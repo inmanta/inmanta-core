@@ -36,7 +36,7 @@ from pytest import approx
 import inmanta.ast.export as ast_export
 import inmanta.data.model as model
 import utils
-from inmanta import config, data
+from inmanta import config, data, util
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
@@ -800,9 +800,9 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
 
 @pytest.mark.slowtest
-async def test_server_recompile_param_v2(server, client, environment, monkeypatch):
+async def test_server_recompile_param_fact_v2(server, clienthelper, client, environment, monkeypatch):
     """
-    Test recompile triggers when setting params with the v2 endpoint
+    Test recompile triggers when setting params and facts with the v2 endpoint
     """
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
@@ -831,11 +831,34 @@ async def test_server_recompile_param_v2(server, client, environment, monkeypatc
 """
         )
 
+    version = await clienthelper.get_version()
+    resource_id = "test::MyDiscoveryResource[discovery_agent,key=key1]"
+    resource_version_id = f"{resource_id},v={version}"
+
+    resources = [
+        {
+            "key": "key1",
+            "id": resource_version_id,
+            "send_event": True,
+            "purged": False,
+            "requires": [],
+        }
+    ]
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=util.get_compiler_version(),
+    )
+    assert result.code == 200
+
     logger.info("request a compile")
     result = await client.notify_change(environment)
     assert result.code == 200
 
-    logger.info("wait for 1")
     versions = await wait_for_version(client, environment, 1, compile_timeout=40)
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
@@ -854,32 +877,69 @@ async def test_server_recompile_param_v2(server, client, environment, monkeypatc
     assert value_env_var in report_map["Recompiling configuration model"]["outstream"]
 
     # set a parameter without requesting a recompile
-    result = await client.set_parameter(environment, id="param1", value="test", source=ParameterSource.plugin)
+    result = await client.set_parameter(environment, name="param1", value="test", source=ParameterSource.plugin)
     assert result.code == 200
     versions = await wait_for_version(client, environment, 1)
-    assert versions["count"] == 1
+    assert versions["count"] == 2
 
     logger.info("request second compile")
     # set a new parameter and request a recompile
-    result = await client.set_parameter(environment, id="param2", value="test", source=ParameterSource.plugin, recompile=True)
-    assert result.code == 200
-    logger.info("wait for 2")
-    versions = await wait_for_version(client, environment, 2)
-    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
-    assert versions["count"] == 2
-
-    # update the parameter to the same value -> no compile
-    result = await client.set_parameter(environment, id="param2", value="test", source=ParameterSource.plugin, recompile=True)
-    assert result.code == 200
-    versions = await wait_for_version(client, environment, 2)
-    assert versions["count"] == 2
-
-    # update the parameter to a new value
-    result = await client.set_parameter(environment, id="param2", value="test2", source=ParameterSource.plugin, recompile=True)
+    result = await client.set_parameter(environment, name="param2", value="test", source=ParameterSource.plugin, recompile=True)
     assert result.code == 200
     logger.info("wait for 3")
-    versions = await wait_for_version(client, environment, 3)
+    versions = await wait_for_version(client, environment, 2)
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
     assert versions["count"] == 3
+
+    # update the parameter to the same value -> no compile
+    result = await client.set_parameter(environment, name="param2", value="test", source=ParameterSource.plugin, recompile=True)
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, 2)
+    assert versions["count"] == 3
+
+    # update the parameter to a new value
+    result = await client.set_parameter(
+        environment, name="param2", value="test2", source=ParameterSource.plugin, recompile=True
+    )
+    assert result.code == 200
+    logger.info("wait for 4")
+    versions = await wait_for_version(client, environment, 3)
+    assert versions["count"] == 4
+
+    # set a fact without requesting a recompile
+    result = await client.set_fact(
+        environment, name="fact1", value="test", source=ParameterSource.fact, resource_id=resource_id
+    )
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, 1)
+    assert versions["count"] == 4
+
+    # set a new fact and request a recompile
+    result = await client.set_fact(
+        environment, name="fact2", value="test", source=ParameterSource.fact, resource_id=resource_id, recompile=True
+    )
+    assert result.code == 200
+    logger.info("wait for 5")
+    versions = await wait_for_version(client, environment, 2)
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
+    assert versions["count"] == 5
+
+    # update the fact to the same value -> no compile
+    result = await client.set_fact(
+        environment, name="fact2", value="test", source=ParameterSource.fact, resource_id=resource_id, recompile=True
+    )
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, 2)
+    assert versions["count"] == 5
+
+    # update the fact to a new value
+    result = await client.set_fact(
+        environment, name="fact2", value="test2", source=ParameterSource.fact, resource_id=resource_id, recompile=True
+    )
+    assert result.code == 200
+    logger.info("wait for 6")
+    versions = await wait_for_version(client, environment, 3)
+    assert versions["count"] == 6
 
 
 async def run_compile_and_wait_until_compile_is_done(

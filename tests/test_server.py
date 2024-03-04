@@ -1989,7 +1989,7 @@ async def test_set_param_v2(server, client, environment):
 
     result = await client.set_parameter(
         tid=environment,
-        id="param",
+        name="param",
         source=ParameterSource.user,
         value="val",
         metadata={"key1": "val1", "key2": "val2"},
@@ -2008,7 +2008,7 @@ async def test_set_param_v2(server, client, environment):
 
     await client.set_parameter(
         tid=environment,
-        id="param",
+        name="param",
         source=ParameterSource.user,
         value="val2",
         metadata={"key1": "val1", "key2": "val2"},
@@ -2025,7 +2025,7 @@ async def test_set_param_v2(server, client, environment):
     assert parameters[0]["expires"] is False
 
     await client.set_parameter(
-        tid=environment, id="param2", source=ParameterSource.user, value="val3", metadata={}, recompile=False
+        tid=environment, name="param2", source=ParameterSource.user, value="val3", metadata={}, recompile=False
     )
     assert result.code == 200
 

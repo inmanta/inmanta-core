@@ -364,7 +364,7 @@ class ParameterService(protocol.ServerSlice):
             raise NotFound(f"Fact with id {id} does not exist")
         return param.as_fact()
 
-    @handle(methods_v2.set_parameter, env="tid", name="id")
+    @handle(methods_v2.set_parameter, env="tid")
     async def set_parameter(
         self,
         env: data.Environment,

@@ -1123,7 +1123,7 @@ def get_parameters(
 
 
 @typedmethod(
-    path="/parameters/<id>",
+    path="/parameters/<name>",
     operation="PUT",
     arg_options=methods.ENV_OPTS,
     client_types=[ClientType.api, ClientType.compiler, ClientType.agent],
@@ -1131,7 +1131,7 @@ def get_parameters(
 )
 def set_parameter(
     tid: uuid.UUID,
-    id: str,
+    name: str,
     source: ParameterSource,
     value: str,
     metadata: dict[str, str] = {},
@@ -1142,7 +1142,7 @@ def set_parameter(
     Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
 
     :param tid: The id of the environment
-    :param id: The name of the parameter
+    :param name: The name of the parameter
     :param source: The source of the parameter.
     :param value: The value of the parameter
     :param metadata: Optional. Metadata about the parameter
@@ -1212,7 +1212,8 @@ def set_fact(
     expires: Optional[bool] = True,
 ) -> ReturnValue[model.Fact]:
     """
-    Set a fact on the server
+    Set a fact on the server. If the fact is a tracked unknown, it will trigger a recompile on the server.
+    Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
 
     :param tid: The id of the environment
     :param name: The name of the parameter
