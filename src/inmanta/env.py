@@ -548,6 +548,8 @@ class PythonEnvironment:
     Inmanta product packages don't change.
     """
 
+    _invalid_chars_in_path_re = re.compile(r'["$`]')
+
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
         if (env_path is None) == (python_path is None):
             raise ValueError("Exactly one of `env_path` and `python_path` needs to be specified")
@@ -583,7 +585,7 @@ class PythonEnvironment:
         if not path:
             raise ValueError("Cannot create virtual environment because the provided path is an empty string.")
 
-        match = VirtualEnv._invalid_chars_in_path_re.search(path)
+        match = PythonEnvironment._invalid_chars_in_path_re.search(path)
         if match:
             raise ValueError(
                 f"Cannot create virtual environment because the provided path `{path}` contains an"
@@ -1194,8 +1196,6 @@ class VirtualEnv(ActiveEnv):
     """
     Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
     """
-
-    _invalid_chars_in_path_re = re.compile(r'["$`]')
 
     def __init__(self, env_path: str) -> None:
         super().__init__(env_path=env_path)
