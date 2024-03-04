@@ -565,8 +565,30 @@ class PythonEnvironment:
             self.env_path = self.get_env_path_for_python_path(self.python_path)
             if not self.python_path:
                 raise ValueError("The python_path cannot be an empty string.")
+        self.validate_path(env_path)
         self.site_packages_dir: str = self.get_site_dir_for_env_path(self.env_path)
         self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
+
+    def validate_path(self, path: str) -> None:
+        """
+        The given path is used in the `./bin/activate` file of the created venv without escaping any special characters.
+        As such, we refuse all special characters here that might cause the given path to be interpreted incorrectly:
+
+            * $: Character used for variable expansion in bash strings.
+            * `: Character used to perform command substitution in bash strings.
+            * ": Character that will be interpreted incorrectly as the end of the string.
+
+        :param path: Path to validate.
+        """
+        if not path:
+            raise ValueError("Cannot create virtual environment because the provided path is an empty string.")
+
+        match = VirtualEnv._invalid_chars_in_path_re.search(path)
+        if match:
+            raise ValueError(
+                f"Cannot create virtual environment because the provided path `{path}` contains an"
+                f" invalid character (`{match.group()}`)."
+            )
 
     @classmethod
     def get_python_path_for_env_path(cls, env_path: str) -> str:
@@ -1177,31 +1199,9 @@ class VirtualEnv(ActiveEnv):
 
     def __init__(self, env_path: str) -> None:
         super().__init__(env_path=env_path)
-        self.validate_path(env_path)
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
         self._using_venv: bool = False
-
-    def validate_path(self, path: str) -> None:
-        """
-        The given path is used in the `./bin/activate` file of the created venv without escaping any special characters.
-        As such, we refuse all special characters here that might cause the given path to be interpreted incorrectly:
-
-            * $: Character used for variable expansion in bash strings.
-            * `: Character used to perform command substitution in bash strings.
-            * ": Character that will be interpreted incorrectly as the end of the string.
-
-        :param path: Path to validate.
-        """
-        if not path:
-            raise ValueError("Cannot create virtual environment because the provided path is an empty string.")
-
-        match = VirtualEnv._invalid_chars_in_path_re.search(path)
-        if match:
-            raise ValueError(
-                f"Cannot create virtual environment because the provided path `{path}` contains an"
-                f" invalid character (`{match.group()}`)."
-            )
 
     def exists(self) -> bool:
         """
