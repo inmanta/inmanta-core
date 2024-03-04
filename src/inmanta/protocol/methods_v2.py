@@ -1134,7 +1134,7 @@ def set_parameter(
     name: str,
     source: ParameterSource,
     value: str,
-    metadata: dict[str, str] = {},
+    metadata: Optional[dict[str, str]] = None,
     recompile: bool = False,
 ) -> ReturnValue[model.Parameter]:
     """
@@ -1207,7 +1207,7 @@ def set_fact(
     source: ParameterSource,
     value: str,
     resource_id: str,
-    metadata: dict[str, str] = {},
+    metadata: Optional[dict[str, str]] = None,
     recompile: bool = False,
     expires: Optional[bool] = True,
 ) -> ReturnValue[model.Fact]:

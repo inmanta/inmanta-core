@@ -370,7 +370,7 @@ class ParameterService(protocol.ServerSlice):
         name: str,
         value: str,
         source: ParameterSource,
-        metadata: dict,
+        metadata: dict[str, str],
         recompile: bool,
         resource_id: Optional[str] = None,
         expires: Optional[bool] = None,
@@ -406,9 +406,11 @@ class ParameterService(protocol.ServerSlice):
         name: str,
         source: ParameterSource,
         value: str,
-        metadata: dict = {},
+        metadata: Optional[dict[str, str]] = None,
         recompile: bool = False,
     ) -> ReturnValue[Parameter]:
+        if metadata is None:
+            metadata = {}
         param, warnings = await self._update_and_recompile(env, name, value, source, metadata, recompile)
         return_value = ReturnValue(response=param.as_param())
         if warnings:
@@ -423,10 +425,12 @@ class ParameterService(protocol.ServerSlice):
         source: ParameterSource,
         value: str,
         resource_id: str,
-        metadata: dict = {},
+        metadata: Optional[dict[str, str]] = None,
         recompile: bool = False,
         expires: Optional[bool] = True,
     ) -> ReturnValue[Fact]:
+        if metadata is None:
+            metadata = {}
         param, warnings = await self._update_and_recompile(env, name, value, source, metadata, recompile, resource_id, expires)
         return_value = ReturnValue(response=param.as_fact())
         if warnings:
