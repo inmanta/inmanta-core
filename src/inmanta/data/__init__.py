@@ -6150,7 +6150,7 @@ class Notification(BaseDocument):
     title: str
     message: str
     severity: const.NotificationSeverity = const.NotificationSeverity.message
-    uri: str
+    uri: Optional[str] = None
     read: bool = False
     cleared: bool = False
 
