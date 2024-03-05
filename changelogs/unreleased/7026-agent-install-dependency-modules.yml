@@ -1,0 +1,8 @@
+---
+description: Dropped the project configuration option `agent_install_dependency_modules`. The installation of module dependencies is now always enabled.
+issue-nr: 7026
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso7]
+sections:
+  upgrade-note: "{{description}}"
