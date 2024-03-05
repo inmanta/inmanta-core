@@ -162,6 +162,25 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     # Finish deployment r1
     await resource_deployer.deployment_finished(rvid=rvid_r1_v1, action_id=action_id)
 
+    # request 3
+    # only two exist
+    result = await agent._client.resources_status(
+        tid=environment,
+        model_version=version,
+        rids=["std::File[agent1,path=/etc/file2]", "std::File[agent1,path=/etc/file3]", "std::File[agent1,path=/etc/file4]"],
+    )
+    assert result.code == 200
+    assert result.result["data"] == {
+        "std::File[agent1,path=/etc/file2]": "deployed",
+        "std::File[agent1,path=/etc/file3]": "deployed",
+    }
+
+    result = await agent._client.resources_status(
+        tid=environment, model_version=version, rids=["std::File[agent1,path=/etc/file2]", "Resource WITH invalid id"]
+    )
+    assert result.code == 400
+    assert result.result["message"] == "Invalid request: Invalid id for resource Resource WITH invalid id"
+
 
 async def test_events_api_endpoints_increment(server, client, environment, clienthelper, agent, resource_deployer):
     """

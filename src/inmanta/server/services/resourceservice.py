@@ -21,6 +21,7 @@ import datetime
 import logging
 import os
 import re
+import typing
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
@@ -1230,6 +1231,19 @@ class ResourceService(protocol.ServerSlice):
             raise BadRequest(e.message) from e
 
         # TODO: optimize for no orphans
+
+    @handle(methods_v2.resources_status, env="tid")
+    async def resources_status(
+        self,
+        env: data.Environment,
+        model_version: int,
+        rids: list[ResourceIdStr],
+    ) -> dict[ResourceIdStr, ResourceState]:
+        try:
+            rids = [Id.parse_id(rid).resource_str() for rid in rids]
+        except ValueError as e:
+            raise BadRequest(str(e))
+        return await data.Resource.get_status_for(env.id, model_version, rids)
 
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:

@@ -19,6 +19,7 @@
 """
 
 import datetime
+import typing
 import uuid
 from typing import Literal, Optional, Union
 
@@ -859,6 +860,28 @@ def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.F
     :param id: The id of the fact
     :return: A specific fact corresponding to the id
     :raise NotFound: This status code is returned when the referenced environment or fact is not found
+    """
+
+
+@typedmethod(
+    path="/resources/status",
+    operation="GET",
+    agent_server=True,
+    arg_options={**methods.ENV_OPTS},
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def resources_status(
+    tid: uuid.UUID,
+    model_version: int,
+    rids: list[model.ResourceIdStr],
+) -> dict[model.ResourceIdStr, ResourceState]:
+    """
+    Get the deployment status for a batch of resource ids
+
+    :param tid: The id of the environment the resources belong to
+    :param model_version: Version of the model to get the status for
+    :param rids: List of resource ids to fetch the status for.
     """
 
 
