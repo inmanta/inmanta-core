@@ -1427,7 +1427,7 @@ class Agent(SessionEndpoint):
             self._loader_lock = Lock()
             # Keep track for each resource type of the last loaded version
             self._last_loaded_version: dict[str, int] = defaultdict(lambda: -1)
-            # Cache to prevent re-loading the same resource-version
+            # Cache to prevent re-fetching the same resource-version
             self._previously_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
             # Per-resource lock to serialize all actions per resource
             self._resource_loader_lock = NamedLock()
