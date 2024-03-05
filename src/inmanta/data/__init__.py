@@ -4622,7 +4622,6 @@ class Resource(BaseDocument):
         return out
 
     @classmethod
-    @classmethod
     async def get_status_for(
         cls,
         env: uuid.UUID,
