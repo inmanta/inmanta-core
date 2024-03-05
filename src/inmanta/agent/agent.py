@@ -1728,7 +1728,7 @@ class Agent(SessionEndpoint):
                     self._last_loaded_version[resource_install_spec.resource_type] = -1
 
                 for source in resource_install_spec.sources:
-                    module_name: str = loader.get_inmanta_module_name(source["module_name"])
+                    module_name: str = loader.get_inmanta_module_name(source.name)
                     all_installed_modules.add(module_name)
 
                 all_required_modules.update(
@@ -1738,7 +1738,6 @@ class Agent(SessionEndpoint):
                         if r.startswith("inmanta-module-")
                     }
                 )
-
 
         # If a certain module A depends on the plugin code of another module B, then the source of B must either:
         #  * Be exported to the server (because module B has resources or providers)

@@ -309,12 +309,12 @@ def test():
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
     )
-
-    await agent.ensure_code(
+    install_spec, _ = await agent.get_code(
         environment=environment,
         version=version,
         resource_types=["test::Test"],
     )
+    await agent.ensure_code(install_spec)
 
     assert agent._env.are_installed(["pkg", "dep-a"])
     assert not agent._env.are_installed(["dep-b", "dep-c"])
@@ -380,11 +380,12 @@ async def test_warning_message_stale_python_code(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
     )
 
-    await agent.ensure_code(
+    install_specs, _ = await agent.get_code(
         environment=uuid.UUID(environment),
         version=version,
         resource_types=["test::Test", "minimalv2module::Test"],
     )
+    await agent.ensure_code(install_specs)
 
     expected_warning_message = (
         f"The source code for the modules minimalv2module is present in the modules directory of the agent "
@@ -410,11 +411,12 @@ async def test_warning_message_stale_python_code(
     res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources_test_mod})
     assert res.code == 200
 
-    await agent.ensure_code(
+    install_specs, _ = await agent.get_code(
         environment=uuid.UUID(environment),
         version=version,
         resource_types=["test::Test"],
     )
+    await agent.ensure_code(install_specs)
 
     log_contains(caplog, "agent", logging.WARNING, expected_warning_message)
     result = await client.list_notifications(tid=environment)
