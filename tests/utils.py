@@ -278,6 +278,7 @@ async def wait_until_version_is_released(client, environment: uuid.UUID, version
     """
     Wait until the configurationmodel with the given version and environment is released.
     """
+
     async def _is_version_released() -> bool:
         result = await client.get_version(tid=environment, id=version)
         if result.code == 404:
