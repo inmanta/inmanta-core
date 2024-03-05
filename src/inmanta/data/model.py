@@ -648,7 +648,7 @@ class Notification(BaseModel):
     title: str
     message: str
     severity: const.NotificationSeverity
-    uri: str
+    uri: Optional[str] = None
     read: bool
     cleared: bool
 
