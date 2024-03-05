@@ -34,6 +34,9 @@ class InProcessExecutor(executor.Executor):
 
 
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
+    """
+    This is the executor that provides the backward compatible behavior, confirming to the agent in ISO7.
+    """
 
     def __init__(self, thread_pool: ThreadPoolExecutor, environment_manager: executor.VirtualEnvironmentManager) -> None:
         super().__init__(thread_pool, environment_manager)

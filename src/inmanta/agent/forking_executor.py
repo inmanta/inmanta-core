@@ -228,6 +228,11 @@ class MPExecutor(executor.Executor):
 
 
 class MPManager(executor.ExecutorManager[MPExecutor]):
+    """
+    This is the executor that provides the new behavior (ISO8+),
+    where the agent forks executors in specific venvs to prevent code reloading.
+    """
+
     def __init__(
         self,
         thread_pool: concurrent.futures.thread.ThreadPoolExecutor,
