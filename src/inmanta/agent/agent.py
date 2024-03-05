@@ -82,8 +82,6 @@ class ResourceActionBase(abc.ABC):
     resource_id: Id
     future: ResourceActionResultFuture
     dependencies: list["ResourceActionBase"]
-    # resourceid -> attribute -> {current: , desired:}
-    changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]
 
     def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str) -> None:
         """
@@ -97,7 +95,6 @@ class ResourceActionBase(abc.ABC):
         self.running: bool = False
         self.gid: uuid.UUID = gid
         self.status: Optional[const.ResourceState] = None
-        self.change: Optional[const.Change] = const.Change.nochange
         self.undeployable: Optional[const.ResourceState] = None
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
@@ -138,12 +135,16 @@ class DummyResourceAction(ResourceActionBase):
 
 
 class ResourceAction(ResourceActionBase):
+    # resourceid -> attribute -> {current: , desired:}
+    changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]
+
     def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
         """
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         super().__init__(scheduler, resource.id, gid, reason)
         self.resource: Resource = resource
+        self.change: Optional[const.Change] = const.Change.nochange
 
     async def send_in_progress(self, action_id: uuid.UUID) -> dict[ResourceIdStr, const.ResourceState]:
         result = await self.scheduler.get_client().resource_deploy_start(
@@ -324,9 +325,6 @@ class RemoteResourceAction(ResourceActionBase):
                 result = await self.scheduler.get_client().get_resource(
                     self.scheduler.agent._env_id,
                     self.resource_id.resource_version_str(),
-                    logs=True,
-                    log_action=const.ResourceAction.deploy,
-                    log_limit=1,
                 )
                 if result.code != 200 or result.result is None:
                     LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id), result.result)
@@ -340,20 +338,6 @@ class RemoteResourceAction(ResourceActionBase):
                     # wait for event
                     pass
                 else:
-                    if "logs" in result.result and len(result.result["logs"]) > 0:
-                        log = result.result["logs"][0]
-
-                        if "change" in log and log["change"] is not None:
-                            self.change = const.Change[log["change"]]
-                        else:
-                            self.change = const.Change.nochange
-
-                        if "changes" in log and log["changes"] is not None and str(self.resource_id) in log["changes"]:
-                            self.changes = log["changes"]
-                        else:
-                            self.changes = {}
-                        self.status = status
-
                     self.future.set_result(ResourceActionResult(cancel=False))
             except Exception:
                 LOGGER.exception("could not get status for remote resource")
@@ -363,13 +347,9 @@ class RemoteResourceAction(ResourceActionBase):
     def notify(
         self,
         status: const.ResourceState,
-        change: const.Change,
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]],
     ) -> None:
         if not self.future.done():
             self.status = status
-            self.change = change
-            self.changes = changes
             self.future.set_result(ResourceActionResult(cancel=False))
 
 
@@ -609,7 +589,7 @@ class ResourceScheduler:
         if resourceid not in self.cad:
             # received CAD notification for which no resource are waiting, so return
             return
-        self.cad[resourceid].notify(state, change, changes)
+        self.cad[resourceid].notify(state)
 
     def dump(self) -> None:
         print("Waiting:")
