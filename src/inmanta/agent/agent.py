@@ -611,7 +611,7 @@ class ExternalExecutor(Executor):
         raise NotImplementedError
 
     @classmethod
-    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]) -> tuple[Self, Set[str]]:
+    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]) -> tuple[Self, FailedResourcesSet]:
         # TODO extract the relevant identifying info and stabilize it (i.e. sort and deduplicate specs).
         raise NotImplementedError
 
