@@ -944,11 +944,11 @@ class ResourceScheduler:
         self.generation = {}
 
         for resource in resources:
-            resource_action = ResourceAction(self, executor, self._env_id, resource, gid, self.running.reason)
+            local_resource_action = ResourceAction(self, executor, self._env_id, resource, gid, self.running.reason)
             # mark undeployable
             if resource.rvid in undeployable:
-                resource_action.undeployable = undeployable[resource.rvid]
-            self.generation[resource.rid] = resource_action
+                local_resource_action.undeployable = undeployable[resource.rvid]
+            self.generation[resource.rid] = local_resource_action
 
         # hook up Cross Agent Dependencies
         cross_agent_dependencies: Sequence[Id] = [
@@ -956,9 +956,9 @@ class ResourceScheduler:
         ]
 
         for cad in cross_agent_dependencies:
-            ra = RemoteResourceAction(self, cad, gid, self.running.reason)
-            self.cad[str(cad)] = ra
-            self.generation[cad.resource_str()] = ra
+            remote_resource_action = RemoteResourceAction(self, cad, gid, self.running.reason)
+            self.cad[str(cad)] = remote_resource_action
+            self.generation[cad.resource_str()] = remote_resource_action
 
         # Create dummy to give start signal
         dummy = DummyResourceAction(self, gid, self.running.reason)
