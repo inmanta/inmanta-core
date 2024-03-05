@@ -274,6 +274,20 @@ async def report_db_index_usage(min_precent=100):
         print(row)
 
 
+async def wait_until_version_is_released(client, environment: uuid.UUID, version: int) -> None:
+    """
+    Wait until the configurationmodel with the given version and environment is released.
+    """
+    async def _is_version_released() -> bool:
+        result = await client.get_version(tid=environment, id=version)
+        if result.code == 404:
+            return False
+        assert result.code == 200
+        return result.result["model"]["released"]
+
+    await retry_limited(_is_version_released, timeout=10)
+
+
 async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     """
     :param compile_timeout: Raise an AssertionError if the compilation didn't finish after this amount of seconds.
@@ -337,7 +351,7 @@ class ClientHelper:
         assert res.code == 200
         return res.result["data"]
 
-    async def put_version_simple(self, resources: dict[str, Any], version: int, wait_for_released: bool = False) -> None:
+    async def put_version_simple(self, resources: list[dict[str, Any]], version: int, wait_for_released: bool = False) -> None:
         res = await self.client.put_version(
             tid=self.environment,
             version=version,
