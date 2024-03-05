@@ -315,34 +315,7 @@ class RemoteResourceAction(ResourceActionBase):
     async def execute(
         self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
     ) -> None:
-        await dummy.future
-        async with self.scheduler.agent.process.cad_ratelimiter:
-            try:
-                # got event or cancel first
-                if self.is_done():
-                    return
-
-                result = await self.scheduler.get_client().get_resource(
-                    self.scheduler.agent._env_id,
-                    self.resource_id.resource_version_str(),
-                )
-                if result.code != 200 or result.result is None:
-                    LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id), result.result)
-                    return
-
-                status = const.ResourceState[result.result["resource"]["status"]]
-
-                self.running = True
-
-                if status in const.TRANSIENT_STATES or self.future.done():
-                    # wait for event
-                    pass
-                else:
-                    self.future.set_result(ResourceActionResult(cancel=False))
-            except Exception:
-                LOGGER.exception("could not get status for remote resource")
-            finally:
-                self.running = False
+        pass
 
     def notify(
         self,
@@ -467,6 +440,7 @@ class ResourceScheduler:
 
         self.running: Optional[DeployRequest] = None
         self.deferred: Optional[DeployRequest] = None
+        self.cad_resolver: Optional[asyncio.Task[None]] = None
 
         self.logger: Logger = agent.logger
 
@@ -485,6 +459,8 @@ class ResourceScheduler:
         """
         for ra in self.generation.values():
             ra.cancel()
+        if self.cad_resolver is not None:
+            self.cad_resolver.cancel()
         self.generation = {}
         self.cad = {}
 
@@ -546,11 +522,17 @@ class ResourceScheduler:
                 self.generation[key].undeployable = undeployable[vid]
 
         # hook up Cross Agent Dependencies
-        cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
+        cross_agent_dependencies = {q for r in resources for q in r.requires if q.get_agent_name() != self.name}
+        cads_by_rid: dict[ResourceIdStr, RemoteResourceAction] = {}
         for cad in cross_agent_dependencies:
             ra = RemoteResourceAction(self, cad, gid, self.running.reason)
             self.cad[str(cad)] = ra
-            self.generation[cad.resource_str()] = ra
+            rid = cad.resource_str()
+            cads_by_rid[rid] = ra
+            self.generation[rid] = ra
+
+        if cads_by_rid:
+            self.cad_resolver = self.agent.process.add_background_task(self.resolve_cads(self.version, cads_by_rid))
 
         # Create dummy to give start signal
         dummy = DummyResourceAction(self, gid, self.running.reason)
@@ -578,6 +560,26 @@ class ResourceScheduler:
                 self.logger.info("Resuming run '%s'", self.deferred.reason)
                 self.agent.process.add_background_task(self.agent.get_latest_version_for_agent(self.deferred))
                 self.deferred = None
+
+    async def resolve_cads(self, version: int, cads: dict[ResourceIdStr, RemoteResourceAction]) -> None:
+
+        async with self.agent.process.cad_ratelimiter:
+
+            result = await self.get_client().resources_status(
+                tid=self.agent._env_id,
+                model_version=version,
+                rids=list(cads.keys()),
+            )
+            if result.code != 200 or result.result is None:
+                LOGGER.error("Failed to get the status for remote resources %s (%s)", list(cads.keys()), result.result)
+                return
+
+            for rid_raw, status_raw in result.result["data"].items():
+                status = const.ResourceState[status_raw]
+                rra = cads.get(rid_raw, None)
+                if rra is not None:
+                    if status not in const.TRANSIENT_STATES:
+                        rra.notify(status)
 
     def notify_ready(
         self,
