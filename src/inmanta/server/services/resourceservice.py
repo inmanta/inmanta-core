@@ -1237,7 +1237,7 @@ class ResourceService(protocol.ServerSlice):
         env: data.Environment,
         model_version: int,
         rids: list[ResourceIdStr],
-    ) -> dict[ResourceIdStr, ResourceState]:
+    ) -> dict[str, ResourceState]:
         try:
             rids = [Id.parse_id(rid).resource_str() for rid in rids]
         except ValueError as e:
