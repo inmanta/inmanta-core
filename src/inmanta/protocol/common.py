@@ -341,6 +341,7 @@ class MethodProperties:
         """
         current_list = [(x.path, x.api_version) for x in cls.methods[properties.function.__name__]]
         if (properties.path, properties.api_version) in current_list:
+            breakpoint()
             raise Exception(
                 f"Method {properties.function.__name__} already has a "
                 f"method definition for api path {properties.path} and API version {properties.api_version}"

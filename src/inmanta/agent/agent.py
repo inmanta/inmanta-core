@@ -33,7 +33,7 @@ from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence, Se
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
-from typing import Any, Collection, Dict, Optional, Self, Union, cast
+from typing import Any, Collection, Dict, Optional, Self, Union, cast, TypeAlias
 
 import pkg_resources
 
@@ -49,7 +49,7 @@ from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConf
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
-from inmanta.types import Apireturn, FailedResourcesSet, JsonType
+from inmanta.types import Apireturn, JsonType
 from inmanta.util import (
     CronSchedule,
     IntervalSchedule,
@@ -181,6 +181,7 @@ class ResourceDetails:
         self.model_version = resource_dict["model"]
 
 
+FailedResourcesSet: TypeAlias = set[str]
 class Executor(ABC):
     """
     An executor for resources. Delegates to the appropriate handlers.
@@ -188,7 +189,7 @@ class Executor(ABC):
 
     @classmethod
     @abc.abstractmethod
-    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]) -> tuple[Self, Set[str]]:
+    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]) -> tuple[Self, FailedResourcesSet]:
         """
         Get an executor for the requested resources.
         The return value is a tuple of

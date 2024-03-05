@@ -62,4 +62,3 @@ Apireturn = Union[int, ReturnTupple, "ReturnValue[ReturnTypes]", "ReturnValue[No
 Warnings = Optional[list[str]]
 HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]
 
-FailedResourcesSet = set[str]
