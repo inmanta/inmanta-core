@@ -29,7 +29,7 @@ import uuid
 from abc import ABC
 from asyncio import Lock
 from collections import defaultdict
-from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence, Set
+from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
