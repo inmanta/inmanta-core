@@ -33,7 +33,7 @@ from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence, Se
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
-from typing import Any, Collection, Dict, Optional, Self, Union, cast, TypeAlias
+from typing import Any, Collection, Dict, Optional, Self, TypeAlias, Union, cast
 
 import pkg_resources
 
@@ -182,6 +182,8 @@ class ResourceDetails:
 
 
 FailedResourcesSet: TypeAlias = set[str]
+
+
 class Executor(ABC):
     """
     An executor for resources. Delegates to the appropriate handlers.
@@ -1665,9 +1667,12 @@ class Agent(SessionEndpoint):
                         invalid_resource_types.add(resource_type)
                         continue
 
-                resource_install_specs.append(
-                    ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources)
-                )
+                resource_install_spec = ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources)
+                resource_install_specs.append(resource_install_spec)
+
+                # Update the ``_previously_loaded`` cache to indicate that the given resource type's code
+                # was loaded successfully at the specified version.
+                self._previously_loaded[(resource_type, version)] = resource_install_spec
             else:
                 invalid_resource_types.add(resource_type)
 
@@ -1689,8 +1694,6 @@ class Agent(SessionEndpoint):
                     )
                     continue
 
-                self._last_loaded_version[resource_install_spec.resource_type] = -1
-
                 try:
                     # Install required python packages and the list of ``ModuleSource`` with the provided pip config
                     LOGGER.debug(
@@ -1708,11 +1711,7 @@ class Agent(SessionEndpoint):
                         resource_install_spec.resource_type,
                         resource_install_spec.model_version,
                     )
-                    # Update the ``_previously_loaded`` cache to indicate that the given resource type's code
-                    # was loaded successfully at the specified version.
-                    self._previously_loaded[(resource_install_spec.resource_type, resource_install_spec.model_version)] = (
-                        resource_install_spec
-                    )
+
                     self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.model_version
                 except Exception:
                     LOGGER.exception(
@@ -1721,6 +1720,7 @@ class Agent(SessionEndpoint):
                         resource_install_spec.model_version,
                     )
                     failed_to_load.add(resource_install_spec.resource_type)
+                    self._last_loaded_version[resource_install_spec.resource_type] = -1
 
         return failed_to_load
 

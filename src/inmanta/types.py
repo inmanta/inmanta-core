@@ -61,4 +61,3 @@ MethodType = Callable[..., MethodReturn]
 Apireturn = Union[int, ReturnTupple, "ReturnValue[ReturnTypes]", "ReturnValue[None]", ReturnTypes]
 Warnings = Optional[list[str]]
 HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]
-
