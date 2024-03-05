@@ -20,6 +20,7 @@ import logging
 import os
 import subprocess
 
+import inmanta.agent.executor
 from inmanta.agent import in_process_executor
 from inmanta.agent.executor import EnvBlueprint, ExecutorBlueprint, ExecutorId, VirtualEnvironmentManager
 from inmanta.data.model import PipConfig
@@ -88,7 +89,7 @@ async def test_process_manager(environment, tmpdir) -> None:
     env_blueprint2 = EnvBlueprint(pip_config=pip_config, requirements=requirements2)
 
     # Initialize the virtual environment and executor managers
-    venv_manager = VirtualEnvironmentManager()
+    venv_manager = VirtualEnvironmentManager(inmanta.agent.executor.initialize_envs_directory())
     executor_manager = in_process_executor.InProcessExecutorManager(threadpool, venv_manager)
 
     # Getting a first executor should successfully create and map it
@@ -169,7 +170,7 @@ async def test_process_manager_restart(environment, tmpdir, caplog) -> None:
 
     with caplog.at_level(logging.INFO):
         # First execution: create an executor and verify its creation
-        venv_manager = VirtualEnvironmentManager()
+        venv_manager = VirtualEnvironmentManager(inmanta.agent.executor.initialize_envs_directory())
         executor_manager = in_process_executor.InProcessExecutorManager(threadpool, venv_manager)
         await executor_manager.get_executor("agent1", blueprint1)
         assert len(executor_manager.executor_map) == 1
@@ -180,7 +181,7 @@ async def test_process_manager_restart(environment, tmpdir, caplog) -> None:
         log_doesnt_contain(caplog, "inmanta.agent.executor", logging.INFO, f"Found existing virtual environment at {env_dir}")
 
         # Simulate ExecutorManager restart by creating new instances of ExecutorManager and VirtualEnvironmentManager
-        venv_manager2 = VirtualEnvironmentManager()
+        venv_manager2 = VirtualEnvironmentManager(inmanta.agent.executor.initialize_envs_directory())
         executor_manager2 = in_process_executor.InProcessExecutorManager(threadpool, venv_manager2)
         # Assertions before retrieving the executor to verify a fresh start
         assert len(executor_manager2.executor_map) == 0
@@ -274,7 +275,7 @@ async def test_environment_creation_locking(environment, tmpdir) -> None:
     only one environment is created for the same blueprint when requested concurrently,
     preventing race conditions and duplicate environment creation.
     """
-    manager = VirtualEnvironmentManager()
+    manager = VirtualEnvironmentManager(inmanta.agent.executor.initialize_envs_directory())
 
     pip_index = PipIndex(artifact_dir=str(tmpdir))
     create_python_package(
@@ -338,7 +339,7 @@ async def test_executor_creation_and_reuse(environment, tmpdir) -> None:
     blueprint2 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources2)
     blueprint3 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
 
-    venv_manager = VirtualEnvironmentManager()
+    venv_manager = VirtualEnvironmentManager(inmanta.agent.executor.initialize_envs_directory())
     executor_manager = in_process_executor.InProcessExecutorManager(threadpool, venv_manager)
     executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.gather(
         executor_manager.get_executor("agent1", blueprint1),
