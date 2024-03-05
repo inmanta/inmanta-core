@@ -21,7 +21,6 @@ import datetime
 import logging
 import os
 import re
-import typing
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence

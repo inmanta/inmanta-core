@@ -4630,10 +4630,10 @@ class Resource(BaseDocument):
         rids: list[ResourceIdStr],
     ) -> dict[ResourceIdStr, ResourceState]:
         query = (
-            f"SELECT r.resource_id, r.status FROM resource r"
-            f" WHERE r.environment=$1"
-            f" AND r.model=$2"
-            f" AND r.resource_id = ANY($3);"
+            "SELECT r.resource_id, r.status FROM resource r"
+            " WHERE r.environment=$1"
+            " AND r.model=$2"
+            " AND r.resource_id = ANY($3);"
         )
         out = await cls.select_query(query, [env, model_version, rids], no_obj=True)
         return {ResourceIdStr(r["resource_id"]): ResourceState[r["status"]] for r in out}
