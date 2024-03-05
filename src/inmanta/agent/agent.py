@@ -1680,7 +1680,12 @@ class Agent(SessionEndpoint):
 
     async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> FailedResourcesSet:
         """Ensure that the code for the given environment and version is loaded"""
+
         failed_to_load: FailedResourcesSet = set()
+
+        if self._loader is None:
+            return failed_to_load
+
         # The names of the modules that are included in the requirements list of a module source.
         all_required_modules: set[str] = set()
         # The names of the modules for which the source code was installed.
