@@ -562,9 +562,8 @@ class ResourceScheduler:
                 self.deferred = None
 
     async def resolve_cads(self, version: int, cads: dict[ResourceIdStr, RemoteResourceAction]) -> None:
-
+        """ Batch resolve all CAD's """
         async with self.agent.process.cad_ratelimiter:
-
             result = await self.get_client().resources_status(
                 tid=self.agent._env_id,
                 model_version=version,
