@@ -86,6 +86,8 @@ precedence = (
     ("left", "IN"),
     ("left", "CID", "ID"),
     ("left", "(", "["),
+    # TODO: required?
+    ("left", "."),
     ("left", "MLS"),
 )
 
@@ -856,7 +858,7 @@ def p_index_lookup(p: YaccProduction) -> None:
 def p_short_index_lookup(p: YaccProduction) -> None:
     "index_lookup : attr_ref '[' param_list ']'"
     attref = p[1]
-    p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3][0], p[3][1])
+    p[0] = ShortIndexLookup(attref.instance_expression, attref.attribute, p[3][0], p[3][1])
     attach_lnr(p, 2)
 
 
@@ -1074,7 +1076,8 @@ def convert_to_references(variables: list[tuple[str, LocatableString]]) -> list[
             offset = len(var_parts[0]) + 1
             for attr in var_parts[1:]:
                 attr_locatable_string: LocatableString = normalize(attr, var, offset=offset)
-                ref = AttributeReference(ref, attr_locatable_string)
+                # TODO: this should be (ref+attr).location
+                ref = AttributeReference(ref.location, ref, attr_locatable_string)
                 ref.location = attr_locatable_string.location
                 ref.namespace = namespace
                 offset += len(attr) + 1
@@ -1222,7 +1225,18 @@ def p_attr_ref(p: YaccProduction) -> None:
     # reference: LocatableString = LocatableString(
     #     f"{instance.full_name}.{attribute}", range, instance.locatable_name.lexpos, instance.namespace
     # )
-    p[0] = AttributeReference(None, expression, attribute)
+    # TODO: fix
+    range: Range = Range(
+        file,
+        p.lineno(3),
+        0,
+        0,
+        0,
+    )
+    reference: LocatableString = LocatableString(
+        f"{expression}.{attribute}", range, p.lexpos(3), expression.namespace
+    )
+    p[0] = AttributeReference(reference, expression, attribute)
     attach_lnr(p, 2)
 
 
@@ -1249,19 +1263,24 @@ def p_class_ref(p: YaccProduction) -> None:
     merge_lnr_to_string(p, 1, 3)
 
 
-def p_class_ref_err_dot(p: YaccProduction) -> None:
-    "class_ref : expression '.' CID"
-    var: Union[LocatableString, Reference] = p[1]
-    var_str: LocatableString = var if isinstance(var, LocatableString) else var.locatable_name
-    cid: LocatableString = p[3]
-    assert namespace
-    full_string: LocatableString = LocatableString(
-        f"{var_str}.{cid}",
-        expand_range(var_str.location, cid.location),
-        var_str.lexpos,
-        namespace,
-    )
-    raise InvalidNamespaceAccess(full_string)
+# TODO: make sure error is raised again. Either here or in p_error
+#def p_class_ref(p: YaccProduction) -> None:
+#    "class_ref : class_ref_err"
+#
+#
+#def p_class_ref_err_dot(p: YaccProduction) -> None:
+#    "class_ref_err : expression '.' CID"
+#    var: Union[LocatableString, Reference] = p[1]
+#    var_str: LocatableString = var if isinstance(var, LocatableString) else var.locatable_name
+#    cid: LocatableString = p[3]
+#    assert namespace
+#    full_string: LocatableString = LocatableString(
+#        f"{var_str}.{cid}",
+#        expand_range(var_str.location, cid.location),
+#        var_str.lexpos,
+#        namespace,
+#    )
+#    raise InvalidNamespaceAccess(full_string)
 
 
 def p_class_ref_list_collect(p: YaccProduction) -> None:
@@ -1322,6 +1341,28 @@ def p_error(p: YaccProduction) -> None:
         if hasattr(p.value, "location"):
             r = p.value.location
         raise ParserException(r, str(p.value), "invalid identifier, %s is a reserved keyword" % p.value)
+
+    # TODO: make sure error is raised again. Either here or with an explicit production
+    ## CID instead of ID
+    ## TODO: note to self: this is either
+    ##   an attempt at attribute access that should use lowercase
+    ##   an attempt at entity ref that should use ::
+    #if p.type == "CID" and parser.symstack[-1].value == "." or p.value == "." and parser.symstack[1] == "CID":
+    #    #var: Union[LocatableString, Reference] = p[1]
+    #    #var_str: LocatableString = var if isinstance(var, LocatableString) else var.locatable_name
+    #    #cid: LocatableString = p[3]
+    #    #assert namespace
+    #    #full_string: LocatableString = LocatableString(
+    #    #    f"{var_str}.{cid}",
+    #    #    expand_range(var_str.location, cid.location),
+    #    #    var_str.lexpos,
+    #    #    namespace,
+    #    #)
+
+    #    #breakpoint()
+    #    raise InvalidNamespaceAccess(p.value)
+
+    #breakpoint()
 
     if parser.symstack[-1].type in reserved.values():
         if hasattr(parser.symstack[-1].value, "location"):
