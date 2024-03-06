@@ -71,10 +71,10 @@ INSERT INTO public.resource_persistent_state (
             GROUP BY
                 environment,
                 resource_id
-        ) rm ON
-            r.environment = rm.environment AND
-            r.resource_id = rm.resource_id AND
-            r.model = rm.max_model;
+        ) rmax ON
+            r.environment = rmax.environment AND
+            r.resource_id = rmax.resource_id AND
+            r.model = rmax.max_model;
 
 ALTER TABLE public.resource DROP COLUMN last_success;
 ALTER TABLE public.resource DROP COLUMN last_non_deploying_status;

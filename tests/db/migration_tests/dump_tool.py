@@ -22,9 +22,10 @@
 import asyncio
 import os
 import shutil
+import uuid
 from uuid import UUID
 
-from inmanta import const
+from inmanta import const, data
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
 from inmanta.data.schema import DBSchema
 from inmanta.protocol import methods
@@ -199,6 +200,15 @@ async def test_dump_db(server, client, postgres_db, database_name):
         resource_sets=resource_sets,
     )
     assert result.code == 200
+
+    # create an orphan resource
+    version = 2
+    path = "/tmp/test" + str(2)
+    key = "std::File[localhost,path=" + path + "]"
+    res2_v1 = data.Resource.new(
+        environment=uuid.UUID(env_id_1), resource_version_id=key + ",v=%d" % version, attributes={"path": path}
+    )
+    await res2_v1.insert()
 
     proc = await asyncio.create_subprocess_exec(
         "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name
