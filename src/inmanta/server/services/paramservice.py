@@ -381,7 +381,7 @@ class ParameterService(protocol.ServerSlice):
         # Validate parameter or fact
         self._validate_parameter(name, resource_id, expires)
 
-        # Update parameter with new value and metadata
+        # Update parameter/fact with new value and metadata
         result = await self._update_param(env, name, value, source, resource_id, metadata, recompile, expires)
         warnings = None
         if result:
