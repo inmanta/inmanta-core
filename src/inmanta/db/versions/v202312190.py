@@ -35,13 +35,46 @@ CREATE TABLE IF NOT EXISTS public.resource_persistent_state (
     PRIMARY KEY(environment, resource_id)
 );
 
-INSERT INTO public.resource_persistent_state
- (environment, resource_id, last_deploy, last_success, last_non_deploying_status, last_produced_events)
- SELECT environment, resource_id, last_deploy, last_success, last_non_deploying_status, last_produced_events
- FROM public.resource
- WHERE (environment, model) IN (
-    SELECT environment, max(version) FROM public.configurationmodel WHERE released=true GROUP BY environment
- );
+-- The INSERT query uses a correlated subquery to find the maximum model version
+-- for each resource within each environment. This to also include orphans.
+-- The query uses the 'resource_env_resourceid_index' index on the 'resource' table,
+-- This index allows the query to efficiently find the latest version for each resource
+-- within each environment without scanning the entire table.
+INSERT INTO public.resource_persistent_state (
+            environment,
+            resource_id,
+            last_deploy,
+            last_success,
+            last_non_deploying_status,
+            last_produced_events,
+            last_deployed_version,
+            last_deployed_attribute_hash
+        )
+        SELECT
+            r.environment,
+            r.resource_id,
+            r.last_deploy,
+            r.last_success,
+            r.last_non_deploying_status,
+            r.last_produced_events,
+            r.model AS last_deployed_version,
+            r.attribute_hash AS last_deployed_attribute_hash
+        FROM
+            public.resource r
+        INNER JOIN (
+            SELECT
+                environment,
+                resource_id,
+                MAX(model) AS max_model
+            FROM
+                public.resource
+            GROUP BY
+                environment,
+                resource_id
+        ) rm ON
+            r.environment = rm.environment AND
+            r.resource_id = rm.resource_id AND
+            r.model = rm.max_model;
 
 ALTER TABLE public.resource DROP COLUMN last_success;
 ALTER TABLE public.resource DROP COLUMN last_non_deploying_status;
