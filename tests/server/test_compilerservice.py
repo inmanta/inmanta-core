@@ -876,7 +876,7 @@ async def test_server_recompile_param_fact_v2(server, clienthelper, client, envi
     # set a parameter without requesting a recompile
     result = await client.set_parameter(environment, name="param1", value="test", source=ParameterSource.plugin)
     assert result.code == 200
-    versions = await wait_for_version(client, environment, 1)
+    versions = await wait_for_version(client, environment, cnt=2)
     assert versions["count"] == 2
 
     logger.info("request second compile")
