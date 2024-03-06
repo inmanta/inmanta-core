@@ -842,6 +842,7 @@ class ResourceScheduler:
             ra.cancel()
         if self.cad_resolver is not None:
             self.cad_resolver.cancel()
+            self.cad_resolver = None
         self.generation = {}
         self.cad = {}
 
