@@ -1235,14 +1235,14 @@ class ResourceService(protocol.ServerSlice):
     async def resources_status(
         self,
         env: data.Environment,
-        model_version: int,
+        version: int,
         rids: list[ResourceIdStr],
     ) -> dict[str, ResourceState]:
         try:
             rids = [Id.parse_id(rid).resource_str() for rid in rids]
         except ValueError as e:
             raise BadRequest(str(e))
-        return await data.Resource.get_status_for(env.id, model_version, rids)
+        return await data.Resource.get_status_for(env.id, version, rids)
 
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:
