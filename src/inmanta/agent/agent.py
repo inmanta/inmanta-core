@@ -142,24 +142,8 @@ class DummyResourceAction(ResourceActionBase):
 
 FailedResourcesSet: TypeAlias = set[str]
 
-class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):
-    """
-    A context manager to ensure the cache version is properly closed
-    """
 
-    def __init__(self, executor: "Executor", version: int) -> None:
-        self.version = version
-        self.executor = executor
-
-    async def __aenter__(self) -> None:
-        await self.executor.open_version(self.version)
-
-    async def __aexit__(self, __exc_type: typing.Type[BaseException] | None, __exc_value: BaseException | None, __traceback: types.TracebackType | None) -> None:
-        await self.executor.close_version(self.version)
-        return None
-
-
-class Executor(ABC):
+class Executor(executor.Executor):
     """
     An executor for resources. Delegates to the appropriate handlers.
     """
@@ -175,65 +159,7 @@ class Executor(ABC):
         """
         pass
 
-    def cache(self, model_version: int) -> CacheVersionContext:
-        """
-        Context manager responsible for opening and closing the handler cache
-        for the given model_version during deployment.
-        """
-        return CacheVersionContext(self, model_version)
 
-
-    @abc.abstractmethod
-    async def execute(
-        self,
-        gid: uuid.UUID,
-        resource_details: ResourceDetails,
-        reason: str,
-    ) -> None:
-        """
-        Perform the actual deployment of the resource by calling the loaded handler code
-
-        :param gid: unique id for this deploy
-        :param resource_details: desired state for this resource as a ResourceDetails
-        :param reason: textual reason for this deploy
-        """
-        pass
-
-    @abc.abstractmethod
-    async def dry_run(
-        self,
-        resources: Sequence[ResourceDetails],
-        dry_run_id: uuid.UUID,
-    ) -> None:
-        """
-        Perform a dryrun for the given resources
-
-        :param resources: Sequence of resources for which to perform a dryrun.
-        :param dry_run_id: id for this dryrun
-        """
-        pass
-
-    @abc.abstractmethod
-    async def get_facts(self, resource: ResourceDetails) -> Apireturn:
-        """
-        Get facts for a given resource
-        :param resource: The resource for which to get facts.
-        """
-        pass
-
-    @abc.abstractmethod
-    async def open_version(self, version: int) -> None:
-        """
-            Open a version on the cache
-        """
-        pass
-
-    @abc.abstractmethod
-    async def close_version(self, version: int) -> None:
-        """
-            Close a version on the cache
-        """
-        pass
 
 
 class InProcessExecutor(Executor):
@@ -431,7 +357,7 @@ class InProcessExecutor(Executor):
         model_version: int = resources[0].model_version
         env_id: uuid.UUID = resources[0].env_id
 
-        with self.cache(model_version):
+        async with self.cache(model_version):
             for resource in resources:
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
@@ -530,7 +456,7 @@ class InProcessExecutor(Executor):
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
 
-            with self.cache(model_version):
+            async with self.cache(model_version):
                 try:
                     started = datetime.datetime.now().astimezone()
                     provider = await self.agent.get_provider(resource_obj)
@@ -573,8 +499,17 @@ class InProcessExecutor(Executor):
                 provider.close()
         return 200
 
-    def cache(self, model_version: int) -> CacheVersionContext:
-        return self.agent._cache.manager(model_version)
+    async def open_version(self, version: int) -> None:
+        """
+        Open a version on the cache
+        """
+        self.agent._cache.open_version(version)
+
+    async def close_version(self, version: int) -> None:
+        """
+        Close a version on the cache
+        """
+        self.agent._cache.close_version(version)
 
 
 class ExternalExecutor(Executor):

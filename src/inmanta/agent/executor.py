@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import typing
+import types
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -32,20 +33,21 @@ from typing import Any, Dict, Optional, Sequence
 
 import pkg_resources
 
+import inmanta.types
+from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import executor
 from inmanta.data import ResourceIdStr
 from inmanta.data.model import PipConfig, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
-from inmanta.resources import Resource, Id
+from inmanta.resources import Id, Resource
 from inmanta.types import JsonType
 from inmanta.util import NamedLock
-from inmanta import const
-import inmanta.types
-
+import contextlib
 
 LOGGER = logging.getLogger(__name__)
+
 
 class ResourceDetails:
     """
@@ -286,6 +288,26 @@ class VirtualEnvironmentManager:
                 return self._environment_map[blueprint]
             return await self.create_environment(blueprint, threadpool)
 
+class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):
+    """
+    A context manager to ensure the cache version is properly closed
+    """
+
+    def __init__(self, executor: "Executor", version: int) -> None:
+        self.version = version
+        self.executor = executor
+
+    async def __aenter__(self) -> None:
+        await self.executor.open_version(self.version)
+
+    async def __aexit__(
+        self,
+        __exc_type: typing.Type[BaseException] | None,
+        __exc_value: BaseException | None,
+        __traceback: types.TracebackType | None,
+    ) -> None:
+        await self.executor.close_version(self.version)
+        return None
 
 class Executor(abc.ABC):
     """
@@ -297,14 +319,13 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    @abc.abstractmethod
-    async def deserialize(self, resource_details: ResourceDetails, action: const.ResourceAction) -> Optional[Resource]:
-        """
-        Deserialize a resource from an untyped representation to an actual Resource
 
-        :param resource_details: untyped representation of the resource
-        :param action: the current action being performed that required this resource deserialization
+    def cache(self, model_version: int) -> CacheVersionContext:
         """
+        Context manager responsible for opening and closing the handler cache
+        for the given model_version during deployment.
+        """
+        return CacheVersionContext(self, model_version)
 
     @abc.abstractmethod
     async def execute(
@@ -347,14 +368,14 @@ class Executor(abc.ABC):
     @abc.abstractmethod
     async def open_version(self, version: int) -> None:
         """
-            Open a version on the cache
+        Open a version on the cache
         """
         pass
 
     @abc.abstractmethod
     async def close_version(self, version: int) -> None:
         """
-            Close a version on the cache
+        Close a version on the cache
         """
         pass
 
@@ -402,31 +423,6 @@ class ExecutorManager(abc.ABC, typing.Generic[MyExecutor]):
             executor = await self.create_executor(venv, executor_id)
             self.executor_map[executor_id] = executor
             return executor
-
-
-
-class ResourceDetails:
-    """
-    In memory representation of the desired state of a resource
-    """
-
-    id: Id
-    rid: ResourceIdStr
-    rvid: ResourceVersionIdStr
-    env_id: uuid.UUID
-    model_version: int
-    requires: Sequence[Id]
-    attributes: dict[str, object]
-
-    def __init__(self, resource_dict: JsonType) -> None:
-        self.attributes = resource_dict["attributes"]
-        self.attributes["id"] = resource_dict["id"]
-        self.id = Id.parse_id(resource_dict["id"])
-        self.rid = self.id.resource_str()
-        self.rvid = self.id.resource_version_str()
-        self.env_id = resource_dict["environment"]
-        self.requires = [Id.parse_id(resource_id) for resource_id in resource_dict["attributes"]["requires"]]
-        self.model_version = resource_dict["model"]
 
 
 @dataclass(frozen=True)
