@@ -813,7 +813,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     # add main.cf
     with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
         fd.write(
-            f"""
+            """
     host = std::Host(name="test", os=std::linux)
         std::ConfigFile(host=host, path="/etc/motd", content="1234")
 """
@@ -827,6 +827,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
 
+    # get an existing ressource
     resources = await data.Resource.get_resources_for_version(environment, 1)
     resource_id = resources[0].resource_id
 
