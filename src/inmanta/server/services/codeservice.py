@@ -70,6 +70,7 @@ class CodeService(protocol.ServerSlice):
                 ):
                     raise BadRequest("The values in the source map should be of the form (filename, module, [requirements])")
 
+        # list of file hashes
         allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
 
         val = await self.file_slice.stat_file_internal(allrefs)
@@ -123,6 +124,8 @@ class CodeService(protocol.ServerSlice):
             raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
 
         sources = []
+
+        # Get all module code pertaining to this env/version/resource
         if code.source_refs is not None:
             for code_hash, (file_name, module, requires) in code.source_refs.items():
                 sources.append(

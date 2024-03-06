@@ -1,0 +1,5 @@
+description: >
+  POC for the agent refactor
+  Bring together the logic for code loading and code execution in a new ``InProcessExecutor`` class.
+change-type: patch
+destination-branches: [master]
