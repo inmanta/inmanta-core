@@ -1900,19 +1900,11 @@ async def test_set_fact(
     client,
     clienthelper,
     environment,
-    no_agent_backoff,
-    agent_factory,
 ):
     """
     Test the set_fact endpoint. First create a fact with expires set to true.
     Then set expires to false for the same fact.
     """
-    await agent_factory(
-        environment=environment,
-        agent_map={"discovery_agent": "localhost"},
-        hostname="discovery_agent",
-    )
-
     version = await clienthelper.get_version()
     resource_id = "test::MyDiscoveryResource[discovery_agent,key=key1]"
     resource_version_id = f"{resource_id},v={version}"

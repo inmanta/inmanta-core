@@ -378,26 +378,28 @@ class ParameterService(protocol.ServerSlice):
         """
         Update a parameter or fact and optionally trigger recompilation.
         """
+        if resource_id is None:
+            resource_id = ""
         # Validate parameter or fact
         self._validate_parameter(name, resource_id, expires)
 
-        # Update parameter with new value and metadata
+        # Update parameter/fact with new value and metadata
         result = await self._update_param(env, name, value, source, resource_id, metadata, recompile, expires)
         warnings = None
         if result:
             compile_metadata = {
-                "message": "Recompile model because one or more parameters were updated",
-                "type": "param",
+                "message": "Recompile model because one or more parameters/facts were updated",
+                "type": "fact" if resource_id else "param",
                 "params": [(name, resource_id)],
             }
             warnings = await self.server_slice._async_recompile(env, False, metadata=compile_metadata)
 
         # Retrieve the updated parameter/fact
-        param = await data.Parameter.get_list(environment=env.id, name=name)
+        param = await data.Parameter.get_one(environment=env.id, name=name, resource_id=resource_id)
         if not param:
-            raise NotFound(f"Parameter with id {name} does not exist")
+            raise NotFound(f"{'Fact' if resource_id else 'Parameter'} with id {name} does not exist")
 
-        return param[0], warnings
+        return param, warnings
 
     @handle(methods_v2.set_parameter, env="tid")
     async def set_parameter(
