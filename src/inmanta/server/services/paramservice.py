@@ -390,7 +390,7 @@ class ParameterService(protocol.ServerSlice):
                 "type": "param",
                 "params": [(name, resource_id)],
             }
-            warnings = await self.server_slice._async_recompile(env, False, metadata=compile_metadata)
+            warnings = await self.server_slice._async_recompile(env, update_repo=False, metadata=compile_metadata)
 
         # Retrieve the updated parameter/fact
         param = await data.Parameter.get_list(environment=env.id, name=name)
