@@ -382,9 +382,9 @@ class ParameterService(protocol.ServerSlice):
         self._validate_parameter(name, resource_id, expires)
 
         # Update parameter/fact with new value and metadata
-        result = await self._update_param(env, name, value, source, resource_id, metadata, recompile, expires)
+        recompile_required: bool = await self._update_param(env, name, value, source, resource_id, metadata, recompile, expires)
         warnings = None
-        if result:
+        if recompile_required:
             compile_metadata = {
                 "message": "Recompile model because one or more parameters were updated",
                 "type": "param",
