@@ -18,6 +18,7 @@
 
 import abc
 import asyncio
+import contextlib
 import dataclasses
 import datetime
 import enum
@@ -25,13 +26,14 @@ import logging
 import os
 import random
 import time
+import types
+import typing
 import uuid
 from abc import ABC
 from asyncio import Lock
 from collections import defaultdict
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
-from dataclasses import dataclass
 from logging import Logger
 from typing import Any, Collection, Dict, Optional, Self, TypeAlias, Union, cast
 
@@ -41,6 +43,7 @@ from inmanta import const, data, env, loader, module, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, handler
 from inmanta.agent.cache import AgentCache, CacheVersionContext
+from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
@@ -137,49 +140,23 @@ class DummyResourceAction(ResourceActionBase):
         super().__init__(scheduler, dummy_id, gid, reason)
 
 
-@dataclass(frozen=True)
-class ResourceInstallSpec:
-    """
-    This class encapsulates the requirements for a specific resource type for a specific model version.
-
-    :ivar resource_type: fully qualified name for this resource type e.g. std::File
-    :ivar model_version: the version of the model to use
-    :ivar pip_config: the pip config to use during requirements installation
-    :ivar requirements: python packages that must be installed prior to executing the module sources
-    :ivar sources: list of ModuleSource containing the code for deployment of this resource
-
-    """
-
-    resource_type: str
-    model_version: int
-    blueprint: executor.ExecutorBlueprint
-
-
-class ResourceDetails:
-    """
-    In memory representation of the desired state of a resource
-    """
-
-    id: Id
-    rid: ResourceIdStr
-    rvid: ResourceVersionIdStr
-    env_id: uuid.UUID
-    model_version: int
-    requires: Sequence[Id]
-    attributes: dict[str, object]
-
-    def __init__(self, resource_dict: JsonType) -> None:
-        self.attributes = resource_dict["attributes"]
-        self.attributes["id"] = resource_dict["id"]
-        self.id = Id.parse_id(resource_dict["id"])
-        self.rid = self.id.resource_str()
-        self.rvid = self.id.resource_version_str()
-        self.env_id = resource_dict["environment"]
-        self.requires = [Id.parse_id(resource_id) for resource_id in resource_dict["attributes"]["requires"]]
-        self.model_version = resource_dict["model"]
-
-
 FailedResourcesSet: TypeAlias = set[str]
+
+class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):
+    """
+    A context manager to ensure the cache version is properly closed
+    """
+
+    def __init__(self, executor: "Executor", version: int) -> None:
+        self.version = version
+        self.executor = executor
+
+    async def __aenter__(self) -> None:
+        await self.executor.open_version(self.version)
+
+    async def __aexit__(self, __exc_type: typing.Type[BaseException] | None, __exc_value: BaseException | None, __traceback: types.TracebackType | None) -> None:
+        await self.executor.close_version(self.version)
+        return None
 
 
 class Executor(ABC):
@@ -198,14 +175,13 @@ class Executor(ABC):
         """
         pass
 
-    @abc.abstractmethod
-    async def deserialize(self, resource_details: ResourceDetails, action: const.ResourceAction) -> Optional[Resource]:
+    def cache(self, model_version: int) -> CacheVersionContext:
         """
-        Deserialize a resource from an untyped representation to an actual Resource
+        Context manager responsible for opening and closing the handler cache
+        for the given model_version during deployment.
+        """
+        return CacheVersionContext(self, model_version)
 
-        :param resource_details: untyped representation of the resource
-        :param action: the current action being performed that required this resource deserialization
-        """
 
     @abc.abstractmethod
     async def execute(
@@ -246,10 +222,16 @@ class Executor(ABC):
         pass
 
     @abc.abstractmethod
-    def cache(self, model_version: int) -> CacheVersionContext:
+    async def open_version(self, version: int) -> None:
         """
-        Context manager responsible for opening and closing the handler cache
-        for the given model_version during deployment.
+            Open a version on the cache
+        """
+        pass
+
+    @abc.abstractmethod
+    async def close_version(self, version: int) -> None:
+        """
+            Close a version on the cache
         """
         pass
 
@@ -638,7 +620,7 @@ class ResourceAction(ResourceActionBase):
 
     async def execute(self, dummy: "ResourceActionBase", generation: Mapping[ResourceIdStr, ResourceActionBase]) -> None:
         self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
-        with self.executor.cache(self.resource.model_version):
+        async with self.executor.cache(self.resource.model_version):
             self.dependencies = [generation[resource_id.resource_str()] for resource_id in self.resource.requires]
             waiters = [x.future for x in self.dependencies]
             waiters.append(dummy.future)

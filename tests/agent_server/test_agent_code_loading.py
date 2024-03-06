@@ -30,7 +30,7 @@ import pytest
 import inmanta
 from inmanta import const
 from inmanta.agent import Agent
-from inmanta.agent.agent import ResourceInstallSpec
+from inmanta.agent.executor import ResourceInstallSpec
 from inmanta.data import PipConfig
 from inmanta.data.model import Notification
 from inmanta.protocol import Client

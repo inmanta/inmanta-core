@@ -25,20 +25,50 @@ import json
 import logging
 import os
 import typing
-from collections.abc import Sequence
+import uuid
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, Optional, Sequence
 
 import pkg_resources
 
 from inmanta.agent import config as cfg
-from inmanta.data.model import PipConfig
+from inmanta.agent import executor
+from inmanta.data import ResourceIdStr
+from inmanta.data.model import PipConfig, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
-from inmanta.resources import Resource
+from inmanta.resources import Resource, Id
+from inmanta.types import JsonType
 from inmanta.util import NamedLock
+from inmanta import const
+import inmanta.types
+
 
 LOGGER = logging.getLogger(__name__)
+
+class ResourceDetails:
+    """
+    In memory representation of the desired state of a resource
+    """
+
+    id: Id
+    rid: ResourceIdStr
+    rvid: ResourceVersionIdStr
+    env_id: uuid.UUID
+    model_version: int
+    requires: Sequence[Id]
+    attributes: dict[str, object]
+
+    def __init__(self, resource_dict: JsonType) -> None:
+        self.attributes = resource_dict["attributes"]
+        self.attributes["id"] = resource_dict["id"]
+        self.id = Id.parse_id(resource_dict["id"])
+        self.rid = self.id.resource_str()
+        self.rvid = self.id.resource_version_str()
+        self.env_id = resource_dict["environment"]
+        self.requires = [Id.parse_id(resource_id) for resource_id in resource_dict["attributes"]["requires"]]
+        self.model_version = resource_dict["model"]
 
 
 @dataclasses.dataclass
@@ -267,8 +297,66 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    def execute(self, resources: list[Resource]) -> None:
-        print("Start deploy of resources")
+    @abc.abstractmethod
+    async def deserialize(self, resource_details: ResourceDetails, action: const.ResourceAction) -> Optional[Resource]:
+        """
+        Deserialize a resource from an untyped representation to an actual Resource
+
+        :param resource_details: untyped representation of the resource
+        :param action: the current action being performed that required this resource deserialization
+        """
+
+    @abc.abstractmethod
+    async def execute(
+        self,
+        gid: uuid.UUID,
+        resource_details: ResourceDetails,
+        reason: str,
+    ) -> None:
+        """
+        Perform the actual deployment of the resource by calling the loaded handler code
+
+        :param gid: unique id for this deploy
+        :param resource_details: desired state for this resource as a ResourceDetails
+        :param reason: textual reason for this deploy
+        """
+        pass
+
+    @abc.abstractmethod
+    async def dry_run(
+        self,
+        resources: Sequence[ResourceDetails],
+        dry_run_id: uuid.UUID,
+    ) -> None:
+        """
+        Perform a dryrun for the given resources
+
+        :param resources: Sequence of resources for which to perform a dryrun.
+        :param dry_run_id: id for this dryrun
+        """
+        pass
+
+    @abc.abstractmethod
+    async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
+        """
+        Get facts for a given resource
+        :param resource: The resource for which to get facts.
+        """
+        pass
+
+    @abc.abstractmethod
+    async def open_version(self, version: int) -> None:
+        """
+            Open a version on the cache
+        """
+        pass
+
+    @abc.abstractmethod
+    async def close_version(self, version: int) -> None:
+        """
+            Close a version on the cache
+        """
+        pass
 
 
 MyExecutor = typing.TypeVar("MyExecutor", bound=Executor)
@@ -315,18 +403,45 @@ class ExecutorManager(abc.ABC, typing.Generic[MyExecutor]):
             self.executor_map[executor_id] = executor
             return executor
 
-    async def execute(
-        self,
-        agent_name: str,
-        blueprint: ExecutorBlueprint,
-        resources: list[Resource],
-    ) -> None:
-        """
-        Execute the given resources with the appropriate Executor.
 
-        :param agent_name: The name of the agent under which the execution is performed.
-        :param blueprint: The ExecutorBlueprint defining the configuration for the Executor.
-        :param resources: A list of Resource instances to be deployed.
-        """
-        executor = await self.get_executor(agent_name, blueprint)
-        executor.execute(resources)
+
+class ResourceDetails:
+    """
+    In memory representation of the desired state of a resource
+    """
+
+    id: Id
+    rid: ResourceIdStr
+    rvid: ResourceVersionIdStr
+    env_id: uuid.UUID
+    model_version: int
+    requires: Sequence[Id]
+    attributes: dict[str, object]
+
+    def __init__(self, resource_dict: JsonType) -> None:
+        self.attributes = resource_dict["attributes"]
+        self.attributes["id"] = resource_dict["id"]
+        self.id = Id.parse_id(resource_dict["id"])
+        self.rid = self.id.resource_str()
+        self.rvid = self.id.resource_version_str()
+        self.env_id = resource_dict["environment"]
+        self.requires = [Id.parse_id(resource_id) for resource_id in resource_dict["attributes"]["requires"]]
+        self.model_version = resource_dict["model"]
+
+
+@dataclass(frozen=True)
+class ResourceInstallSpec:
+    """
+    This class encapsulates the requirements for a specific resource type for a specific model version.
+
+    :ivar resource_type: fully qualified name for this resource type e.g. std::File
+    :ivar model_version: the version of the model to use
+    :ivar pip_config: the pip config to use during requirements installation
+    :ivar requirements: python packages that must be installed prior to executing the module sources
+    :ivar sources: list of ModuleSource containing the code for deployment of this resource
+
+    """
+
+    resource_type: str
+    model_version: int
+    blueprint: executor.ExecutorBlueprint
