@@ -225,6 +225,14 @@ class ModuleSource:
 
         return base64.b64decode(response.result["content"])
 
+    def for_transport(self) -> "ModuleSource":
+        return ModuleSource(name=self.name, hash_value=self.hash_value, is_byte_code=self.is_byte_code, source=self.source)
+
+    def with_client(self, client: "protocol.SyncClient") -> "ModuleSource":
+        return ModuleSource(
+            name=self.name, hash_value=self.hash_value, is_byte_code=self.is_byte_code, source=self.source, _client=client
+        )
+
 
 class CodeLoader:
     """
@@ -239,8 +247,8 @@ class CodeLoader:
 
         self.__check_dir()
 
-        mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-        PluginModuleFinder.configure_module_finder(modulepaths=[mod_dir], prefer=True)
+        self.mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
+        PluginModuleFinder.configure_module_finder(modulepaths=[self.mod_dir], prefer=True)
 
     def __check_dir(self) -> None:
         """
@@ -258,6 +266,9 @@ class CodeLoader:
         """
         Load or reload a module
         """
+
+        # Importing a module -> only the first import loads the code
+        # cache of loaded modules mechanism -> starts afresh when agent is restarted
         try:
             if mod_name in self.__modules:
                 mod = importlib.reload(self.__modules[mod_name][1])
@@ -347,7 +358,7 @@ class CodeLoader:
             is_changed = self.install_source(module_source)
             if is_changed:
                 to_reload.append(module_source)
-
+        # This whole mechanism can go if we spawn a new venv with the new code when required
         if len(to_reload) > 0:
             importlib.invalidate_caches()
             for module_source in to_reload:

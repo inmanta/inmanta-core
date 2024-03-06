@@ -26,7 +26,7 @@ import logging
 import os
 import typing
 from collections.abc import Sequence
-from concurrent.futures.thread import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional
 
 import pkg_resources
@@ -197,9 +197,9 @@ class VirtualEnvironmentManager:
     for storing these environments.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, envs_dir: str) -> None:
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
-        self.envs_dir: str = initialize_envs_directory()
+        self.envs_dir: str = envs_dir
         self._locks: NamedLock = NamedLock()
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
@@ -278,7 +278,7 @@ class ExecutorManager(abc.ABC, typing.Generic[MyExecutor]):
     """
     Manages Executors by ensuring that Executors are created and reused efficiently based on their configurations.
 
-    :param agent: The Agent instance that this ExecutorManager is part of.
+    :param thread_pool:  threadpool to perform work on
     :param environment_manager: The VirtualEnvironmentManager responsible for managing the virtual environments
     """
 
