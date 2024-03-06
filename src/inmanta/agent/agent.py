@@ -39,7 +39,7 @@ import pkg_resources
 
 from inmanta import const, data, env, loader, module, protocol
 from inmanta.agent import config as cfg
-from inmanta.agent import handler
+from inmanta.agent import executor, handler
 from inmanta.agent.cache import AgentCache, CacheVersionContext
 from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
@@ -152,9 +152,7 @@ class ResourceInstallSpec:
 
     resource_type: str
     model_version: int
-    pip_config: PipConfig
-    requirements: Sequence[str]
-    sources: Sequence["ModuleSource"]
+    blueprint: executor.ExecutorBlueprint
 
 
 class ResourceDetails:
@@ -1429,7 +1427,7 @@ class Agent(SessionEndpoint):
             # Lock to ensure only one actual install runs at a time
             self._loader_lock = Lock()
             # Keep track for each resource type of the last loaded version
-            self._last_loaded_version: dict[str, int] = defaultdict(lambda: -1)
+            self._last_loaded_version: dict[str, executor.ExecutorBlueprint] = defaultdict(lambda: None)
             # Cache to prevent re-fetching the same resource-version
             self._previously_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
             # Per-resource lock to serialize all actions per resource
@@ -1667,7 +1665,9 @@ class Agent(SessionEndpoint):
                         invalid_resource_types.add(resource_type)
                         continue
 
-                resource_install_spec = ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources)
+                resource_install_spec = ResourceInstallSpec(
+                    resource_type, version, executor.ExecutorBlueprint(pip_config, list(requirements), sources)
+                )
                 resource_install_specs.append(resource_install_spec)
 
                 # Update the ``_previously_loaded`` cache to indicate that the given resource type's code
@@ -1696,7 +1696,7 @@ class Agent(SessionEndpoint):
             async with self._resource_loader_lock.get(resource_install_spec.resource_type):
                 # stop if the last successful load was this one
                 # The combination of the lock and this check causes the reloads to naturally 'batch up'
-                if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.model_version:
+                if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.blueprint:
                     LOGGER.debug(
                         "Handler code already installed for %s version=%d",
                         resource_install_spec.resource_type,
@@ -1711,18 +1711,14 @@ class Agent(SessionEndpoint):
                         resource_install_spec.resource_type,
                         resource_install_spec.model_version,
                     )
-                    await self._install(
-                        resource_install_spec.sources,
-                        resource_install_spec.requirements,
-                        pip_config=resource_install_spec.pip_config,
-                    )
+                    await self._install(resource_install_spec.blueprint)
                     LOGGER.debug(
                         "Installed handler %s version=%d",
                         resource_install_spec.resource_type,
                         resource_install_spec.model_version,
                     )
 
-                    self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.model_version
+                    self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
                 except Exception:
                     LOGGER.exception(
                         "Failed to install handler %s version=%d",
@@ -1730,16 +1726,16 @@ class Agent(SessionEndpoint):
                         resource_install_spec.model_version,
                     )
                     failed_to_load.add(resource_install_spec.resource_type)
-                    self._last_loaded_version[resource_install_spec.resource_type] = -1
+                    self._last_loaded_version[resource_install_spec.resource_type] = None
 
-                for source in resource_install_spec.sources:
+                for source in resource_install_spec.blueprint.sources:
                     module_name: str = loader.get_inmanta_module_name(source.name)
                     all_installed_modules.add(module_name)
 
                 all_required_modules.update(
                     {
                         module.ModuleV2Source.get_inmanta_module_name(r)
-                        for r in resource_install_spec.requirements
+                        for r in resource_install_spec.blueprint.requirements
                         if r.startswith("inmanta-module-")
                     }
                 )
@@ -1773,7 +1769,7 @@ problem occurs, a manual cleanup of the agent's code directory is required to re
 
         return failed_to_load
 
-    async def _install(self, sources: Sequence[ModuleSource], requirements: Sequence[str], pip_config: PipConfig) -> None:
+    async def _install(self, blueprint: executor.ExecutorBlueprint) -> None:
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
@@ -1782,10 +1778,10 @@ problem occurs, a manual cleanup of the agent's code directory is required to re
             await loop.run_in_executor(
                 self.thread_pool,
                 self._env.install_for_config,
-                list(pkg_resources.parse_requirements(requirements)),
-                pip_config,
+                list(pkg_resources.parse_requirements(blueprint.requirements)),
+                blueprint.pip_config,
             )
-            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, sources)
+            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
 
     async def _get_pip_config(self, environment: uuid.UUID, version: int) -> PipConfig:
         response = await self._client.get_pip_config(tid=environment, version=version)
