@@ -562,7 +562,7 @@ class ResourceScheduler:
                 self.deferred = None
 
     async def resolve_cads(self, version: int, cads: dict[ResourceIdStr, RemoteResourceAction]) -> None:
-        """ Batch resolve all CAD's """
+        """Batch resolve all CAD's"""
         async with self.agent.process.cad_ratelimiter:
             result = await self.get_client().resources_status(
                 tid=self.agent._env_id,
@@ -575,10 +575,9 @@ class ResourceScheduler:
 
             for rid_raw, status_raw in result.result["data"].items():
                 status = const.ResourceState[status_raw]
-                rra = cads.get(rid_raw, None)
-                if rra is not None:
-                    if status not in const.TRANSIENT_STATES:
-                        rra.notify(status)
+                rra = cads[rid_raw]
+                if status not in const.TRANSIENT_STATES:
+                    rra.notify(status)
 
     def notify_ready(
         self,

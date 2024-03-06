@@ -872,14 +872,14 @@ def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.F
 )
 def resources_status(
     tid: uuid.UUID,
-    model_version: int,
+    version: int,
     rids: list[model.ResourceIdStr],
 ) -> dict[model.ResourceIdStr, ResourceState]:
     """
     Get the deployment status for a batch of resource ids
 
     :param tid: The id of the environment the resources belong to
-    :param model_version: Version of the model to get the status for
+    :param version: Version of the model to get the status for
     :param rids: List of resource ids to fetch the status for.
     """
 
