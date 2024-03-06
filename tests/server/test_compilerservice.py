@@ -36,7 +36,7 @@ from pytest import approx
 import inmanta.ast.export as ast_export
 import inmanta.data.model as model
 import utils
-from inmanta import config, data, util
+from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
