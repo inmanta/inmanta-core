@@ -807,7 +807,6 @@ async def test_server_recompile_param_fact_v2(server, clienthelper, client, envi
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
-    print("Project at: ", project_dir)
 
     shutil.copytree(project_source, project_dir)
     subprocess.check_output(["git", "init"], cwd=project_dir)
