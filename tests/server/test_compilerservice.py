@@ -827,7 +827,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
 
-    # get an existing ressource
+    # get an existing resource
     resources = await data.Resource.get_resources_for_version(environment, 1)
     resource_id = resources[0].resource_id
 
@@ -866,7 +866,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
         environment, name="fact1", value="test", source=ParameterSource.fact, resource_id=resource_id
     )
     assert result.code == 200
-    versions = await wait_for_version(client, environment, cnt=4)
+    versions = await wait_for_version(client, environment, cnt=3)
     assert versions["count"] == 3
 
     # set a new fact and request a recompile
@@ -876,7 +876,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     assert result.code == 200
     logger.info("wait for 4")
     versions = await wait_for_version(client, environment, cnt=4)
-    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "fact"
     assert versions["count"] == 4
 
     # update the fact to the same value -> no compile
@@ -884,7 +884,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
         environment, name="fact2", value="test", source=ParameterSource.fact, resource_id=resource_id, recompile=True
     )
     assert result.code == 200
-    versions = await wait_for_version(client, environment, cnt=5)
+    versions = await wait_for_version(client, environment, cnt=4)
     assert versions["count"] == 4
 
     # update the fact to a new value
@@ -893,7 +893,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     )
     assert result.code == 200
     logger.info("wait for 5")
-    versions = await wait_for_version(client, environment, cnt=6)
+    versions = await wait_for_version(client, environment, cnt=5)
     assert versions["count"] == 5
 
 
