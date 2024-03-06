@@ -166,7 +166,7 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     # only two exist
     result = await agent._client.resources_status(
         tid=environment,
-        model_version=version,
+        version=version,
         rids=["std::File[agent1,path=/etc/file2]", "std::File[agent1,path=/etc/file3]", "std::File[agent1,path=/etc/file4]"],
     )
     assert result.code == 200
@@ -176,7 +176,7 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     }
 
     result = await agent._client.resources_status(
-        tid=environment, model_version=version, rids=["std::File[agent1,path=/etc/file2]", "Resource WITH invalid id"]
+        tid=environment, version=version, rids=["std::File[agent1,path=/etc/file2]", "Resource WITH invalid id"]
     )
     assert result.code == 400
     assert result.result["message"] == "Invalid request: Invalid id for resource Resource WITH invalid id"
