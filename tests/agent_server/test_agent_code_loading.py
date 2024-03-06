@@ -18,6 +18,7 @@
 
 import base64
 import hashlib
+import logging
 import os
 import py_compile
 import tempfile
@@ -27,16 +28,30 @@ from logging import DEBUG, INFO
 import pytest
 
 import inmanta
+from inmanta import const
 from inmanta.agent import Agent
+from inmanta.agent.agent import ResourceInstallSpec
 from inmanta.data import PipConfig
+from inmanta.data.model import Notification
 from inmanta.protocol import Client
 from inmanta.util import get_compiler_version
-from utils import LogSequence
+from utils import LogSequence, log_contains, log_doesnt_contain
 
 
 async def make_source_structure(
-    into: dict, file: str, module: str, source: str, client: Client, byte_code: bool = False, dependencies: list[str] = []
+    into: dict[str, tuple[str, str, list[str]]],
+    file: str,
+    module: str,
+    source: str,
+    client: Client,
+    byte_code: bool = False,
+    dependencies: list[str] = [],
 ) -> str:
+    """
+    :param into: dict to populate:
+        - key = hash value of the file
+        - value = tuple (file_name, module, dependencies)
+    """
     with tempfile.TemporaryDirectory() as tmpdirname:
         if byte_code:
             py_file = os.path.join(tmpdirname, "test.py")
@@ -159,24 +174,47 @@ inmanta.test_agent_code_loading = 15
 
     # Cache test
     # install sources for all three
-    await agent.ensure_code(
-        environment=environment,
-        version=version_1,
-        resource_types=["test::Test", "test::Test2", "test::Test3"],
+    resource_install_specs_1: list[ResourceInstallSpec]
+    resource_install_specs_2: list[ResourceInstallSpec]
+    resource_install_specs_3: list[ResourceInstallSpec]
+    resource_install_specs_4: list[ResourceInstallSpec]
+    resource_install_specs_5: list[ResourceInstallSpec]
+    resource_install_specs_6: list[ResourceInstallSpec]
+
+    resource_install_specs_1, _ = await agent.get_code(
+        environment=environment, version=version_1, resource_types=["test::Test", "test::Test2", "test::Test3"]
     )
-    # install sources as well
-    await agent.ensure_code(environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"])
-    # install sources as well
-    await agent.ensure_code(environment=environment, version=version_2, resource_types=["test::Test2"])
+    await agent.ensure_code(
+        code=resource_install_specs_1,
+    )
+    resource_install_specs_2, _ = await agent.get_code(
+        environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"]
+    )
+    await agent.ensure_code(
+        code=resource_install_specs_2,
+    )
+    resource_install_specs_3, _ = await agent.get_code(
+        environment=environment, version=version_2, resource_types=["test::Test2"]
+    )
+    await agent.ensure_code(
+        code=resource_install_specs_3,
+    )
 
     # Test 1 is deployed once, as seen by the agent
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test version={version_1}").contains(
-        "inmanta.agent.agent", DEBUG, f"Installed handler test::Test version={version_1}"
-    ).contains("inmanta.agent.agent", DEBUG, f"Code already present for test::Test version={version_1}").assert_not(
-        "inmanta", DEBUG, "test::Test "
+    (
+        LogSequence(caplog)
+        .contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test version={version_1}")
+        .contains("inmanta.agent.agent", DEBUG, f"Installed handler test::Test version={version_1}")
+        .contains(
+            "inmanta.agent.agent",
+            DEBUG,
+            f"Cache hit, using existing ResourceInstallSpec for resource_type=test::Test version={version_1}",
+        )
+        .contains("inmanta.agent.agent", DEBUG, f"Handler code already installed for test::Test version={version_1}")
+        .assert_not("inmanta", DEBUG, "test::Test ")
     )
 
-    # Test 2 is once twice, as seen by the agent
+    # Test 2 is deployed twice, as seen by the agent
     # But loaded only once
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test2 version={version_1}").contains(
         "inmanta.agent.agent", DEBUG, f"Installing handler test::Test2 version={version_2}"
@@ -190,8 +228,11 @@ inmanta.test_agent_code_loading = 15
     # we are now at sources1
     assert getattr(inmanta, "test_agent_code_loading") == 5
 
+    resource_install_specs_4, _ = await agent.get_code(
+        environment=environment, version=version_2, resource_types=["test::Test3"]
+    )
     # Install sources2
-    await agent.ensure_code(environment=environment, version=version_2, resource_types=["test::Test3"])
+    await agent.ensure_code(code=resource_install_specs_4)
     # Test 3 is deployed twice, as seen by the agent and the loader
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test3 version={version_1}")
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test3 version={version_2}")
@@ -203,8 +244,11 @@ inmanta.test_agent_code_loading = 15
     # we are now at sources2
     assert getattr(inmanta, "test_agent_code_loading") == 10
 
+    resource_install_specs_5, _ = await agent.get_code(
+        environment=environment, version=version_3, resource_types=["test::Test4"]
+    )
     # Loader loads byte code file
-    await agent.ensure_code(environment=environment, version=version_3, resource_types=["test::Test4"])
+    await agent.ensure_code(code=resource_install_specs_5)
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test4 version={version_3}")
     LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)").assert_not(
         "inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)"
@@ -212,8 +256,11 @@ inmanta.test_agent_code_loading = 15
 
     assert getattr(inmanta, "test_agent_code_loading") == 15
 
+    resource_install_specs_6, _ = await agent.get_code(
+        environment=environment, version=version_4, resource_types=["test::Test4"]
+    )
     # Now load the python only version again
-    await agent.ensure_code(environment=environment, version=version_4, resource_types=["test::Test4"])
+    await agent.ensure_code(code=resource_install_specs_6)
     assert getattr(inmanta, "test_agent_code_loading") == 10
 
 
@@ -262,12 +309,124 @@ def test():
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
     )
-
-    await agent.ensure_code(
+    install_spec, _ = await agent.get_code(
         environment=environment,
         version=version,
         resource_types=["test::Test"],
     )
+    await agent.ensure_code(install_spec)
 
     assert agent._env.are_installed(["pkg", "dep-a"])
     assert not agent._env.are_installed(["dep-b", "dep-c"])
+
+
+async def test_warning_message_stale_python_code(
+    server,
+    client,
+    environment,
+    agent_factory,
+    clienthelper,
+    caplog,
+    local_module_package_index,
+) -> None:
+    """
+    If a certain module A depends on the plugin code of another module B, then the source of B must either:
+      * Be exported to the server (because module B has resources or providers)
+      * Or, not be exported and never been exported in any previous version.
+    Otherwise there is the possibility that stale code in the code directory of the agent gets picket up,
+    instead of the code from the Python package (V2 module) installed in the venv of the agent.
+
+    This test case verifies that a warning message is written the agent's log file when this scenario occurs.
+    """
+
+    sources_test_mod = {}
+    await make_source_structure(
+        into=sources_test_mod,
+        file="inmanta_plugins/test/__init__.py",
+        module="inmanta_plugins.test",
+        source="",
+        dependencies=["inmanta-module-minimalv2module"],
+        client=client,
+    )
+    sources_minimalv2module_mod = {}
+    await make_source_structure(
+        into=sources_minimalv2module_mod,
+        file="inmanta_plugins/minimalv2module/__init__.py",
+        module="inmanta_plugins.minimalv2module",
+        source="",
+        dependencies=[],
+        client=client,
+    )
+
+    version = await clienthelper.get_version()
+
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[],
+        pip_config=PipConfig(index_url=local_module_package_index),
+        compiler_version=get_compiler_version(),
+    )
+    assert res.code == 200
+
+    res = await client.upload_code_batched(
+        tid=environment,
+        id=version,
+        resources={"test::Test": sources_test_mod, "minimalv2module::Test": sources_minimalv2module_mod},
+    )
+    assert res.code == 200
+
+    agent: Agent = await agent_factory(
+        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
+    )
+
+    install_specs, _ = await agent.get_code(
+        environment=uuid.UUID(environment),
+        version=version,
+        resource_types=["test::Test", "minimalv2module::Test"],
+    )
+    await agent.ensure_code(install_specs)
+
+    expected_warning_message = (
+        f"The source code for the modules minimalv2module is present in the modules directory of the agent "
+        f"({agent._loader.mod_dir})"
+    )
+    log_doesnt_contain(caplog, "agent", logging.WARNING, expected_warning_message)
+    result = await client.list_notifications(tid=environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+
+    # Don't upload code for modb anymore in new version
+    version = await clienthelper.get_version()
+
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[],
+        pip_config=PipConfig(index_url=local_module_package_index),
+        compiler_version=get_compiler_version(),
+    )
+    assert res.code == 200
+
+    res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources_test_mod})
+    assert res.code == 200
+
+    install_specs, _ = await agent.get_code(
+        environment=uuid.UUID(environment),
+        version=version,
+        resource_types=["test::Test"],
+    )
+    await agent.ensure_code(install_specs)
+
+    log_contains(caplog, "agent", logging.WARNING, expected_warning_message)
+    result = await client.list_notifications(tid=environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    notification = Notification(**result.result["data"][0])
+    assert notification.environment == uuid.UUID(environment)
+    assert notification.title == "Stale code in agent's code directory"
+    assert expected_warning_message in notification.message
+    assert notification.uri is None
+    assert notification.severity == const.NotificationSeverity.warning.value
+    assert not notification.read
+    assert not notification.cleared

@@ -105,10 +105,7 @@ class SourceInfo:
         if self._requires is None:
             project: module.Project = module.Project.get()
             mod: module.Module = project.modules[self._get_module_name()]
-            if project.metadata.agent_install_dependency_modules:
-                self._requires = mod.get_all_python_requirements_as_list()
-            else:
-                self._requires = mod.get_strict_python_requirements_as_list()
+            self._requires = mod.get_all_python_requirements_as_list()
         return self._requires
 
 
@@ -247,8 +244,8 @@ class CodeLoader:
 
         self.__check_dir()
 
-        mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-        PluginModuleFinder.configure_module_finder(modulepaths=[mod_dir], prefer=True)
+        self.mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
+        PluginModuleFinder.configure_module_finder(modulepaths=[self.mod_dir], prefer=True)
 
     def __check_dir(self) -> None:
         """
@@ -266,6 +263,9 @@ class CodeLoader:
         """
         Load or reload a module
         """
+
+        # Importing a module -> only the first import loads the code
+        # cache of loaded modules mechanism -> starts afresh when agent is restarted
         try:
             if mod_name in self.__modules:
                 mod = importlib.reload(self.__modules[mod_name][1])
@@ -355,7 +355,7 @@ class CodeLoader:
             is_changed = self.install_source(module_source)
             if is_changed:
                 to_reload.append(module_source)
-
+        # This whole mechanism can go if we spawn a new venv with the new code when required
         if len(to_reload) > 0:
             importlib.invalidate_caches()
             for module_source in to_reload:

@@ -83,10 +83,12 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
     assert result.code == 503
 
     env_uuid = uuid.UUID(environment)
-    params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-    while len(params) < 3:
+
+    async def wait_for_three_params():
         params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-        await asyncio.sleep(0.1)
+        return len(params) >= 3
+
+    await retry_limited(wait_for_three_params, 10)
 
     result = await client.get_param(environment, "key1", resource_id_wov)
     assert result.code == 200
@@ -431,4 +433,4 @@ async def test_get_fact_no_code(resource_container, client, clienthelper, enviro
     log_entry = result["logs"][0]
     assert log_entry["action"] == "getfact"
     assert log_entry["status"] == "unavailable"
-    assert "Failed to load" in log_entry["messages"][0]["msg"]
+    assert "Unable to deserialize" in log_entry["messages"][0]["msg"]
