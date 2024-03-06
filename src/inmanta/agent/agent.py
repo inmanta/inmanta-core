@@ -695,9 +695,7 @@ class RemoteResourceAction(ResourceActionBase):
     def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str) -> None:
         super().__init__(scheduler, resource_id, gid, reason)
 
-    async def execute(
-        self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
-    ) -> None:
+    async def execute(self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]") -> None:
         pass
 
     def notify(
@@ -907,7 +905,7 @@ class ResourceScheduler:
             self.generation[resource.rid] = local_resource_action
 
         # hook up Cross Agent Dependencies
-        cross_agent_dependencies: Set[Id] = {q for r in resources for q in r.requires if q.get_agent_name() != self.name}
+        cross_agent_dependencies: set[Id] = {q for r in resources for q in r.requires if q.get_agent_name() != self.name}
         cads_by_rid: dict[ResourceIdStr, RemoteResourceAction] = {}
         for cad in cross_agent_dependencies:
             ra = RemoteResourceAction(self, cad, gid, self.running.reason)
