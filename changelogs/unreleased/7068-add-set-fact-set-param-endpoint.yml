@@ -3,4 +3,4 @@ issue-nr: 7068
 change-type: minor
 destination-branches: [master, iso7]
 sections:
-  feature: "{{description}}"
+  minor-improvement: "{{description}}"

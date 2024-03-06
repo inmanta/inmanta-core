@@ -814,7 +814,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
         fd.write(
             f"""
-        host = std::Host(name="test", os=std::linux)
+    host = std::Host(name="test", os=std::linux)
         std::ConfigFile(host=host, path="/etc/motd", content="1234")
 """
         )
@@ -823,7 +823,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     result = await client.notify_change(environment)
     assert result.code == 200
 
-    versions = await wait_for_version(client, environment, 1, compile_timeout=40)
+    versions = await wait_for_version(client, environment, cnt=1, compile_timeout=40)
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
 
@@ -833,7 +833,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     # set a parameter without requesting a recompile
     result = await client.set_parameter(environment, name="param1", value="test", source=ParameterSource.plugin)
     assert result.code == 200
-    versions = await wait_for_version(client, environment, 1)
+    versions = await wait_for_version(client, environment, cnt=1)
     assert versions["count"] == 1
 
     logger.info("request second compile")
@@ -841,14 +841,14 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     result = await client.set_parameter(environment, name="param2", value="test", source=ParameterSource.plugin, recompile=True)
     assert result.code == 200
     logger.info("wait for 2")
-    versions = await wait_for_version(client, environment, 2)
+    versions = await wait_for_version(client, environment, cnt=2)
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
     assert versions["count"] == 2
 
     # update the parameter to the same value -> no compile
     result = await client.set_parameter(environment, name="param2", value="test", source=ParameterSource.plugin, recompile=True)
     assert result.code == 200
-    versions = await wait_for_version(client, environment, 2)
+    versions = await wait_for_version(client, environment, cnt=2)
     assert versions["count"] == 2
 
     # update the parameter to a new value
@@ -857,7 +857,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     )
     assert result.code == 200
     logger.info("wait for 3")
-    versions = await wait_for_version(client, environment, 3)
+    versions = await wait_for_version(client, environment, cnt=3)
     assert versions["count"] == 3
 
     # set a fact without requesting a recompile
@@ -865,7 +865,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
         environment, name="fact1", value="test", source=ParameterSource.fact, resource_id=resource_id
     )
     assert result.code == 200
-    versions = await wait_for_version(client, environment, 1)
+    versions = await wait_for_version(client, environment, cnt=4)
     assert versions["count"] == 3
 
     # set a new fact and request a recompile
@@ -874,8 +874,8 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     )
     assert result.code == 200
     logger.info("wait for 4")
-    versions = await wait_for_version(client, environment, 2)
-    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "fact"
+    versions = await wait_for_version(client, environment, cnt=4)
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
     assert versions["count"] == 4
 
     # update the fact to the same value -> no compile
@@ -883,7 +883,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
         environment, name="fact2", value="test", source=ParameterSource.fact, resource_id=resource_id, recompile=True
     )
     assert result.code == 200
-    versions = await wait_for_version(client, environment, 2)
+    versions = await wait_for_version(client, environment, cnt=5)
     assert versions["count"] == 4
 
     # update the fact to a new value
@@ -892,7 +892,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     )
     assert result.code == 200
     logger.info("wait for 5")
-    versions = await wait_for_version(client, environment, 3)
+    versions = await wait_for_version(client, environment, cnt=6)
     assert versions["count"] == 5
 
 

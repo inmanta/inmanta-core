@@ -1216,11 +1216,11 @@ def set_fact(
     Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
 
     :param tid: The id of the environment
-    :param name: The name of the parameter
-    :param source: The source of the parameter.
-    :param value: The value of the parameter
-    :param resource_id: Optional. Scope the parameter to resource (fact)
-    :param metadata: Optional. Metadata about the parameter
+    :param name: The name of the fact
+    :param source: The source of the fact
+    :param value: The value of the fact
+    :param resource_id: The resource this fact belongs to
+    :param metadata: Optional. Metadata about the fact
     :param recompile: Optional. Whether to trigger a recompile
     :param expires: Optional. If the fact should expire or not. By default, facts expire.
     """

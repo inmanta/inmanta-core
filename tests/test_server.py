@@ -1895,7 +1895,7 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
     assert not await clienthelper.is_released(v1)
 
 
-async def test_set_fact(
+async def test_set_fact_v2(
     server,
     client,
     clienthelper,
@@ -1919,6 +1919,7 @@ async def test_set_fact(
         }
     ]
 
+    # Put a new version containing a resource with id=resource_id, to make sure the fact is not cleaned up.
     result = await client.put_version(
         tid=environment,
         version=version,
@@ -1973,7 +1974,7 @@ async def test_set_fact(
 async def test_set_param_v2(server, client, environment):
     """
     Test the set_parameter endpoint. Create a parameters and verify that expires is set to false.
-    also test we can modify it and create a second one.
+    Also test we can modify it and create a second one.
     """
 
     result = await client.set_parameter(
