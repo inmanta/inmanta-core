@@ -824,8 +824,6 @@ async def test_server_recompile_param_fact_v2(server, clienthelper, client, envi
     with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
         fd.write(
             f"""
-        host = std::Host(name="test", os=std::linux)
-        std::ConfigFile(host=host, path="/etc/motd", content="1234")
         std::print(std::get_env("{key_env_var}"))
 """
         )
