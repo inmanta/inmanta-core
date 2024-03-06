@@ -1210,7 +1210,7 @@ def set_fact(
     metadata: Optional[dict[str, str]] = None,
     recompile: bool = False,
     expires: Optional[bool] = True,
-) -> ReturnValue[model.Fact]:
+) -> model.Fact:
     """
     Set a fact on the server. If the fact is a tracked unknown, it will trigger a recompile on the server.
     Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
