@@ -16,11 +16,11 @@ Inmanta components requirements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 {% if data['requirements_table'] is not none %}
- {{ make_list_table(
-     ["Component", "Required version"],
-     data['requirements_table'],
-     title='Component requirements'
-     ) }}
+{{ make_list_table(
+    ["Component", "Required version"],
+    data['requirements_table'],
+    title='Component requirements'
+    ) }}
 
 {% else %}
     Components are not pinned for major version |version_major| because it is not released yet.
