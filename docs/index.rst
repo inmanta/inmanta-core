@@ -34,7 +34,7 @@
 
     .. welcome
 
-    Welcome to the Inmanta Ser  vice Orchestrator documentation!
+    Welcome to the Inmanta Service Orchestrator documentation!
 
     .. what
 
