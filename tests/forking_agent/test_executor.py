@@ -105,6 +105,10 @@ async def test_executor_server(mpmanager: MPManager, client):
     4. build up venv with requirements, source files, ...
     5. check that code is loaded correctly
     """
+    with pytest.raises(ImportError):
+        # make sure lorem isn't installed at the start of the test.
+        import lorem  # noqa: F401
+
     manager = mpmanager
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
@@ -166,7 +170,7 @@ def test():
 
     with pytest.raises(ImportError):
         # we aren't leaking into this venv
-        import lorem  # noqa: F401
+        import lorem  # noqa: F401, F811
 
 
 async def test_executor_server_dirty_shutdown(mpmanager):
