@@ -36,7 +36,7 @@ async def test_resource_state_table(postgres_db, database_name, migrate_db_from:
     env = await Environment.get_one(name="dev-1")
     assert env
 
-    # verify time on last success
+    # Verify time on last success for non-orphaned resource
     rps = await ResourcePersistentState.get_one(
         environment=env.id, resource_id="std::AgentConfig[internal,agentname=localhost]"
     )
@@ -51,3 +51,8 @@ async def test_resource_state_table(postgres_db, database_name, migrate_db_from:
     assert rps.last_deploy == last_deploy.finished
     assert rps.last_success == last_success.started
     assert rps.last_produced_events == last_produced_events
+
+    # Verify that orphaned resource is included in resource_persistent_state
+    orphaned_rps = await ResourcePersistentState.get_one(environment=env.id, resource_id="std::File[localhost,path=/tmp/test2]")
+    assert orphaned_rps
+    assert orphaned_rps.last_deployed_version == 2  # Last version where the resource existed
