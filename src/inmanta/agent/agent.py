@@ -39,9 +39,11 @@ from typing import Any, Collection, Dict, Optional, Self, TypeAlias, Union, cast
 
 import pkg_resources
 
+import inmanta.agent.executor
+import inmanta.agent.in_process_executor
 from inmanta import const, data, env, loader, module, protocol
 from inmanta.agent import config as cfg
-from inmanta.agent import executor, handler
+from inmanta.agent import executor, handler, in_process_executor
 from inmanta.agent.cache import AgentCache, CacheVersionContext
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.handler import HandlerAPI, SkipResource
@@ -140,443 +142,11 @@ class DummyResourceAction(ResourceActionBase):
         super().__init__(scheduler, dummy_id, gid, reason)
 
 
-FailedResourcesSet: TypeAlias = set[str]
-
-
-class Executor(executor.Executor):
-    """
-    An executor for resources. Delegates to the appropriate handlers.
-    """
-
-    @classmethod
-    @abc.abstractmethod
-    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]) -> tuple[Self, FailedResourcesSet]:
-        """
-        Get an executor for the requested resources.
-        The return value is a tuple of
-            - the executor
-            - the set of resources for which no handler code is available
-        """
-        pass
-
-
-class InProcessExecutor(Executor, executor.AgentInstance):
-    """
-    This executor is running in the same process as the agent. `get_executor` loads resource and handler
-    code within this process, reloading when required.
-    """
-
-    def __init__(self, agent: "AgentInstance"):
-        self.name = agent.name
-        self.client = agent.get_client()
-        self.uri = agent.uri
-
-        # For agentinstance api
-        self.eventloop = agent.process._io_loop
-        self.sessionid = agent.process.sessionid
-        self.environment = agent.process.environment
-
-        # threads to setup _io ssh connections
-        self.provider_thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="ProviderPool_%s" % self.name)
-        # threads to work
-        self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="Pool_%s" % self.name)
-
-        self._cache = AgentCache(self)
-
-        self.logger: Logger = LOGGER.getChild(self.name)
-
-        self._stopped = False
-
-    def stop(self) -> None:
-        self._stopped = True
-        self._cache.close()
-        self.provider_thread_pool.shutdown(wait=False)
-        self.thread_pool.shutdown(wait=False)
-
-    def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
-        """
-        Called after stop to ensure complete shutdown
-
-        :param thread_pool_finalizer: all threadpools that should be joined should be added here.
-        """
-        assert self._stopped
-        thread_pool_finalizer.append(self.provider_thread_pool)
-        thread_pool_finalizer.append(self.thread_pool)
-
-    def is_stopped(self) -> bool:
-        return self._stopped
-
-    @classmethod
-    async def get_executor(
-        cls, agent: "AgentInstance", code: Collection[ResourceInstallSpec]
-    ) -> tuple[Self, FailedResourcesSet]:
-        # TODO: add cache!!! MUST!
-        failed_resource_types: FailedResourcesSet = await agent.process.ensure_code(code)
-        return cls(agent), failed_resource_types
-
-    async def get_provider(self, resource: Resource) -> HandlerAPI[Any]:
-        provider = await asyncio.get_running_loop().run_in_executor(
-            self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
-        )
-        provider.set_cache(self._cache)
-        return provider
-
-    async def send_in_progress(
-        self, action_id: uuid.UUID, env_id: uuid.UUID, resource_id: ResourceVersionIdStr
-    ) -> dict[ResourceIdStr, const.ResourceState]:
-        result = await self.client.resource_deploy_start(
-            tid=env_id,
-            rvid=resource_id,
-            action_id=action_id,
-        )
-        if result.code != 200 or result.result is None:
-            raise Exception("Failed to report the start of the deployment to the server")
-        return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.result["data"].items()}
-
-    async def _execute(
-        self,
-        resource: Resource,
-        gid: uuid.UUID,
-        ctx: handler.HandlerContext,
-        requires: dict[ResourceIdStr, const.ResourceState],
-    ) -> None:
-        """
-        Get the handler for a given resource and run its ``deploy`` method.
-
-        :param resource: The resource to deploy.
-        :param gid: Id of this deploy.
-        :param ctx: The context to use during execution of this deploy.
-        :param requires: A dictionary that maps each dependency of the resource to be deployed, to its latest resource
-                         state that was not `deploying'.
-        """
-        # setup provider
-        ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=gid, resource_id=resource.id)
-
-        provider: Optional[HandlerAPI[Any]] = None
-        try:
-            provider = await self.get_provider(resource)
-        except ChannelClosedException as e:
-            ctx.set_status(const.ResourceState.unavailable)
-            ctx.exception(str(e))
-            return
-        except Exception:
-            ctx.set_status(const.ResourceState.unavailable)
-            ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=resource.id.resource_version_str())
-            return
-        else:
-            # main execution
-            try:
-                await asyncio.get_running_loop().run_in_executor(
-                    self.thread_pool,
-                    provider.deploy,
-                    ctx,
-                    resource,
-                    requires,
-                )
-                if ctx.status is None:
-                    ctx.set_status(const.ResourceState.deployed)
-            except ChannelClosedException as e:
-                ctx.set_status(const.ResourceState.failed)
-                ctx.exception(str(e))
-            except SkipResource as e:
-                ctx.set_status(const.ResourceState.skipped)
-                ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
-            except Exception as e:
-                ctx.set_status(const.ResourceState.failed)
-                ctx.exception(
-                    "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
-                    resource_id=resource.id,
-                    exception=repr(e),
-                )
-        finally:
-            if provider is not None:
-                provider.close()
-
-    async def _report_resource_deploy_done(
-        self,
-        resource_details: ResourceDetails,
-        ctx: handler.HandlerContext,
-    ) -> None:
-        """
-        Report the end of a resource deployment to the server.
-
-        :param resource_details: Deployed resource being reported.
-        :param ctx: Context of the associated handler.
-        """
-
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_details.rvid: ctx.changes}
-        response = await self.client.resource_deploy_done(
-            tid=resource_details.env_id,
-            rvid=resource_details.rvid,
-            action_id=ctx.action_id,
-            status=ctx.status,
-            messages=ctx.logs,
-            changes=changes,
-            change=ctx.change,
-        )
-        if response.code != 200:
-            LOGGER.error("Resource status update failed %s", response.result)
-
-    async def deserialize(self, resource_details: ResourceDetails, action: const.ResourceAction) -> Optional[Resource]:
-        started: datetime.datetime = datetime.datetime.now().astimezone()
-        try:
-            return Resource.deserialize(resource_details.attributes)
-        except Exception:
-            msg = data.LogLine.log(
-                level=const.LogLevel.ERROR,
-                msg="Unable to deserialize %(resource_id)s",
-                resource_id=resource_details.rvid,
-                timestamp=datetime.datetime.now().astimezone(),
-            )
-
-            await self.client.resource_action_update(
-                tid=resource_details.env_id,
-                resource_ids=[resource_details.rvid],
-                action_id=uuid.uuid4(),
-                action=action,
-                started=started,
-                finished=datetime.datetime.now().astimezone(),
-                status=const.ResourceState.unavailable,
-                messages=[msg],
-            )
-            raise
-
-    async def execute(
-        self,
-        gid: uuid.UUID,
-        resource_details: ResourceDetails,
-        reason: str,
-    ) -> None:
-        try:
-            resource: Resource | None = await self.deserialize(resource_details, const.ResourceAction.deploy)
-        except Exception:
-            return
-        assert resource is not None
-        ctx = handler.HandlerContext(resource, logger=self.logger)
-        ctx.debug(
-            "Start run for resource %(resource)s because %(reason)s",
-            resource=str(resource_details.rvid),
-            deploy_id=gid,
-            agent=self.name,
-            reason=reason,
-        )
-
-        try:
-            requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(
-                ctx.action_id, resource_details.env_id, resource_details.rvid
-            )
-        except Exception:
-            ctx.set_status(const.ResourceState.failed)
-            ctx.exception("Failed to report the start of the deployment to the server")
-            return
-
-        await self._execute(resource, gid=gid, ctx=ctx, requires=requires)
-
-        ctx.debug(
-            "End run for resource %(r_id)s in deploy %(deploy_id)s",
-            r_id=resource_details.rvid,
-            deploy_id=gid,
-        )
-
-        if ctx.facts:
-            ctx.debug("Sending facts to the server")
-            set_fact_response = await self.client.set_parameters(tid=resource_details.env_id, parameters=ctx.facts)
-            if set_fact_response.code != 200:
-                ctx.error("Failed to send facts to the server %s", set_fact_response.result)
-
-        await self._report_resource_deploy_done(resource_details, ctx)
-
-    async def dry_run(
-        self,
-        resources: Sequence[ResourceDetails],
-        dry_run_id: uuid.UUID,
-    ) -> None:
-        """
-        Perform a dryrun for the given resources
-
-        :param resources: Sequence of resources for which to perform a dryrun.
-        :param dry_run_id: id for this dryrun
-        """
-        model_version: int = resources[0].model_version
-        env_id: uuid.UUID = resources[0].env_id
-
-        async with self.cache(model_version):
-            for resource in resources:
-                try:
-                    resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
-                except Exception:
-                    await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource.rvid, changes={})
-                    continue
-                assert resource_obj is not None
-                ctx = handler.HandlerContext(resource_obj, True)
-                started = datetime.datetime.now().astimezone()
-                provider = None
-
-                resource_id: ResourceVersionIdStr = resource.rvid
-
-                try:
-                    self.logger.debug("Running dryrun for %s", resource_id)
-
-                    try:
-                        provider = await self.get_provider(resource_obj)
-                    except Exception as e:
-                        ctx.exception(
-                            "Unable to find a handler for %(resource_id)s (exception: %(exception)s",
-                            resource_id=resource_id,
-                            exception=str(e),
-                        )
-                        await self.client.dryrun_update(
-                            tid=env_id,
-                            id=dry_run_id,
-                            resource=resource_id,
-                            changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
-                        )
-                    else:
-                        try:
-                            await asyncio.get_running_loop().run_in_executor(
-                                self.thread_pool, provider.execute, ctx, resource_obj, True
-                            )
-
-                            changes = ctx.changes
-                            if changes is None:
-                                changes = {}
-                            if ctx.status == const.ResourceState.failed:
-                                changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                            await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
-                        except Exception as e:
-                            ctx.exception(
-                                "Exception during dryrun for %(resource_id)s (exception: %(exception)s",
-                                resource_id=resource.rvid,
-                                exception=str(e),
-                            )
-                            changes = ctx.changes
-                            if changes is None:
-                                changes = {}
-                            changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                            await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
-
-                except Exception:
-                    ctx.exception("Unable to process resource for dryrun.")
-                    changes = {}
-                    changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
-                    await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
-                finally:
-                    if provider is not None:
-                        provider.close()
-
-                    finished = datetime.datetime.now().astimezone()
-                    await self.client.resource_action_update(
-                        tid=env_id,
-                        resource_ids=[resource_id],
-                        action_id=ctx.action_id,
-                        action=const.ResourceAction.dryrun,
-                        started=started,
-                        finished=finished,
-                        messages=ctx.logs,
-                        status=const.ResourceState.dry,
-                    )
-
-    async def get_facts(self, resource: ResourceDetails) -> Apireturn:
-        """
-        Get facts for a given resource
-        :param resource: The resource for which to get facts.
-        """
-        model_version: int = resource.model_version
-        env_id: uuid.UUID = resource.env_id
-
-        provider = None
-        try:
-            try:
-                resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.getfact)
-            except Exception:
-                return 500
-            assert resource_obj is not None
-            ctx = handler.HandlerContext(resource_obj)
-
-            async with self.cache(model_version):
-                try:
-                    started = datetime.datetime.now().astimezone()
-                    provider = await self.get_provider(resource_obj)
-                    result = await asyncio.get_running_loop().run_in_executor(
-                        self.thread_pool, provider.check_facts, ctx, resource_obj
-                    )
-
-                    parameters = [
-                        {
-                            "id": name,
-                            "value": value,
-                            "resource_id": resource.rid,
-                            "source": ParameterSource.fact.value,
-                        }
-                        for name, value in result.items()
-                    ]
-                    # Add facts set via the set_fact() method of the HandlerContext
-                    parameters.extend(ctx.facts)
-
-                    await self.client.set_parameters(tid=env_id, parameters=parameters)
-                    finished = datetime.datetime.now().astimezone()
-                    await self.client.resource_action_update(
-                        tid=env_id,
-                        resource_ids=[resource.rvid],
-                        action_id=ctx.action_id,
-                        action=const.ResourceAction.getfact,
-                        started=started,
-                        finished=finished,
-                        messages=ctx.logs,
-                    )
-
-                except Exception:
-                    self.agent.logger.exception("Unable to retrieve fact")
-
-        except Exception:
-            self.agent.logger.exception("Unable to find a handler for %s", resource.id)
-            return 500
-        finally:
-            if provider is not None:
-                provider.close()
-        return 200
-
-    async def open_version(self, version: int) -> None:
-        """
-        Open a version on the cache
-        """
-        self._cache.open_version(version)
-
-    async def close_version(self, version: int) -> None:
-        """
-        Close a version on the cache
-        """
-        self._cache.close_version(version)
-
-
-class ExternalExecutor(Executor):
-    """
-    This class encapsulates an executor running in a separate process from the agent.
-    """
-
-    async def execute(
-        self,
-        gid: uuid.UUID,
-        resource_details: ResourceDetails,
-        reason: str,
-    ) -> None:
-        raise NotImplementedError
-
-    @classmethod
-    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]) -> tuple[Self, FailedResourcesSet]:
-        # TODO extract the relevant identifying info and stabilize it (i.e. sort and deduplicate specs).
-        raise NotImplementedError
-
-    def cache(self, model_version: int) -> CacheVersionContext:
-        # TODO this cache should not rely on AgentCache
-        raise NotImplementedError
-
-
 class ResourceAction(ResourceActionBase):
     def __init__(
         self,
         scheduler: "ResourceScheduler",
-        executor: Executor,
+        my_executor: executor.Executor,
         env_id: uuid.UUID,
         resource: ResourceDetails,
         gid: uuid.UUID,
@@ -587,7 +157,7 @@ class ResourceAction(ResourceActionBase):
         """
         super().__init__(scheduler, resource.id, gid, reason)
         self.resource: ResourceDetails = resource
-        self.executor: Executor = executor
+        self.executor: executor.Executor = my_executor
         self.env_id: uuid.UUID = env_id
 
     async def execute(self, dummy: "ResourceActionBase", generation: Mapping[ResourceIdStr, ResourceActionBase]) -> None:
@@ -617,7 +187,6 @@ class ResourceAction(ResourceActionBase):
                     self.running = False
 
             async with self.scheduler.ratelimiter:
-
                 self.running = True
 
                 try:
@@ -847,7 +416,7 @@ class ResourceScheduler:
         resources: Sequence[ResourceDetails],
         undeployable: dict[ResourceVersionIdStr, ResourceState],
         new_request: DeployRequest,
-        executor: Executor,
+        executor: executor.Executor,
     ) -> None:
         """
         Schedule a new set of resources for execution.
@@ -976,7 +545,7 @@ class AgentInstance:
         self.dryrunlock = asyncio.Semaphore(1)
 
         # multi threading control
-        self.ratelimiter = asyncio.Semaphore(process.poolsize)
+        self.ratelimiter = asyncio.Semaphore(1)
 
         if process.environment is None:
             raise Exception("Agent instance started without a valid environment id set.")
@@ -1003,11 +572,14 @@ class AgentInstance:
         self._getting_resources = False
         self._get_resource_timeout = 0
 
+        self.executor_manager = process.executor_manager
+
     async def stop(self) -> None:
         self._stopped = True
         self._enabled = False
         self._disable_time_triggers()
         self._nq.cancel()
+        self.executor_manager.stop()
 
     def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
         """
@@ -1016,14 +588,13 @@ class AgentInstance:
         :param thread_pool_finalizer: all threadpools that should be joined should be added here.
         """
         assert self._stopped
-        # thread_pool_finalizer.append(self.provider_thread_pool)
-        # thread_pool_finalizer.append(self.thread_pool)
+        self.executor_manager.join(thread_pool_finalizer)
 
     @property
     def environment(self) -> uuid.UUID:
         return self._env_id
 
-    def get_client(self) -> protocol.Client:
+    def get_client(self) -> protocol.SessionClient:
         return self.process._client
 
     @property
@@ -1240,12 +811,9 @@ class AgentInstance:
 
             return await executor.get_facts(resource_refs[0])
 
-    async def get_executor(self, code: Collection[ResourceInstallSpec]) -> tuple[Executor, FailedResourcesSet]:
-        return await InProcessExecutor.get_executor(self, code)
-
     async def setup_executor(
         self, version: int, action: const.ResourceAction, resources: list[JsonType]
-    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], Executor]:
+    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], executor.Executor]:
         # TODO refactor wiring of tuples around -> not sure how
 
         """
@@ -1259,17 +827,16 @@ class AgentInstance:
 
         """
         started = datetime.datetime.now().astimezone()
-        executor: Executor
         code: Collection[ResourceInstallSpec]
         # Resource types for which no handler code exist for the given version
         # or for which the pip config couldn't be retrieved
-        invalid_resource_types: FailedResourcesSet
         code, invalid_resource_types = await self.process.get_code(
             self._env_id, version, [res["resource_type"] for res in resources]
         )
         # Resource types for which an error occurred during handler code installation
-        failed_resource_types: FailedResourcesSet
-        executor, failed_resource_types = await self.get_executor(code)
+
+        executor = await self.executor_manager.get_executor(self.name, self.uri, code)
+        failed_resource_types = executor.failed_resource_types
 
         loaded_resources: list[ResourceDetails] = []
         failed_resources: list[ResourceVersionIdStr] = []
@@ -1325,7 +892,6 @@ class Agent(SessionEndpoint):
         agent_map: Optional[dict[str, str]] = None,
         code_loader: bool = True,
         environment: Optional[uuid.UUID] = None,
-        poolsize: int = 1,
     ):
         """
         :param hostname: this used to indicate the hostname of the agent,
@@ -1334,16 +900,14 @@ class Agent(SessionEndpoint):
         :param agent_map: the agent map for this agent to use
         :param code_loader: do we enable the code loader (used for testing)
         :param environment: environment id
-        :param poolsize: level of parallelism per agent instance, in practice, always 1
         """
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.hostname = hostname
-        self.poolsize = poolsize
-        self.ratelimiter = asyncio.Semaphore(poolsize)
+        self.ratelimiter = asyncio.Semaphore(1)
         # Number of in flight requests for resolving CAD's
         self.cad_ratelimiter = asyncio.Semaphore(3)
-        self.thread_pool = ThreadPoolExecutor(poolsize, thread_name_prefix="mainpool")
+        self.thread_pool = ThreadPoolExecutor(1, thread_name_prefix="mainpool")
 
         self._storage = self.check_storage()
 
@@ -1372,6 +936,14 @@ class Agent(SessionEndpoint):
             self._resource_loader_lock = NamedLock()
 
         self.agent_map: Optional[dict[str, str]] = agent_map
+
+        self.executor_manager = in_process_executor.InProcessExecutorManager(
+            environment,
+            self._client,
+            asyncio.get_event_loop(),
+            LOGGER,
+            self,
+        )
 
     async def _init_agent_map(self) -> None:
         if cfg.use_autostart_agent_map.get():
@@ -1554,7 +1126,7 @@ class Agent(SessionEndpoint):
 
     async def get_code(
         self, environment: uuid.UUID, version: int, resource_types: Sequence[str]
-    ) -> tuple[Collection[ResourceInstallSpec], FailedResourcesSet]:
+    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResourcesSet]:
         """
         Get the collection of installation specifications (i.e. pip config, python package dependencies,
         Inmanta modules sources) required to deploy a given version for the provided resource types.
@@ -1616,10 +1188,10 @@ class Agent(SessionEndpoint):
 
         return resource_install_specs, invalid_resource_types
 
-    async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> FailedResourcesSet:
+    async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> executor.FailedResourcesSet:
         """Ensure that the code for the given environment and version is loaded"""
 
-        failed_to_load: FailedResourcesSet = set()
+        failed_to_load: executor.FailedResourcesSet = set()
 
         if self._loader is None:
             return failed_to_load
@@ -1632,8 +1204,7 @@ class Agent(SessionEndpoint):
         for resource_install_spec in code:
             # only one logical thread can load a particular resource type at any time
             async with self._resource_loader_lock.get(resource_install_spec.resource_type):
-                # stop if the last successful load was this one
-                # The combination of the lock and this check causes the reloads to naturally 'batch up'
+                # stop if the last successful load wfis check causes the reloads to naturally 'batch up'
                 if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.blueprint:
                     LOGGER.debug(
                         "Handler code already installed for %s version=%d",

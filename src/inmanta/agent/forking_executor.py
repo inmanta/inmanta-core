@@ -26,6 +26,7 @@ import socket
 import typing
 import uuid
 
+import inmanta.agent.executor
 import inmanta.config
 import inmanta.const
 import inmanta.env
@@ -33,6 +34,7 @@ import inmanta.loader
 import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
+import inmanta.util
 from inmanta.agent import executor
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer
@@ -226,6 +228,30 @@ class MPExecutor(executor.Executor):
             else:
                 raise
 
+    async def close_version(self, version: int) -> None:
+        pass
+
+    async def open_version(self, version: int) -> None:
+        pass
+
+    async def dry_run(
+        self,
+        resources: typing.Sequence[inmanta.agent.executor.ResourceDetails],
+        dry_run_id: uuid.UUID,
+    ) -> None:
+        pass
+
+    async def execute(
+        self,
+        gid: uuid.UUID,
+        resource_details: inmanta.agent.executor.ResourceDetails,
+        reason: str,
+    ) -> None:
+        pass
+
+    async def get_facts(self, resource: inmanta.agent.executor.ResourceDetails) -> inmanta.types.Apireturn:
+        pass
+
 
 class MPManager(executor.ExecutorManager[MPExecutor]):
     """
@@ -253,7 +279,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         :param cli_log: do we also want to echo the log to std_err
 
         """
-        super().__init__(thread_pool, environment_manager)
+        super().__init__(thread_pool)
+        self.environment_manager = environment_manager
         self.children: list[MPExecutor] = []
         self.log_folder = log_folder
         self.storage_folder = storage_folder
@@ -262,6 +289,9 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self.inmanta_log_level = inmanta_log_level
         self.cli_log = cli_log
         self.session_gid = session_gid
+
+        self.executor_map: dict[executor.ExecutorId, MPExecutor] = {}
+        self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
     @classmethod
     def init_once(cls) -> None:
@@ -274,10 +304,36 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             # already set
             pass
 
-    async def create_executor(self, venv: executor.ExecutorVirtualEnvironment, executor_id: executor.ExecutorId) -> MPExecutor:
+    async def get_executor(
+        self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
+    ) -> MPExecutor:
+        """
+        Retrieves an Executor based on the agent name and blueprint.
+        If an Executor does not exist for the given configuration, a new one is created.
+
+        :param agent_name: The name of the agent for which an Executor is being retrieved or created.
+        :param blueprint: The ExecutorBlueprint defining the configuration for the Executor.
+        :return: An Executor instance
+        """
+        blueprint = executor.ExecutorBlueprint.from_specs(code)
+        executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
+        if executor_id in self.executor_map:
+            return self.executor_map[executor_id]
+        # Acquire a lock based on the blueprint's hash
+        # We don't care about URI here
+        async with self._locks.get(executor_id.identity()):
+            if executor_id in self.executor_map:
+                return self.executor_map[executor_id]
+            executor = await self.create_executor(executor_id)
+            self.executor_map[executor_id] = executor
+            return executor
+
+    async def create_executor(self, executor_id: executor.ExecutorId) -> MPExecutor:
         # entry point from parent class
+        env_blueprint = executor_id.blueprint.to_env_blueprint()
+        venv = await self.environment_manager.get_environment(env_blueprint, self.thread_pool)
         executor = await self.make_child_and_connect(executor_id.agent_name)
-        storage_for_blueprint = os.path.join(self.storage_folder, "code", executor_id.blueprint.generate_blueprint_hash())
+        storage_for_blueprint = os.path.join(self.storage_folder, "code", executor_id.blueprint.blueprint_hash())
         os.makedirs(storage_for_blueprint, exist_ok=True)
         await executor.connection.call(
             InitCommand(

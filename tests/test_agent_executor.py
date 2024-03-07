@@ -166,7 +166,7 @@ async def test_process_manager_restart(environment, tmpdir, caplog) -> None:
 
     # Create a blueprint with no requirements and no sources
     blueprint1 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements, sources=sources)
-    env_bp_hash1 = blueprint1.to_env_blueprint().generate_blueprint_hash()
+    env_bp_hash1 = blueprint1.to_env_blueprint().blueprint_hash()
 
     with caplog.at_level(logging.INFO):
         # First execution: create an executor and verify its creation
@@ -209,8 +209,8 @@ async def test_blueprint_hash_consistency(tmpdir):
     blueprint1 = EnvBlueprint(pip_config=pip_config, requirements=requirements1)
     blueprint2 = EnvBlueprint(pip_config=pip_config, requirements=requirements2)
 
-    hash1 = blueprint1.generate_blueprint_hash()
-    hash2 = blueprint2.generate_blueprint_hash()
+    hash1 = blueprint1.blueprint_hash()
+    hash2 = blueprint2.blueprint_hash()
     print(hash1)
 
     assert hash1 == hash2, "Blueprint hashes should be identical regardless of the order of requirements"
@@ -254,7 +254,7 @@ print(blueprint.generate_blueprint_hash())
     # Generate hash in the current session for comparison
     pip_config = PipConfig(**pip_config_dict)
     current_session_blueprint = EnvBlueprint(pip_config=pip_config, requirements=requirements)
-    current_hash = current_session_blueprint.generate_blueprint_hash()
+    current_hash = current_session_blueprint.blueprint_hash()
 
     # Generate hash in a new interpreter session
     result = subprocess.run(["python", "-c", python_code], capture_output=True, text=True)

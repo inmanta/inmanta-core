@@ -48,6 +48,8 @@ from inmanta.util import NamedLock
 
 LOGGER = logging.getLogger(__name__)
 
+FailedResourcesSet: typing.TypeAlias = set[str]
+
 
 class AgentInstance(abc.ABC):
 
@@ -93,7 +95,7 @@ class EnvBlueprint:
     requirements: Sequence[str]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
 
-    def generate_blueprint_hash(self) -> str:
+    def blueprint_hash(self) -> str:
         """
         Generate a stable hash for an EnvBlueprint instance by serializing its pip_config
         and requirements in a sorted, consistent manner. This ensures that the hash value is
@@ -117,10 +119,10 @@ class EnvBlueprint:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EnvBlueprint):
             return False
-        return self.generate_blueprint_hash() == other.generate_blueprint_hash()
+        return self.blueprint_hash() == other.blueprint_hash()
 
     def __hash__(self) -> int:
-        return int(self.generate_blueprint_hash(), 16)
+        return int(self.blueprint_hash(), 16)
 
 
 @dataclasses.dataclass
@@ -130,7 +132,20 @@ class ExecutorBlueprint(EnvBlueprint):
     sources: Sequence[ModuleSource]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
 
-    def generate_blueprint_hash(self) -> str:
+    @classmethod
+    def from_specs(cls, code: typing.Collection["ResourceInstallSpec"]) -> "ExecutorBlueprint":
+        sources = list({source for cd in code for source in cd.blueprint.sources})
+        requirements = list({req for cd in code for req in cd.blueprint.requirements})
+        pip_config = {cd.blueprint.pip_config for cd in code}
+        assert len(pip_config) == 1, f"One agent is using multiple pipe configs: {pip_config}"
+
+        return ExecutorBlueprint(
+            pip_config=next(iter(pip_config)),
+            sources=sources,
+            requirements=requirements,
+        )
+
+    def blueprint_hash(self) -> str:
         """
         Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources
         and requirements in a sorted, consistent manner. This ensures that the hash value is
@@ -162,10 +177,10 @@ class ExecutorBlueprint(EnvBlueprint):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return self.generate_blueprint_hash() == other.generate_blueprint_hash()
+        return self.blueprint_hash() == other.blueprint_hash()
 
     def __hash__(self) -> int:
-        return int(self.generate_blueprint_hash(), 16)
+        return int(self.blueprint_hash(), 16)
 
 
 @dataclasses.dataclass
@@ -173,10 +188,11 @@ class ExecutorId:
     """Identifies an executor with an agent name and its blueprint configuration."""
 
     agent_name: str
+    agent_uri: str
     blueprint: ExecutorBlueprint
 
     def __hash__(self) -> int:
-        combined_str = self.agent_name + self.blueprint.generate_blueprint_hash()
+        combined_str = self.identity()
         hash_obj = hashlib.md5(combined_str.encode("utf-8"))
         return int(hash_obj.hexdigest(), 16)
 
@@ -185,8 +201,30 @@ class ExecutorId:
             return False
         return (
             self.agent_name == other.agent_name
-            and self.blueprint.generate_blueprint_hash() == other.blueprint.generate_blueprint_hash()
+            and self.agent_uri == other.agent_uri
+            and self.blueprint.blueprint_hash() == other.blueprint.blueprint_hash()
         )
+
+    def identity(self) -> str:
+        return self.agent_name + self.agent_uri + self.blueprint.blueprint_hash()
+
+
+@dataclass(frozen=True)
+class ResourceInstallSpec:
+    """
+    This class encapsulates the requirements for a specific resource type for a specific model version.
+
+    :ivar resource_type: fully qualified name for this resource type e.g. std::File
+    :ivar model_version: the version of the model to use
+    :ivar pip_config: the pip config to use during requirements installation
+    :ivar requirements: python packages that must be installed prior to executing the module sources
+    :ivar sources: list of ModuleSource containing the code for deployment of this resource
+
+    """
+
+    resource_type: str
+    model_version: int
+    blueprint: ExecutorBlueprint
 
 
 class ExecutorVirtualEnvironment(PythonEnvironment):
@@ -255,7 +293,7 @@ class VirtualEnvironmentManager:
         :param blueprint: The blueprint of the environment for which the storage is being determined.
         :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
         """
-        env_dir_name: str = blueprint.generate_blueprint_hash()
+        env_dir_name: str = blueprint.blueprint_hash()
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
         # Check if the directory already exists and create it if not
@@ -295,7 +333,7 @@ class VirtualEnvironmentManager:
         if blueprint in self._environment_map:
             return self._environment_map[blueprint]
         # Acquire a lock based on the blueprint's hash
-        async with self._locks.get(blueprint.generate_blueprint_hash()):
+        async with self._locks.get(blueprint.blueprint_hash()):
             if blueprint in self._environment_map:
                 return self._environment_map[blueprint]
             return await self.create_environment(blueprint, threadpool)
@@ -332,6 +370,8 @@ class Executor(abc.ABC):
     :param executor_virtual_env: The virtual environment in which this executor operates
     :param storage: File system path to where the executor's resources are stored.
     """
+
+    failed_resource_types: FailedResourcesSet
 
     def cache(self, model_version: int) -> CacheVersionContext:
         """
@@ -404,17 +444,8 @@ class ExecutorManager(abc.ABC, typing.Generic[MyExecutor]):
     :param environment_manager: The VirtualEnvironmentManager responsible for managing the virtual environments
     """
 
-    def __init__(self, thread_pool: ThreadPoolExecutor, environment_manager: VirtualEnvironmentManager):
-        self.executor_map: dict[ExecutorId, MyExecutor] = {}
-        self.environment_manager = environment_manager
-        self.thread_pool = thread_pool
-        self._locks: NamedLock = NamedLock()
-
     @abc.abstractmethod
-    async def create_executor(self, venv: ExecutorVirtualEnvironment, executor_id: ExecutorId) -> MyExecutor:
-        pass
-
-    async def get_executor(self, agent_name: str, blueprint: ExecutorBlueprint) -> MyExecutor:
+    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]) -> MyExecutor:
         """
         Retrieves an Executor based on the agent name and blueprint.
         If an Executor does not exist for the given configuration, a new one is created.
@@ -423,34 +454,4 @@ class ExecutorManager(abc.ABC, typing.Generic[MyExecutor]):
         :param blueprint: The ExecutorBlueprint defining the configuration for the Executor.
         :return: An Executor instance
         """
-        executor_id = ExecutorId(agent_name, blueprint)
-        if executor_id in self.executor_map:
-            return self.executor_map[executor_id]
-        # Acquire a lock based on the blueprint's hash
-        async with self._locks.get(blueprint.generate_blueprint_hash()):
-            if executor_id in self.executor_map:
-                return self.executor_map[executor_id]
-            blueprint = executor_id.blueprint
-            env_blueprint = blueprint.to_env_blueprint()
-            venv = await self.environment_manager.get_environment(env_blueprint, self.thread_pool)
-            executor = await self.create_executor(venv, executor_id)
-            self.executor_map[executor_id] = executor
-            return executor
-
-
-@dataclass(frozen=True)
-class ResourceInstallSpec:
-    """
-    This class encapsulates the requirements for a specific resource type for a specific model version.
-
-    :ivar resource_type: fully qualified name for this resource type e.g. std::File
-    :ivar model_version: the version of the model to use
-    :ivar pip_config: the pip config to use during requirements installation
-    :ivar requirements: python packages that must be installed prior to executing the module sources
-    :ivar sources: list of ModuleSource containing the code for deployment of this resource
-
-    """
-
-    resource_type: str
-    model_version: int
-    blueprint: executor.ExecutorBlueprint
+        pass
