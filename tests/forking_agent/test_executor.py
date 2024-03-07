@@ -105,6 +105,11 @@ async def test_executor_server(mpmanager: MPManager, client):
     4. build up venv with requirements, source files, ...
     5. check that code is loaded correctly
     """
+
+    with pytest.raises(ImportError):
+        # make sure lorem isn't isntalled at the start of the test.
+        import lorem  # noqa: F401
+
     manager = mpmanager
     inmanta.config.Config.set("test", "aaa", "bbbb")
 

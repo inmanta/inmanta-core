@@ -36,7 +36,7 @@ async def test_resource_state_table(postgres_db, database_name, migrate_db_from:
     env = await Environment.get_one(name="dev-1")
     assert env
 
-    # Verify time on last success for non-orphaned resource
+    # Verify time on last success
     rps = await ResourcePersistentState.get_one(
         environment=env.id, resource_id="std::AgentConfig[internal,agentname=localhost]"
     )
