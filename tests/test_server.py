@@ -210,6 +210,8 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep)
     assert result.code == 200
 
+    # make a second environment to be sure we don't do cross env deletes
+    # as it is empty, if it leaks, it will likely take everything with it on the other one
     await client.create_environment(project_id=project_id, name="env_2")
 
     # Check value was set
