@@ -4465,8 +4465,8 @@ class ResourcePersistentState(BaseDocument):
             WHERE NOT EXISTS(
                 SELECT r.resource_id
                 FROM {Resource.table_name()} r
-                WHERE r.resource_id = rps.resource_id and r.environment=$1 and rps.environment=$1
-            )
+                WHERE r.resource_id = rps.resource_id and r.environment=$1
+            ) and rps.environment=$1
             """,
             environment,
             connection=connection,
@@ -5258,7 +5258,8 @@ class Resource(BaseDocument):
             return
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
 
-        await self._execute_query(query, self.environment, self.resource_id, *args.args, connection=connection)
+        result = await self._execute_query(query, self.environment, self.resource_id, *args.args, connection=connection)
+        assert result == "UPDATE 1"
 
 
 @stable_api
