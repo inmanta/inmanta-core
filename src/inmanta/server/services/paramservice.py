@@ -397,7 +397,10 @@ class ParameterService(protocol.ServerSlice):
         # Retrieve the updated parameter/fact
         param = await data.Parameter.get_one(environment=env.id, name=name, resource_id=resource_id)
         if not param:
-            raise NotFound(f"{'Fact' if resource_id else 'Parameter'} with id {name} does not exist in environment {env.id}")
+            error_base = f"{name} for resource_id: {resource_id}" if resource_id else name
+            error_prefix = "Fact" if resource_id else "Parameter"
+            error_message = f"{error_prefix} with id {error_base} does not exist in environment {env.id}"
+            raise NotFound(error_message)
 
         return param, warnings
 
