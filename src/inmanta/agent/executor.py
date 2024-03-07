@@ -18,14 +18,15 @@
 
 import abc
 import asyncio
+import contextlib
 import dataclasses
 import functools
 import hashlib
 import json
 import logging
 import os
-import typing
 import types
+import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -44,9 +45,20 @@ from inmanta.loader import ModuleSource
 from inmanta.resources import Id, Resource
 from inmanta.types import JsonType
 from inmanta.util import NamedLock
-import contextlib
 
 LOGGER = logging.getLogger(__name__)
+
+
+class AgentInstance(abc.ABC):
+
+    eventloop: asyncio.AbstractEventLoop
+    sessionid: uuid.UUID
+    environment: uuid.UUID
+    uri: str
+
+    @abc.abstractmethod
+    def is_stopped(self) -> bool:
+        pass
 
 
 class ResourceDetails:
@@ -288,6 +300,7 @@ class VirtualEnvironmentManager:
                 return self._environment_map[blueprint]
             return await self.create_environment(blueprint, threadpool)
 
+
 class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):
     """
     A context manager to ensure the cache version is properly closed
@@ -309,6 +322,7 @@ class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):
         await self.executor.close_version(self.version)
         return None
 
+
 class Executor(abc.ABC):
     """
     Represents an executor responsible for deploying resources within a specified virtual environment.
@@ -318,7 +332,6 @@ class Executor(abc.ABC):
     :param executor_virtual_env: The virtual environment in which this executor operates
     :param storage: File system path to where the executor's resources are stored.
     """
-
 
     def cache(self, model_version: int) -> CacheVersionContext:
         """

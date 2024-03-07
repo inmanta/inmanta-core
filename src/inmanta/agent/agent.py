@@ -160,28 +160,71 @@ class Executor(executor.Executor):
         pass
 
 
-
-
-class InProcessExecutor(Executor):
+class InProcessExecutor(Executor, executor.AgentInstance):
     """
     This executor is running in the same process as the agent. `get_executor` loads resource and handler
     code within this process, reloading when required.
     """
 
     def __init__(self, agent: "AgentInstance"):
-        self.agent: AgentInstance = agent
+        self.name = agent.name
+        self.client = agent.get_client()
+        self.uri = agent.uri
+
+        # For agentinstance api
+        self.eventloop = agent.process._io_loop
+        self.sessionid = agent.process.sessionid
+        self.environment = agent.process.environment
+
+        # threads to setup _io ssh connections
+        self.provider_thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="ProviderPool_%s" % self.name)
+        # threads to work
+        self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="Pool_%s" % self.name)
+
+        self._cache = AgentCache(self)
+
+        self.logger: Logger = LOGGER.getChild(self.name)
+
+        self._stopped = False
+
+    def stop(self) -> None:
+        self._stopped = True
+        self._cache.close()
+        self.provider_thread_pool.shutdown(wait=False)
+        self.thread_pool.shutdown(wait=False)
+
+    def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
+        """
+        Called after stop to ensure complete shutdown
+
+        :param thread_pool_finalizer: all threadpools that should be joined should be added here.
+        """
+        assert self._stopped
+        thread_pool_finalizer.append(self.provider_thread_pool)
+        thread_pool_finalizer.append(self.thread_pool)
+
+    def is_stopped(self) -> bool:
+        return self._stopped
 
     @classmethod
     async def get_executor(
         cls, agent: "AgentInstance", code: Collection[ResourceInstallSpec]
     ) -> tuple[Self, FailedResourcesSet]:
+        # TODO: add cache!!! MUST!
         failed_resource_types: FailedResourcesSet = await agent.process.ensure_code(code)
         return cls(agent), failed_resource_types
+
+    async def get_provider(self, resource: Resource) -> HandlerAPI[Any]:
+        provider = await asyncio.get_running_loop().run_in_executor(
+            self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
+        )
+        provider.set_cache(self._cache)
+        return provider
 
     async def send_in_progress(
         self, action_id: uuid.UUID, env_id: uuid.UUID, resource_id: ResourceVersionIdStr
     ) -> dict[ResourceIdStr, const.ResourceState]:
-        result = await self.agent.get_client().resource_deploy_start(
+        result = await self.client.resource_deploy_start(
             tid=env_id,
             rvid=resource_id,
             action_id=action_id,
@@ -211,7 +254,7 @@ class InProcessExecutor(Executor):
 
         provider: Optional[HandlerAPI[Any]] = None
         try:
-            provider = await self.agent.get_provider(resource)
+            provider = await self.get_provider(resource)
         except ChannelClosedException as e:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception(str(e))
@@ -224,7 +267,7 @@ class InProcessExecutor(Executor):
             # main execution
             try:
                 await asyncio.get_running_loop().run_in_executor(
-                    self.agent.thread_pool,
+                    self.thread_pool,
                     provider.deploy,
                     ctx,
                     resource,
@@ -262,7 +305,7 @@ class InProcessExecutor(Executor):
         """
 
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_details.rvid: ctx.changes}
-        response = await self.agent.get_client().resource_deploy_done(
+        response = await self.client.resource_deploy_done(
             tid=resource_details.env_id,
             rvid=resource_details.rvid,
             action_id=ctx.action_id,
@@ -286,7 +329,7 @@ class InProcessExecutor(Executor):
                 timestamp=datetime.datetime.now().astimezone(),
             )
 
-            await self.agent.get_client().resource_action_update(
+            await self.client.resource_action_update(
                 tid=resource_details.env_id,
                 resource_ids=[resource_details.rvid],
                 action_id=uuid.uuid4(),
@@ -309,12 +352,12 @@ class InProcessExecutor(Executor):
         except Exception:
             return
         assert resource is not None
-        ctx = handler.HandlerContext(resource, logger=self.agent.logger)
+        ctx = handler.HandlerContext(resource, logger=self.logger)
         ctx.debug(
             "Start run for resource %(resource)s because %(reason)s",
             resource=str(resource_details.rvid),
             deploy_id=gid,
-            agent=self.agent.name,
+            agent=self.name,
             reason=reason,
         )
 
@@ -337,7 +380,7 @@ class InProcessExecutor(Executor):
 
         if ctx.facts:
             ctx.debug("Sending facts to the server")
-            set_fact_response = await self.agent.get_client().set_parameters(tid=resource_details.env_id, parameters=ctx.facts)
+            set_fact_response = await self.client.set_parameters(tid=resource_details.env_id, parameters=ctx.facts)
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
@@ -362,7 +405,7 @@ class InProcessExecutor(Executor):
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
                 except Exception:
-                    await self.agent.get_client().dryrun_update(tid=env_id, id=dry_run_id, resource=resource.rvid, changes={})
+                    await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource.rvid, changes={})
                     continue
                 assert resource_obj is not None
                 ctx = handler.HandlerContext(resource_obj, True)
@@ -372,17 +415,17 @@ class InProcessExecutor(Executor):
                 resource_id: ResourceVersionIdStr = resource.rvid
 
                 try:
-                    self.agent.logger.debug("Running dryrun for %s", resource_id)
+                    self.logger.debug("Running dryrun for %s", resource_id)
 
                     try:
-                        provider = await self.agent.get_provider(resource_obj)
+                        provider = await self.get_provider(resource_obj)
                     except Exception as e:
                         ctx.exception(
                             "Unable to find a handler for %(resource_id)s (exception: %(exception)s",
                             resource_id=resource_id,
                             exception=str(e),
                         )
-                        await self.agent.get_client().dryrun_update(
+                        await self.client.dryrun_update(
                             tid=env_id,
                             id=dry_run_id,
                             resource=resource_id,
@@ -391,7 +434,7 @@ class InProcessExecutor(Executor):
                     else:
                         try:
                             await asyncio.get_running_loop().run_in_executor(
-                                self.agent.thread_pool, provider.execute, ctx, resource_obj, True
+                                self.thread_pool, provider.execute, ctx, resource_obj, True
                             )
 
                             changes = ctx.changes
@@ -399,9 +442,7 @@ class InProcessExecutor(Executor):
                                 changes = {}
                             if ctx.status == const.ResourceState.failed:
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                            await self.agent.get_client().dryrun_update(
-                                tid=env_id, id=dry_run_id, resource=resource_id, changes=changes
-                            )
+                            await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
                         except Exception as e:
                             ctx.exception(
                                 "Exception during dryrun for %(resource_id)s (exception: %(exception)s",
@@ -412,23 +453,19 @@ class InProcessExecutor(Executor):
                             if changes is None:
                                 changes = {}
                             changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                            await self.agent.get_client().dryrun_update(
-                                tid=env_id, id=dry_run_id, resource=resource_id, changes=changes
-                            )
+                            await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
 
                 except Exception:
                     ctx.exception("Unable to process resource for dryrun.")
                     changes = {}
                     changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
-                    await self.agent.get_client().dryrun_update(
-                        tid=env_id, id=dry_run_id, resource=resource_id, changes=changes
-                    )
+                    await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
                 finally:
                     if provider is not None:
                         provider.close()
 
                     finished = datetime.datetime.now().astimezone()
-                    await self.agent.get_client().resource_action_update(
+                    await self.client.resource_action_update(
                         tid=env_id,
                         resource_ids=[resource_id],
                         action_id=ctx.action_id,
@@ -459,9 +496,9 @@ class InProcessExecutor(Executor):
             async with self.cache(model_version):
                 try:
                     started = datetime.datetime.now().astimezone()
-                    provider = await self.agent.get_provider(resource_obj)
+                    provider = await self.get_provider(resource_obj)
                     result = await asyncio.get_running_loop().run_in_executor(
-                        self.agent.thread_pool, provider.check_facts, ctx, resource_obj
+                        self.thread_pool, provider.check_facts, ctx, resource_obj
                     )
 
                     parameters = [
@@ -476,9 +513,9 @@ class InProcessExecutor(Executor):
                     # Add facts set via the set_fact() method of the HandlerContext
                     parameters.extend(ctx.facts)
 
-                    await self.agent.get_client().set_parameters(tid=env_id, parameters=parameters)
+                    await self.client.set_parameters(tid=env_id, parameters=parameters)
                     finished = datetime.datetime.now().astimezone()
-                    await self.agent.get_client().resource_action_update(
+                    await self.client.resource_action_update(
                         tid=env_id,
                         resource_ids=[resource.rvid],
                         action_id=ctx.action_id,
@@ -503,13 +540,13 @@ class InProcessExecutor(Executor):
         """
         Open a version on the cache
         """
-        self.agent._cache.open_version(version)
+        self._cache.open_version(version)
 
     async def close_version(self, version: int) -> None:
         """
         Close a version on the cache
         """
-        self.agent._cache.close_version(version)
+        self._cache.close_version(version)
 
 
 class ExternalExecutor(Executor):
@@ -773,12 +810,11 @@ class ResourceScheduler:
     2 - we don't need to figure out exactly when a run is done
     """
 
-    def __init__(self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache) -> None:
+    def __init__(self, agent: "AgentInstance", env_id: uuid.UUID, name: str) -> None:
         self.generation: dict[ResourceIdStr, ResourceActionBase] = {}
         self.cad: dict[str, RemoteResourceAction] = {}
         self._env_id = env_id
         self.agent = agent
-        self.cache = cache
         self.name = name
         self.ratelimiter = agent.ratelimiter
         self.version: int = 0
@@ -940,10 +976,6 @@ class AgentInstance:
         self.dryrunlock = asyncio.Semaphore(1)
 
         # multi threading control
-        # threads to setup connections
-        self.provider_thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="ProviderPool_%s" % name)
-        # threads to work
-        self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(process.poolsize, thread_name_prefix="Pool_%s" % name)
         self.ratelimiter = asyncio.Semaphore(process.poolsize)
 
         if process.environment is None:
@@ -953,8 +985,7 @@ class AgentInstance:
         self.sessionid: uuid.UUID = process.sessionid
 
         # init
-        self._cache = AgentCache(self)
-        self._nq = ResourceScheduler(self, self._env_id, name, self._cache)
+        self._nq = ResourceScheduler(self, self._env_id, name)
         self._time_triggered_actions: set[ScheduledTask] = set()
         self._enabled = False
         self._stopped = False
@@ -977,9 +1008,6 @@ class AgentInstance:
         self._enabled = False
         self._disable_time_triggers()
         self._nq.cancel()
-        self._cache.close()
-        self.provider_thread_pool.shutdown(wait=False)
-        self.thread_pool.shutdown(wait=False)
 
     def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
         """
@@ -988,8 +1016,8 @@ class AgentInstance:
         :param thread_pool_finalizer: all threadpools that should be joined should be added here.
         """
         assert self._stopped
-        thread_pool_finalizer.append(self.provider_thread_pool)
-        thread_pool_finalizer.append(self.thread_pool)
+        # thread_pool_finalizer.append(self.provider_thread_pool)
+        # thread_pool_finalizer.append(self.thread_pool)
 
     @property
     def environment(self) -> uuid.UUID:
@@ -1115,13 +1143,6 @@ class AgentInstance:
             )
             return False
         return True
-
-    async def get_provider(self, resource: Resource) -> HandlerAPI[Any]:
-        provider = await asyncio.get_running_loop().run_in_executor(
-            self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
-        )
-        provider.set_cache(self._cache)
-        return provider
 
     async def get_latest_version_for_agent(
         self,
