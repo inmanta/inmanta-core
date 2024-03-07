@@ -142,7 +142,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         else:
             # main execution
             try:
-                print(resource.id.resource_version_str(), self.thread_pool._work_queue.qsize())
                 await asyncio.get_running_loop().run_in_executor(
                     self.thread_pool,
                     provider.deploy,
@@ -168,7 +167,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         finally:
             if provider is not None:
                 provider.close()
-        print("X", resource.id.resource_version_str())
 
     async def _report_resource_deploy_done(
         self,

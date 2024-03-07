@@ -385,7 +385,6 @@ async def test_warning_message_stale_python_code(
         resource_types=["test::Test", "minimalv2module::Test"],
     )
     await agent.ensure_code(install_specs)
-    # mess up the cache
 
     expected_warning_message = (
         f"The source code for the modules minimalv2module is present in the modules directory of the agent "
