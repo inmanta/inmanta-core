@@ -1,0 +1,28 @@
+.. -*- mode: rst -*-
+
+
+Python version
+~~~~~~~~~~~~~~
+
+
+{{ make_list_table(
+    ["Component", "Required version"],
+    data['python_table'],
+    title='Python requirement',
+    ) }}
+
+
+Inmanta components requirements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+{% if data['requirements_table'] is not none %}
+ {{ make_list_table(
+     ["Component", "Required version"],
+     data['requirements_table'],
+     title='Component requirements'
+     ) }}
+
+{% else %}
+    Components are not pinned for major version |version_major| because it is not released yet.
+{% endif %}
+
