@@ -364,6 +364,84 @@ class ParameterService(protocol.ServerSlice):
             raise NotFound(f"Fact with id {id} does not exist")
         return param.as_fact()
 
+    async def _update_and_recompile(
+        self,
+        env: data.Environment,
+        name: str,
+        value: str,
+        source: ParameterSource,
+        metadata: dict[str, str],
+        recompile: bool,
+        resource_id: Optional[str] = None,
+        expires: Optional[bool] = None,
+    ) -> tuple[data.Parameter, Optional[list[str]]]:
+        """
+        Update a parameter or fact and optionally trigger recompilation.
+        """
+        if resource_id is None:
+            resource_id = ""
+        # Validate parameter or fact
+        self._validate_parameter(name, resource_id, expires)
+
+        # Update parameter/fact with new value and metadata
+        recompile_required: bool = await self._update_param(env, name, value, source, resource_id, metadata, recompile, expires)
+        warnings = None
+        if recompile_required:
+            compile_metadata = {
+                "message": "Recompile model because one or more parameters/facts were updated",
+                "type": "fact" if resource_id else "param",
+                "params": [(name, resource_id)],
+            }
+            warnings = await self.server_slice._async_recompile(env, update_repo=False, metadata=compile_metadata)
+
+        # Retrieve the updated parameter/fact
+        param = await data.Parameter.get_one(environment=env.id, name=name, resource_id=resource_id)
+        if not param:
+            error_base = f"{name} for resource_id: {resource_id}" if resource_id else name
+            error_prefix = "Fact" if resource_id else "Parameter"
+            error_message = f"{error_prefix} with id {error_base} does not exist in environment {env.id}"
+            raise NotFound(error_message)
+
+        return param, warnings
+
+    @handle(methods_v2.set_parameter, env="tid")
+    async def set_parameter(
+        self,
+        env: data.Environment,
+        name: str,
+        source: ParameterSource,
+        value: str,
+        metadata: Optional[dict[str, str]] = None,
+        recompile: bool = False,
+    ) -> ReturnValue[Parameter]:
+        if metadata is None:
+            metadata = {}
+        param, warnings = await self._update_and_recompile(env, name, value, source, metadata, recompile)
+        return_value = ReturnValue(response=param.as_param())
+        if warnings:
+            return_value.add_warnings(warnings)
+        return return_value
+
+    @handle(methods_v2.set_fact, env="tid")
+    async def set_fact(
+        self,
+        env: data.Environment,
+        name: str,
+        source: ParameterSource,
+        value: str,
+        resource_id: str,
+        metadata: Optional[dict[str, str]] = None,
+        recompile: bool = False,
+        expires: Optional[bool] = True,
+    ) -> ReturnValue[Fact]:
+        if metadata is None:
+            metadata = {}
+        param, warnings = await self._update_and_recompile(env, name, value, source, metadata, recompile, resource_id, expires)
+        return_value = ReturnValue(response=param.as_fact())
+        if warnings:
+            return_value.add_warnings(warnings)
+        return return_value
+
     @handle(methods_v2.get_parameters, env="tid")
     async def get_parameters(
         self,
