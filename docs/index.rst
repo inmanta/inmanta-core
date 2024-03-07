@@ -34,7 +34,7 @@
 
     .. welcome
 
-    Welcome to the Inmanta Service Orchestrator documentation!
+    Welcome to the Inmanta Ser  vice Orchestrator documentation!
 
     .. what
 
@@ -82,6 +82,7 @@
     reference/index
     troubleshooting
     changelogs
+    configuration_requirements
     configuration_requirements
 
 PDF version
