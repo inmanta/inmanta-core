@@ -1146,7 +1146,7 @@ def set_parameter(
     :param source: The source of the parameter.
     :param value: The value of the parameter
     :param metadata: Optional. Metadata about the parameter
-    :param recompile: Optional. Whether to trigger a recompile
+    :param recompile: Optional. Whether to trigger a recompile if the value of the parameter changed.
     """
 
 
@@ -1221,7 +1221,7 @@ def set_fact(
     :param value: The value of the fact
     :param resource_id: The resource this fact belongs to
     :param metadata: Optional. Metadata about the fact
-    :param recompile: Optional. Whether to trigger a recompile
+    :param recompile: Optional. Whether to trigger a recompile if the value of the fact changed.
     :param expires: Optional. If the fact should expire or not. By default, facts expire.
     """
 
