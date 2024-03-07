@@ -83,7 +83,6 @@
     troubleshooting
     changelogs
     configuration_requirements
-    configuration_requirements
 
 PDF version
 -----------

@@ -1,7 +1,11 @@
 Configuration requirements
 **************************
 
-The following table shows the requirements for the current version
+This page shows the configuration requirements for the iso |version_major| version.
+These constraints are defined for the whole lifetime of this major version i.e.
+they are not pinned to a specific three-digit version.
 
 
-.. jsonschema:: schemas/sample.json
+.. datatemplate:json:: sample.json
+   :template: sample.tmpl
+
