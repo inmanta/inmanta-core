@@ -752,6 +752,7 @@ def set_param(
     """
     Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
     Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
+    [DEPRECATED] Please use the new endpoints `/facts/<name>` and `/parameters/<name>` instead.
 
     :param tid: The id of the environment
     :param id: The name of the parameter
