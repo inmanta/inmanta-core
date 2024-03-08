@@ -5,7 +5,7 @@ Configuration requirements
 
     This page shows the configuration requirements for the Inmanta Service Orchestrator |version_major| version.
     These constraints are defined for the whole lifetime of this major version i.e.
-    they are not pinned to a specific three-digit version.
+    they are not pinned to a specific three-digit version. Upper bounds may be added when a new major version is released.
 
 
     .. datatemplate:json:: required_configuration.json
