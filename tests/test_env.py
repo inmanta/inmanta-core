@@ -83,6 +83,9 @@ def test_basic_install(tmpdir):
     """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it."""
     env_dir1 = tmpdir.mkdir("env1").strpath
 
+    with pytest.raises(ImportError):
+        import lorem  # NOQA
+
     venv1 = env.VirtualEnv(env_dir1)
 
     venv1.use_virtual_env()
@@ -371,9 +374,6 @@ def test_active_env_get_module_file(
     install a dependency of inmanta-core (which is already installed in the encapsulating development venv), a new package or an
     inmanta module (namespace package).
     """
-    with pytest.raises(ImportError):
-        # we aren't leaking into this venv
-        import lorem  # noqa: F401, F811
     venv_dir, _ = tmpvenv_active
 
     if package_name.startswith(module.ModuleV2.PKG_NAME_PREFIX):
@@ -413,9 +413,6 @@ def test_active_env_get_module_file(
     importlib.import_module(module_name)
     assert module_name in sys.modules
     assert sys.modules[module_name].__file__ == module_file
-    with pytest.raises(ImportError):
-        # we aren't leaking into this venv
-        import lorem  # noqa: F401, F811
 
 
 @pytest.mark.slowtest
