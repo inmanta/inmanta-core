@@ -79,32 +79,22 @@ def test_venv_pyton_env_empty_string(tmpdir):
 
 @pytest.mark.slowtest
 def test_basic_install(tmpdir):
-    """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it."""
     env_dir1 = tmpdir.mkdir("env1").strpath
-
-    with pytest.raises(ImportError):
-        import lorem  # NOQA
-
     venv1 = env.VirtualEnv(env_dir1)
+    assert not venv1.are_installed(["lorem"])
 
     venv1.use_virtual_env()
     venv1.install_from_list(["lorem"])
-    import lorem  # NOQA
+    assert venv1.are_installed(["lorem"])
 
-    lorem.sentence()
-
-    with pytest.raises(ImportError):
-        import yummy  # NOQA
+    assert not venv1.are_installed(["dummy-yummy"])
 
     venv1 = env.VirtualEnv(env_dir1)
-
     venv1.use_virtual_env()
     venv1.install_from_list(["dummy-yummy"])
-    import yummy  # NOQA
+    assert venv1.are_installed(["dummy-yummy"])
 
-    with pytest.raises(ImportError):
-        import iplib  # NOQA
-
+    assert not venv1.are_installed(["iplib"])
     venv1 = env.VirtualEnv(env_dir1)
 
     venv1.use_virtual_env()
@@ -115,7 +105,7 @@ def test_basic_install(tmpdir):
     except CalledProcessError as ep:
         print(ep.stdout)
         raise
-    import iplib  # NOQA
+    assert venv1.are_installed(["iplib"])
 
 
 @pytest.mark.slowtest
