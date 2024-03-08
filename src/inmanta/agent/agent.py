@@ -567,7 +567,7 @@ class ResourceScheduler:
         async with self.agent.process.cad_ratelimiter:
             result = await self.get_client().resources_status(
                 tid=self.agent._env_id,
-                model_version=version,
+                version=version,
                 rids=list(cads.keys()),
             )
             if result.code != 200 or result.result is None:
