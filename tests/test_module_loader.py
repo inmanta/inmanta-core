@@ -882,6 +882,7 @@ def test_module_install_extra_on_dep_of_v2_module(
            [--> <extra>]
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
     # create module with optional dependency
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
@@ -939,6 +940,7 @@ def test_module_install_extra_on_dep_of_v1_module(
            [--> <extra>]
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
         str(tmpdir.join("depmod")),
@@ -987,6 +989,7 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
     Verify that module installation works correctly when a project is updated with a V2 module dependency with an extra.
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
     # create module with optional dependency
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
@@ -1055,6 +1058,7 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
            [--> <extra>]
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
     # create module with optional dependency
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
@@ -1145,6 +1149,7 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
            [--> <extra>]
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
     # Publish dependency of V1 module (depmod) to python package repo
     package_without_extra: Requirement = InmantaModuleRequirement.parse("depmod").get_python_package_requirement()
     package_with_extra: Requirement = InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()

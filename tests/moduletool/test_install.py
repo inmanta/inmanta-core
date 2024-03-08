@@ -242,7 +242,7 @@ def test_module_install(tmpdir, snippetcompiler_clean, modules_v2_dir: str, edit
 
 @pytest.mark.slowtest
 def test_module_install_conflicting_requirements(
-    tmpvenv_active_inherit: env.VirtualEnv, tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str
+    tmpvenv_active: tuple[py.path.local, py.path.local], tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str
 ) -> None:
     """
     Verify that installing a module raises an appropriate exception when a module has conflicting dependencies.
