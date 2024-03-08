@@ -933,9 +933,6 @@ def clienthelper(client, environment):
 @pytest.fixture(scope="function", autouse=True)
 def capture_warnings():
     # Ensure that the test suite uses the same config for warnings as the default config used by the CLI tools.
-    with pytest.raises(ImportError):
-        # we aren't leaking into this venv
-        import lorem  # noqa: F401, F811
     logging.captureWarnings(True)
     cmd_parser = inmanta.app.cmd_parser()
     WarningsManager.apply_config({"default": cmd_parser.get_default("warnings")})
