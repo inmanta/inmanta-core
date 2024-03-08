@@ -1,16 +1,16 @@
-Configuration requirements
-**************************
+Compatibility
+*************
 
 .. only:: iso
 
-    This page shows the configuration requirements for the Inmanta Service Orchestrator |version_major| version.
-    These constraints are defined for the whole lifetime of this major version i.e.
+    This page shows the compatibility of the Inmanta Service Orchestrator v|version_major| with other components.
+    These compatible versions are defined for the whole lifetime of this major version i.e.
     they are not pinned to a specific three-digit version. Upper bounds may be added when a new major version is released.
 
 
 .. only:: oss
 
-    This page shows the configuration requirements for version |release| of Inmanta.
+    This page shows the compatibility of Inmanta v|release| with other components.
 
 
 .. datatemplate:json:: required_configuration.json
