@@ -49,6 +49,9 @@ def get_module_source(module: str, code: str) -> ModuleSource:
 
 def test_code_manager(tmpdir: py.path.local):
     """Verify the code manager"""
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
     shutil.copytree(original_project_dir, project_dir)
@@ -113,6 +116,9 @@ def test_code_manager(tmpdir: py.path.local):
     source_info._requires = None
     # when disabled only install non-module dependencies
     assert source_info.requires == ["lorem"]
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
 
 
 def test_code_loader(tmp_path, caplog):

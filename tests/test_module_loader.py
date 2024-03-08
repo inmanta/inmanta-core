@@ -832,6 +832,9 @@ def test_module_install_extra_on_project_level_v2_dep(
     """
     Verify that module installation works correctly when a project has a V2 module dependency with an extra.
     """
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
 
     # create module with optional dependency
@@ -861,6 +864,9 @@ def test_module_install_extra_on_project_level_v2_dep(
     installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
     assert package_name in installed
     assert package_name_extra in installed
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
 
 
 @pytest.mark.slowtest
@@ -882,7 +888,9 @@ def test_module_install_extra_on_dep_of_v2_module(
            [--> <extra>]
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
-
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
     # create module with optional dependency
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
@@ -918,6 +926,9 @@ def test_module_install_extra_on_dep_of_v2_module(
     package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}depmod"
     assert package_name in installed
     assert package_name_extra in installed
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
 
 
 @pytest.mark.slowtest
@@ -940,7 +951,9 @@ def test_module_install_extra_on_dep_of_v1_module(
            [--> <extra>]
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
-
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
         str(tmpdir.join("depmod")),
@@ -972,6 +985,9 @@ def test_module_install_extra_on_dep_of_v1_module(
     package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}depmod"
     assert package_name in installed
     assert package_name_extra in installed
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
 
 
 @pytest.mark.slowtest
@@ -989,7 +1005,9 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
     Verify that module installation works correctly when a project is updated with a V2 module dependency with an extra.
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
-
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
     # create module with optional dependency
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
@@ -1035,6 +1053,9 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
         project_tool.update(project=project)
 
     assert_installed(extra_installed=True)
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
 
 
 @pytest.mark.slowtest
@@ -1058,7 +1079,9 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
            [--> <extra>]
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
-
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
     # create module with optional dependency
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
@@ -1125,6 +1148,9 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
         project_tool.update(project=project)
 
     assert_installed(extra_installed=True)
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
 
 
 @pytest.mark.slowtest
@@ -1149,7 +1175,9 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
            [--> <extra>]
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
-
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
     # Publish dependency of V1 module (depmod) to python package repo
     package_without_extra: Requirement = InmantaModuleRequirement.parse("depmod").get_python_package_requirement()
     package_with_extra: Requirement = InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()
@@ -1210,6 +1238,9 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
         project_tool.update(project=project)
 
     assert_installed(extra_installed=True)
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
 
 
 @pytest.mark.slowtest

@@ -695,6 +695,9 @@ async def test_workon_compile(
     Verify the inmanta command works as expected after using inmanta-workon. Specifically, verify that the inmanta command
     considers this venv as the active one.
     """
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
     assert not inmanta.env.PythonWorkingSet.are_installed(
         ["lorem"]
     ), "This test assumes lorem is not preinstalled and therefore will not work as expected."
@@ -729,6 +732,9 @@ async def test_workon_compile(
             " the shell. This ensures the proper permission checks are performed.\n"
         ),
     )
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
 
 
 @pytest.mark.slowtest

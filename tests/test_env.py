@@ -118,6 +118,10 @@ def test_basic_install(tmpdir):
         raise
     import iplib  # NOQA
 
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
+
 
 @pytest.mark.slowtest
 def test_install_package_already_installed_in_parent_env(tmpdir):
@@ -374,6 +378,9 @@ def test_active_env_get_module_file(
     install a dependency of inmanta-core (which is already installed in the encapsulating development venv), a new package or an
     inmanta module (namespace package).
     """
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
     venv_dir, _ = tmpvenv_active
 
     if package_name.startswith(module.ModuleV2.PKG_NAME_PREFIX):
@@ -413,6 +420,9 @@ def test_active_env_get_module_file(
     importlib.import_module(module_name)
     assert module_name in sys.modules
     assert sys.modules[module_name].__file__ == module_file
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
 
 
 @pytest.mark.slowtest
