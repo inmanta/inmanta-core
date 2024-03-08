@@ -82,8 +82,6 @@ class ResourceActionBase(abc.ABC):
     resource_id: Id
     future: ResourceActionResultFuture
     dependencies: list["ResourceActionBase"]
-    # resourceid -> attribute -> {current: , desired:}
-    changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]
 
     def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str) -> None:
         """
@@ -97,7 +95,6 @@ class ResourceActionBase(abc.ABC):
         self.running: bool = False
         self.gid: uuid.UUID = gid
         self.status: Optional[const.ResourceState] = None
-        self.change: Optional[const.Change] = const.Change.nochange
         self.undeployable: Optional[const.ResourceState] = None
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
@@ -138,12 +135,16 @@ class DummyResourceAction(ResourceActionBase):
 
 
 class ResourceAction(ResourceActionBase):
+    # resourceid -> attribute -> {current: , desired:}
+    changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]
+
     def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
         """
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         super().__init__(scheduler, resource.id, gid, reason)
         self.resource: Resource = resource
+        self.change: Optional[const.Change] = const.Change.nochange
 
     async def send_in_progress(self, action_id: uuid.UUID) -> dict[ResourceIdStr, const.ResourceState]:
         result = await self.scheduler.get_client().resource_deploy_start(
@@ -314,62 +315,14 @@ class RemoteResourceAction(ResourceActionBase):
     async def execute(
         self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
     ) -> None:
-        await dummy.future
-        async with self.scheduler.agent.process.cad_ratelimiter:
-            try:
-                # got event or cancel first
-                if self.is_done():
-                    return
-
-                result = await self.scheduler.get_client().get_resource(
-                    self.scheduler.agent._env_id,
-                    self.resource_id.resource_version_str(),
-                    logs=True,
-                    log_action=const.ResourceAction.deploy,
-                    log_limit=1,
-                )
-                if result.code != 200 or result.result is None:
-                    LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id), result.result)
-                    return
-
-                status = const.ResourceState[result.result["resource"]["status"]]
-
-                self.running = True
-
-                if status in const.TRANSIENT_STATES or self.future.done():
-                    # wait for event
-                    pass
-                else:
-                    if "logs" in result.result and len(result.result["logs"]) > 0:
-                        log = result.result["logs"][0]
-
-                        if "change" in log and log["change"] is not None:
-                            self.change = const.Change[log["change"]]
-                        else:
-                            self.change = const.Change.nochange
-
-                        if "changes" in log and log["changes"] is not None and str(self.resource_id) in log["changes"]:
-                            self.changes = log["changes"]
-                        else:
-                            self.changes = {}
-                        self.status = status
-
-                    self.future.set_result(ResourceActionResult(cancel=False))
-            except Exception:
-                LOGGER.exception("could not get status for remote resource")
-            finally:
-                self.running = False
+        pass
 
     def notify(
         self,
         status: const.ResourceState,
-        change: const.Change,
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]],
     ) -> None:
         if not self.future.done():
             self.status = status
-            self.change = change
-            self.changes = changes
             self.future.set_result(ResourceActionResult(cancel=False))
 
 
@@ -487,6 +440,7 @@ class ResourceScheduler:
 
         self.running: Optional[DeployRequest] = None
         self.deferred: Optional[DeployRequest] = None
+        self.cad_resolver: Optional[asyncio.Task[None]] = None
 
         self.logger: Logger = agent.logger
 
@@ -505,6 +459,9 @@ class ResourceScheduler:
         """
         for ra in self.generation.values():
             ra.cancel()
+        if self.cad_resolver is not None:
+            self.cad_resolver.cancel()
+            self.cad_resolver = None
         self.generation = {}
         self.cad = {}
 
@@ -566,11 +523,17 @@ class ResourceScheduler:
                 self.generation[key].undeployable = undeployable[vid]
 
         # hook up Cross Agent Dependencies
-        cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
+        cross_agent_dependencies = {q for r in resources for q in r.requires if q.get_agent_name() != self.name}
+        cads_by_rid: dict[ResourceIdStr, RemoteResourceAction] = {}
         for cad in cross_agent_dependencies:
             ra = RemoteResourceAction(self, cad, gid, self.running.reason)
             self.cad[str(cad)] = ra
-            self.generation[cad.resource_str()] = ra
+            rid = cad.resource_str()
+            cads_by_rid[rid] = ra
+            self.generation[rid] = ra
+
+        if cads_by_rid:
+            self.cad_resolver = self.agent.process.add_background_task(self.resolve_cads(self.version, cads_by_rid))
 
         # Create dummy to give start signal
         dummy = DummyResourceAction(self, gid, self.running.reason)
@@ -599,6 +562,24 @@ class ResourceScheduler:
                 self.agent.process.add_background_task(self.agent.get_latest_version_for_agent(self.deferred))
                 self.deferred = None
 
+    async def resolve_cads(self, version: int, cads: dict[ResourceIdStr, RemoteResourceAction]) -> None:
+        """Batch resolve all CAD's"""
+        async with self.agent.process.cad_ratelimiter:
+            result = await self.get_client().resources_status(
+                tid=self.agent._env_id,
+                model_version=version,
+                rids=list(cads.keys()),
+            )
+            if result.code != 200 or result.result is None:
+                LOGGER.error("Failed to get the status for remote resources %s (%s)", list(cads.keys()), result.result)
+                return
+
+            for rid_raw, status_raw in result.result["data"].items():
+                status = const.ResourceState[status_raw]
+                rra = cads[rid_raw]
+                if status not in const.TRANSIENT_STATES:
+                    rra.notify(status)
+
     def notify_ready(
         self,
         resourceid: ResourceVersionIdStr,
@@ -609,7 +590,7 @@ class ResourceScheduler:
         if resourceid not in self.cad:
             # received CAD notification for which no resource are waiting, so return
             return
-        self.cad[resourceid].notify(state, change, changes)
+        self.cad[resourceid].notify(state)
 
     def dump(self) -> None:
         print("Waiting:")

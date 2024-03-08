@@ -862,6 +862,28 @@ def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.F
     """
 
 
+@typedmethod(
+    path="/resources/status",
+    operation="GET",
+    agent_server=True,
+    arg_options={**methods.ENV_OPTS},
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def resources_status(
+    tid: uuid.UUID,
+    version: int,
+    rids: list[model.ResourceIdStr],
+) -> dict[model.ResourceIdStr, ResourceState]:
+    """
+    Get the deployment status for a batch of resource ids
+
+    :param tid: The id of the environment the resources belong to
+    :param version: Version of the model to get the status for
+    :param rids: List of resource ids to fetch the status for.
+    """
+
+
 @typedmethod(path="/compilereport", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def get_compile_reports(
     tid: uuid.UUID,
