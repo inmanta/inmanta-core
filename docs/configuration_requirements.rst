@@ -10,7 +10,7 @@ Configuration requirements
 
 .. only:: oss
 
-    This page shows the configuration requirements for version |version_major| of Inmanta.
+    This page shows the configuration requirements for version |release| of Inmanta.
 
 
 .. datatemplate:json:: required_configuration.json

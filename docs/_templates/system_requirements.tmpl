@@ -4,10 +4,13 @@
 System requirements
 ~~~~~~~~~~~~~~~~~~~
 
-
+{% if data['system_requirements_table'] is not none %}
 {{ make_list_table(
     ["Component", "Required version"],
     data['system_requirements_table'],
     title='System requirements',
     ) }}
+
+{% endif %}
+
 

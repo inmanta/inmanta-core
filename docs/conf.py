@@ -138,6 +138,7 @@ rst_prolog = f"""\
 .. |version_major| replace:: {version_major}
 .. |iso_gpg_key| replace:: {iso_gpg_key}
 .. |oss_gpg_key| replace:: {oss_gpg_key}
+.. |release| replace:: {release}
 """
 
 
