@@ -1,0 +1,3 @@
+description: fix test by not importing lorem explicitly anymore.
+change-type: patch
+destination-branches: [master, iso7, iso6]

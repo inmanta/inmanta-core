@@ -79,33 +79,24 @@ def test_venv_pyton_env_empty_string(tmpdir):
 
 
 @pytest.mark.slowtest
-def test_basic_install(tmpvenv_active):
-    venv_dir, _ = tmpvenv_active
-
-    with pytest.raises(ImportError):
-        import lorem  # NOQA
-
-    venv1 = env.VirtualEnv(str(venv_dir))
+def test_basic_install(tmpdir):
+    env_dir1 = tmpdir.mkdir("env1").strpath
+    venv1 = env.VirtualEnv(env_dir1)
+    assert not venv1.are_installed(["lorem"])
 
     venv1.use_virtual_env()
     venv1.install_from_list(["lorem"])
-    import lorem  # NOQA
+    assert venv1.are_installed(["lorem"])
 
-    lorem.sentence()
+    assert not venv1.are_installed(["dummy-yummy"])
 
-    with pytest.raises(ImportError):
-        import yummy  # NOQA
-
-    venv1 = env.VirtualEnv(str(venv_dir))
-
+    venv1 = env.VirtualEnv(env_dir1)
     venv1.use_virtual_env()
     venv1.install_from_list(["dummy-yummy"])
-    import yummy  # NOQA
+    assert venv1.are_installed(["dummy-yummy"])
 
-    with pytest.raises(ImportError):
-        import iplib  # NOQA
-
-    venv1 = env.VirtualEnv(str(venv_dir))
+    assert not venv1.are_installed(["iplib"])
+    venv1 = env.VirtualEnv(env_dir1)
 
     venv1.use_virtual_env()
     try:
@@ -115,7 +106,7 @@ def test_basic_install(tmpvenv_active):
     except CalledProcessError as ep:
         print(ep.stdout)
         raise
-    import iplib  # NOQA
+    assert venv1.are_installed(["iplib"])
 
 
 @pytest.mark.slowtest
