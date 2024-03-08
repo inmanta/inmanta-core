@@ -8,12 +8,16 @@ Configuration requirements
     they are not pinned to a specific three-digit version. Upper bounds may be added when a new major version is released.
 
 
-    .. datatemplate:json:: required_configuration.json
-       :template: iso_config_requirements.tmpl
-
 .. only:: oss
 
     This page shows the configuration requirements for version |version_major| of Inmanta.
 
+
+.. datatemplate:json:: required_configuration.json
+   :template: system_requirements.tmpl
+
+.. only:: iso
+
     .. datatemplate:json:: required_configuration.json
-       :template: oss_config_requirements.tmpl
+       :template: components_requirements.tmpl
+
