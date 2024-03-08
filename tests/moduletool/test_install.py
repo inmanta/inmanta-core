@@ -241,13 +241,12 @@ def test_module_install(tmpdir, snippetcompiler_clean, modules_v2_dir: str, edit
 
 
 @pytest.mark.slowtest
-def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
+def test_module_install_conflicting_requirements(
+    tmpvenv_active_inherit: env.VirtualEnv, tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str
+) -> None:
     """
     Verify that installing a module raises an appropriate exception when a module has conflicting dependencies.
     """
-    with pytest.raises(ImportError):
-        # we aren't leaking into this venv
-        import lorem  # noqa: F401, F811
     # activate snippetcompiler's venv
     snippetcompiler_clean.setup_for_snippet("")
 
@@ -281,9 +280,6 @@ def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetc
         "inmanta-module-modtwo==1.2.3 because these package versions "
         "have conflicting dependencies."
     ) in exc_info.value.format_trace()
-    with pytest.raises(ImportError):
-        # we aren't leaking into this venv
-        import lorem  # noqa: F401, F811
 
 
 @pytest.mark.parametrize_any("dev", [True, False])

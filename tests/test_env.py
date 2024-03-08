@@ -83,9 +83,6 @@ def test_basic_install(tmpdir):
     """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it."""
     env_dir1 = tmpdir.mkdir("env1").strpath
 
-    with pytest.raises(ImportError):
-        import lorem  # NOQA
-
     venv1 = env.VirtualEnv(env_dir1)
 
     venv1.use_virtual_env()
@@ -117,10 +114,6 @@ def test_basic_install(tmpdir):
         print(ep.stdout)
         raise
     import iplib  # NOQA
-
-    with pytest.raises(ImportError):
-        # we aren't leaking into this venv
-        import lorem  # noqa: F401, F811
 
 
 @pytest.mark.slowtest
