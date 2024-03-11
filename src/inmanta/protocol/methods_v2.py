@@ -862,9 +862,12 @@ def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.F
     """
 
 
+# This should be be get operation,
+# but we can overflow the max url length if we don't put the parameters in the body
+# as such, we made this a post
 @typedmethod(
     path="/resources/status",
-    operation="GET",
+    operation="POST",
     agent_server=True,
     arg_options={**methods.ENV_OPTS},
     client_types=[ClientType.agent],
