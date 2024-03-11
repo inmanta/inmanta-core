@@ -13,11 +13,11 @@ Compatibility
     This page shows the compatibility of Inmanta v|release| with other components.
 
 
-.. datatemplate:json:: required_configuration.json
+.. datatemplate:json:: compatibility.json
    :template: system_requirements.tmpl
 
 .. only:: iso
 
-    .. datatemplate:json:: required_configuration.json
+    .. datatemplate:json:: compatibility.json
        :template: components_requirements.tmpl
 

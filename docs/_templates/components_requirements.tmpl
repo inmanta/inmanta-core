@@ -3,10 +3,10 @@
 Inmanta core and extensions versions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-{% if data['requirements_table'] is not none %}
+{% if data['component_requirements'] is not none %}
 {{ make_list_table(
     ["Component", "Required version"],
-    data['requirements_table'],
+    data['component_requirements'],
     title='Component requirements'
     ) }}
 
