@@ -3,18 +3,26 @@
 Inmanta core and extensions versions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-{% if data['component_requirements'] is not none %}
-{{ make_list_table(
-    ["Component", "Required version"],
-    data['component_requirements'],
-    title='Component requirements'
-    ) }}
+
+{% if data['component_requirements']%}
+.. list-table:: Inmanta core and extensions versions
+   :widths: 25 25
+   :header-rows: 1
+
+   * - Component
+     - Required version
+
+   {% for key, value in data["component_requirements"] | dictsort %}
+   * - {{ key|e }}
+     - {{ value|e }}
+   {% endfor %}
 
 .. note::
 
-A machine-consumable json file with these versions is available at https://docs.inmanta.com/inmanta-service-orchestrator-dev/|version_major|/requirements.components.txt
+    A machine-consumable json file with these versions is available at https://docs.inmanta.com/inmanta-service-orchestrator-dev/|version_major|/requirements.components.txt
+
 
 {% else %}
-    Components are not pinned for major version |version_major| because it is not released yet.
+Components are not pinned for major version |version_major| because it is not released yet.
 {% endif %}
 

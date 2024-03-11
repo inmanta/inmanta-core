@@ -4,15 +4,22 @@
 System requirements
 ~~~~~~~~~~~~~~~~~~~
 
-{% if data['system_requirements'] is not none %}
-{{ make_list_table(
-    ["Component", "Required version"],
-    data['system_requirements'],
-    title='System requirements',
-    ) }}
 
+{% if data['system_requirements']%}
+.. list-table:: System requirements
+   :widths: 25 25
+   :header-rows: 1
+
+   * - Component
+     - Required version
+
+   {% for key, value in data["system_requirements"] | dictsort %}
+   * - {{ key|e }}
+     - {{ value|e }}
+   {% endfor %}
 {% endif %}
 
-A machine-consumable json file with these versions is available at https://docs.inmanta.com/inmanta-service-orchestrator-dev/|version_major|/required_configuration.json
+A machine-consumable json file with these versions is available at ``https://docs.inmanta.com/inmanta-service-orchestrator-dev/|version_major|/required_configuration.json``
 
+A machine-consumable json file with these versions is available at `https://docs.inmanta.com/inmanta-service-orchestrator-dev/|version_major|/required_configuration.json <../required_configuration.json>`_
 
