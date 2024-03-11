@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS public.resource_persistent_state (
 
 
 -- The INSERT query uses a subquery to find the maximum model version
--- for each resource within each environment. This to also include orphans.
+-- for each resource within each environment. This also includes orphans.
 -- The query uses the 'resource_env_resourceid_index' index to efficiently find
 -- the latest version for each resource within each environment without scanning the entire table.
 INSERT INTO public.resource_persistent_state (
