@@ -30,6 +30,7 @@ from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
 from inmanta.data.schema import DBSchema
 from inmanta.protocol import methods
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
+from inmanta.server.services.compilerservice import CompilerService
 
 if __file__ and os.path.dirname(__file__).split("/")[-2] == "inmanta_tests":
     from inmanta_tests.utils import _wait_until_deployment_finishes, wait_for_version  # noqa: F401
