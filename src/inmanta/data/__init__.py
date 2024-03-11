@@ -3053,6 +3053,17 @@ class Parameter(BaseDocument):
             expires=self.expires,
         )
 
+    def as_param(self) -> m.Parameter:
+        return m.Parameter(
+            id=self.id,
+            name=self.name,
+            value=self.value,
+            environment=self.environment,
+            source=self.source,
+            updated=self.updated,
+            metadata=self.metadata,
+        )
+
 
 class UnknownParameter(BaseDocument):
     """
@@ -4465,8 +4476,8 @@ class ResourcePersistentState(BaseDocument):
             WHERE NOT EXISTS(
                 SELECT r.resource_id
                 FROM {Resource.table_name()} r
-                WHERE r.resource_id = rps.resource_id and r.environment=$1 and rps.environment=$1
-            )
+                WHERE r.resource_id = rps.resource_id and r.environment=$1
+            ) and rps.environment=$1
             """,
             environment,
             connection=connection,
@@ -4620,6 +4631,25 @@ class Resource(BaseDocument):
             connection=connection,
         )
         return out
+
+    @classmethod
+    async def get_status_for(
+        cls,
+        env: uuid.UUID,
+        model_version: int,
+        rids: list[ResourceIdStr],
+    ) -> dict[ResourceIdStr, ResourceState]:
+        if not rids:
+            return {}
+        query = """
+            SELECT r.resource_id, r.status
+            FROM resource r
+            WHERE r.environment=$1
+                AND r.model=$2
+                AND r.resource_id = ANY($3);
+            """
+        out = await cls.select_query(query, [env, model_version, rids], no_obj=True)
+        return {ResourceIdStr(r["resource_id"]): ResourceState[r["status"]] for r in out}
 
     @classmethod
     async def set_deployed_multi(
@@ -5239,7 +5269,8 @@ class Resource(BaseDocument):
             return
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
 
-        await self._execute_query(query, self.environment, self.resource_id, *args.args, connection=connection)
+        result = await self._execute_query(query, self.environment, self.resource_id, *args.args, connection=connection)
+        assert result == "UPDATE 1"
 
 
 @stable_api
