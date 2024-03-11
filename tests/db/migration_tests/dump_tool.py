@@ -80,11 +80,11 @@ async def populate_facts_and_parameters(client, env_id: str):
             "id": "parameter3",
             "source": const.ParameterSource.fact,
             "value": "value3",
-            "expires": True,
+            "expires": False,
         },
     ]
     for param_data in parameters:
-        await client.set_param(
+        result = await client.set_param(
             tid=UUID(env_id),
             id=param_data["id"],
             source=param_data["source"],
@@ -92,6 +92,7 @@ async def populate_facts_and_parameters(client, env_id: str):
             resource_id=param_data.get("resource_id", None),
             expires=param_data.get("expires", None),
         )
+        assert result.code == 200
 
 
 async def test_dump_db(server, client, postgres_db, database_name):
@@ -114,8 +115,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
     assert result.code == 200
     env_1_version = result.result["data"]
 
-    result = await client.create_environment(project_id=project_id, name="dev-2")
-    assert result.code == 200
+    check_result(await client.create_environment(project_id=project_id, name="dev-2"))
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(env_id_1))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../..", "data", "simple_project")
@@ -135,16 +135,18 @@ async def test_dump_db(server, client, postgres_db, database_name):
     check_result(await client.set_setting(env_id_1, "autostart_agent_repair_interval", "600"))
     check_result(await client.set_setting(env_id_1, "auto_deploy", False))
 
-    await client.notify_change(id=env_id_1)
+    check_result(await client.notify_change(id=env_id_1))
 
     versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=40)
     v1 = versions["versions"][0]["version"]
 
-    await client.release_version(env_id_1, v1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
+    check_result(
+        await client.release_version(env_id_1, v1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
+    )
 
     await _wait_until_deployment_finishes(client, env_id_1, v1, 20)
 
-    await client.notify_change(id=env_id_1, update=False)
+    check_result(await client.notify_change(id=env_id_1, update=False))
 
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
@@ -157,33 +159,41 @@ async def test_dump_db(server, client, postgres_db, database_name):
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
 
-    await client.release_version(
-        env_id_1, env_1_version, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    check_result(
+        await client.release_version(
+            env_id_1, env_1_version, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+        )
     )
 
     await _wait_until_deployment_finishes(client, env_id_1, env_1_version, 20)
 
     # a version that is release, but not deployed
-    await client.notify_change(id=env_id_1, update=False)
+    check_result(await client.notify_change(id=env_id_1, update=False))
 
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
-    await client.release_version(
-        env_id_1, env_1_version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    check_result(
+        await client.release_version(
+            env_id_1, env_1_version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+        )
     )
 
     await populate_facts_and_parameters(client, env_id_1)
 
     await wait_for_version(client, env_id_1, env_1_version)
 
-    await client.release_version(
-        env_id_1, env_1_version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    env_1_version += 1
+
+    check_result(
+        await client.release_version(
+            env_id_1, env_1_version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+        )
     )
 
     # a not released version
-    await client.notify_change(id=env_id_1, update=False)
-    versions = await wait_for_version(client, env_id_1, 4)
-    await client.notify_change(id=env_id_1)
+    check_result(await client.notify_change(id=env_id_1, update=False))
+    await wait_for_version(client, env_id_1, 4)
+    check_result(await client.notify_change(id=env_id_1))
 
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
@@ -202,15 +212,16 @@ async def test_dump_db(server, client, postgres_db, database_name):
     ]
     resource_sets = {rid2: "set-a"}
     resource_states = {rid2: const.ResourceState.available}
-    result = await client.put_partial(
-        tid=env_id_1,
-        resources=resources_partial,
-        resource_state=resource_states,
-        unknowns=[],
-        version_info=None,
-        resource_sets=resource_sets,
+    check_result(
+        await client.put_partial(
+            tid=env_id_1,
+            resources=resources_partial,
+            resource_state=resource_states,
+            unknowns=[],
+            version_info=None,
+            resource_sets=resource_sets,
+        )
     )
-    assert result.code == 200
 
     proc = await asyncio.create_subprocess_exec(
         "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name
