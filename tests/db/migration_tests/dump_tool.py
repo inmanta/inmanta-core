@@ -153,8 +153,8 @@ async def test_dump_db(server, client, postgres_db, database_name):
     await compilerslice.request_recompile(
         env=env1, force_update=False, do_export=True, remote_id=remote_id1, env_vars={"add_one_resource": "true"}
     )
-    env_1_version += 1
 
+    env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
 
     await client.release_version(
