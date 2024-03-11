@@ -155,6 +155,8 @@ async def test_dump_db(server, client, postgres_db, database_name):
     )
     env_1_version += 1
 
+    await wait_for_version(client, env_id_1, env_1_version)
+
     await client.release_version(
         env_id_1, env_1_version, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
     )
