@@ -3642,7 +3642,11 @@ class Compile(BaseDocument):
     :param do_export: should this compiler perform an export
     :param force_update: should this compile definitely update
     :param metadata: exporter metadata to be passed to the compiler
-    :param environment_variables: environment variables to be passed to the compiler
+    :param environment_variables: environment variables requested to be passed to the compiler
+    :param compactable_environment_variables: environment variables to be passed to the compiler.
+            These env vars can be compacted over multiple compiles.
+            If multiple values are compacted, they will be joined using spaces.
+    :param used_environment_variables: environment variables passed to the compiler
     :param success: was the compile successful
     :param handled: were all registered handlers executed?
     :param version: version exported by this compile
@@ -3671,6 +3675,8 @@ class Compile(BaseDocument):
     force_update: bool = False
     metadata: JsonType = {}
     environment_variables: Optional[dict[str, str]] = {}
+    compactable_environment_variables: dict[str, str] = {}
+    used_environment_variables: Optional[dict[str, str]] = {}
 
     success: Optional[bool]
     handled: bool = False
