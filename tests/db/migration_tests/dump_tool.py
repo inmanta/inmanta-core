@@ -84,15 +84,16 @@ async def populate_facts_and_parameters(client, env_id: str):
         },
     ]
     for param_data in parameters:
-        result = await client.set_param(
-            tid=UUID(env_id),
-            id=param_data["id"],
-            source=param_data["source"],
-            value=param_data["value"],
-            resource_id=param_data.get("resource_id", None),
-            expires=param_data.get("expires", None),
+        check_result(
+            await client.set_param(
+                tid=UUID(env_id),
+                id=param_data["id"],
+                source=param_data["source"],
+                value=param_data["value"],
+                resource_id=param_data.get("resource_id", None),
+                expires=param_data.get("expires", None),
+            )
         )
-        assert result.code == 200
 
 
 async def test_dump_db(server, client, postgres_db, database_name):
