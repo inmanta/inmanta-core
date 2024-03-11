@@ -21,3 +21,6 @@ Compatibility
     .. datatemplate:json:: compatibility.json
        :template: components_requirements.tmpl
 
+    .. note::
+
+        A machine-consumable json file with these versions is available at https://docs.inmanta.com/inmanta-service-orchestrator-dev/|version_major|/requirements.components.txt
