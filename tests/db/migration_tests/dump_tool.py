@@ -29,7 +29,7 @@ from inmanta import const, data
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
 from inmanta.data.schema import DBSchema
 from inmanta.protocol import methods
-from inmanta.server import SLICE_SERVER
+from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 
 if __file__ and os.path.dirname(__file__).split("/")[-2] == "inmanta_tests":
     from inmanta_tests.utils import _wait_until_deployment_finishes, wait_for_version  # noqa: F401
@@ -99,6 +99,8 @@ async def test_dump_db(server, client, postgres_db, database_name):
         # trick autocomplete to have autocomplete on client
         client = methods
 
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
     result = await client.create_project("project-test-a")
     assert result.code == 200
     project_id = result.result["project"]["id"]
@@ -106,6 +108,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
     result = await client.create_environment(project_id=project_id, name="dev-1")
     assert result.code == 200
     env_id_1 = result.result["environment"]["id"]
+    env1 = await data.Environment.get_by_id(uuid.UUID(env_id_1))
 
     result = await client.reserve_version(env_id_1)
     assert result.code == 200
@@ -145,6 +148,11 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
+
+    remote_id1 = uuid.uuid4()
+    await compilerslice.request_recompile(
+        env=env1, force_update=False, do_export=True, remote_id=remote_id1, env_vars={"my_unique_var": "1"}
+    )
 
     await client.release_version(
         env_id_1, env_1_version, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
@@ -200,15 +208,6 @@ async def test_dump_db(server, client, postgres_db, database_name):
         resource_sets=resource_sets,
     )
     assert result.code == 200
-
-    # create an orphan resource
-    version = 2
-    path = "/tmp/test" + str(2)
-    key = "std::File[localhost,path=" + path + "]"
-    res2_v1 = data.Resource.new(
-        environment=uuid.UUID(env_id_1), resource_version_id=key + ",v=%d" % version, attributes={"path": path}
-    )
-    await res2_v1.insert()
 
     proc = await asyncio.create_subprocess_exec(
         "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name
