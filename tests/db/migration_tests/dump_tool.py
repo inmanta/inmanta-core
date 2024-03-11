@@ -182,7 +182,6 @@ async def test_dump_db(server, client, postgres_db, database_name):
     await populate_facts_and_parameters(client, env_id_1)
 
     await wait_for_version(client, env_id_1, env_1_version)
-
     env_1_version += 1
 
     check_result(
@@ -193,7 +192,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     # a not released version
     check_result(await client.notify_change(id=env_id_1, update=False))
-    await wait_for_version(client, env_id_1, 4)
+    await wait_for_version(client, env_id_1, env_1_version)
     check_result(await client.notify_change(id=env_id_1))
 
     env_1_version += 1
