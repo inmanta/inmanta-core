@@ -151,7 +151,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     remote_id1 = uuid.uuid4()
     await compilerslice.request_recompile(
-        env=env1, force_update=False, do_export=True, remote_id=remote_id1, env_vars={"my_unique_var": "1"}
+        env=env1, force_update=False, do_export=True, remote_id=remote_id1, env_vars={"add_one_resource": "true"}
     )
     env_1_version += 1
 
