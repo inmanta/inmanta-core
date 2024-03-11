@@ -23,7 +23,7 @@ from collections import abc
 import pytest
 
 from inmanta import const
-from inmanta.data import Environment, Resource, ResourceAction, ResourcePersistentState
+from inmanta.data import Environment, ResourceAction, ResourcePersistentState
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
@@ -52,7 +52,6 @@ async def test_resource_state_table(postgres_db, database_name, migrate_db_from:
     assert rps.last_success == last_success.started
     assert rps.last_produced_events == last_produced_events
 
-    resources = await Resource.get_list()
     # Verify that orphaned resource is included in resource_persistent_state
     orphaned_rps = await ResourcePersistentState.get_one(
         environment=env.id, resource_id="std::File[localhost,path=/tmp/test_orphan]"
