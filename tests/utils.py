@@ -151,7 +151,6 @@ def log_contains(caplog, loggerpart, level, msg, test_phase="call"):
         logger_name, log_level, message = record.name, record.levelno, record.message
         if msg in message:
             if loggerpart in logger_name and level == log_level:
-                print(logger_name)
                 return
             else:
                 close.append((logger_name, log_level, message))
