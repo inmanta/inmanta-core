@@ -137,7 +137,7 @@ class RESTClient(RESTBase):
                 if length > 65000:
                     LOGGER.exception("Failed to send request, header is too long (estimated size %d)", length)
                     return common.Result(
-                        code=e.code, result={"message": e.message + f" header is too long (estimated size {length})"}
+                        code=e.code, result={"message": f"{e.message} header is too long (estimated size {length})"}
                     )
             if e.response is not None and e.response.body is not None and len(e.response.body) > 0:
                 try:
