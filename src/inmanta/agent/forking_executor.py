@@ -179,7 +179,6 @@ class MPExecutor(executor.Executor):
         self.connection = connection
         self.connection.finalizers.append(self.force_stop)
         self.closed = False
-        self.joining = False
         self.owner = owner
 
     async def stop(self) -> None:
