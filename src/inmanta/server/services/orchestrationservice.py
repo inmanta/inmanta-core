@@ -946,6 +946,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[list[str]] = None,
         pip_config: Optional[PipConfig] = None,
+        soft_delete: Optional[bool] = None,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
@@ -954,6 +955,8 @@ class OrchestrationService(protocol.ServerSlice):
                      "parameter": str,
                      "source": str
                     }
+        :param soft_delete: When true, only delete resources in removed_resource_sets if they are not being exported
+            i.e. not in resource_sets
         """
         if resource_state is None:
             resource_state = {}
@@ -963,6 +966,8 @@ class OrchestrationService(protocol.ServerSlice):
             resource_sets = {}
         if removed_resource_sets is None:
             removed_resource_sets = []
+        if soft_delete is None:
+            soft_delete = False
 
         try:
             pydantic.TypeAdapter(abc.Sequence[ResourceMinimal]).validate_python(resources)
@@ -981,12 +986,17 @@ class OrchestrationService(protocol.ServerSlice):
             if rid.get_version() != 0:
                 raise BadRequest("Resources for partial export should not contain version information")
 
-        intersection: set[str] = set(resource_sets.values()).intersection(set(removed_resource_sets))
+        removed_resource_sets_set = set(removed_resource_sets)
+
+        intersection: set[str] = set(resource_sets.values()).intersection(removed_resource_sets_set)
         if intersection:
-            raise BadRequest(
-                "Following resource sets are present in the removed resource sets and in the resources that are exported: "
-                f"{intersection}"
-            )
+            if soft_delete:
+                removed_resource_sets = list(removed_resource_sets_set - intersection)
+            else:
+                raise BadRequest(
+                    "Following resource sets are present in the removed resource sets and in the resources that are exported: "
+                    f"{intersection}"
+                )
 
         async with data.Resource.get_connection() as con:
             async with con.transaction():

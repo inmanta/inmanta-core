@@ -402,6 +402,10 @@ class CompileRun:
                     cmd.append("--delete-resource-set")
                     cmd.append(resource_set)
 
+            if self.request.soft_delete is not None:
+                cmd.append("--soft-delete")
+                cmd.append(self.request.soft_delete)
+
             if not self.request.do_export:
                 f = NamedTemporaryFile()
                 cmd.append("-j")
@@ -603,6 +607,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         failed_compile_message: Optional[str] = None,
         in_db_transaction: bool = False,
         connection: Optional[Connection] = None,
+        soft_delete: bool = False,
     ) -> tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -649,6 +654,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             exporter_plugin=exporter_plugin,
             notify_failed_compile=notify_failed_compile,
             failed_compile_message=failed_compile_message,
+            soft_delete=soft_delete,
         )
         if not in_db_transaction:
             async with self._queue_count_cache_lock:

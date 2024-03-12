@@ -373,6 +373,7 @@ class Exporter:
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
+        soft_delete: bool = False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
@@ -424,7 +425,7 @@ class Exporter:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
         elif (not self.failed or len(self._resources) > 0 or len(unknown_parameters) > 0) and not no_commit:
             self._version = self.commit_resources(
-                self._version, resources, metadata, partial_compile, resource_sets_to_remove_all, Project.get().metadata.pip
+                self._version, resources, metadata, partial_compile, resource_sets_to_remove_all, Project.get().metadata.pip, soft_delete
             )
             LOGGER.info("Committed resources with version %d" % self._version)
 
@@ -505,6 +506,7 @@ class Exporter:
         partial_compile: bool,
         resource_sets_to_remove: list[str],
         pip_config: PipConfig,
+        soft_delete: bool
     ) -> int:
         """
         Commit the entire list of resources to the configuration server.

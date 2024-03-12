@@ -455,6 +455,13 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "be used together with the --partial option.",
         action="append",
     )
+    parser.add_argument(
+        "--soft-delete",
+        dest="soft_delete",
+        help="Use in combination with --delete-resource-set to delete these resource sets iff they are not being exported",
+        action="store_true",
+        default=False,
+    )
     moduletool.add_deps_check_arguments(parser)
 
 
@@ -465,6 +472,10 @@ def export(options: argparse.Namespace) -> None:
         if not options.partial_compile and options.delete_resource_set:
             raise CLIException(
                 "The --delete-resource-set option should always be used together with the --partial option", exitcode=1
+            )
+        if not options.delete_resource_set and options.soft_delete:
+            raise CLIException(
+                "The --soft-delete option should always be used together with the --delete-resource-set option", exitcode=1
             )
         if options.environment is not None:
             Config.set("config", "environment", options.environment)
@@ -545,6 +556,7 @@ def export(options: argparse.Namespace) -> None:
                 export_plugin=options.export_plugin,
                 partial_compile=options.partial_compile,
                 resource_sets_to_remove=options.delete_resource_set,
+                soft_delete=options.soft_delete,
             )
 
         if not summary_reporter.is_failure() and options.deploy:
