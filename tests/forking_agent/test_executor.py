@@ -94,7 +94,7 @@ async def test_executor_server(mpmanager: MPManager, client):
     simplest = inmanta.agent.executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(), requirements=[], sources=[]  # No pip
     )
-    simplest = await manager.get_executor("agent1", simplest)
+    simplest = await manager.get_executor("agent1", "test", [executor.ResourceInstallSpec("test::Test", 5, simplest)])
 
     # check communications
     result = await simplest.connection.call(Echo(["aaaa"]))
