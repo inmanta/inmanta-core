@@ -97,10 +97,6 @@ async def populate_facts_and_parameters(client, env_id: str):
         )
 
 
-import pytest
-
-
-@pytest.mark.parametrize("rerun", list(range(5)))
 async def test_dump_db(server, client, postgres_db, database_name, rerun):
     if False:
         # trick autocomplete to have autocomplete on client
