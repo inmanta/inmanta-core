@@ -31,6 +31,7 @@ import psutil
 import pytest
 from psutil import NoSuchProcess, Process
 
+import utils
 from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent, wait_for_n_deployed_resources
 from inmanta import agent, config, const, data, execute
 from inmanta.agent import config as agent_config
@@ -1096,7 +1097,14 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
 
 
 async def test_cross_agent_deps(
-    resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer
+    resource_container,
+    server,
+    client,
+    environment,
+    clienthelper,
+    no_agent_backoff,
+    async_finalizer,
+    caplog,
 ):
     """
     deploy a configuration model with cross host dependency
@@ -1197,6 +1205,9 @@ async def test_cross_agent_deps(
     assert resource_container.Provider.get("agent 1", "key1") == "value1"
     assert resource_container.Provider.get("agent 1", "key2") == "value2"
     assert resource_container.Provider.get("agent2", "key3") == "value3"
+    # CAD's involve some background tasks of which the exceptions don't propagate
+    # It is also sufficiently redundant to succeed if they fail, be it slowly
+    utils.no_error_in_logs(caplog)
 
 
 @pytest.mark.parametrize(
