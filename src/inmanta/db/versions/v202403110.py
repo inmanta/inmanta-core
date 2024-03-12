@@ -22,8 +22,12 @@ from asyncpg import Connection
 async def update(connection: Connection) -> None:
     schema = """
      ALTER TABLE public.compile
-        ADD COLUMN compactable_environment_variables jsonb DEFAULT '{}',
+        ADD COLUMN mergeable_environment_variables jsonb DEFAULT '{}',
         ADD COLUMN used_environment_variables jsonb;
+
+     ALTER TABLE public.compile RENAME COLUMN environment_variables TO requested_environment_variables;
+
+     UPDATE public.compile SET used_environment_variables = requested_environment_variables WHERE completed is not null;
      """
 
     await connection.execute(schema)

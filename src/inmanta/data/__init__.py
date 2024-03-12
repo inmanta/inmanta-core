@@ -3642,8 +3642,8 @@ class Compile(BaseDocument):
     :param do_export: should this compiler perform an export
     :param force_update: should this compile definitely update
     :param metadata: exporter metadata to be passed to the compiler
-    :param environment_variables: environment variables requested to be passed to the compiler
-    :param compactable_environment_variables: environment variables to be passed to the compiler.
+    :param requtested_environment_variables: environment variables requested to be passed to the compiler
+    :param mergeable_environment_variables: environment variables to be passed to the compiler.
             These env vars can be compacted over multiple compiles.
             If multiple values are compacted, they will be joined using spaces.
     :param used_environment_variables: environment variables passed to the compiler
@@ -3674,8 +3674,8 @@ class Compile(BaseDocument):
     do_export: bool = False
     force_update: bool = False
     metadata: JsonType = {}
-    environment_variables: Optional[dict[str, str]] = {}
-    compactable_environment_variables: dict[str, str] = {}
+    requested_environment_variables: Optional[dict[str, str]] = {}
+    mergeable_environment_variables: dict[str, str] = {}
     used_environment_variables: Optional[dict[str, str]] = {}
 
     success: Optional[bool]
@@ -3833,7 +3833,9 @@ class Compile(BaseDocument):
                 c.do_export,
                 c.force_update,
                 c.metadata,
-                c.environment_variables,
+                c.requested_environment_variables ,
+                c.mergeable_environment_variables,
+                c.used_environment_variables,
                 c.compile_data,
                 c.substitute_compile_id,
                 c.partial,
@@ -3866,7 +3868,9 @@ class Compile(BaseDocument):
                     comp.do_export,
                     comp.force_update,
                     comp.metadata,
-                    comp.environment_variables,
+                    comp.requested_environment_variables,
+                    comp.mergeable_environment_variables,
+                    comp.used_environment_variables,
                     comp.compile_data,
                     comp.substitute_compile_id,
                     comp.partial,
@@ -3921,6 +3925,12 @@ class Compile(BaseDocument):
             if report.get("report_id")
         ]
 
+        environment_variables = {}
+        for report in result:
+            environment_variables = report.get("used_environment_variables")
+            if environment_variables:
+                break
+
         return m.CompileDetails(
             id=requested_compile["id"],
             remote_id=requested_compile["remote_id"],
@@ -3933,8 +3943,16 @@ class Compile(BaseDocument):
             do_export=requested_compile["do_export"],
             force_update=requested_compile["force_update"],
             metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
-            environment_variables=(
-                json.loads(requested_compile["environment_variables"]) if requested_compile["environment_variables"] else {}
+            environment_variables=(json.loads(environment_variables) if environment_variables else {}),
+            requested_environment_variables=(
+                json.loads(requested_compile["requested_environment_variables"])
+                if requested_compile["requested_environment_variables"]
+                else {}
+            ),
+            mergeable_environment_variables=(
+                json.loads(requested_compile["mergeable_environment_variables"])
+                if requested_compile["mergeable_environment_variables"]
+                else {}
             ),
             partial=requested_compile["partial"],
             removed_resource_sets=requested_compile["removed_resource_sets"],
@@ -3955,7 +3973,9 @@ class Compile(BaseDocument):
             do_export=self.do_export,
             force_update=self.force_update,
             metadata=self.metadata,
-            environment_variables=self.environment_variables,
+            environment_variables=self.used_environment_variables or {},
+            requested_environment_variables=self.requested_environment_variables or {},
+            mergeable_environment_variables=self.mergeable_environment_variables,
             compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
             partial=self.partial,
             removed_resource_sets=self.removed_resource_sets,
@@ -3963,6 +3983,14 @@ class Compile(BaseDocument):
             notify_failed_compile=self.notify_failed_compile,
             failed_compile_message=self.failed_compile_message,
         )
+
+    def to_dict(self) -> JsonType:
+        """produce dict directly, for untyped endpoints"""
+        # mangle the output for backward compatibility
+        # we have to do it because we have no DTO here
+        out = super().to_dict()
+        out["environment_variables"] = self.used_environment_variables or self.requested_environment_variables
+        return out
 
 
 class LogLine(DataDocument):
