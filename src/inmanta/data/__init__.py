@@ -3674,7 +3674,7 @@ class Compile(BaseDocument):
     do_export: bool = False
     force_update: bool = False
     metadata: JsonType = {}
-    requested_environment_variables: Optional[dict[str, str]] = {}
+    requested_environment_variables: dict[str, str] = {}
     mergeable_environment_variables: dict[str, str] = {}
     used_environment_variables: Optional[dict[str, str]] = {}
 
@@ -3925,9 +3925,9 @@ class Compile(BaseDocument):
             if report.get("report_id")
         ]
 
-        environment_variables = {}
+        environment_variables: Optional[str] = None
         for report in result:
-            environment_variables = report.get("used_environment_variables")
+            environment_variables = cast(Optional[str], report.get("used_environment_variables"))
             if environment_variables:
                 break
 
