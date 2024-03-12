@@ -3642,7 +3642,7 @@ class Compile(BaseDocument):
     :param do_export: should this compiler perform an export
     :param force_update: should this compile definitely update
     :param metadata: exporter metadata to be passed to the compiler
-    :param requtested_environment_variables: environment variables requested to be passed to the compiler
+    :param requested_environment_variables: environment variables requested to be passed to the compiler
     :param mergeable_environment_variables: environment variables to be passed to the compiler.
             These env vars can be compacted over multiple compiles.
             If multiple values are compacted, they will be joined using spaces.
@@ -3925,12 +3925,6 @@ class Compile(BaseDocument):
             if report.get("report_id")
         ]
 
-        environment_variables: Optional[str] = None
-        for report in result:
-            environment_variables = cast(Optional[str], report.get("used_environment_variables"))
-            if environment_variables:
-                break
-
         return m.CompileDetails(
             id=requested_compile["id"],
             remote_id=requested_compile["remote_id"],
@@ -3943,7 +3937,11 @@ class Compile(BaseDocument):
             do_export=requested_compile["do_export"],
             force_update=requested_compile["force_update"],
             metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
-            environment_variables=(json.loads(environment_variables) if environment_variables else {}),
+            environment_variables=(
+                json.loads(requested_compile["used_environment_variables"])
+                if requested_compile["used_environment_variables"]
+                else {}
+            ),
             requested_environment_variables=(
                 json.loads(requested_compile["requested_environment_variables"])
                 if requested_compile["requested_environment_variables"]
