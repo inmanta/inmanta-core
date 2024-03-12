@@ -97,7 +97,7 @@ async def populate_facts_and_parameters(client, env_id: str):
         )
 
 
-async def test_dump_db(server, client, postgres_db, database_name, rerun):
+async def test_dump_db(server, client, postgres_db, database_name):
     if False:
         # trick autocomplete to have autocomplete on client
         client = methods
