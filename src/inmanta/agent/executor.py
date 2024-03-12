@@ -35,14 +35,12 @@ from typing import Any, Dict, Optional, Sequence
 import pkg_resources
 
 import inmanta.types
-from inmanta import const
 from inmanta.agent import config as cfg
-from inmanta.agent import executor
 from inmanta.data import ResourceIdStr
 from inmanta.data.model import PipConfig, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
-from inmanta.resources import Id, Resource
+from inmanta.resources import Id
 from inmanta.types import JsonType
 from inmanta.util import NamedLock
 
@@ -136,11 +134,12 @@ class ExecutorBlueprint(EnvBlueprint):
     def from_specs(cls, code: typing.Collection["ResourceInstallSpec"]) -> "ExecutorBlueprint":
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
-        pip_config = {cd.blueprint.pip_config for cd in code}
-        assert len(pip_config) == 1, f"One agent is using multiple pipe configs: {pip_config}"
-
+        pip_configs = [cd.blueprint.pip_config for cd in code]
+        base_pip = pip_configs[0]
+        for pip_config in pip_configs:
+            assert pip_config == base_pip, f"One agent is using multiple pipe configs: {base_pip} {pip_config}"
         return ExecutorBlueprint(
-            pip_config=next(iter(pip_config)),
+            pip_config=base_pip,
             sources=sources,
             requirements=requirements,
         )

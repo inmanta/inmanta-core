@@ -18,7 +18,6 @@
 
 import abc
 import asyncio
-import contextlib
 import dataclasses
 import datetime
 import enum
@@ -26,34 +25,26 @@ import logging
 import os
 import random
 import time
-import types
-import typing
 import uuid
-from abc import ABC
 from asyncio import Lock
 from collections import defaultdict
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import Any, Collection, Dict, Optional, Self, TypeAlias, Union, cast
+from typing import Any, Collection, Dict, Optional, Union, cast
 
 import pkg_resources
 
-import inmanta.agent.executor
-import inmanta.agent.in_process_executor
 from inmanta import const, data, env, loader, module, protocol
 from inmanta.agent import config as cfg
-from inmanta.agent import executor, handler, in_process_executor
-from inmanta.agent.cache import AgentCache, CacheVersionContext
+from inmanta.agent import executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
-from inmanta.agent.handler import HandlerAPI, SkipResource
-from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
-from inmanta.const import ParameterSource, ResourceState
+from inmanta.const import ResourceState
 from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
-from inmanta.resources import Id, Resource
+from inmanta.resources import Id
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import (
     CronSchedule,
@@ -1142,7 +1133,7 @@ class Agent(SessionEndpoint):
         pip_config: Optional[PipConfig] = None
 
         resource_install_specs: list[ResourceInstallSpec] = []
-        invalid_resource_types: FailedResourcesSet = set()
+        invalid_resource_types: executor.FailedResourcesSet = set()
         for resource_type in set(resource_types):
             cached_spec: Optional[ResourceInstallSpec] = self._previously_loaded.get((resource_type, version))
             if cached_spec:

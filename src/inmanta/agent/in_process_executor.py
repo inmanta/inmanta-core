@@ -448,12 +448,12 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self._creation_locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
     def stop(self) -> None:
-        for executor in self.executors.values():
-            executor.stop()
+        for child in self.executors.values():
+            child.stop()
 
     def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
-        for executor in self.executors.values():
-            executor.join(thread_pool_finalizer)
+        for child in self.executors.values():
+            child.join(thread_pool_finalizer)
 
     async def get_executor(
         self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]

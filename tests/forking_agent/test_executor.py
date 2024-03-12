@@ -75,26 +75,6 @@ class TestLoader(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
         return [inmanta_plugins.test.testA.test(), inmanta_plugins.test.testB.test()]
 
 
-@pytest.fixture
-async def mpmanager(tmp_path, agent: inmanta.agent.Agent) -> typing.Iterator[MPManager]:
-    log_folder = tmp_path / "logs"
-    storage_folder = tmp_path / "executors"
-    venvs = tmp_path / "venvs"
-
-    threadpool = concurrent.futures.thread.ThreadPoolExecutor()
-    venv_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venvs))
-    manager = MPManager(
-        threadpool, venv_manager, agent.sessionid, log_folder=str(log_folder), storage_folder=str(storage_folder), cli_log=True
-    )
-    manager.init_once()
-
-    yield manager
-
-    threadpool.shutdown(wait=False)
-    await manager.stop()
-    await manager.join(10)
-
-
 async def test_executor_server(mpmanager: MPManager, client):
     """
     Test the MPManager, this includes

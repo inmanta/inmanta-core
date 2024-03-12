@@ -176,12 +176,22 @@ def mp_worker_entrypoint(
 class MPExecutor(executor.Executor):
     """A Single Child Executor"""
 
-    def __init__(self, owner: "MPManager", process: multiprocessing.Process, connection: FinalizingIPCClient[ExecutorContext]):
+    def __init__(
+        self,
+        owner: "MPManager",
+        process: multiprocessing.Process,
+        connection: FinalizingIPCClient[ExecutorContext],
+        executor_id: executor.ExecutorId,
+        venv: executor.VirtualEnvironmentManager,
+    ):
         self.process = process
         self.connection = connection
         self.connection.finalizers.append(self.force_stop)
         self.closed = False
         self.owner = owner
+        # Pure for debugging purpose
+        self.executor_id = executor_id
+        self.executor_virtual_env = venv
 
     async def stop(self) -> None:
         """Stop by shutdown"""
@@ -279,7 +289,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         :param cli_log: do we also want to echo the log to std_err
 
         """
-        super().__init__(thread_pool)
+        self.thread_pool = thread_pool
         self.environment_manager = environment_manager
         self.children: list[MPExecutor] = []
         self.log_folder = log_folder
@@ -324,15 +334,15 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         async with self._locks.get(executor_id.identity()):
             if executor_id in self.executor_map:
                 return self.executor_map[executor_id]
-            executor = await self.create_executor(executor_id)
-            self.executor_map[executor_id] = executor
-            return executor
+            my_executor = await self.create_executor(executor_id)
+            self.executor_map[executor_id] = my_executor
+            return my_executor
 
     async def create_executor(self, executor_id: executor.ExecutorId) -> MPExecutor:
         # entry point from parent class
         env_blueprint = executor_id.blueprint.to_env_blueprint()
         venv = await self.environment_manager.get_environment(env_blueprint, self.thread_pool)
-        executor = await self.make_child_and_connect(executor_id.agent_name)
+        executor = await self.make_child_and_connect(executor_id, venv)
         storage_for_blueprint = os.path.join(self.storage_folder, "code", executor_id.blueprint.blueprint_hash())
         os.makedirs(storage_for_blueprint, exist_ok=True)
         await executor.connection.call(
@@ -345,9 +355,12 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         )
         return executor
 
-    async def make_child_and_connect(self, name: str) -> MPExecutor:
+    async def make_child_and_connect(
+        self, executor_id: executor.ExecutorId, venv: executor.ExecutorVirtualEnvironment
+    ) -> MPExecutor:
         """Async code to make a child process as share a socker with it"""
         loop = asyncio.get_running_loop()
+        name = executor_id.agent_name
 
         # Start child
         logfile = os.path.join(self.log_folder, f"{name}.log")
@@ -359,7 +372,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             functools.partial(FinalizingIPCClient, f"executor.{name}"), parent_conn
         )
 
-        child_handle = MPExecutor(self, process, protocol)
+        child_handle = MPExecutor(self, process, protocol, executor_id, venv)
         self.children.append(child_handle)
         return child_handle
 
