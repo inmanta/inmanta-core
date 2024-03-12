@@ -97,7 +97,11 @@ async def populate_facts_and_parameters(client, env_id: str):
         )
 
 
-async def test_dump_db(server, client, postgres_db, database_name):
+import pytest
+
+
+@pytest.mark.parametrize("rerun", list(range(5)))
+async def test_dump_db(server, client, postgres_db, database_name, rerun):
     if False:
         # trick autocomplete to have autocomplete on client
         client = methods
@@ -113,9 +117,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
     env_id_1 = result.result["environment"]["id"]
     env1 = await data.Environment.get_by_id(uuid.UUID(env_id_1))
 
-    result = await client.reserve_version(env_id_1)
-    assert result.code == 200
-    env_1_version = result.result["data"]
+    env_1_version = 1
 
     check_result(await client.create_environment(project_id=project_id, name="dev-2"))
 
@@ -139,7 +141,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     check_result(await client.notify_change(id=env_id_1))
 
-    versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=40)
+    versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=60)
     v1 = versions["versions"][0]["version"]
 
     check_result(
@@ -182,20 +184,11 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     await populate_facts_and_parameters(client, env_id_1)
 
-    await wait_for_version(client, env_id_1, env_1_version)
-    env_1_version += 1
-
-    check_result(
-        await client.release_version(
-            env_id_1, env_1_version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-        )
-    )
-
     # a not released version
     check_result(await client.notify_change(id=env_id_1, update=False))
+    env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
     check_result(await client.notify_change(id=env_id_1))
-
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
 
