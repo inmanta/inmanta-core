@@ -36,8 +36,7 @@ import pkg_resources
 
 import inmanta.types
 from inmanta.agent import config as cfg
-from inmanta.data import ResourceIdStr
-from inmanta.data.model import PipConfig, ResourceVersionIdStr
+from inmanta.data.model import PipConfig, ResourceIdStr, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id

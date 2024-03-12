@@ -69,7 +69,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self._stopped = False
 
-        self.failed_resource_types: FailedResourcesSet = []
+        self.failed_resource_types: FailedResourcesSet = set()
 
     def stop(self) -> None:
         self._stopped = True

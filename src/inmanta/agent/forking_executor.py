@@ -182,7 +182,7 @@ class MPExecutor(executor.Executor):
         process: multiprocessing.Process,
         connection: FinalizingIPCClient[ExecutorContext],
         executor_id: executor.ExecutorId,
-        venv: executor.VirtualEnvironmentManager,
+        venv: executor.ExecutorVirtualEnvironment,
     ):
         self.process = process
         self.connection = connection

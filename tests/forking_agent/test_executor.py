@@ -18,9 +18,7 @@
 
 import asyncio
 import base64
-import concurrent.futures.thread
 import logging
-import typing
 
 import pytest
 
@@ -153,10 +151,10 @@ def test():
         import lorem  # noqa: F401, F811
 
 
-async def test_executor_server_dirty_shutdown(mpmanager):
+async def test_executor_server_dirty_shutdown(mpmanager: MPManager):
     manager = mpmanager
 
-    child1 = await manager.make_child_and_connect("Testchild")
+    child1 = await manager.make_child_and_connect(inmanta.agent.executor.ExecutorId("test", "Test", None), None)
 
     result = await child1.connection.call(Echo(["aaaa"]))
     assert ["aaaa"] == result

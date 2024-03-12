@@ -896,7 +896,7 @@ class Agent(SessionEndpoint):
             # Lock to ensure only one actual install runs at a time
             self._loader_lock = Lock()
             # Keep track for each resource type of the last loaded version
-            self._last_loaded_version: dict[str, executor.ExecutorBlueprint] = defaultdict(lambda: None)
+            self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] = defaultdict(lambda: None)
             # Cache to prevent re-fetching the same resource-version
             self._previously_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
             # Per-resource lock to serialize all actions per resource

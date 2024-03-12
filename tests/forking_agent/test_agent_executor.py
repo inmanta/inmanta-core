@@ -13,28 +13,21 @@
 """
 
 import asyncio
-import concurrent.futures.thread
 import hashlib
 import json
 import logging
 import os
 import subprocess
-import uuid
 
-import pytest
-
-import inmanta.agent.executor
-from inmanta.agent import executor, forking_executor, in_process_executor
-from inmanta.agent.executor import EnvBlueprint, ExecutorBlueprint, ExecutorId, VirtualEnvironmentManager
+from inmanta.agent import executor, forking_executor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
-from packaging import version
-from utils import PipIndex, create_python_package, log_contains, log_doesnt_contain
+from utils import PipIndex, log_contains, log_doesnt_contain
 
 logger = logging.getLogger(__name__)
 
 
-def code_for(bp: ExecutorBlueprint) -> list[executor.ResourceInstallSpec]:
+def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpec]:
     return [executor.ResourceInstallSpec("test::Test", 5, bp)]
 
 
@@ -70,11 +63,11 @@ async def test_process_manager(environment, pip_index, mpmanager_light: forking_
     sources2 = (module_source1,)
 
     # Define blueprints for executors and environments
-    blueprint1 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
-    env_blueprint1 = EnvBlueprint(pip_config=pip_config, requirements=requirements1)
-    blueprint2 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources2)
-    blueprint3 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
-    env_blueprint2 = EnvBlueprint(pip_config=pip_config, requirements=requirements2)
+    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
+    env_blueprint1 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements1)
+    blueprint2 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources2)
+    blueprint3 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
+    env_blueprint2 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements2)
 
     executor_manager = mpmanager_light
     venv_manager = mpmanager_light.environment_manager
@@ -84,7 +77,7 @@ async def test_process_manager(environment, pip_index, mpmanager_light: forking_
     assert executor_1
 
     assert len(executor_manager.executor_map) == 1
-    assert executor_1.executor_id == ExecutorId("agent1", "local:", blueprint1)
+    assert executor_1.executor_id == executor.ExecutorId("agent1", "local:", blueprint1)
     assert executor_1.executor_id in executor_manager.executor_map
     assert executor_manager.executor_map[executor_1.executor_id] == executor_1
 
@@ -101,7 +94,7 @@ async def test_process_manager(environment, pip_index, mpmanager_light: forking_
     assert executor_1_reuse == executor_1
 
     assert len(executor_manager.executor_map) == 1
-    assert executor_1_reuse.executor_id == ExecutorId("agent1", "local:", blueprint1)
+    assert executor_1_reuse.executor_id == executor.ExecutorId("agent1", "local:", blueprint1)
     assert executor_1_reuse.executor_id in executor_manager.executor_map
     assert executor_manager.executor_map[executor_1_reuse.executor_id] == executor_1_reuse
 
@@ -113,7 +106,7 @@ async def test_process_manager(environment, pip_index, mpmanager_light: forking_
     executor_2 = await executor_manager.get_executor("agent1", "local:", code_for(blueprint2))
 
     assert len(executor_manager.executor_map) == 2
-    assert executor_2.executor_id == ExecutorId("agent1", "local:", blueprint2)
+    assert executor_2.executor_id == executor.ExecutorId("agent1", "local:", blueprint2)
     assert executor_2.executor_id in executor_manager.executor_map
     assert executor_manager.executor_map[executor_2.executor_id] == executor_2
 
@@ -125,7 +118,7 @@ async def test_process_manager(environment, pip_index, mpmanager_light: forking_
     executor_3 = await executor_manager.get_executor("agent1", "local:", code_for(blueprint3))
 
     assert len(executor_manager.executor_map) == 3
-    assert executor_3.executor_id == ExecutorId("agent1", "local:", blueprint3)
+    assert executor_3.executor_id == executor.ExecutorId("agent1", "local:", blueprint3)
     assert executor_3.executor_id in executor_manager.executor_map
     assert executor_manager.executor_map[executor_3.executor_id] == executor_3
 
@@ -143,7 +136,6 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     simulates a restart scenario to ensure that previously created environments are reused instead of being recreated.
     """
     caplog.clear()
-    threadpool = concurrent.futures.thread.ThreadPoolExecutor()
 
     # Setup a local pip, a pip config, requirements and sources
     pip_index = PipIndex(artifact_dir=str(tmpdir))
@@ -152,7 +144,7 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     sources = ()
 
     # Create a blueprint with no requirements and no sources
-    blueprint1 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements, sources=sources)
+    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements, sources=sources)
     env_bp_hash1 = blueprint1.to_env_blueprint().blueprint_hash()
 
     with caplog.at_level(logging.INFO):
@@ -193,8 +185,8 @@ async def test_blueprint_hash_consistency(tmpdir):
     requirements1 = ("pkg1", "pkg2")
     requirements2 = ("pkg2", "pkg1")
 
-    blueprint1 = EnvBlueprint(pip_config=pip_config, requirements=requirements1)
-    blueprint2 = EnvBlueprint(pip_config=pip_config, requirements=requirements2)
+    blueprint1 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements1)
+    blueprint2 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements2)
 
     hash1 = blueprint1.blueprint_hash()
     hash2 = blueprint2.blueprint_hash()
@@ -240,7 +232,7 @@ print(blueprint.blueprint_hash())
 
     # Generate hash in the current session for comparison
     pip_config = PipConfig(**pip_config_dict)
-    current_session_blueprint = EnvBlueprint(pip_config=pip_config, requirements=requirements)
+    current_session_blueprint = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements)
     current_hash = current_session_blueprint.blueprint_hash()
 
     # Generate hash in a new interpreter session
@@ -262,10 +254,10 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     only one environment is created for the same blueprint when requested concurrently,
     preventing race conditions and duplicate environment creation.
     """
-    manager = VirtualEnvironmentManager(tmpdir)
+    manager = executor.VirtualEnvironmentManager(tmpdir)
 
-    blueprint1 = EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=("pkg1",))
-    blueprint2 = EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=())
+    blueprint1 = executor.EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=("pkg1",))
+    blueprint2 = executor.EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=())
 
     # Wait for all tasks to complete
     env_same_1, env_same_2, env_diff_1 = await asyncio.gather(
@@ -305,9 +297,9 @@ async def test_executor_creation_and_reuse(pip_index, mpmanager_light) -> None:
     sources1 = ()
     sources2 = (module_source1,)
 
-    blueprint1 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
-    blueprint2 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources2)
-    blueprint3 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
+    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
+    blueprint2 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources2)
+    blueprint3 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
 
     executor_manager = mpmanager_light
     executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.gather(
