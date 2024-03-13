@@ -451,6 +451,10 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         for child in self.executors.values():
             child.stop()
 
+    async def stop_for_agent(self, agent_name: str) -> None:
+        if agent_name in self.executors:
+            self.executors[agent_name].stop()
+
     def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
         for child in self.executors.values():
             child.join(thread_pool_finalizer)

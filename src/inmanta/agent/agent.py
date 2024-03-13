@@ -546,7 +546,7 @@ class AgentInstance:
         self._enabled = False
         self._disable_time_triggers()
         self._nq.cancel()
-        self.executor_manager.stop()
+        self.executor_manager.stop_for_agent(self.name)
 
     def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
         """
@@ -940,11 +940,16 @@ class Agent(SessionEndpoint):
 
     async def stop(self) -> None:
         await super().stop()
-        self.thread_pool.shutdown(wait=False)
+        self.executor_manager.stop()
+
         threadpools_to_join = [self.thread_pool]
+
+        self.executor_manager.join(threadpools_to_join)
+        self.thread_pool.shutdown(wait=False)
         for instance in self._instances.values():
             await instance.stop()
             instance.join(threadpools_to_join)
+
         await join_threadpools(threadpools_to_join)
 
     async def start_connected(self) -> None:

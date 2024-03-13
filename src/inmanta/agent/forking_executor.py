@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import collections
 import concurrent.futures.thread
 import functools
 import logging
@@ -303,7 +304,17 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self.session_gid = session_gid
 
         self.executor_map: dict[executor.ExecutorId, MPExecutor] = {}
+        self.agent_map: dict[str, set[executor.ExecutorId]] = collections.defaultdict(set)
+
         self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
+
+    def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
+        self.executor_map[theid] = the_executor
+        self.agent_map[theid.agent_name].add(theid)
+
+    def __remove_executor(self, theid: executor.ExecutorId) -> None:
+        del self.executor_map[theid]
+        self.agent_map[theid.agent_name].discard(theid)
 
     @classmethod
     def init_once(cls) -> None:
@@ -337,7 +348,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             if executor_id in self.executor_map:
                 return self.executor_map[executor_id]
             my_executor = await self.create_executor(executor_id)
-            self.executor_map[executor_id] = my_executor
+            self.__add_executor(executor_id, my_executor)
             return my_executor
 
     async def create_executor(self, executor_id: executor.ExecutorId) -> MPExecutor:
@@ -382,6 +393,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         """Internal, for child to remove itself once stopped"""
         try:
             self.children.remove(child_handle)
+            self.__remove_executor(child_handle.executor_id)
         except ValueError:
             # already gone
             pass
@@ -408,3 +420,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
     async def join(self, timeout: float) -> None:
         await asyncio.gather(*(child.join(timeout) for child in self.children))
+
+    async def stop_for_agent(self, agent_name: str) -> None:
+        children_ids = self.agent_map[agent_name]
+        await asyncio.gather(*(self.executor_map[child_id].stop() for child_id in children_ids))

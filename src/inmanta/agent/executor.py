@@ -453,3 +453,10 @@ class ExecutorManager(abc.ABC, typing.Generic[MyExecutor]):
         :return: An Executor instance
         """
         pass
+
+    async def stop_for_agent(self, agent_name: str) -> None:
+        """
+        Indicate that all executors for this agent can be stopped.
+
+        This is considered to be a hint , the manager can choose to follow or not
+        """
