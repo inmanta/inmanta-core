@@ -31,6 +31,7 @@ from pydantic import ConfigDict, Field, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
+import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
@@ -137,11 +138,10 @@ class CompileRunBase(BaseModel):
     do_export: bool
     force_update: bool
     metadata: JsonType
-
-    environment_variables: dict[str, str]
     # Used env vars
     mergeable_environment_variables: dict[str, str]
     requested_environment_variables: dict[str, str]
+    environment_variables: dict[str, str]
 
     partial: bool
     removed_resource_sets: list[str]
@@ -150,6 +150,22 @@ class CompileRunBase(BaseModel):
 
     notify_failed_compile: Optional[bool] = None
     failed_compile_message: Optional[str] = None
+
+    @pydantic.field_validator("environment_variables", mode="before")
+    @classmethod
+    def validate_environment_variables(cls, v: typing.Any, info: pydantic_core.core_schema.ValidationInfo) -> typing.Any:
+        """
+        Default the environment_variables to requested_environment_variables + mergeable_environment_variables
+
+        This relies on the fact that fields are validated in the order they are declared!
+        """
+        if v is None:
+            out = {}
+            out.update(info.data["requested_environment_variables"])
+            out.update(info.data["mergeable_environment_variables"])
+            return out
+        else:
+            return v
 
 
 class CompileRun(CompileRunBase):

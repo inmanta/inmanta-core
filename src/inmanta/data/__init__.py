@@ -3924,15 +3924,6 @@ class Compile(BaseDocument):
             for report in result
             if report.get("report_id")
         ]
-        requested_env_vars = json.loads(requested_compile["requested_environment_variables"])
-        mergeable_env_vars = json.loads(requested_compile["mergeable_environment_variables"])
-        if requested_compile["used_environment_variables"] is not None:
-            environment_variables = json.loads(requested_compile["used_environment_variables"])
-        else:
-            environment_variables = {}
-            environment_variables.update(requested_env_vars)
-            environment_variables.update(mergeable_env_vars)
-
         return m.CompileDetails(
             id=requested_compile["id"],
             remote_id=requested_compile["remote_id"],
@@ -3945,9 +3936,13 @@ class Compile(BaseDocument):
             do_export=requested_compile["do_export"],
             force_update=requested_compile["force_update"],
             metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
-            environment_variables=environment_variables,
-            requested_environment_variables=requested_env_vars,
-            mergeable_environment_variables=mergeable_env_vars,
+            environment_variables=(
+                json.loads(requested_compile["used_environment_variables"])
+                if requested_compile["used_environment_variables"] is not None
+                else None
+            ),
+            requested_environment_variables=(json.loads(requested_compile["requested_environment_variables"])),
+            mergeable_environment_variables=(json.loads(requested_compile["mergeable_environment_variables"])),
             partial=requested_compile["partial"],
             removed_resource_sets=requested_compile["removed_resource_sets"],
             exporter_plugin=requested_compile["exporter_plugin"],
@@ -3958,13 +3953,6 @@ class Compile(BaseDocument):
         )
 
     def to_dto(self) -> m.CompileRun:
-        if self.used_environment_variables is not None:
-            environment_variables = self.used_environment_variables
-        else:
-            environment_variables = {}
-            environment_variables.update(self.requested_environment_variables)
-            environment_variables.update(self.mergeable_environment_variables)
-
         return m.CompileRun(
             id=self.id,
             remote_id=self.remote_id,
@@ -3974,7 +3962,7 @@ class Compile(BaseDocument):
             do_export=self.do_export,
             force_update=self.force_update,
             metadata=self.metadata,
-            environment_variables=environment_variables,
+            environment_variables=self.used_environment_variables,
             requested_environment_variables=self.requested_environment_variables,
             mergeable_environment_variables=self.mergeable_environment_variables,
             compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
