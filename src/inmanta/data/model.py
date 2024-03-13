@@ -129,6 +129,13 @@ class CompileData(BaseModel):
 
 
 class CompileRunBase(BaseModel):
+    """
+    :param requested_environment_variables: environment variables requested to be passed to the compiler
+    :param mergeable_environment_variables: environment variables to be passed to the compiler.
+            These env vars can be compacted over multiple compiles.
+            If multiple values are compacted, they will be joined using spaces.
+    :param environment_variables: environment variables passed to the compiler
+    """
     id: uuid.UUID
     remote_id: Optional[uuid.UUID] = None
     environment: uuid.UUID
@@ -138,7 +145,6 @@ class CompileRunBase(BaseModel):
     do_export: bool
     force_update: bool
     metadata: JsonType
-    # Used env vars
     mergeable_environment_variables: dict[str, str]
     requested_environment_variables: dict[str, str]
     environment_variables: dict[str, str]
