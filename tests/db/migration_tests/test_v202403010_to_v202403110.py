@@ -38,6 +38,7 @@ async def test_drop_not_null_constraint(
     await migrate_db_from()
     # check in DB
     all_compiles = await inmanta.data.Compile.get_list()
+    assert len(all_compiles) > 0
     for compile in all_compiles:
         assert compile.requested_environment_variables in [{"add_one_resource": "true"}, {}]
         assert compile.used_environment_variables == compile.requested_environment_variables
@@ -49,6 +50,7 @@ async def test_drop_not_null_constraint(
     client = inmanta.protocol.Client("client")
     result = await client.get_reports(tid=env.id)
     assert result.code == 200
+    assert len(result.result["reports"]) > 0
     for compile in result.result["reports"]:
         assert compile["requested_environment_variables"] in [{"add_one_resource": "true"}, {}]
         assert compile["environment_variables"] == compile["requested_environment_variables"]
