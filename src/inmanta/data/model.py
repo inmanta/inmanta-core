@@ -136,6 +136,7 @@ class CompileRunBase(BaseModel):
             If multiple values are compacted, they will be joined using spaces.
     :param environment_variables: environment variables passed to the compiler
     """
+
     id: uuid.UUID
     remote_id: Optional[uuid.UUID] = None
     environment: uuid.UUID

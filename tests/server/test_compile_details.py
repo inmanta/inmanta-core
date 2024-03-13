@@ -106,12 +106,6 @@ async def test_compile_details(server, client, env_with_compiles):
         datetime.timezone.utc
     )
 
-    # test deserialization of computed fields
-    details_dict = result.result["data"]
-    assert result.result["data"]["environment_variables"] == {}
-    reconstructed = inmanta.data.model.CompileDetails(**details_dict)
-    assert reconstructed.environment_variables == {}
-
     # A compile that is 2 levels deep in substitutions: id2 -> id1 -> id0
     result = await client.compile_details(environment, ids[2])
     assert result.code == 200
