@@ -580,6 +580,7 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     removed_resource_sets=resource_sets_to_remove,
+                    soft_delete=soft_delete,
                     **kwargs,
                 )
             else:

@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import logging
 import uuid
 from collections import abc
 from typing import Optional
@@ -28,6 +29,7 @@ from inmanta import const, data
 from inmanta.protocol.common import Result
 from inmanta.resources import ResourceIdStr
 from inmanta.util import get_compiler_version
+from utils import log_contains
 
 
 async def test_resource_sets_via_put_version(server, client, environment, clienthelper):
@@ -1127,7 +1129,7 @@ async def test_put_partial_different_env(server, client):
 
 
 @pytest.mark.parametrize("soft_delete", [True, False])
-async def test_put_partial_removed_rs_in_rs(server, client, environment, clienthelper, soft_delete: bool):
+async def test_put_partial_removed_rs_in_rs(server, client, environment, clienthelper, soft_delete: bool, caplog):
     """
     Test the soft_delete option of the put_partial endpoint:
         - When False: Raise an exception when a resource being exported belongs to a resource set that is being deleted.
@@ -1196,13 +1198,20 @@ async def test_put_partial_removed_rs_in_rs(server, client, environment, clienth
     if soft_delete:
         assert result.code == 200
         expected_value = "updated"
+        msg = (
+            "The following resource sets will not be deleted because they contain resources that are being exported: {'set-b'}"
+        )
+
+        log_contains(caplog, "inmanta.server.services.orchestrationservice", logging.INFO, msg)
 
     else:
         assert result.code == 400
         assert result.result["message"] == (
-            "Invalid request: Following resource sets are present in the removed resource sets and in the resources "
-            "that are exported: {'set-b'}"
+            "Invalid request: The following resource sets are marked for deletion, but they contain resources that are "
+            "being exported: {'set-b'}. To silently ignore deletion of such resource sets, consider using the --soft-delete "
+            "option of the put_partial endpoint."
         )
+
         expected_value = "initial"
 
     # Explicitly sort the list because postgres gives no guarantee regarding order without explicit ORDER BY clause

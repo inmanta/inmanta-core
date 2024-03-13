@@ -991,11 +991,16 @@ class OrchestrationService(protocol.ServerSlice):
         intersection: set[str] = set(resource_sets.values()).intersection(removed_resource_sets_set)
         if intersection:
             if soft_delete:
+                LOGGER.info(
+                    "The following resource sets will not be deleted because they contain resources that are being exported: "
+                    f"{intersection}"
+                )
                 removed_resource_sets = list(removed_resource_sets_set - intersection)
             else:
                 raise BadRequest(
-                    "Following resource sets are present in the removed resource sets and in the resources that are exported: "
-                    f"{intersection}"
+                    "The following resource sets are marked for deletion, but they contain resources that are being exported: "
+                    f"{intersection}. To silently ignore deletion of such resource sets, consider using the --soft-delete "
+                    "option of the put_partial endpoint."
                 )
 
         async with data.Resource.get_connection() as con:
