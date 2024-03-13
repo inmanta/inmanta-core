@@ -995,7 +995,7 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id6 = uuid.uuid4()
     compile_id6, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id6)
 
-    # request with partial, will no be merged
+    # request with partial, will not be merged
     remote_id7 = uuid.uuid4()
     compile_id7, _ = await compilerslice.request_recompile(
         env=env, force_update=False, do_export=True, remote_id=remote_id7, partial=True
@@ -1076,13 +1076,13 @@ async def test_compileservice_queue_with_env_var_merging(
         env=env, force_update=False, do_export=True, remote_id=remote_id1, env_vars={"my_var": "1"}, partial=False
     )
 
-    # The one to compact on top of
+    # Then one to compact on top of
     remote_id2 = uuid.uuid4()
     compile_id2, _ = await compilerslice.request_recompile(
         env=env, force_update=False, do_export=True, remote_id=remote_id2, env_vars={"my_var": "1"}, partial=True
     )
 
-    # The add one
+    # Then add one
     remote_id3 = uuid.uuid4()
     compile_id3, _ = await compilerslice.request_recompile(
         env=env,
@@ -1094,7 +1094,7 @@ async def test_compileservice_queue_with_env_var_merging(
         mergeable_env_vars={"v1": "a", "v2": "b"},
     )
 
-    # The another one
+    # Then another one
     remote_id4 = uuid.uuid4()
     compile_id4, _ = await compilerslice.request_recompile(
         env=env,
@@ -1108,7 +1108,7 @@ async def test_compileservice_queue_with_env_var_merging(
 
     # finish first compile
     t1 = await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
-    # finish a all other compiles at once
+    # finish all other compiles at once
     t2 = await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
     # api should return none
