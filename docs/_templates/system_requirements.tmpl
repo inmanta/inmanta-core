@@ -13,8 +13,8 @@ System requirements
      - Required version
 
    {% for key, value in data["system_requirements"] | dictsort %}
-   * - {{ key|e }}
-     - {{ value|e }}
+   * - {{ key }}
+     - {{ value }}
    {% endfor %}
 {% endif %}
 

@@ -6,15 +6,14 @@ Inmanta core and extensions versions
 
 {% if data['component_requirements']%}
 .. list-table:: Inmanta core and extensions versions
-   :widths: 25 25
    :header-rows: 1
 
    * - Component
      - Required version
 
    {% for key, value in data["component_requirements"] | dictsort %}
-   * - {{ key|e }}
-     - {{ value|e }}
+   * - {{ key }}
+     - {{ value }}
    {% endfor %}
 
 .. note::
