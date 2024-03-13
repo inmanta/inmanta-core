@@ -402,9 +402,8 @@ class CompileRun:
                     cmd.append("--delete-resource-set")
                     cmd.append(resource_set)
 
-            if self.request.soft_delete is not None:
+            if self.request.soft_delete:
                 cmd.append("--soft-delete")
-                cmd.append(self.request.soft_delete)
 
             if not self.request.do_export:
                 f = NamedTemporaryFile()
