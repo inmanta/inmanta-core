@@ -3692,6 +3692,7 @@ class Compile(BaseDocument):
     failed_compile_message: Optional[str] = None
 
     soft_delete: Optional[bool] = False
+
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:
         """
