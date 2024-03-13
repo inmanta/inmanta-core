@@ -660,7 +660,8 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
         query_builder = SimpleQueryBuilder(
             select_clause="""SELECT id, remote_id, environment, requested,
                             started, completed, do_export, force_update,
-                            metadata, requested_environment_variables, used_environment_variables, mergeable_environment_variables,
+                            metadata, requested_environment_variables, used_environment_variables,
+                            mergeable_environment_variables,
                             success, version, partial, removed_resource_sets, exporter_plugin,
                             notify_failed_compile, failed_compile_message""",
             from_clause=f" FROM {data.Compile.table_name()}",

@@ -57,7 +57,7 @@ async def env_with_compile_reports(client, environment):
             do_export=bool(i % 3),
             force_update=False,
             metadata={"meta": 42} if i % 2 else None,
-            requested_environment_variables={"TEST_ENV_VAR": "True"} if i % 2 else None,
+            requested_environment_variables={"TEST_ENV_VAR": "True"} if i % 2 else {},
             used_environment_variables={"TEST_ENV_VAR": "True"} if i % 2 else None,
             success=i != 0,
             handled=True,
