@@ -546,7 +546,7 @@ class AgentInstance:
         self._enabled = False
         self._disable_time_triggers()
         self._nq.cancel()
-        self.executor_manager.stop_for_agent(self.name)
+        await self.executor_manager.stop_for_agent(self.name)
 
     def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
         """
