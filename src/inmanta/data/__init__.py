@@ -3989,8 +3989,14 @@ class Compile(BaseDocument):
         """produce dict directly, for untyped endpoints"""
         # mangle the output for backward compatibility
         # we have to do it because we have no DTO here
+        environment_variables = self.used_environment_variables
+        if environment_variables is None:
+            environment_variables = {}
+            environment_variables.update(self.requested_environment_variables)
+            environment_variables.update(self.mergeable_environment_variables)
+
         out = super().to_dict()
-        out["environment_variables"] = self.used_environment_variables or self.requested_environment_variables
+        out["environment_variables"] = environment_variables
         return out
 
 
