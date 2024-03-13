@@ -1171,7 +1171,8 @@ class Agent(SessionEndpoint):
         for resource_install_spec in code:
             # only one logical thread can load a particular resource type at any time
             async with self._resource_loader_lock.get(resource_install_spec.resource_type):
-                # stop if the last successful load wfis check causes the reloads to naturally 'batch up'
+                # stop if the last successful load was this one
+                # The combination of the lock and this check causes the reloads to naturally 'batch up'
                 if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.blueprint:
                     LOGGER.debug(
                         "Handler code already installed for %s version=%d",

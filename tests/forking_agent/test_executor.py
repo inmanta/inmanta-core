@@ -23,12 +23,12 @@ import logging
 import pytest
 
 import inmanta.agent
-import inmanta.agent.executor
 import inmanta.config
 import inmanta.data
 import inmanta.loader
 import inmanta.protocol.ipc_light
 import inmanta.util
+from inmanta.agent import executor
 from inmanta.agent.forking_executor import MPManager
 from inmanta.protocol.ipc_light import ConnectionLost
 
@@ -91,9 +91,7 @@ async def test_executor_server(mpmanager: MPManager, client):
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
     # Simple empty venv
-    simplest = inmanta.agent.executor.ExecutorBlueprint(
-        pip_config=inmanta.data.PipConfig(), requirements=[], sources=[]  # No pip
-    )
+    simplest = executor.ExecutorBlueprint(pip_config=inmanta.data.PipConfig(), requirements=[], sources=[])  # No pip
     simplest = await manager.get_executor("agent1", "test", [executor.ResourceInstallSpec("test::Test", 5, simplest)])
 
     # check communications
@@ -128,10 +126,10 @@ def test():
     assert res.code == 200
 
     # Full config: 2 source files, one python dependency
-    full = inmanta.agent.executor.ExecutorBlueprint(
+    full = executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct, via_server]
     )
-    full_runner = await manager.get_executor("agent2", full)
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
 
     # assert loaded
     result2 = await full_runner.connection.call(TestLoader())
@@ -154,7 +152,7 @@ def test():
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager):
     manager = mpmanager
 
-    child1 = await manager.make_child_and_connect(inmanta.agent.executor.ExecutorId("test", "Test", None), None)
+    child1 = await manager.make_child_and_connect(executor.ExecutorId("test", "Test", None), None)
 
     result = await child1.connection.call(Echo(["aaaa"]))
     assert ["aaaa"] == result
