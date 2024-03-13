@@ -204,19 +204,21 @@ class MPExecutor(executor.Executor):
         except ValueError:
             # Process already gone:
             pass
-        self.process.close()
         self._set_closed()
 
     def _set_closed(self) -> None:
-        self.closed = True
-        self.owner._child_closed(self)
+        # this code can be raced from the join call and the disconnect handler
+        # relying on the GIL to keep us safe
+        if not self.closed:
+            self.closed = True
+            self.process.close()
+            self.owner._child_closed(self)
 
     async def join(self, timeout: float) -> None:
         if self.closed:
             return
         try:
             await asyncio.get_running_loop().run_in_executor(None, functools.partial(self.process.join, timeout))
-            self.process.close()
             self._set_closed()
         except ValueError as e:
             if "process object is closed" in str(e):

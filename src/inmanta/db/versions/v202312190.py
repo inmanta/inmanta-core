@@ -35,13 +35,50 @@ CREATE TABLE IF NOT EXISTS public.resource_persistent_state (
     PRIMARY KEY(environment, resource_id)
 );
 
-INSERT INTO public.resource_persistent_state
- (environment, resource_id, last_deploy, last_success, last_non_deploying_status, last_produced_events)
- SELECT environment, resource_id, last_deploy, last_success, last_non_deploying_status, last_produced_events
- FROM public.resource
- WHERE (environment, model) IN (
-    SELECT environment, max(version) FROM public.configurationmodel WHERE released=true GROUP BY environment
- );
+
+-- The INSERT query uses a subquery to find the maximum model version
+-- for each resource within each environment. This also includes orphans.
+-- The query uses the 'resource_env_resourceid_index' index to efficiently find
+-- the latest version for each resource within each environment without scanning the entire table.
+INSERT INTO public.resource_persistent_state (
+            environment,
+            resource_id,
+            last_deploy,
+            last_success,
+            last_non_deploying_status,
+            last_produced_events,
+            last_deployed_version,
+            last_deployed_attribute_hash
+        )
+SELECT
+    r.environment,
+    r.resource_id,
+    r.last_deploy,
+    r.last_success,
+    r.last_non_deploying_status,
+    r.last_produced_events,
+    r.model AS last_deployed_version,
+    r.attribute_hash AS last_deployed_attribute_hash
+FROM
+    public.resource r
+INNER JOIN (
+    SELECT
+        resource.environment,
+        resource.resource_id,
+        MAX(resource.model) AS max_model
+    FROM
+        public.resource
+    JOIN public.configurationmodel ON
+        public.resource.model = public.configurationmodel.version AND
+        public.resource.environment = public.configurationmodel.environment
+    WHERE
+        public.configurationmodel.released = true
+    GROUP BY
+        resource.environment, resource.resource_id
+) rmax ON
+    r.environment = rmax.environment AND
+    r.resource_id = rmax.resource_id AND
+    r.model = rmax.max_model;
 
 ALTER TABLE public.resource DROP COLUMN last_success;
 ALTER TABLE public.resource DROP COLUMN last_non_deploying_status;
