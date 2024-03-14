@@ -21,7 +21,6 @@ import uuid
 
 import pytest
 
-import inmanta.data.model
 from inmanta import data
 from inmanta.data import Report
 from inmanta.util import parse_timestamp
