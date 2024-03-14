@@ -413,14 +413,12 @@ class Exporter:
 
         resources, resource_sets_with_exporting_resources = self.resources_to_list()
 
-        if self.options.soft_delete:
+        if self.options and self.options.soft_delete:
             # Remove resource sets with exporting resource from the resource_sets_to_remove list.
             resource_sets_to_remove_all = list(set(resource_sets_to_remove_all) - resource_sets_with_exporting_resources)
 
         export_done = time.time()
         LOGGER.debug("Generating resources from the compiled model took %0.03f seconds", export_done - start)
-        LOGGER.debug("soft_delete %s", self.options.soft_delete)
-        LOGGER.debug("resources %s", resources)
 
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
@@ -493,10 +491,11 @@ class Exporter:
             serialized_resource = res.serialize()
             resources.append(serialized_resource)
 
-            if self.options.soft_delete:
+            if self.options and self.options.soft_delete:
                 rid = serialized_resource["id"]
                 resource_set: Optional[str] = self._resource_sets.get(Id.parse_id(rid).resource_str(), None)
-                resource_sets_with_exporting_resources.add(resource_set)
+                if resource_set:
+                    resource_sets_with_exporting_resources.add(resource_set)
 
         return resources, resource_sets_with_exporting_resources
 

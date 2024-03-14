@@ -556,7 +556,6 @@ def export(options: argparse.Namespace) -> None:
                 export_plugin=options.export_plugin,
                 partial_compile=options.partial_compile,
                 resource_sets_to_remove=options.delete_resource_set,
-                soft_delete=options.soft_delete,
             )
 
         if not summary_reporter.is_failure() and options.deploy:
