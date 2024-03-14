@@ -107,9 +107,7 @@ def test_git_based_install(tmpdir: py.path.local) -> None:
     assert not venv.are_installed([pkg_name])
 
     try:
-        venv.install_from_list(
-            [f"{pkg_name}@git+https://github.com/inmanta/{pkg_name}"]
-        )
+        venv.install_from_list([f"{pkg_name}@git+https://github.com/inmanta/{pkg_name}"])
     except CalledProcessError as ep:
         print(ep.stdout)
         raise
