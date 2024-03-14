@@ -25,6 +25,6 @@ async def update(connection: Connection) -> None:
     -- and deleting it iff the model doesn't export resources for it.
 
     ALTER TABLE public.compile
-    ADD COLUMN soft_delete boolean DEFAULT false;
+    ADD COLUMN soft_delete boolean DEFAULT false NOT NULL;
     """
     await connection.execute(schema)

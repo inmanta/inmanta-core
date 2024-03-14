@@ -458,7 +458,7 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
     parser.add_argument(
         "--soft-delete",
         dest="soft_delete",
-        help="Use in combination with --delete-resource-set to delete these resource sets iff they are not being exported",
+        help="Use in combination with --delete-resource-set to delete these resource sets only if they are not being exported",
         action="store_true",
         default=False,
     )
