@@ -373,7 +373,6 @@ class Exporter:
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
-        soft_delete: bool = False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
@@ -412,10 +411,16 @@ class Exporter:
         # validate the dependency graph
         self._validate_graph()
 
-        resources = self.resources_to_list()
+        resources, resource_sets_with_exporting_resources = self.resources_to_list()
+
+        if self.options.soft_delete:
+            # Remove resource sets with exporting resource from the resource_sets_to_remove list.
+            resource_sets_to_remove_all = list(set(resource_sets_to_remove_all) - resource_sets_with_exporting_resources)
 
         export_done = time.time()
         LOGGER.debug("Generating resources from the compiled model took %0.03f seconds", export_done - start)
+        LOGGER.debug("soft_delete %s", self.options.soft_delete)
+        LOGGER.debug("resources %s", resources)
 
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
@@ -431,7 +436,6 @@ class Exporter:
                 partial_compile,
                 resource_sets_to_remove_all,
                 Project.get().metadata.pip,
-                soft_delete,
             )
             LOGGER.info("Committed resources with version %d" % self._version)
 
@@ -476,14 +480,25 @@ class Exporter:
 
         self._resources[resource.id] = resource
 
-    def resources_to_list(self) -> list[dict[str, Any]]:
-        """Convert the resource list to a json representation"""
+    def resources_to_list(self) -> tuple[list[dict[str, Any]], set[str]]:
+        """
+        Convert the resource list to a json representation
+        If the soft_delete option is set, this will also compute the set of resource sets containing these resources
+        """
         resources = []
 
-        for res in self._resources.values():
-            resources.append(res.serialize())
+        resource_sets_with_exporting_resources: set[str] = set()
 
-        return resources
+        for res in self._resources.values():
+            serialized_resource = res.serialize()
+            resources.append(serialized_resource)
+
+            if self.options.soft_delete:
+                rid = serialized_resource["id"]
+                resource_set: Optional[str] = self._resource_sets.get(Id.parse_id(rid).resource_str(), None)
+                resource_sets_with_exporting_resources.add(resource_set)
+
+        return resources, resource_sets_with_exporting_resources
 
     def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, version: Optional[int] = None) -> None:
         """Deploy code to the server"""
@@ -512,7 +527,6 @@ class Exporter:
         partial_compile: bool,
         resource_sets_to_remove: list[str],
         pip_config: PipConfig,
-        soft_delete: bool,
     ) -> int:
         """
         Commit the entire list of resources to the configuration server.
@@ -580,7 +594,6 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     removed_resource_sets=resource_sets_to_remove,
-                    soft_delete=soft_delete,
                     **kwargs,
                 )
             else:

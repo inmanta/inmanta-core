@@ -1320,6 +1320,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete=False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         return self._do_export(
             deploy=False,
@@ -1327,6 +1328,7 @@ class SnippetCompilationTest(KeepOnFail):
             do_raise=do_raise,
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            soft_delete=soft_delete,
         )
 
     def get_exported_json(self) -> JsonType:
@@ -1340,6 +1342,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete=False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         """
         helper function to allow actual export to be run on a different thread
@@ -1354,6 +1357,7 @@ class SnippetCompilationTest(KeepOnFail):
         options.depgraph = False
         options.deploy = deploy
         options.ssl = False
+        options.soft_delete = soft_delete
 
         from inmanta.export import Exporter  # noqa: H307
 
@@ -1385,6 +1389,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete: bool = False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
         """Export to an actual server"""
         return await asyncio.get_running_loop().run_in_executor(
@@ -1395,6 +1400,7 @@ class SnippetCompilationTest(KeepOnFail):
                 do_raise=do_raise,
                 partial_compile=partial_compile,
                 resource_sets_to_remove=resource_sets_to_remove,
+                soft_delete=soft_delete,
             ),
         )
 
