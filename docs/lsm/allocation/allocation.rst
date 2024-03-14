@@ -20,7 +20,7 @@ Types of Allocation
 ####################
 
 We distinguish several types of allocation. The next sections will explain each type, from simplest to most advanced.
-After the basic explanation, a more in-depth explanation is give for the different types.
+After the basic explanation, a more in-depth explanation is given for the different types.
 When first learning about LSM allocation (or allocation in general), it is important to have a basic understanding of the different types, before diving into the details.
 
 
