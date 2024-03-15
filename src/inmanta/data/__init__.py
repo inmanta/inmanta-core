@@ -3660,6 +3660,7 @@ class Compile(BaseDocument):
     :param notify_failed_compile: if true use the notification service to notify that a compile has failed.
         By default, notifications are enabled only for exporting compiles.
     :param failed_compile_message: Optional message to use when a notification for a failed compile is created
+    :param soft_delete: Prevents deletion of resources in removed_resource_sets if they are being exported.
     """
 
     __primary_key__ = ("id",)
@@ -3695,6 +3696,8 @@ class Compile(BaseDocument):
 
     notify_failed_compile: Optional[bool] = None
     failed_compile_message: Optional[str] = None
+
+    soft_delete: bool = False
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:
