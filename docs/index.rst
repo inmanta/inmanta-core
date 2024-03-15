@@ -82,7 +82,7 @@
     reference/index
     troubleshooting
     changelogs
-    configuration_requirements
+    compatibility
 
 PDF version
 -----------
