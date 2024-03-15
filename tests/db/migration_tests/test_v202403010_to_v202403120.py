@@ -23,6 +23,8 @@ from collections import abc
 import asyncpg
 import pytest
 
+from inmanta.protocol import Client
+
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
@@ -34,3 +36,9 @@ async def test_drop_not_null_constraint(
 ) -> None:
     # This migration script adds a column. Just verify that the script doesn't fail.
     await migrate_db_from()
+
+    client = Client("client")
+    result = await client.get_reports(tid="4d6d694b-0915-495a-909c-582832c504fe")
+    assert result.code == 200
+    for report in result.result["reports"]:
+        assert report["soft_delete"] is False
