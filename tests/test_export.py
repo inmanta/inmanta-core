@@ -586,7 +586,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
     response = await client.list_versions(tid=environment)
     assert response.code == 200
 
-    # One of the 3 partial compile is expected to fail when soft_delete is true:
+    # One of the 3 partial compiles is expected to fail when soft_delete is true:
     assert len(response.result["versions"]) == 2 + soft_delete
     last_version_nr = 0
     expected_pip_config = {
