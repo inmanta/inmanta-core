@@ -98,6 +98,10 @@ Two arguments can be passed to the ``inmanta export`` command in order to export
 - ``--partial`` To specify that the model being compiled only contains the resources that need to be updated in relation to the previous version of the model.
 - ``--delete-resource-set <resource-set-name>`` This option, which may be used more than once, instructs the model to remove the resource set with the specified name. Only in conjunction with the preceding choice may this option be utilized. Note that utilizing a ``std::ResourceSet`` that includes no resources allows resource sets to be implicitly deleted during a partial compilation.
 
+.. note::
+
+    The ``--soft-delete`` option can be used in combination with these options to silently ignore deletion of resource sets
+    specified through the ``--delete-resource-set`` option if the model is exporting resources that are part of these sets.
 
 .. _partial-compiles-limitations:
 
