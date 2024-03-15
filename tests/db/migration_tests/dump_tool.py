@@ -25,6 +25,7 @@ import shutil
 import uuid
 from uuid import UUID
 
+import inmanta.protocol
 from inmanta import const, data
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
 from inmanta.data.schema import DBSchema
@@ -38,7 +39,7 @@ else:
     from utils import _wait_until_deployment_finishes, wait_for_version
 
 
-def check_result(result):
+def check_result(result: inmanta.protocol.Result) -> bool:
     assert result.code == 200
 
 
