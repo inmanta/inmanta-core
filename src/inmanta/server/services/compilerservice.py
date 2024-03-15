@@ -235,8 +235,8 @@ class CompileRun:
             env = await data.Environment.get_by_id(environment_id)
 
             env_string = (
-                ", ".join([f"{k}='{v}'" for k, v in self.request.environment_variables.items()])
-                if self.request.environment_variables
+                ", ".join([f"{k}='{v}'" for k, v in self.request.used_environment_variables.items()])
+                if self.request.used_environment_variables
                 else ""
             )
             assert self.stage
@@ -428,7 +428,7 @@ class CompileRun:
             self.tail_stdout = ""
 
             env_vars_compile: dict[str, str] = os.environ.copy()
-            env_vars_compile.update(self.request.environment_variables)
+            env_vars_compile.update(self.request.used_environment_variables)
 
             result: data.Report = await run_compile_stage_in_venv(
                 "Recompiling configuration model", cmd, cwd=project_dir, env=env_vars_compile
@@ -607,6 +607,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         in_db_transaction: bool = False,
         connection: Optional[Connection] = None,
         soft_delete: bool = False,
+        mergeable_env_vars: Optional[Mapping[str, str]] = None,
     ) -> tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -620,6 +621,10 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         :param in_db_transaction: If set to True, the connection must be provided and the connection must be part of an ongoing
                                   database transaction. If this parameter is set to True, is required to call
                                   `CompileService.notify_compile_request_committed()` right after the transaction commits.
+        :param soft_delete: Silently ignore deletion of resource sets in removed_resource_sets if they contain
+            resources that are being exported.
+        :param mergeable_env_vars: a set of env vars that can be compacted over multiple compiles.
+            If multiple values are compacted, they will be joined using spaces
         :return: the compile id of the requested compile and any warnings produced during the request
         """
         if in_db_transaction and not connection:
@@ -632,6 +637,8 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             metadata = {}
         if env_vars is None:
             env_vars = {}
+        if mergeable_env_vars is None:
+            mergeable_env_vars = {}
 
         server_compile: bool = bool(await env.get(data.SERVER_COMPILE))
         if not server_compile:
@@ -640,6 +647,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
         requested = datetime.datetime.now().astimezone()
 
+        shared_keys = mergeable_env_vars.keys() & env_vars.keys()
+        assert not shared_keys, f"An env var can not be both mergeable and normal: {shared_keys}"
+
         compile = data.Compile(
             environment=env.id,
             requested=requested,
@@ -647,7 +657,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             do_export=do_export,
             force_update=force_update,
             metadata=metadata,
-            environment_variables=env_vars,
+            requested_environment_variables=env_vars,
+            used_environment_variables=env_vars,
+            mergeable_environment_variables=mergeable_env_vars,
             partial=partial,
             removed_resource_sets=removed_resource_sets,
             exporter_plugin=exporter_plugin,
@@ -837,9 +849,20 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
         runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
 
+        merged_env_vars = dict(compile.mergeable_environment_variables)
+        for merge_candidate in merge_candidates:
+            for key, to_add in merge_candidate.mergeable_environment_variables.items():
+                existing = merged_env_vars.get(key, None)
+                if existing:
+                    merged_env_vars[key] = existing + " " + to_add
+                else:
+                    merged_env_vars[key] = to_add
+
+        merged_env_vars.update(compile.requested_environment_variables)
+
         started = datetime.datetime.now().astimezone()
         async with self._queue_count_cache_lock:
-            await compile.update_fields(started=started)
+            await compile.update_fields(started=started, used_environment_variables=merged_env_vars)
             self._queue_count_cache -= 1
 
         # set force_update == True iff any compile request has force_update == True
@@ -856,6 +879,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                 started=compile.started,
                 completed=end,
                 success=success,
+                used_environment_variables=merged_env_vars,
                 version=version,
                 substitute_compile_id=compile.id,
                 compile_data=compile_data_json,
