@@ -411,11 +411,11 @@ class Exporter:
         # validate the dependency graph
         self._validate_graph()
 
-        resources, resource_sets_with_exporting_resources = self.resources_to_list()
+        resources = self.resources_to_list()
 
-        if self.options and self.options.soft_delete:
-            # Remove resource sets with exporting resource from the resource_sets_to_remove list.
-            resource_sets_to_remove_all = list(set(resource_sets_to_remove_all) - resource_sets_with_exporting_resources)
+
+
+
 
         export_done = time.time()
         LOGGER.debug("Generating resources from the compiled model took %0.03f seconds", export_done - start)
@@ -481,23 +481,14 @@ class Exporter:
     def resources_to_list(self) -> tuple[list[dict[str, Any]], set[str]]:
         """
         Convert the resource list to a json representation
-        If the soft_delete option is set, this will also compute the set of resource sets containing these resources
         """
         resources = []
-
-        resource_sets_with_exporting_resources: set[str] = set()
 
         for res in self._resources.values():
             serialized_resource = res.serialize()
             resources.append(serialized_resource)
 
-            if self.options and self.options.soft_delete:
-                rid = serialized_resource["id"]
-                resource_set: Optional[str] = self._resource_sets.get(Id.parse_id(rid).resource_str(), None)
-                if resource_set:
-                    resource_sets_with_exporting_resources.add(resource_set)
-
-        return resources, resource_sets_with_exporting_resources
+        return resources
 
     def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, version: Optional[int] = None) -> None:
         """Deploy code to the server"""

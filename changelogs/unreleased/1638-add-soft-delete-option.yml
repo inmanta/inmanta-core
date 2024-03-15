@@ -1,5 +1,5 @@
 description: >
-    Add ``soft_delete`` option to allow compiles to silently prevent resource
+    Add ``soft_delete`` option to the exporter, to allow compiles to silently prevent resource
     set deletion if the model is exporting resources included in this set.
 issue-nr: 1638
 issue-repo: inmanta-lsm
