@@ -71,9 +71,6 @@ def put_partial(
               * resources: a list of resource objects. Since the version is not known yet resource versions should be set to 0.
               * version_info: Model version information
     :param pip_config: Pip config used by this version
-    :param soft_delete: When True, ignore deletion of resources in removed_resource_sets if they are also being exported
-        (i.e. also present in resource_sets). When False, attempting to delete a resource being exported will raise an
-        exception.
     :return: The newly stored version number.
     """
 
