@@ -27,7 +27,7 @@ import tempfile
 from importlib.abc import Loader
 from re import Pattern
 from subprocess import CalledProcessError
-from typing import Callable, Optional
+from typing import Callable, LiteralString, Optional
 from unittest.mock import patch
 
 import pkg_resources
@@ -95,18 +95,24 @@ def test_basic_install(tmpdir):
     venv1.install_from_list(["dummy-yummy"])
     assert venv1.are_installed(["dummy-yummy"])
 
-    assert not venv1.are_installed(["iplib"])
-    venv1 = env.VirtualEnv(env_dir1)
 
-    venv1.use_virtual_env()
+def test_git_based_install(tmpdir: py.path.local) -> None:
+    """
+    Verify that the install methods can handle git-based installs over https.
+    """
+    venv = env.VirtualEnv(tmpdir.mkdir("env").strpath)
+    venv.use_virtual_env()
+
+    pkg_name: LiteralString = "pytest-inmanta"
+    assert not venv.are_installed([pkg_name])
+
     try:
-        venv1.install_from_list(
-            ["lorem == 0.1.1", "dummy-yummy", "iplib@git+https://github.com/bartv/python3-iplib", "lorem", "iplib >=0.0.1"]
-        )
+        venv.install_from_list([f"{pkg_name}@git+https://github.com/inmanta/{pkg_name}"])
     except CalledProcessError as ep:
         print(ep.stdout)
         raise
-    assert venv1.are_installed(["iplib"])
+
+    assert venv.are_installed([pkg_name])
 
 
 @pytest.mark.slowtest
