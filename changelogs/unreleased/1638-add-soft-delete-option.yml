@@ -1,6 +1,5 @@
 description: >
-    Add ``soft_delete`` option to the exporter, to allow compiles to silently prevent resource
-    set deletion if the model is exporting resources included in this set.
+    Add `--soft-delete` option to the exporter. This option makes sure that resource sets, specified using the `--delete-resource-set` option, are only deleted if there are no resources exported for this set.
 issue-nr: 1638
 issue-repo: inmanta-lsm
 change-type: patch
