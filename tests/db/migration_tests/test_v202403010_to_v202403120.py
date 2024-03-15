@@ -39,6 +39,7 @@ async def test_drop_not_null_constraint(
 
     client = Client("client")
     result = await client.get_reports(tid="4d6d694b-0915-495a-909c-582832c504fe")
+    assert result.result["reports"]
     assert result.code == 200
     for report in result.result["reports"]:
         assert report["soft_delete"] is False
