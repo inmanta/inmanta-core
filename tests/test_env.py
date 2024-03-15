@@ -26,7 +26,7 @@ import tempfile
 from importlib.abc import Loader
 from re import Pattern
 from subprocess import CalledProcessError
-from typing import Callable, LiteralString, Optional
+from typing import Callable, Optional
 from unittest.mock import patch
 
 import py
@@ -99,7 +99,7 @@ def test_git_based_install(tmpdir: py.path.local) -> None:
     venv = env.VirtualEnv(tmpdir.mkdir("env").strpath)
     venv.use_virtual_env()
 
-    pkg_name: LiteralString = "pytest-inmanta"
+    pkg_name: str = "pytest-inmanta"
     assert not venv.are_installed([pkg_name])
 
     try:
