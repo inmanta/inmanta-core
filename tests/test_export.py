@@ -561,15 +561,6 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         },
     )
 
-    # Test soft_delete option
-
-    # model = """
-    #     import test_resources
-    #
-    #     g = test_resources::Resource(value="A", agent="A", key="the_resource_g")
-    #     std::ResourceSet(name="resource_set_5", resources=[g])
-    #
-    #     """
     model = """
         entity Res extends std::Resource:
             string name
