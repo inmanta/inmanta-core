@@ -240,8 +240,10 @@ class Exporter:
                         str(resource_set_instance.get_attribute("name").get_value()),
                     )
             if empty_set:
+                # Implicit deletion of empty sets
                 self._removed_resource_sets.add(name)
             else:
+                # When soft_delete option is set, un-mark resource sets with exporting resources from deletion
                 if self.options and self.options.soft_delete:
                     self._removed_resource_sets.discard(name)
 
