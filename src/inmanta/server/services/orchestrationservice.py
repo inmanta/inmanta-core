@@ -982,7 +982,6 @@ class OrchestrationService(protocol.ServerSlice):
                 raise BadRequest("Resources for partial export should not contain version information")
 
         intersection: set[str] = set(resource_sets.values()).intersection(set(removed_resource_sets))
-
         if intersection:
             raise BadRequest(
                 "Following resource sets are present in the removed resource sets and in the resources that are exported: "

@@ -486,8 +486,7 @@ class Exporter:
         resources = []
 
         for res in self._resources.values():
-            serialized_resource = res.serialize()
-            resources.append(serialized_resource)
+            resources.append(res.serialize())
 
         return resources
 
