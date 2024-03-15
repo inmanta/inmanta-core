@@ -5,7 +5,7 @@ colorlog==6.8.2
 cookiecutter==2.6.0
 crontab==1.0.1
 cryptography==42.0.5
-docstring-parser==0.15
+docstring-parser==0.16
 email-validator==2.1.1
 execnet==1.9.0
 importlib_metadata==7.0.2

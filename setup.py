@@ -12,7 +12,7 @@ requires = [
     "crontab>=0.23,<2.0",
     "cryptography>=36,<43",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
-    "docstring-parser>=0.10,<0.16",
+    "docstring-parser>=0.10,<0.17",
     "email-validator>=1,<3",
     "execnet>=1,<2",
     "importlib_metadata>=4,<8",
