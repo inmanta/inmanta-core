@@ -175,7 +175,7 @@ class Exporter:
         """
         resource.validate()
         entities = resource.get_entity_resources()
-        resource_mapping: dict[Instance:Resource] = {}
+        resource_mapping: dict[Instance, Resource] = {}
         ignored_set = set()
 
         for entity in entities:
