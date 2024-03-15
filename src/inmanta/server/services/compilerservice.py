@@ -602,7 +602,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         in_db_transaction: bool = False,
         connection: Optional[Connection] = None,
         soft_delete: bool = False,
-        mergeable_env_vars: Optional[Mapping[str, str]] = None,
     ) -> tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -618,8 +617,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                                   `CompileService.notify_compile_request_committed()` right after the transaction commits.
         :param soft_delete: Silently ignore deletion of resource sets in removed_resource_sets if they contain
             resources that are being exported.
-        :param mergeable_env_vars: a set of env vars that can be compacted over multiple compiles.
-            If multiple values are compacted, they will be joined using spaces
         :return: the compile id of the requested compile and any warnings produced during the request
         """
         if in_db_transaction and not connection:

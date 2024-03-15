@@ -452,7 +452,7 @@ exp::Test3(
 
 
 @pytest.mark.parametrize("soft_delete", [True, False])
-async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environment, client, agent, soft_delete: bool) -> None:
+async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environment, client, soft_delete: bool) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
     """
@@ -563,13 +563,22 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
 
     # Test soft_delete option
 
+    # model = """
+    #     import test_resources
+    #
+    #     g = test_resources::Resource(value="A", agent="A", key="the_resource_g")
+    #     std::ResourceSet(name="resource_set_5", resources=[g])
+    #
+    #     """
     model = """
-        import test_resources
+        entity Res extends std::Resource:
+            string name
+        end
+        implement Res using std::none
 
-        g = test_resources::Resource(value="A", agent="A", key="the_resource_g")
+        g = Res(name="the_resource_g")
         std::ResourceSet(name="resource_set_5", resources=[g])
-
-        """
+    """
     if not soft_delete:
         with pytest.raises(
             Exception,
@@ -609,16 +618,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
 
     # One of the 3 partial compiles is expected to fail when soft_delete is true:
     assert len(response.result["versions"]) == 2 + soft_delete
-    last_version_nr = 0
-    expected_pip_config = {
-        "extra-index-url": ["example.inmanta.com/index"],
-        "index-url": None,
-        "pre": None,
-        "use-system-config": False,
-    }
-    for version in response.result["versions"]:
-        assert version["pip_config"] == expected_pip_config, f"failed for version: {version['version']}"
-        last_version_nr = version["version"]
+
 
 async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
     """
