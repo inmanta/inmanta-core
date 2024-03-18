@@ -16,13 +16,13 @@ Example
 The example below show you the use case where a single allocator is used the same way on both the
 service instance and an embedded entity.
 
-.. literalinclude:: allocation_sources/allocation_v2_native.cf
+.. literalinclude:: allocation_sources/allocation_v2/allocation_v2_native.cf
     :linenos:
     :language: inmanta
     :lines: 1-53
     :caption: main.cf
 
-.. literalinclude:: allocation_sources/allocation_v2_native.py
+.. literalinclude:: allocation_sources/allocation_v2/allocation_v2_native.py
     :linenos:
     :language: python
     :caption: plugins/__init__.py
@@ -104,14 +104,14 @@ specify in which attributes all the allocated values should be saved.
 
 
 
-.. literalinclude:: allocation_sources/allocation_v2_with_context_v2_wrapper.cf
+.. literalinclude:: allocation_sources/allocation_v2/allocation_v2_with_context_v2_wrapper.cf
     :linenos:
     :language: inmanta
     :lines: 1-55
     :emphasize-lines: 12,13,35,36,37,38
     :caption: main.cf
 
-.. literalinclude:: allocation_sources/allocation_v2_with_context_v2_wrapper.py
+.. literalinclude:: allocation_sources/allocation_v2/allocation_v2_with_context_v2_wrapper.py
     :linenos:
     :language: python
     :emphasize-lines: 39,40,52
@@ -137,14 +137,14 @@ To prevent this, use ``track_deletes=true`` on both the the allocator ``ContextV
 
 Additionally, to re-trigger allocation when an item is deleted, use ``SetSensitiveForEach`` instead of ``ForEach``.
 
-.. literalinclude:: allocation_sources/allocation_v2_track_delete.cf
+.. literalinclude:: allocation_sources/allocation_v2/allocation_v2_track_delete.cf
     :linenos:
     :language: inmanta
     :lines: 1-61
     :emphasize-lines: 43
     :caption: main.cf
 
-.. literalinclude:: allocation_sources/allocation_v2_track_delete.py
+.. literalinclude:: allocation_sources/allocation_v2/allocation_v2_track_delete.py
     :linenos:
     :language: python
     :emphasize-lines: 42, 53

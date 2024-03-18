@@ -1,0 +1,47 @@
+entity ValueService extends lsm::ServiceEntity:
+    string                      name
+    lsm::attribute_modifier     name__modifier="rw"
+    int?                        first_value
+    lsm::attribute_modifier     first_value__modifier="r"
+end
+
+index ValueService(name)
+ValueService.embedded_values [0:] -- EmbeddedValue
+
+entity EmbeddedValue extends lsm::EmbeddedEntity:
+    string                      id
+    lsm::attribute_modifier     id__modifier="rw"
+    int?                        third_value
+    lsm::attribute_modifier     third_value__modifier="r"
+    string[]? __lsm_key_attributes = ["id"]
+end
+
+index EmbeddedValue(id)
+
+implement ValueService using parents
+implement EmbeddedValue using std::none
+
+value_binding = lsm::ServiceEntityBinding(
+    service_entity="allocatorv3_demo::ValueService",
+    lifecycle=lsm::fsm::simple,
+    service_entity_name="value-service",
+    allocation_spec="value_allocation",
+    strict_modifier_enforcement=true,
+)
+
+for assignment in lsm::all(value_binding):
+    attributes = assignment["attributes"]
+
+    service = ValueService(
+        instance_id=assignment["id"],
+        entity_binding=value_binding,
+        name=attributes["name"],
+        first_value=attributes["first_value"],
+    )
+
+    for embedded_value in attributes["embedded_values"]:
+        service.embedded_values += EmbeddedValue(
+            **embedded_value
+        )
+    end
+end
