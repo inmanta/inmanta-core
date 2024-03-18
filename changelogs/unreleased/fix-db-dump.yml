@@ -1,0 +1,3 @@
+description: Fix v202402130.sql dump
+change-type: patch
+destination-branches: [iso6]
