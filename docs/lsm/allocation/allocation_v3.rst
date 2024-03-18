@@ -49,7 +49,7 @@ It is also possible to enforce an order in the allocators call by passing values
 the model:
 
 
-.. literalinclude:: allocation_sources/allocation_v3/migration_example/ordering_example/main.cf
+.. literalinclude:: allocation_sources/allocation_v3/ordering_example/main.cf
    :language: inmanta
    :caption: main.cf (Plugin call ordering)
    :linenos:
@@ -84,7 +84,7 @@ Plugin
 
 Baseline V2 allocation in the plugins directory:
 
-.. literalinclude:: allocation_sources/allocation_v3/migration_example/basic_example/v2_plugin.py
+.. literalinclude:: allocation_sources/allocation_v3/basic_example/v2_plugin.py
    :language: python
    :caption: __init__.py (V2 allocation)
    :linenos:
@@ -93,7 +93,7 @@ Baseline V2 allocation in the plugins directory:
 
 When moving to V3, register one allocator for each property:
 
-.. literalinclude:: allocation_sources/allocation_v3/migration_example/basic_example/v3_plugin.py
+.. literalinclude:: allocation_sources/allocation_v3/basic_example/v3_plugin.py
    :language: python
    :caption: __init__.py (V3 allocation)
    :emphasize-lines: 1-2,8-9
@@ -105,7 +105,7 @@ Model
 
 Baseline V2 allocation in the model:
 
-.. literalinclude:: allocation_sources/allocation_v3/migration_example/basic_example/v2_main.cf
+.. literalinclude:: allocation_sources/allocation_v3/basic_example/v2_main.cf
    :language: inmanta
    :caption: main.cf (V2 allocation)
    :linenos:
@@ -114,7 +114,7 @@ Baseline V2 allocation in the model:
 When moving to V3 allocation, on the model side, add a new implementation
 that calls the allocators defined in the plugin:
 
-.. literalinclude:: allocation_sources/allocation_v3/migration_example/basic_example/v3_main.cf
+.. literalinclude:: allocation_sources/allocation_v3/basic_example/v3_main.cf
    :language: inmanta
    :caption: main.cf (V3 allocation)
    :emphasize-lines: 12,14
@@ -132,7 +132,7 @@ Plugin
 
 Baseline V2 allocation in the plugins directory:
 
-.. literalinclude:: allocation_sources/allocation_v3/migration_example/complex_example/v2_plugin.py
+.. literalinclude:: allocation_sources/allocation_v3/complex_example/v2_plugin.py
    :language: python
    :caption: __init__.py (V2 allocation)
    :linenos:
@@ -141,7 +141,7 @@ Baseline V2 allocation in the plugins directory:
 
 When moving to V3, register one allocator for each property:
 
-.. literalinclude:: allocation_sources/allocation_v3/migration_example/complex_example/v3_plugin.py
+.. literalinclude:: allocation_sources/allocation_v3/complex_example/v3_plugin.py
    :language: python
    :caption: __init__.py (V3 allocation)
    :linenos:
@@ -157,7 +157,7 @@ Model
 
 Baseline V2 allocation in the model:
 
-.. literalinclude:: allocation_sources/allocation_v3/migration_example/complex_example/v2_main.cf
+.. literalinclude:: allocation_sources/allocation_v3/complex_example/v2_main.cf
    :language: inmanta
    :caption: main.cf (V2 allocation)
    :linenos:
@@ -166,7 +166,7 @@ Baseline V2 allocation in the model:
 When moving to V3 allocation, on the model side, add a new implementation
 that calls the allocators defined in the plugin:
 
-.. literalinclude:: allocation_sources/allocation_v3/migration_example/complex_example/v3_main.cf
+.. literalinclude:: allocation_sources/allocation_v3/complex_example/v3_main.cf
    :language: inmanta
    :caption: main.cf (V3 allocation)
    :linenos:
