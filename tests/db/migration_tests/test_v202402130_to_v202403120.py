@@ -38,7 +38,7 @@ async def test_drop_not_null_constraint(
     await migrate_db_from()
 
     client = Client("client")
-    result = await client.get_reports(tid="4d6d694b-0915-495a-909c-582832c504fe")
+    result = await client.get_reports(tid="f015501d-e9e9-4016-914d-c7e214ae28bc")
     assert result.result["reports"]
     assert result.code == 200
     for report in result.result["reports"]:
