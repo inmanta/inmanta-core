@@ -451,7 +451,8 @@ exp::Test3(
     )
 
 
-async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+@pytest.mark.parametrize("soft_delete", [True, False])
+async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environment, client, soft_delete: bool) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
     """
@@ -492,6 +493,7 @@ class Res(Resource):
         await snippetcompiler.do_export_and_deploy(
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            soft_delete=soft_delete,
         )
 
     # Full compile
@@ -558,6 +560,55 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_z": None,
         },
     )
+
+    model = """
+        entity Res extends std::Resource:
+            string name
+        end
+        implement Res using std::none
+
+        g = Res(name="the_resource_g")
+        std::ResourceSet(name="resource_set_5", resources=[g])
+    """
+    if not soft_delete:
+        with pytest.raises(
+            Exception,
+            match=(
+                "Invalid request: Following resource sets are present in the removed resource"
+                " sets and in the resources that are exported: {'resource_set_5'}"
+            ),
+        ):
+            await export_model(
+                model=model,
+                partial_compile=True,
+                resource_sets_to_remove=["resource_set_5"],
+            )
+
+    else:
+        await export_model(
+            model=model,
+            partial_compile=True,
+            resource_sets_to_remove=["resource_set_5"],
+        )
+        await assert_resource_set_assignment(
+            environment,
+            assignment={
+                "the_resource_a": "resource_set_1",
+                "the_resource_c2": "resource_set_1",
+                "the_resource_d": "resource_set_3",
+                "the_resource_e": "resource_set_3",
+                "the_resource_f": "resource_set_4",
+                "the_resource_g": "resource_set_5",  # Check it didn't get removed
+                "the_resource_y": None,
+                "the_resource_z": None,
+            },
+        )
+
+    response = await client.list_versions(tid=environment)
+    assert response.code == 200
+
+    # One of the 3 partial compiles is expected to fail when soft_delete is true:
+    assert len(response.result["versions"]) == 2 + soft_delete
 
 
 async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
