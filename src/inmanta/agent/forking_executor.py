@@ -352,7 +352,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             return my_executor
 
     async def create_executor(self, executor_id: executor.ExecutorId) -> MPExecutor:
-        # entry point from parent class
         env_blueprint = executor_id.blueprint.to_env_blueprint()
         venv = await self.environment_manager.get_environment(env_blueprint, self.thread_pool)
         executor = await self.make_child_and_connect(executor_id, venv)
