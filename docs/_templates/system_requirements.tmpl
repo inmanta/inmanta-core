@@ -1,0 +1,24 @@
+.. -*- mode: rst -*-
+
+
+System requirements
+~~~~~~~~~~~~~~~~~~~
+
+
+{% if data['system_requirements']%}
+.. list-table:: System requirements
+   :header-rows: 1
+
+   * - Component
+     - Required version
+
+   {% for key, value in data["system_requirements"] | dictsort %}
+   * - {{ key }}
+     - {{ value }}
+   {% endfor %}
+{% endif %}
+
+.. note::
+
+    This information is also available in a machine-consumable format in the `compatibility.json <./compatibility.json>`_ file.
+
