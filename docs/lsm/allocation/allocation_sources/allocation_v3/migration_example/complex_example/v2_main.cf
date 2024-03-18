@@ -1,0 +1,22 @@
+entity VlanAssignment extends lsm::ServiceEntity:
+    string name
+    int? vlan_id
+    lsm::attribute_modifier vlan_id__modifier="r"
+end
+
+implement VlanAssignment using parents
+
+vlan_binding = lsm::ServiceEntityBinding(
+    service_entity="VlanAssignment",
+    lifecycle=lsm::fsm::simple,
+    service_entity_name="vlan-assignment",
+    allocation_spec="allocate_vlan",
+)
+
+for assignment in lsm::all(vlan_binding):
+    VlanAssignment(
+        instance_id=assignment["id"],
+        entity_binding=vlan_binding,
+        **assignment["attributes"]
+    )
+end

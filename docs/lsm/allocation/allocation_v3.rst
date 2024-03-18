@@ -3,219 +3,173 @@ Allocation V3
 **************
 
 
-
-
 Allocation V3 is a new framework that changes significantly compared to Allocation V2. It doesn't have
 its own lifecycle stage anymore, but instead allocation happens during validation compile. The purpose is
-the same as v2: filling up the read-only values of a service instance. The difference is that allocated attributes
+the same as V2: filling up the read-only values of a service instance. The difference is that allocated attributes
 are not set in the LSM unwrapping anymore, but instead in an implementation of the service, using plugins.
 
 The advantage of this approach is that it simplifies greatly the process: you don't need anymore to write
-allocator classes and all the required functions (needs_allocation, allocate, etc.). You also don't need to instantiate many
-AllocationSpecV2 with your allocators inside. Instead, you just need to write one plugin per attribute
+allocator classes and all the required functions (``needs_allocation``, ``allocate``, etc.). You also don't need to instantiate many
+``AllocationSpecV2`` with your allocators inside. Instead, you just need to write one plugin per attribute
 you want to allocate, it is less verbose and a much more straightforward approach.
 
-Example
-#######
+Create an allocator
+###################
 
-The example below show you the use case where a single allocator is used the same way on both the
-service instance and an embedded entity.
+In the allocation V3 framework, an allocator is a python function returning the value to be set
+for a specific read-only attribute on a specific service instance. To register this function as
+an allocator, use the ``allocation_helpers.allocator()`` decorator:
 
-.. literalinclude:: allocation_sources/allocation_v3/allocation_v3_native.cf
+
+.. code-block:: python
     :linenos:
-    :language: inmanta
-    :lines: 1-53
-    :caption: main.cf
 
-.. literalinclude:: allocation_sources/allocation_v3/allocation_v3_native.py
-    :linenos:
-    :language: python
-    :caption: plugins/__init__.py
+    @allocation_helpers.allocator()
+    def get_service_id(
+        service: "lsm::ServiceEntity",
+        attribute_path: "string",
+    ) -> "int":
+        return 5
 
 
-Allocation V2 features
-######################
+An allocator must accept exactly two positional arguments:
+    1. ``service``, the service instance for which the value is being allocated (usually ``self`` in the model).
+    2. ``attribute_path``, the attribute of the service instance in which the allocated
+    value should be saved. The decorated function can define a default value.
 
-Main differences between allocation v3 and v2 are:
- - Allocators are now defined in the plugins directory through the ``allocator()`` decorator.
+After those two positional arguments, the function is free of accepting any keyword
+argument it needs from the model and they will be passed transparently. The function
+can also define default values, that will be passed transparently as well.
+
+
+Once an allocator is registered, it can be reused for other instances and attributes that require the same type of
+allocation by passing the appropriate parameters to the plugin call.
+
+It is also possible to enforce an order in the allocators call by passing values that are returned by other plugins in
+the model:
+
+
+.. literalinclude:: allocation_sources/allocation_v3/migration_example/ordering_example/main.cf
+   :language: inmanta
+   :caption: main.cf (Plugin call ordering)
+   :linenos:
+   :emphasize-lines: 20
+
 
 
 V2 to V3 migration
 ##################
 
-Allocation V2:
-- In the model:
-```
-entity ValueService extends lsm::ServiceEntity:
-    string                      name
-    lsm::attribute_modifier     name__modifier="rw"
-    int?                        first_value
-    lsm::attribute_modifier     first_value__modifier="r"
-end
+Moving from allocation V2 to allocation V3 boils down to the following steps:
 
-index ValueService(name)
-ValueService.embedded_values [0:] -- EmbeddedValue
+In the plugins directory:
 
-entity EmbeddedValue extends lsm::EmbeddedEntity:
-    string                      id
-    lsm::attribute_modifier     id__modifier="rw"
-    int?                        third_value
-    lsm::attribute_modifier     third_value__modifier="r"
-    string[]? __lsm_key_attributes = ["id"]
-end
+1. Create a specific allocator for each property of the service that requires allocation.
+2. Make sure to register these allocators by decorating them with the ``@allocator()`` decorator.
 
-index EmbeddedValue(id)
+In the model:
 
-implement ValueService using parents
-implement EmbeddedValue using std::none
+3. Add a new implementation for the service to set the values of the properties
+requiring allocation by calling the relevant allocator plugin.
 
-value_binding = lsm::ServiceEntityBinding(
-    service_entity="allocatorv3_demo::ValueService",
-    lifecycle=lsm::fsm::simple,
-    service_entity_name="value-service",
-    allocation_spec="value_allocation",
-    strict_modifier_enforcement=true,
-)
-
-for assignment in lsm::all(value_binding):
-    attributes = assignment["attributes"]
-
-    service = ValueService(
-        instance_id=assignment["id"],
-        entity_binding=value_binding,
-        name=attributes["name"],
-        first_value=attributes["first_value"],
-    )
-
-    for embedded_value in attributes["embedded_values"]:
-        service.embedded_values += EmbeddedValue(
-            **embedded_value
-        )
-    end
-end
-```
-- In the plugin:
-```
-class IntegerAllocator(AllocatorV2):
-
-    def __init__(self, value: int, attribute: str) -> None:
-        self.value = value
-        self.attribute = dict_path.to_path(attribute)
-
-    def needs_allocation(self, context: ContextV2) -> bool:
-        try:
-            if not context.get_instance().get(self.attribute):
-                # Attribute not present
-                return True
-        except IndexError:
-            return True
-
-        return False
-
-    def allocate(self, context: ContextV2) -> None:
-        context.set_value(self.attribute, self.value)
-
-AllocationSpecV2(
-    "value_allocation",
-    IntegerAllocator(value=1, attribute="first_value"),
-    ForEach(
-        item="item",
-        in_list="embedded_values",
-        identified_by="id",
-        apply=[
-            IntegerAllocator(
-                value=3,
-                attribute="third_value",
-            ),
-        ],
-    ),
-)
-```
-
-Allocation V3:
-- In the model:
-```
-entity ValueServiceV3 extends lsm::ServiceEntity:
-    string                      name
-    lsm::attribute_modifier     name__modifier="rw"
-    int?                        first_value
-    lsm::attribute_modifier     first_value__modifier="r"
-end
-
-index ValueServiceV3(name)
-ValueServiceV3.embedded_values [0:] -- EmbeddedValueV3
-
-implementation set_first_value for ValueServiceV3:
-    self.first_value = get_first_value(self, "first_value")
-    for embedded_value in self.embedded_values:
-        embedded_value.third_value = get_third_value(self, "embedded_values[id={{embedded_value.id}}].third_value")
-    end
-end
-
-entity EmbeddedValueV3 extends lsm::EmbeddedEntity:
-    string                      id
-    lsm::attribute_modifier     id__modifier="rw"
-    int?                        third_value
-    lsm::attribute_modifier     third_value__modifier="r"
-    string[]? __lsm_key_attributes = ["id"]
-end
-
-index EmbeddedValueV3(id)
-
-implement ValueServiceV3 using parents, set_first_value
-implement EmbeddedValueV3 using std::none
-
-valuev3_binding = lsm::ServiceEntityBindingV2(
-    service_entity="allocatorv3_demo::ValueServiceV3",
-    lifecycle=lsm::fsm::simple,
-    service_entity_name="value-service-v3",
-    allocation_spec="value_allocation_v3",
-    service_identity="name",
-    service_identity_display_name="Name",
-)
-
-for assignment in lsm::all(valuev3_binding):
-    attributes = assignment["attributes"]
-
-    service = ValueServiceV3(
-        instance_id=assignment["id"],
-        entity_binding=valuev3_binding,
-        name=attributes["name"],
-    )
-
-    for embedded_value in attributes["embedded_values"]:
-        service.embedded_values += EmbeddedValueV3(
-            id=embedded_value["id"],
-        )
-    end
-end
-```
-- In the plugin:
-```
-@allocation_helpers.allocator()
-def get_first_value(
-    service: "lsm::ServiceEntity",
-    attribute_path: "string",
-) -> "int":
-    return 1
-
-@allocation_helpers.allocator()
-def get_third_value(
-    service: "lsm::ServiceEntity",
-    attribute_path: "string",
-) -> "int":
-    return 3
-
-allocation.AllocationSpecV2("value_allocation_v3")
-```
-
-As you can see in the example above, each plugin that you use to allocate must have an allocator decorator. \
-The plugin also has 2 mandatory arguments, the `service instance` (usually self in the model) and the `attribute`
-you want to allocate as a dict_path.
+Basic example
+=============
 
 
-+--------------------------------+--------------------------------+
-|                                |                                |
-|.. literalinclude:: allocation_sources/allocation_v3/migration_example/v2_main.cf |.. literalinclude:: allocation_sources/allocation_v3/migration_example/v3_main.cf |
-|                                |                                |
-+--------------------------------+--------------------------------+
+Here is an example of a V2 to V3 migration. For both the model and the plugin, first the
+old V2 version is shown and then the new version using V3 framework:
+
+Plugin
+------
+
+Baseline V2 allocation in the plugins directory:
+
+.. literalinclude:: allocation_sources/allocation_v3/migration_example/basic_example/v2_plugin.py
+   :language: python
+   :caption: __init__.py (V2 allocation)
+   :linenos:
+
+
+
+When moving to V3, register one allocator for each property:
+
+.. literalinclude:: allocation_sources/allocation_v3/migration_example/basic_example/v3_plugin.py
+   :language: python
+   :caption: __init__.py (V3 allocation)
+   :emphasize-lines: 1-2,8-9
+   :linenos:
+
+
+Model
+-----
+
+Baseline V2 allocation in the model:
+
+.. literalinclude:: allocation_sources/allocation_v3/migration_example/basic_example/v2_main.cf
+   :language: inmanta
+   :caption: main.cf (V2 allocation)
+   :linenos:
+
+
+When moving to V3 allocation, on the model side, add a new implementation
+that calls the allocators defined in the plugin:
+
+.. literalinclude:: allocation_sources/allocation_v3/migration_example/basic_example/v3_main.cf
+   :language: inmanta
+   :caption: main.cf (V3 allocation)
+   :emphasize-lines: 12,14
+   :linenos:
+
+
+In-depth example
+================
+
+This is a more complex example ensuring uniqueness for an attribute across instances within a given range of values:
+
+
+Plugin
+------
+
+Baseline V2 allocation in the plugins directory:
+
+.. literalinclude:: allocation_sources/allocation_v3/migration_example/complex_example/v2_plugin.py
+   :language: python
+   :caption: __init__.py (V2 allocation)
+   :linenos:
+   :emphasize-lines: 4
+
+
+When moving to V3, register one allocator for each property:
+
+.. literalinclude:: allocation_sources/allocation_v3/migration_example/complex_example/v3_plugin.py
+   :language: python
+   :caption: __init__.py (V3 allocation)
+   :linenos:
+
+
+In the example above, the plugin takes extra arguments required to make the allocation: ``lower: "int"`` and
+``upper: "int"``.
+
+
+
+Model
+-----
+
+Baseline V2 allocation in the model:
+
+.. literalinclude:: allocation_sources/allocation_v3/migration_example/complex_example/v2_main.cf
+   :language: inmanta
+   :caption: main.cf (V2 allocation)
+   :linenos:
+
+
+When moving to V3 allocation, on the model side, add a new implementation
+that calls the allocators defined in the plugin:
+
+.. literalinclude:: allocation_sources/allocation_v3/migration_example/complex_example/v3_main.cf
+   :language: inmanta
+   :caption: main.cf (V3 allocation)
+   :linenos:
+   :emphasize-lines: 8
+
+

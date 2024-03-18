@@ -1,0 +1,24 @@
+entity ServiceWithOrderedAllocation extends lsm::ServiceEntity:
+    string                      name
+    lsm::attribute_modifier     name__modifier="rw"
+    int?                        value_allocated_first
+    lsm::attribute_modifier     value_allocated_first__modifier="r"
+    int?                        value_allocated_last
+    lsm::attribute_modifier     value_allocated_last__modifier="r"
+end
+
+
+implementation allocate_in_order for ServiceWithOrderedAllocation:
+    self.value_allocated_first = get_first_value(
+        self,
+        "value_allocated_first"
+    )
+
+    self.value_allocated_last = get_last_value(
+        self,
+        "value_allocated_last",
+        get_first_value(self, "value_allocated_first")
+    )
+end
+
+implement ServiceWithOrderedAllocation using parents, allocate_in_order

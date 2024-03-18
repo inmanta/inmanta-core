@@ -19,15 +19,15 @@ class IntegerAllocator(AllocatorV2):
 
 AllocationSpecV2(
     "value_allocation",
-    IntegerAllocator(value=1, attribute="first_value"),
+    IntegerAllocator(value=1, attribute="top_level_value"),
     ForEach(
         item="item",
-        in_list="embedded_values",
+        in_list="embedded_services",
         identified_by="id",
         apply=[
             IntegerAllocator(
                 value=3,
-                attribute="third_value",
+                attribute="embedded_value",
             ),
         ],
     ),

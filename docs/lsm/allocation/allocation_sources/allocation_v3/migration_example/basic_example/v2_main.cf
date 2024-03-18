@@ -1,0 +1,48 @@
+entity TopLevelService extends lsm::ServiceEntity:
+    string                      name
+    lsm::attribute_modifier     name__modifier="rw"
+    int?                        top_level_value
+    lsm::attribute_modifier     top_level_value__modifier="r"
+end
+
+index TopLevelService(name)
+TopLevelService.embedded_services [0:] -- EmbeddedService
+
+entity EmbeddedService extends lsm::EmbeddedEntity:
+    string                      id
+    lsm::attribute_modifier     id__modifier="rw"
+    int?                        embedded_value
+    lsm::attribute_modifier     embedded_value__modifier="r"
+    string[]? __lsm_key_attributes = ["id"]
+end
+
+index EmbeddedService(id)
+
+implement TopLevelService using parents
+implement EmbeddedService using std::none
+
+value_binding = lsm::ServiceEntityBindingV2(
+    service_entity="TopLevelService",
+    lifecycle=lsm::fsm::simple,
+    service_entity_name="value-service",
+    allocation_spec="value_allocation",
+    service_identity="name",
+    service_identity_display_name="Name",
+)
+
+for assignment in lsm::all(value_binding):
+    attributes = assignment["attributes"]
+
+    service = TopLevelService(
+        instance_id=assignment["id"],
+        entity_binding=value_binding,
+        name=attributes["name"],
+        top_level_value=attributes["top_level_value"],
+    )
+
+    for embedded_service in attributes["embedded_services"]:
+        service.embedded_services += EmbeddedService(
+            **embedded_service
+        )
+    end
+end
