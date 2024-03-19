@@ -245,7 +245,7 @@ class PluginFunction(Function):
             except UnsetException as e:
                 call: str = str(self.plugin)
                 location: str = str(self.ast_node.location)
-                LOGGER.log(
+                LOGGER.debug(
                     "Unset value in python code in plugin at call: %s (%s) (Will be rescheduled by compiler)", call, location
                 )
                 # Don't handle it here!
