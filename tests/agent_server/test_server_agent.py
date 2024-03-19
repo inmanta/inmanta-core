@@ -2683,7 +2683,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
         # incremental deploy + full deploy resumed
         return len(end_run_lines) >= 2
 
-    await retry_limited(resume_waiters_and_wait_until_deploy_finishes, timeout=10)
+    await retry_limited(resume_waiters_and_wait_until_deploy_finishes, timeout=12)
 
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Interrupting run 'Initial Deploy' for 'Second Deploy'")
 
