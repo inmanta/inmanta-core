@@ -1,4 +1,14 @@
+import lsm
+
 entity ServiceWithOrderedAllocation extends lsm::ServiceEntity:
+    """
+    This service entity demonstrates how to enforce a specific order during
+    the allocation process. Here we want to allocate the attributes in the
+    following order:
+        - value_allocated_first
+        - value_allocated_last
+    """
+
     string                      name
     lsm::attribute_modifier     name__modifier="rw"
     int?                        value_allocated_first
@@ -17,7 +27,7 @@ implementation allocate_in_order for ServiceWithOrderedAllocation:
     self.value_allocated_last = get_last_value(
         self,
         "value_allocated_last",
-        get_first_value(self, "value_allocated_first")
+        requires=get_first_value(self, "value_allocated_first")  # adding this parameter enforces the order
     )
 end
 

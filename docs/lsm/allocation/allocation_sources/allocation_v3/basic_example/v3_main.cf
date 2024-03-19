@@ -1,3 +1,6 @@
+import lsm
+import lsm::fsm
+
 entity TopLevelService extends lsm::ServiceEntity:
     string                      name
     lsm::attribute_modifier     name__modifier="rw"
