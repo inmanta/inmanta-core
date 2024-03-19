@@ -35,7 +35,7 @@ an allocator, use the ``allocation_helpers.allocator()`` decorator:
 An allocator must accept exactly two positional arguments:
     1. ``service``, the service instance for which the value is being allocated (usually ``self`` in the model).
     2. ``attribute_path``, the attribute of the service instance in which the allocated
-    value should be saved. The decorated function can define a default value.
+    value should be saved, as a dict_path expression. The decorated function can define a default value.
 
 After those two positional arguments, the function is free of accepting any keyword
 argument it needs from the model and they will be passed transparently. The function
