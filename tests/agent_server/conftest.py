@@ -544,11 +544,7 @@ def resource_container(clean_reset):
             logger.info(
                 "waiting with waiters, %s/%s resources done",
                 done,
-                (
-                    wait_for_this_amount_of_resources_in_done
-                    if wait_for_this_amount_of_resources_in_done
-                    else total
-                ),
+                (wait_for_this_amount_of_resources_in_done if wait_for_this_amount_of_resources_in_done else total),
             )
 
         # unhang waiters
