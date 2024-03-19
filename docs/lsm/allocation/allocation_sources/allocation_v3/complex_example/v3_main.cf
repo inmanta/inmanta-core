@@ -5,7 +5,13 @@ entity VlanAssignment extends lsm::ServiceEntity:
 end
 
 implementation get_available_vlan for VlanAssignment:
-    self.vlan_id = get_free_value_in_range(self, "vlan_id", lower=50000, upper=70000)
+    self.vlan_id = lsm::allocators::get_first_free_integer(
+        self,
+        "vlan_id",
+        range_start=50000,
+        range_end=70000,
+        used_values=lsm::allocators::get_used_values(vlan_binding, "first_value"),
+    ),
 end
 
 implement VlanAssignment using parents, get_available_vlan

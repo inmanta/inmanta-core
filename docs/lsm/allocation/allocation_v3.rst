@@ -35,7 +35,7 @@ an allocator, use the ``allocation_helpers.allocator()`` decorator:
 An allocator must accept exactly two positional arguments:
     1. ``service``, the service instance for which the value is being allocated (usually ``self`` in the model).
     2. ``attribute_path``, the attribute of the service instance in which the allocated
-    value should be saved, as a dict_path expression. The decorated function can define a default value.
+    value should be saved, as a :class:`~inmanta.util.dict_path.DictPath` expression. The decorated function can define a default value.
 
 After those two positional arguments, the function is free of accepting any keyword
 argument it needs from the model and they will be passed transparently. The function
@@ -136,20 +136,11 @@ Baseline V2 allocation in the plugins directory:
    :language: python
    :caption: __init__.py (V2 allocation)
    :linenos:
-   :emphasize-lines: 4
 
 
-When moving to V3, register one allocator for each property:
-
-.. literalinclude:: allocation_sources/allocation_v3/complex_example/v3_plugin.py
-   :language: python
-   :caption: __init__.py (V3 allocation)
-   :linenos:
-
-
-In the example above, the plugin takes extra arguments required to make the allocation: ``lower: "int"`` and
-``upper: "int"``.
-
+This example will demonstrate how to use the :func:`get_first_free_integer<lsm::allocators.get_first_free_integer>`
+allocator from the ``lsm`` module. Since we are using a plugin that is already defined, no extra plugin code
+is required. We will simply call this plugin from the model with the appropriate arguments.
 
 
 Model
