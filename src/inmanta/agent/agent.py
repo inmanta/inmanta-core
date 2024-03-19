@@ -37,7 +37,7 @@ from typing import Any, Collection, Dict, Optional, Self, TypeAlias, Union, cast
 
 import pkg_resources
 
-from inmanta import const, data, env, loader, module, protocol
+from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache, CacheVersionContext

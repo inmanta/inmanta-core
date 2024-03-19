@@ -16,10 +16,8 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import base64
 import hashlib
-import logging
 import os
 import py_compile
 import tempfile
@@ -29,14 +27,12 @@ from logging import DEBUG, INFO
 import pytest
 
 import inmanta
-from inmanta import const
 from inmanta.agent import Agent
 from inmanta.agent.agent import ResourceInstallSpec
 from inmanta.data import PipConfig
-from inmanta.data.model import Notification
 from inmanta.protocol import Client
 from inmanta.util import get_compiler_version
-from utils import LogSequence, log_contains, log_doesnt_contain
+from utils import LogSequence
 
 
 async def make_source_structure(
