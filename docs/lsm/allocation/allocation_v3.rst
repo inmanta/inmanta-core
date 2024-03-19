@@ -3,10 +3,10 @@ Allocation V3
 **************
 
 
-Allocation V3 is a new framework that changes significantly compared to Allocation V2. It doesn't have
-its own lifecycle stage anymore, but instead allocation happens during validation compile. The purpose is
-the same as V2: filling up the read-only values of a service instance. The difference is that allocated attributes
-are not set in the LSM unwrapping anymore, but instead in an implementation of the service, using plugins.
+Allocation V3 is a new framework that changes significantly compared to Allocation V2. The purpose is
+the same as V2: filling up the read-only values of a service instance during the first validation compile
+of the lifecycle. The difference is that allocated attributes are not set in the LSM unwrapping anymore,
+but instead in an implementation of the service, using plugins.
 
 The advantage of this approach is that it simplifies greatly the process: you don't need anymore to write
 allocator classes and all the required functions (``needs_allocation``, ``allocate``, etc.). You also don't need to instantiate many

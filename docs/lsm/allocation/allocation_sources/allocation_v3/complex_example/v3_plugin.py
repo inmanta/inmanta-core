@@ -21,5 +21,3 @@ def get_free_value_in_range(
                 taken.add(values[0])
 
     return allocation.AnyUniqueInt(lower=lower, upper=upper).select(None, taken)
-
-allocation.AllocationSpecV2("allocate_vlan")

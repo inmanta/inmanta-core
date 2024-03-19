@@ -1,15 +1,14 @@
 @allocation_helpers.allocator()
-def get_top_level_value(
+def get_value(
     service: "lsm::ServiceEntity",
     attribute_path: "string",
-) -> "int":
-    return 1
+    *,
+    value: "any",
+) -> "any":
+    """
+    Store a given value in the attributes of a service.
 
-@allocation_helpers.allocator()
-def get_embedded_value(
-    service: "lsm::ServiceEntity",
-    attribute_path: "string",
-) -> "int":
-    return 3
-
-allocation.AllocationSpecV2("value_allocation")
+    :param value: The value to store on the service.
+    """
+    print("This will be called in the first validation compile only!", str(service), str(attribute_path), str(value))
+    return value

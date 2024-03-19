@@ -9,11 +9,12 @@ index TopLevelService(name)
 TopLevelService.embedded_services [0:] -- EmbeddedService
 
 implementation allocate_values for TopLevelService:
-    self.top_level_value = get_top_level_value(self, "top_level_value")
+    self.top_level_value = get_value(self, "top_level_value", value=1)
     for embedded_service in self.embedded_services:
-        embedded_service.embedded_value = get_embedded_value(
+        embedded_service.embedded_value = get_value(
             self,
-            "embedded_services[id={{embedded_service.id}}].embedded_value"
+            "embedded_services[id={{embedded_service.id}}].embedded_value",
+            value=3
         )
     end
 end
@@ -35,7 +36,6 @@ value_binding = lsm::ServiceEntityBindingV2(
     service_entity="TopLevelService",
     lifecycle=lsm::fsm::simple,
     service_entity_name="top-level-service",
-    allocation_spec="value_allocation",
     service_identity="name",
     service_identity_display_name="Name",
 )
