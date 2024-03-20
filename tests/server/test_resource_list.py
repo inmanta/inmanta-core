@@ -670,33 +670,48 @@ async def test_resources_paging_performance(client, environment, very_big_env):
         {"resource_id_value":"sub39"},
     ]
 
+    orders = [
+        f"{field}.{direction}" for field, direction in
+        [
+            ("agent", "DESC"),
+            ("agent", "ASC"),
+            ("resource_type", "DESC"),
+            ("resource_type", "ASC"),
+            ("status", "DESC"),
+            ("status", "ASC"),
+            ("resource_id_value", "DESC"),
+            ("resource_id_value", "ASC"),
+        ]
+    ]
+
     for filter in filters:
-        # Pages 1-3 and -1 to -3
-        async def time_call():
-            start = time.monotonic()
-            result = await client.resource_list(environment, deploy_summary=False, filter=filter, limit=10)
-            assert result.code == 200
-            return (time.monotonic() - start)*1000, result.result.get("links",{})
+        for order in orders:
+            # Pages 1-3 and -1 to -3
+            async def time_call():
+                start = time.monotonic()
+                result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=10, sort=order)
+                assert result.code == 200
+                return (time.monotonic() - start)*1000, result.result.get("links",{})
 
-        async def time_page(links, name: str):
-            start = time.monotonic()
-            if name not in links:
-                return 0, {}
-            url = f"""{base_url}{links[name]}"""
-            request = HTTPRequest(
-                url=url,
-                headers={"X-Inmanta-tid": str(environment)},
-            )
-            response = await http_client.fetch(request, raise_error=False)
-            assert response.code == 200
-            result = json.loads(response.body.decode("utf-8"))
-            return (time.monotonic() - start)*1000, result["links"]
+            async def time_page(links, name: str):
+                start = time.monotonic()
+                if name not in links:
+                    return 0, {}
+                url = f"""{base_url}{links[name]}"""
+                request = HTTPRequest(
+                    url=url,
+                    headers={"X-Inmanta-tid": str(environment)},
+                )
+                response = await http_client.fetch(request, raise_error=False)
+                assert response.code == 200
+                result = json.loads(response.body.decode("utf-8"))
+                return (time.monotonic() - start)*1000, result["links"]
 
-        page1, prev = await time_call()
-        page2, prev = await time_page(prev, "next")
-        page3, prev = await time_page(prev, "next")
-        # pagen1, prev = await time_page(prev, "last")
-        # pagen2, prev = await time_page(prev, "prev")
-        # pagen3, prev = await time_page(prev, "prev")
+            page1, prev = await time_call()
+            page2, prev = await time_page(prev, "next")
+            page3, prev = await time_page(prev, "next")
+            # pagen1, prev = await time_page(prev, "last")
+            # pagen2, prev = await time_page(prev, "prev")
+            # pagen3, prev = await time_page(prev, "prev")
 
-        logging.getLogger(__name__).warning("Timings %s %d %d %d", filter, page1, page2, page3)
+            logging.getLogger(__name__).warning("Timings %s %s %d %d %d", filter, order, page1, page2, page3)
