@@ -108,17 +108,6 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
                     uri=f"/api/v2/compilereport/{compile.id}",
                 )
 
-    @handle(methods_v2.send_notification, env="tid")
-    async def send_notification(
-        self,
-        env: data.Environment,
-        title: str,
-        message: str,
-        uri: Optional[str] = None,
-        severity: const.NotificationSeverity = const.NotificationSeverity.message,
-    ) -> None:
-        await self.notify(env.id, title, message, uri, severity)
-
     async def notify(
         self,
         environment: uuid.UUID,
