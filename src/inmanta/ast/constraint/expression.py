@@ -16,11 +16,12 @@
     Contact: code@inmanta.com
 """
 
+import functools
 import re
 from abc import ABCMeta, abstractmethod
 from collections import abc
 from itertools import chain
-from typing import Optional, Type
+from typing import Generic, Optional, Type, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta import stable_api
@@ -513,20 +514,49 @@ class NotEqual(BinaryOperator):
 class ArithmeticOperator(BinaryOperator):
     __slots__ = ()
 
+    # single operand type ((T, T) -> T) does not allow us to express e.g. (int, float) -> float
+    # but it's a lot simpler and it suffices for what we really need
+
     def _bin_op(self, arg1: object, arg2: object) -> object:
-        if not isinstance(arg1, (int, float)):
-            raise TypingException(self, f"The {self.get_name()} operator in not supported for {arg1} of type {type(arg1)}.")
+        return self.dispatch(arg1, arg2)
+
+    # TODO: name
+    @functools.singledispatchmethod
+    def _dispatch(self, arg1: object, arg2: object) -> object:
+        """
+        Single dispatch method to validate and execute this operator, given two operands.
+
+        This class adds an implementation for numbers. Operators that support additional types can register custom
+        implementations via the single dispatch registration mechanism.
+        """
+        raise TypingException(
+            self, f"The {self.get_name()} operator in not supported for {repr(arg1)} of type '{type(arg1).__name__}'."
+        )
+
+    # all arithmetic operators support at least int | float
+    @_dispatch.register
+    def _(self, arg1: int | float, arg2: object) -> int | float:
         if not isinstance(arg2, (int, float)):
-            raise TypingException(self, f"The {self.get_name()} operator in not supported for {arg2} of type {type(arg2)}.")
+            raise TypingException(
+                self,
+                (
+                    f"Unsupported operand type(s) for {self.get_name()}:"
+                    f" {repr(arg1)} of type '{type(arg1).__name__}' and {repr(arg2)} of type '{type(arg2).__name__}'."
+                ),
+            )
         return self._arithmetic_op(arg1, arg2)
 
     @abstractmethod
     def _arithmetic_op(self, arg1: int | float, arg2: int | float) -> int | float:
         """
-        The implementation for this ArithmeticOperator, excluding the type validation.
-        Type validation is done in the _bin_op() method.
+        The implementation for this ArithmeticOperator when applied to numbers, excluding the type validation.
+        Type validation is done in the _dispatch() method.
+        Concrete implementations may widen the type signature.
         """
         raise NotImplementedError()
+
+
+T = TypeVar("T", int | float, str)
 
 
 class Plus(ArithmeticOperator):
@@ -536,7 +566,17 @@ class Plus(ArithmeticOperator):
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         ArithmeticOperator.__init__(self, "plus", op1, op2)
 
-    def _arithmetic_op(self, arg1: int | float, arg2: int | float) -> int | float:
+    @functools.singledispatchmethod
+    def _dispatch(self, arg1: object, arg2: object) -> object:
+        return super()._dispatch(arg1, arg2)
+
+    @_dispatch.register
+    def _(self, arg1: str, arg2: object) -> str:
+        if not isinstance(arg2, str):
+            raise TypingException(self, f"Can only concatenate str (not {repr(arg2)} of type '{type(arg2).__name__}') to str.")
+        return self._arithmetic_op(arg1, arg2)
+
+    def _arithmetic_op(self, arg1: T, arg2: T) -> T:
         return arg1 + arg2
 
 
