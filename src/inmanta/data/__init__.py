@@ -5098,12 +5098,27 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
-        query = f"""
-            SELECT COUNT(r.resource_id) as count, status
-            FROM {cls.table_name()} as r
+        inner_query = f"""
+        SELECT r.resource_id as resource_id,
+        (
+                        CASE WHEN (r.status = 'deploying')
+                            THEN
+                                r.status::text
+                            ELSE
+                                rps.last_non_deploying_status::text
+                        END
+        ) as status
+        FROM {cls.table_name()} as r
+            JOIN resource_persistent_state rps ON r.resource_id = rps.resource_id and r.environment = rps.environment
                 WHERE r.environment=$1 AND r.model=(SELECT MAX(cm.version)
-                                                  FROM public.configurationmodel AS cm
-                                                  WHERE cm.environment=$1 AND cm.released=TRUE)
+                                                    FROM public.configurationmodel AS cm
+                                                    WHERE cm.environment=$1 AND cm.released=TRUE)
+        """
+
+        query = f"""
+            SELECT COUNT(r.resource_id) as count,
+                   r.status
+            FROM ({inner_query}) as r
             GROUP BY r.status
         """
         raw_results = await cls._fetch_query(query, cls._get_value(environment))

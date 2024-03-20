@@ -26,9 +26,9 @@ from urllib import parse
 from urllib.parse import quote
 from uuid import UUID
 
-import inmanta.data
 from asyncpg import Record
 
+import inmanta.data
 from inmanta import data
 from inmanta.data import (
     APILIMIT,
@@ -487,9 +487,10 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        status_filter_type, status_filter_fields  = self.filter.get("status",(None, []))
-        drop_orphans = (status_filter_type == inmanta.data.QueryType.NOT_CONTAINS and "orphaned" in status_filter_fields) or \
-                       (status_filter_type == inmanta.data.QueryType.CONTAINS and "orphaned" not in status_filter_fields)
+        status_filter_type, status_filter_fields = self.filter.get("status", (None, []))
+        drop_orphans = (status_filter_type == inmanta.data.QueryType.NOT_CONTAINS and "orphaned" in status_filter_fields) or (
+            status_filter_type == inmanta.data.QueryType.CONTAINS and "orphaned" not in status_filter_fields
+        )
 
         if drop_orphans:
             return SimpleQueryBuilder(
@@ -525,9 +526,6 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 """,
                 values=[self.environment.id],
             )
-
-
-
 
         def subquery_latest_version_for_single_resource(higher_than: Optional[str]) -> str:
             """

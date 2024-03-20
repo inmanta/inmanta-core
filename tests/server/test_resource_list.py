@@ -15,9 +15,11 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import json
 import logging
+import time
 import uuid
 from datetime import datetime
 from operator import itemgetter
@@ -176,7 +178,10 @@ async def env_with_resources(server, client):
                 status=status,
             )
             await res.insert()
-            await res.update_persistent_state(last_deploy=datetime.now(tz=UTC))
+            await res.update_persistent_state(
+                last_deploy=datetime.now(tz=UTC),
+                last_non_deploying_status=status if status not in [ResourceState.available, ResourceState.deploying] else None,
+            )
 
     await create_resource("agent1", "/etc/file1", "std::File", ResourceState.available, [1, 2, 3])
     await create_resource("agent1", "/etc/file2", "std::File", ResourceState.deploying, [1, 2])  # Orphaned
@@ -531,31 +536,32 @@ async def test_deploy_summary(server, client, env_with_resources):
     assert result.result["metadata"]["deploy_summary"] == empty_summary
 
 
-
-
-
 @pytest.fixture
 async def very_big_env(server, client, environment, clienthelper, agent_factory):
     env_obj = await data.Environment.get_by_id(environment)
     await env_obj.set(data.AUTO_DEPLOY, True)
 
-    agent = await  agent_factory(environment=environment,
-        agent_map= {f"agent{tenant_index}":"local:" for tenant_index in range(50)},
-        agent_names= [f"agent{tenant_index}"for tenant_index in range(50)])
+    agent = await agent_factory(
+        environment=environment,
+        agent_map={f"agent{tenant_index}": "local:" for tenant_index in range(50)},
+        agent_names=[f"agent{tenant_index}" for tenant_index in range(50)],
+    )
+
+    instances = 10
 
     deploy_counter = 0
     # The mix:
     # 100 versions -> increments , all hashes change after 50 steps
     # each with 5000 resources (50 sets of 100 resources)
-     # one undefined
-     # one skip for undef
-     # one failed
-     # one skipped
+    # one undefined
+    # one skip for undef
+    # one failed
+    # one skipped
     # 500 orphans: in second half, produce 10 orphans each
     # every 10th version is not released
 
     async def make_resource_set(tenant_index: int, iteration: int):
-        is_full = tenant_index==0 and iteration==0
+        is_full = tenant_index == 0 and iteration == 0
         if is_full:
             version = await clienthelper.get_version()
         else:
@@ -563,32 +569,44 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
 
         resources = [
             {
-                "id":f"test::XResource[agent{tenant_index},sub={ri}],v={version}",
+                "id": f"test::XResource[agent{tenant_index},sub={ri}],v={version}",
                 "send_event": False,
                 "purged": False,
                 "requires": [] if ri % 2 == 0 else [f"test::XResource[agent{tenant_index},sub={ri-1}]"],
-                "my_attribute": iteration
-            } for ri in range(100)
+                "my_attribute": iteration,
+            }
+            for ri in range(100)
         ]
-        resource_state = {f"test::XResource[agent{tenant_index},sub=0]":ResourceState.undefined}
-        resource_sets = {
-               f"test::XResource[agent{tenant_index},sub={ri}]": f"set{tenant_index}"
-               for ri in range(100)
-        }
+        resource_state = {f"test::XResource[agent{tenant_index},sub=0]": ResourceState.undefined}
+        resource_sets = {f"test::XResource[agent{tenant_index},sub={ri}]": f"set{tenant_index}" for ri in range(100)}
         if is_full:
-            result = await client.put_version(environment, version, resources, resource_state, [], {}, compiler_version=inmanta.util.get_compiler_version(), resource_sets=resource_sets)
+            result = await client.put_version(
+                environment,
+                version,
+                resources,
+                resource_state,
+                [],
+                {},
+                compiler_version=inmanta.util.get_compiler_version(),
+                resource_sets=resource_sets,
+            )
             assert result.code == 200
         else:
-            result = await client.put_partial(environment, resource_state=resource_state, unknowns=[], version_info={}, resources=resources, resource_sets=resource_sets)
+            result = await client.put_partial(
+                environment,
+                resource_state=resource_state,
+                unknowns=[],
+                version_info={},
+                resources=resources,
+                resource_sets=resource_sets,
+            )
             assert result.code == 200
             version = result.result["data"]
         await utils.wait_until_version_is_released(client, environment, version)
 
-        result = await agent._client.get_resources_for_agent(
-            environment, f"agent{tenant_index}", incremental_deploy=True
-        )
+        result = await agent._client.get_resources_for_agent(environment, f"agent{tenant_index}", incremental_deploy=True)
         assert result.code == 200
-
+        assert result.result["resources"]
 
         async def deploy(resource):
             nonlocal deploy_counter
@@ -596,36 +614,89 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
             actionid = uuid.uuid4()
             deploy_counter = deploy_counter + 1
             await agent._client.resource_deploy_start(environment, rid, actionid)
-            if "sub=1" in rid:
-               return
+            if "sub=4]" in rid:
+                return
             else:
-                if "sub=2" in rid:
+                if "sub=2]" in rid:
                     status = ResourceState.failed
-                elif "sub=3" in rid:
+                elif "sub=3]" in rid:
                     status = ResourceState.skipped
                 else:
                     status = ResourceState.deployed
                 await agent._client.resource_deploy_done(environment, rid, actionid, status)
+
         await asyncio.gather(*(deploy(resource) for resource in result.result["resources"]))
 
-
     for iteration in [0, 1]:
-        for tenant in range(50):
+        for tenant in range(instances):
             await make_resource_set(tenant, iteration)
             logging.getLogger(__name__).warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
 
-@pytest.mark.parametrize(
-    "order_by_column, order",
-    [
-        ("agent", "DESC"),
-        # ("agent", "ASC"),
-        # ("resource_type", "DESC"),
-        # ("resource_type", "ASC"),
-        # ("status", "DESC"),
-        # ("status", "ASC"),
-        # ("resource_id_value", "DESC"),
-        # ("resource_id_value", "ASC"),
-    ],
-)
-async def test_resources_paging_performance(server, client, order_by_column, order, very_big_env):
-    pass
+    return instances
+
+
+async def test_resources_paging_performance(client, environment, very_big_env):
+    # Basic sanity
+    result = await client.resource_list(environment, limit=5, deploy_summary=True, filter={"status": "!orphaned"})
+    assert result.code == 200
+    assert result.result["metadata"]["deploy_summary"] == {
+            "by_state": {
+                "available": very_big_env-1,
+                "cancelled": 0,
+                "deployed": (95 * very_big_env) ,
+                "deploying": 1,
+                "failed": very_big_env,
+                "skipped": very_big_env,
+                "skipped_for_undefined": very_big_env,
+                "unavailable": 0,
+                "undefined": very_big_env,
+            },
+            "total": very_big_env * 100,
+        }
+
+    port = get_bind_port()
+    base_url = f"http://localhost:{port}"
+    http_client = AsyncHTTPClient()
+
+    # Test link for self page
+    filters = [
+        {},
+        {"status": "!orphaned"},
+        {"status": "deploying"},
+        {"status": "available"},
+        {"agent": "agent1"},
+        {"agent": "someotheragent"},
+        {"agent": "someotheragent"},
+        {"resource_id_value":"sub39"},
+    ]
+
+    for filter in filters:
+        # Pages 1-3 and -1 to -3
+        async def time_call():
+            start = time.monotonic()
+            result = await client.resource_list(environment, deploy_summary=False, filter=filter, limit=10)
+            assert result.code == 200
+            return (time.monotonic() - start)*1000, result.result.get("links",{})
+
+        async def time_page(links, name: str):
+            start = time.monotonic()
+            if name not in links:
+                return 0, {}
+            url = f"""{base_url}{links[name]}"""
+            request = HTTPRequest(
+                url=url,
+                headers={"X-Inmanta-tid": str(environment)},
+            )
+            response = await http_client.fetch(request, raise_error=False)
+            assert response.code == 200
+            result = json.loads(response.body.decode("utf-8"))
+            return (time.monotonic() - start)*1000, result["links"]
+
+        page1, prev = await time_call()
+        page2, prev = await time_page(prev, "next")
+        page3, prev = await time_page(prev, "next")
+        # pagen1, prev = await time_page(prev, "last")
+        # pagen2, prev = await time_page(prev, "prev")
+        # pagen3, prev = await time_page(prev, "prev")
+
+        logging.getLogger(__name__).warning("Timings %s %d %d %d", filter, page1, page2, page3)
