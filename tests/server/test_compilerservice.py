@@ -243,14 +243,14 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         print("request: ", results[0].id, env.id)
         return u1
 
-    async def get_compile(env: data.Environment, rid: uuid.UUID) -> data.Compile:
-        results = await data.Compile.get_by_remote_id(env.id, rid)
+    async def get_compile(env: data.Environment, remote_id: uuid.UUID) -> data.Compile:
+        results = await data.Compile.get_by_remote_id(env.id, remote_id)
         assert len(results) == 1
-        assert results[0].remote_id == rid
+        assert results[0].remote_id == remote_id
         return results[0]
 
-    async def is_handled(env: data.Environment, rid: uuid.UUID) -> bool:
-        compile = await get_compile(env, rid)
+    async def is_handled(env: data.Environment, remote_id: uuid.UUID) -> bool:
+        compile = await get_compile(env, remote_id)
         return compile.handled
 
     # setup projects in the database
