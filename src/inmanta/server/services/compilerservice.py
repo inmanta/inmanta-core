@@ -64,13 +64,14 @@ COMPILER_LOGGER: Logger = LOGGER.getChild("report")
 class CompileStateListener:
     @abc.abstractmethod
     async def compile_done(self, compile: data.Compile) -> None:
-        """Receive notification of all completed compiles
+        """
+        Coroutine to execute when this listener is notified of a completed compile
 
         1- Notifications are delivered at least once (retry until all listeners have returned or raise an exception other
         than CancelledError)
-        2- Notification are delivered blocking or non-blocking (i.e. the next compile can already start or not)
+        2- If this listener is blocking, the next compile can only start after this coroutine is done
         3- Multiple notifications can be in flight at any given time, out-of-order delivery is possible but highly unlikely.
-        4- Notification are cancelled upon shutdown
+        4- This coroutine is cancelled upon shutdown
         """
 
     def is_blocking(self) -> bool:
