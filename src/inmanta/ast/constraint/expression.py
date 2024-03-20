@@ -518,32 +518,33 @@ class ArithmeticOperator(BinaryOperator):
     # but it's a lot simpler and it suffices for what we really need
 
     def _bin_op(self, arg1: object, arg2: object) -> object:
-        return self.dispatch(arg1, arg2)
+        result: object = self._dispatch(arg1, arg2)
+        if result is NotImplemented:
+            raise TypingException(
+                self,
+                (
+                    f"Unsupported operand type(s) for {self.get_name()}:"
+                    f" '{type(arg1).__name__}' ({repr(arg1)}) and '{type(arg2).__name__}' ({repr(arg2)})."
+                ),
+            )
+        return result
 
     # TODO: name
     @functools.singledispatchmethod
     def _dispatch(self, arg1: object, arg2: object) -> object:
         """
-        Single dispatch method to validate and execute this operator, given two operands.
+        Single dispatch method to validate and execute this operator, given two operands. When validation fails, may raise its
+        own custom TypingException or return the special value NotImplemented, which will result in a generic TypingException.
 
         This class adds an implementation for numbers. Operators that support additional types can register custom
         implementations via the single dispatch registration mechanism.
         """
-        raise TypingException(
-            self, f"The {self.get_name()} operator in not supported for {repr(arg1)} of type '{type(arg1).__name__}'."
-        )
+        return NotImplemented
 
-    # all arithmetic operators support at least int | float
     @_dispatch.register
     def _(self, arg1: int | float, arg2: object) -> int | float:
         if not isinstance(arg2, (int, float)):
-            raise TypingException(
-                self,
-                (
-                    f"Unsupported operand type(s) for {self.get_name()}:"
-                    f" {repr(arg1)} of type '{type(arg1).__name__}' and {repr(arg2)} of type '{type(arg2).__name__}'."
-                ),
-            )
+            return NotImplemented
         return self._arithmetic_op(arg1, arg2)
 
     @abstractmethod
@@ -573,7 +574,7 @@ class Plus(ArithmeticOperator):
     @_dispatch.register
     def _(self, arg1: str, arg2: object) -> str:
         if not isinstance(arg2, str):
-            raise TypingException(self, f"Can only concatenate str (not {repr(arg2)} of type '{type(arg2).__name__}') to str.")
+            raise TypingException(self, f"Can only concatenate str (not '{type(arg2).__name__}' ({repr(arg2)})) to str.")
         return self._arithmetic_op(arg1, arg2)
 
     def _arithmetic_op(self, arg1: T, arg2: T) -> T:
