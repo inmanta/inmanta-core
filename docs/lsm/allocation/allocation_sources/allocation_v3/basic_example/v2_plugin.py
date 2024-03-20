@@ -17,6 +17,7 @@ class IntegerAllocator(AllocatorV2):
     def allocate(self, context: ContextV2) -> None:
         context.set_value(self.attribute, self.value)
 
+
 AllocationSpecV2(
     "value_allocation",
     IntegerAllocator(value=1, attribute="top_level_value"),

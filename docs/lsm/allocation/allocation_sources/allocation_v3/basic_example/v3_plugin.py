@@ -7,6 +7,7 @@
 
 from inmanta_plugins.lsm.allocation_helpers import allocator
 
+
 @allocator()
 def get_value(
     service: "lsm::ServiceEntity",

@@ -5,13 +5,13 @@
     :license: Inmanta EULA
 """
 
-
 from datetime import datetime
 from inmanta_plugins.lsm.allocation_helpers import allocator
 
 
 def clock_time() -> str:
     return str(datetime.now())
+
 
 @allocator()
 def ordered_allocation(
