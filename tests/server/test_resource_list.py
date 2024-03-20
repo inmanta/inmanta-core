@@ -25,6 +25,7 @@ import pytest
 from dateutil.tz import UTC
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
+import inmanta.util
 from inmanta import data
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource, ResourceVersionIdStr
@@ -525,3 +526,69 @@ async def test_deploy_summary(server, client, env_with_resources):
     result = await client.resource_list(env2.id, deploy_summary=True)
     assert result.code == 200
     assert result.result["metadata"]["deploy_summary"] == empty_summary
+
+
+
+
+
+@pytest.fixture
+async def very_big_env(server, client, environment, clienthelper):
+
+    # The mix:
+    # 100 versions -> increments , all hashes change after 50 steps
+    # each with 5000 resources (50 sets of 100 resources)
+     # one undefined
+     # one skip for undef
+     # one failed
+     # one skipped
+    # 500 orphans: in second half, produce 10 orphans each
+    # every 10th version is not released
+
+    async def make_resource_set(tenant_index: int, iteration: int):
+        is_full = tenant_index==0 and iteration==0
+        if is_full:
+            version = await clienthelper.get_version()
+        else:
+            version = 0
+
+        resources = [
+            {
+                "id":f"test::XResource[agent{tenant_index},sub={ri}],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [] if ri % 2 == 0 else [f"test::XResource[agent{tenant_index},sub={ri-1}]"],
+                "my_attribute": iteration
+            } for ri in range(100)
+        ]
+        resource_state = {f"test::XResource[agent{tenant_index},sub=0]":ResourceState.undefined}
+        resource_sets = {
+               f"test::XResource[agent{tenant_index},sub={ri}]": f"set{tenant_index}"
+               for ri in range(100)
+        }
+        if is_full:
+            result = await client.put_version(environment, version, resources, resource_state, [], {}, compiler_version=inmanta.util.get_compiler_version(), resource_sets=resource_sets)
+            assert result.code == 200
+        else:
+            result = await client.put_partial(environment, resource_state=resource_state, unknowns=[], version_info={}, resources=resources, resource_sets=resource_sets)
+            assert result.code == 200
+
+    for iteration in [0,1]:
+        for tenant in range(50):
+            await make_resource_set(tenant, iteration)
+
+
+@pytest.mark.parametrize(
+    "order_by_column, order",
+    [
+        ("agent", "DESC"),
+        # ("agent", "ASC"),
+        # ("resource_type", "DESC"),
+        # ("resource_type", "ASC"),
+        # ("status", "DESC"),
+        # ("status", "ASC"),
+        # ("resource_id_value", "DESC"),
+        # ("resource_id_value", "ASC"),
+    ],
+)
+async def test_resources_paging_performance(server, client, order_by_column, order, very_big_env):
+    pass

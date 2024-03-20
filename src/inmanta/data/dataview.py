@@ -26,6 +26,7 @@ from urllib import parse
 from urllib.parse import quote
 from uuid import UUID
 
+import inmanta.data
 from asyncpg import Record
 
 from inmanta import data
@@ -486,6 +487,48 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
+        status_filter_type, status_filter_fields  = self.filter.get("status",(None, []))
+        drop_orphans = (status_filter_type == inmanta.data.QueryType.NOT_CONTAINS and "orphaned" in status_filter_fields) or \
+                       (status_filter_type == inmanta.data.QueryType.CONTAINS and "orphaned" not in status_filter_fields)
+
+        if drop_orphans:
+            return SimpleQueryBuilder(
+                """
+                SELECT
+                    r.resource_id,
+                    r.attributes,
+                    r.resource_type,
+                    r.agent,
+                    r.resource_id_value,
+                    r.model,
+                    r.environment,
+                    (
+                        CASE WHEN (r.status = 'deploying')
+                            THEN
+                                r.status::text
+                            ELSE
+                                rps.last_non_deploying_status::text
+                        END
+                    ) as status
+                """,
+                """
+                FROM resource r
+                JOIN resource_persistent_state prs ON r.resource_id = rps.resource_id AND r.environment = rps.environment
+                WHERE r.environment = $1 and r.model = latest_version
+                """,
+                prelude="""
+                WITH latest_version AS (
+                    SELECT MAX(public.configurationmodel.version) as version
+                    FROM public.configurationmodel
+                    WHERE public.configurationmodel.released=TRUE AND environment=$1
+                )
+                """,
+                values=[self.environment.id],
+            )
+
+
+
+
         def subquery_latest_version_for_single_resource(higher_than: Optional[str]) -> str:
             """
             Returns a subquery to select a single row from a resource table:
