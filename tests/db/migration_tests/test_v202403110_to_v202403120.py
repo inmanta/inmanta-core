@@ -30,7 +30,7 @@ part = file_name_regex.match(__name__)[1]
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_drop_not_null_constraint(
+async def test_add_column(
     postgresql_client: asyncpg.Connection,
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
@@ -38,7 +38,7 @@ async def test_drop_not_null_constraint(
     await migrate_db_from()
 
     client = Client("client")
-    result = await client.get_reports(tid="4d6d694b-0915-495a-909c-582832c504fe")
+    result = await client.get_reports(tid="e03eabc9-5342-4e6b-b72e-6a062bab9e52")
     assert result.result["reports"]
     assert result.code == 200
     for report in result.result["reports"]:
