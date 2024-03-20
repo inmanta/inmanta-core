@@ -514,6 +514,7 @@ class NotEqual(BinaryOperator):
 class ArithmeticOperator(BinaryOperator):
     __slots__ = ()
 
+    # TODO: move this comment to where it makes sense, if it's even still relevant
     # single operand type ((T, T) -> T) does not allow us to express e.g. (int, float) -> float
     # but it's a lot simpler and it suffices for what we really need
 
