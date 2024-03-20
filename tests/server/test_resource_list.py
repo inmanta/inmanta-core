@@ -15,8 +15,10 @@
 
     Contact: code@inmanta.com
 """
-
+import asyncio
 import json
+import logging
+import uuid
 from datetime import datetime
 from operator import itemgetter
 from uuid import UUID
@@ -26,6 +28,7 @@ from dateutil.tz import UTC
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 import inmanta.util
+import utils
 from inmanta import data
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource, ResourceVersionIdStr
@@ -532,8 +535,15 @@ async def test_deploy_summary(server, client, env_with_resources):
 
 
 @pytest.fixture
-async def very_big_env(server, client, environment, clienthelper):
+async def very_big_env(server, client, environment, clienthelper, agent_factory):
+    env_obj = await data.Environment.get_by_id(environment)
+    await env_obj.set(data.AUTO_DEPLOY, True)
 
+    agent = await  agent_factory(environment=environment,
+        agent_map= {f"agent{tenant_index}":"local:" for tenant_index in range(50)},
+        agent_names= [f"agent{tenant_index}"for tenant_index in range(50)])
+
+    deploy_counter = 0
     # The mix:
     # 100 versions -> increments , all hashes change after 50 steps
     # each with 5000 resources (50 sets of 100 resources)
@@ -571,11 +581,38 @@ async def very_big_env(server, client, environment, clienthelper):
         else:
             result = await client.put_partial(environment, resource_state=resource_state, unknowns=[], version_info={}, resources=resources, resource_sets=resource_sets)
             assert result.code == 200
+            version = result.result["data"]
+        await utils.wait_until_version_is_released(client, environment, version)
 
-    for iteration in [0,1]:
+        result = await agent._client.get_resources_for_agent(
+            environment, f"agent{tenant_index}", incremental_deploy=True
+        )
+        assert result.code == 200
+
+
+        async def deploy(resource):
+            nonlocal deploy_counter
+            rid = resource["id"]
+            actionid = uuid.uuid4()
+            deploy_counter = deploy_counter + 1
+            await agent._client.resource_deploy_start(environment, rid, actionid)
+            if "sub=1" in rid:
+               return
+            else:
+                if "sub=2" in rid:
+                    status = ResourceState.failed
+                elif "sub=3" in rid:
+                    status = ResourceState.skipped
+                else:
+                    status = ResourceState.deployed
+                await agent._client.resource_deploy_done(environment, rid, actionid, status)
+        await asyncio.gather(*(deploy(resource) for resource in result.result["resources"]))
+
+
+    for iteration in [0, 1]:
         for tenant in range(50):
             await make_resource_set(tenant, iteration)
-
+            logging.getLogger(__name__).warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
 
 @pytest.mark.parametrize(
     "order_by_column, order",
