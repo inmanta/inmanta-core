@@ -473,10 +473,6 @@ def export(options: argparse.Namespace) -> None:
             raise CLIException(
                 "The --delete-resource-set option should always be used together with the --partial option", exitcode=1
             )
-        if not options.delete_resource_set and options.soft_delete:
-            raise CLIException(
-                "The --soft-delete option should always be used together with the --delete-resource-set option", exitcode=1
-            )
         if options.environment is not None:
             Config.set("config", "environment", options.environment)
 
