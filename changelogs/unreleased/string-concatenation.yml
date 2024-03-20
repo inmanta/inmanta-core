@@ -1,0 +1,7 @@
+description: Add support for string concatenation in the Inmanta modelling language
+change-type: minor
+sections:
+  minor-improvement: "{{description}}"
+destination-branches:
+  - master
+  - iso7
