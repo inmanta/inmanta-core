@@ -39,7 +39,7 @@ async def test_server_status(server, client):
     assert db_status[0]["status"]["connected"] is True
 
     assert "features" in status
-    assert len(status["features"]) == 0
+    assert len(status["features"]) > 0
 
 
 async def test_server_status_database_unreachable(server, client):
