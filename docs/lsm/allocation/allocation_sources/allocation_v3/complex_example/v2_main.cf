@@ -1,3 +1,13 @@
+"""
+    Inmanta LSM
+    :copyright: 2024 Inmanta
+    :contact: code@inmanta.com
+    :license: Inmanta EULA
+"""
+
+import lsm
+import lsm::fsm
+
 entity VlanAssignment extends lsm::ServiceEntity:
     string name
     int? vlan_id
@@ -7,7 +17,7 @@ end
 implement VlanAssignment using parents
 
 vlan_binding = lsm::ServiceEntityBinding(
-    service_entity="VlanAssignment",
+    service_entity="allocatorv3_demo::VlanAssignment",
     lifecycle=lsm::fsm::simple,
     service_entity_name="vlan-assignment",
     allocation_spec="allocate_vlan",

@@ -1,3 +1,10 @@
+"""
+    Inmanta LSM
+    :copyright: 2024 Inmanta
+    :contact: code@inmanta.com
+    :license: Inmanta EULA
+"""
+
 import lsm
 import lsm::fsm
 
@@ -25,7 +32,7 @@ implement TopLevelService using parents
 implement EmbeddedService using std::none
 
 value_binding = lsm::ServiceEntityBindingV2(
-    service_entity="TopLevelService",
+    service_entity="allocatorv3_demo::TopLevelService",
     lifecycle=lsm::fsm::simple,
     service_entity_name="value-service",
     allocation_spec="value_allocation",
