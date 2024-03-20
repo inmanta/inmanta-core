@@ -1,7 +1,20 @@
+"""
+    Inmanta LSM
+    :copyright: 2024 Inmanta
+    :contact: code@inmanta.com
+    :license: Inmanta EULA
+"""
+
 import lsm
 import lsm::fsm
 
 entity TopLevelService extends lsm::ServiceEntity:
+    """
+    This service entity demonstrates how a single allocator
+    can be used for both a service entity and its embedded
+    entities.
+    """
+
     string                      name
     lsm::attribute_modifier     name__modifier="rw"
     int?                        top_level_value
@@ -11,16 +24,6 @@ end
 index TopLevelService(name)
 TopLevelService.embedded_services [0:] -- EmbeddedService
 
-implementation allocate_values for TopLevelService:
-    self.top_level_value = get_value(self, "top_level_value", value=1)
-    for embedded_service in self.embedded_services:
-        embedded_service.embedded_value = get_value(
-            self,
-            "embedded_services[id={{embedded_service.id}}].embedded_value",
-            value=3
-        )
-    end
-end
 
 entity EmbeddedService extends lsm::EmbeddedEntity:
     string                      id
@@ -35,20 +38,38 @@ index EmbeddedService(id)
 implement TopLevelService using parents, allocate_values
 implement EmbeddedService using std::none
 
-value_binding = lsm::ServiceEntityBindingV2(
-    service_entity="TopLevelService",
+
+implementation allocate_values for TopLevelService:
+    # Allocation for an attribute in the top level service
+    # using the get_value allocator:
+    self.top_level_value = get_value(self, "top_level_value", value=1)
+
+    # The same allocator can be used for allocation in the embedded services:
+    for embedded_service in self.embedded_services:
+        embedded_service.embedded_value = get_value(
+            self,
+            "embedded_services[id={{embedded_service.id}}].embedded_value",
+            value=3
+        )
+    end
+end
+
+
+
+top_level_service_binding = lsm::ServiceEntityBindingV2(
+    service_entity="allocatorv3_demo::TopLevelService",
     lifecycle=lsm::fsm::simple,
     service_entity_name="top-level-service",
     service_identity="name",
     service_identity_display_name="Name",
 )
 
-for assignment in lsm::all(value_binding):
+for assignment in lsm::all(top_level_service_binding):
     attributes = assignment["attributes"]
 
     service = TopLevelService(
         instance_id=assignment["id"],
-        entity_binding=value_binding,
+        entity_binding=top_level_service_binding,
         name=attributes["name"],
     )
 

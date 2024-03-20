@@ -23,8 +23,9 @@ an allocator, use the ``allocation_helpers.allocator()`` decorator:
 
 .. code-block:: python
     :linenos:
+    from inmanta_plugins.lsm.allocation_helpers import allocator
 
-    @allocation_helpers.allocator()
+    @allocator()
     def get_service_id(
         service: "lsm::ServiceEntity",
         attribute_path: "string",
@@ -53,7 +54,7 @@ the model:
    :language: inmanta
    :caption: main.cf (Plugin call ordering)
    :linenos:
-   :emphasize-lines: 20
+   :emphasize-lines: 42
 
 
 
@@ -91,12 +92,11 @@ Baseline V2 allocation in the plugins directory:
 
 
 
-When moving to V3, register one allocator for each property:
+When moving to V3, register an allocator in the plugin:
 
 .. literalinclude:: allocation_sources/allocation_v3/basic_example/v3_plugin.py
    :language: python
    :caption: __init__.py (V3 allocation)
-   :emphasize-lines: 1-2,8-9
    :linenos:
 
 
@@ -112,12 +112,12 @@ Baseline V2 allocation in the model:
 
 
 When moving to V3 allocation, on the model side, add a new implementation
-that calls the allocators defined in the plugin:
+that calls the allocator defined in the plugin:
 
 .. literalinclude:: allocation_sources/allocation_v3/basic_example/v3_main.cf
    :language: inmanta
    :caption: main.cf (V3 allocation)
-   :emphasize-lines: 12,14
+   :emphasize-lines: 45,49-53
    :linenos:
 
 
@@ -161,6 +161,6 @@ that calls the allocators defined in the plugin:
    :language: inmanta
    :caption: main.cf (V3 allocation)
    :linenos:
-   :emphasize-lines: 8
+   :emphasize-lines: 26-32
 
 

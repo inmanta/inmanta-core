@@ -1,4 +1,22 @@
+"""
+    Inmanta LSM
+    :copyright: 2024 Inmanta
+    :contact: code@inmanta.com
+    :license: Inmanta EULA
+"""
+
+
+import lsm
+import lsm::fsm
+import lsm::allocators
+
+
 entity VlanAssignment extends lsm::ServiceEntity:
+    """
+    This service entity demonstrates allocation using the get_first_free_integer
+    allocator build-in lsm.
+    """
+
     string name
     int? vlan_id
     lsm::attribute_modifier vlan_id__modifier="r"
@@ -11,13 +29,13 @@ implementation get_available_vlan for VlanAssignment:
         range_start=50000,
         range_end=70000,
         used_values=lsm::allocators::get_used_values(vlan_binding, "first_value"),
-    ),
+    )
 end
 
 implement VlanAssignment using parents, get_available_vlan
 
 vlan_binding = lsm::ServiceEntityBindingV2(
-    service_entity="VlanAssignment",
+    service_entity="allocatorv3_demo::VlanAssignment",
     lifecycle=lsm::fsm::simple,
     service_entity_name="vlan-assignment",
 )
