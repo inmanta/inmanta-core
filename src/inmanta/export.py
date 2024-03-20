@@ -130,7 +130,7 @@ class Exporter:
     __dep_manager: list[Callable[[ModelDict, ResourceDict], None]] = []
 
     @classmethod
-    def clear(cls):
+    def clear(cls) -> None:
         cls.types = None
         cls.scopes = None
         cls.__export_functions = {}
