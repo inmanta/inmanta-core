@@ -322,11 +322,7 @@ class VariableReferenceHook(RawResumer):
                                 Can be a reference to a nested relation instance.
     :param name: The name of the variable or instance attribute.
     :param variable_resumer: The resumer that should be called when a value becomes available.
-    :param propagate_unset: If True, propagate unset variables during instance execution to the resumer.
-        Concretely, if the instance expression can not be executed because it depends on a variable that is unset, pass on
-        this unset variable to the variable resumer. This mode essentially ignores unset exceptions without blocking execution.
-        Naively ignoring unset exceptions might block a chain of statements that depend on the variable resumer, resulting
-        in dangling execution units.
+    :param propagate_unset: If True, propagate unset exceptions during execution to the resumer.
     """
 
     __slots__ = ("instance_expression", "name", "variable_resumer", "propagate_unset")
@@ -337,7 +333,6 @@ class VariableReferenceHook(RawResumer):
         name: str,
         variable_resumer: "VariableResumer",
         *,
-        # TODO: change name + docstring
         propagate_unset: bool = False,
     ) -> None:
         super().__init__()
@@ -352,7 +347,7 @@ class VariableReferenceHook(RawResumer):
         """
         if self.instance_expression is None:
             self.resume({}, resolver, queue)
-        elif not self.propagate_unset or isinstance(self.instance_expression, "Reference")
+        else:
             RawUnit(
                 queue,
                 resolver,
@@ -363,10 +358,6 @@ class VariableReferenceHook(RawResumer):
                 self.instance_expression.requires_emit(resolver, queue, propagate_unset=self.propagate_unset),
                 self,
             )
-        else:
-            # TODO: call variable resumer with some dummy variable
-            #   Perhaps by using PromiseVariableReferenceHook(VariableReferenceHook) that overrides `schedule`?
-            pass
 
     def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         """
@@ -481,10 +472,6 @@ class StaticEagerPromise:
             self.instance,
             self.attribute,
             variable_resumer=dynamic,
-            # silence unset exceptions:
-            # - if the statement lives in a conditional block that is never executed, no error must be raised
-            # - if the statement is ever actually executed, they will be raised via the proper code path
-            # This is safe because acquiring a promise on a frozen variable is a NOOP.
             propagate_unset=True,
         )
         self.statement.copy_location(hook)
