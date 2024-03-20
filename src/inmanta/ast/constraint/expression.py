@@ -530,22 +530,16 @@ class ArithmeticOperator(BinaryOperator):
         return result
 
     # TODO: name
-    @functools.singledispatchmethod
     def _dispatch(self, arg1: object, arg2: object) -> object:
         """
-        Single dispatch method to validate and execute this operator, given two operands. When validation fails, may raise its
+        Validate and execute this operator given two operands. When validation fails, may raise its
         own custom TypingException or return the special value NotImplemented, which will result in a generic TypingException.
 
-        This class adds an implementation for numbers. Operators that support additional types can register custom
-        implementations via the single dispatch registration mechanism.
+        This class adds an implementation for numbers. This may be extended by operators that support additional types.
         """
+        if isinstance(arg1, (int, float)) and isinstance(arg2, (int, float)):
+            return self._arithmetic_op(arg1, arg2)
         return NotImplemented
-
-    @_dispatch.register
-    def _(self, arg1: int | float, arg2: object) -> int | float:
-        if not isinstance(arg2, (int, float)):
-            return NotImplemented
-        return self._arithmetic_op(arg1, arg2)
 
     @abstractmethod
     def _arithmetic_op(self, arg1: int | float, arg2: int | float) -> int | float:
@@ -567,15 +561,13 @@ class Plus(ArithmeticOperator):
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         ArithmeticOperator.__init__(self, "plus", op1, op2)
 
-    @functools.singledispatchmethod
     def _dispatch(self, arg1: object, arg2: object) -> object:
-        return super()._dispatch(arg1, arg2)
-
-    @_dispatch.register
-    def _(self, arg1: str, arg2: object) -> str:
-        if not isinstance(arg2, str):
+        if isinstance(arg1, str):
+            if isinstance(arg2, str):
+                return self._arithmetic_op(arg1, arg2)
+            # raise custom error to override generic one from ArithmeticOperator
             raise TypingException(self, f"Can only concatenate str (not '{type(arg2).__name__}' ({repr(arg2)})) to str.")
-        return self._arithmetic_op(arg1, arg2)
+        return super()._dispatch(arg1, arg2)
 
     def _arithmetic_op(self, arg1: T, arg2: T) -> T:
         return arg1 + arg2
