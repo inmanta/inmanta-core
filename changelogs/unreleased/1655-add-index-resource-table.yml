@@ -1,4 +1,5 @@
-description: Add index on compile table.
-issue-nr: 5347
+description: Add index on resource table to speed query to get deployment progress in inmanta-lsm
+issue-nr: 1655
+issue-repo: inmanta-lsm
 change-type: patch
-destination-branches: [master, iso6]
+destination-branches: [master, iso7]
