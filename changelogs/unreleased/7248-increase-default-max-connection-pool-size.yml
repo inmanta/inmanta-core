@@ -1,4 +1,4 @@
-description: "Increased the default value of the max-connection-pool-size database setting"
+description: "Increased the default value of the database.connection_pool_max_size setting to 70"
 change-type: patch
 sections:
   minor-improvement: "{{description}}"
