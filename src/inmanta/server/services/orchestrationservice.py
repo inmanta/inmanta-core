@@ -426,9 +426,7 @@ class OrchestrationService(protocol.ServerSlice):
                     delete_list = sorted(version_dict.keys())
                     delete_list = delete_list[:-n_versions]
                     if delete_list:
-                        LOGGER.info(
-                            "Removing %s available versions from environment %s", len(delete_list), env_item.id
-                        )
+                        LOGGER.info("Removing %s available versions from environment %s", len(delete_list), env_item.id)
                     for v in delete_list:
                         await version_dict[v].delete_cascade(connection=connection)
 
