@@ -274,6 +274,68 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     assert len(prvs) == min(n_versions_to_keep, n_versions_to_create) + 1
 
 
+@pytest.mark.parametrize("has_released_versions", [True, False])
+async def test_purge_versions(server, client, environment, has_released_versions: bool) -> None:
+    """
+    Verify that the `OrchestrationService._purge_versions()` method works correctly and that it doesn't cleanup
+    the latest released version.
+    """
+    result = await client.set_setting(tid=environment, id=data.AUTO_DEPLOY, value="false")
+    assert result.code == 200
+
+    versions = []
+    for _ in range(5):
+        version = (await client.reserve_version(environment)).result["data"]
+        versions.append(version)
+        res = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=[
+                {
+                    "id": f"unittest::Resource[internal,name=ok],v={version}",
+                    "name": "root",
+                    "desired_value": "ok",
+                    "send_event": "false",
+                    "purged": False,
+                    "requires": [],
+                }
+            ],
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
+
+    if has_released_versions:
+        for v in versions[0:2]:
+            result = await client.release_version(environment, id=v)
+            assert result.code == 200
+
+    result = await client.set_setting(tid=environment, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=3)
+    assert result.code == 200
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    result = await client.list_versions(environment)
+    assert result.code == 200
+    assert result.result["count"] == (4 if has_released_versions else 3)
+    if has_released_versions:
+        assert {v["version"] for v in result.result["versions"]} == {versions[1], *versions[2:]}
+    else:
+        assert {v["version"] for v in result.result["versions"]} == {*versions[2:]}
+
+    result = await client.set_setting(tid=environment, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=1)
+    assert result.code == 200
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    result = await client.list_versions(environment)
+    assert result.code == 200
+    assert result.result["count"] == (2 if has_released_versions else 1)
+    if has_released_versions:
+        assert {v["version"] for v in result.result["versions"]} == {versions[1], *versions[4:]}
+    else:
+        assert {v["version"] for v in result.result["versions"]} == {*versions[4:]}
+
+
 async def test_n_versions_env_setting_scope(client, server):
     """
     The AVAILABLE_VERSIONS_TO_KEEP environment setting used to be a global config option.
