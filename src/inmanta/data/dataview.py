@@ -487,13 +487,25 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        status_filter_type, status_filter_fields = self.filter.get("status", (None, []))
+        status_filter_type, status_filter_fields = self.filter.get("status", (None, {}))
 
-        drop_orphans = (status_filter_type == inmanta.data.QueryType.NOT_CONTAINS and "orphaned" in status_filter_fields) or (
-            status_filter_type == inmanta.data.QueryType.CONTAINS and "orphaned" not in status_filter_fields
+        assert status_filter_type is None or status_filter_type == inmanta.data.QueryType.COMBINED
+        assert isinstance(status_filter_fields, dict)
+
+        drop_orphans = "orphaned" in status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []) or (
+            "orphaned" not in status_filter_fields.get(inmanta.data.QueryType.CONTAINS, ["orphaned"])
         )
 
         if drop_orphans:
+            # clean filter for orphans
+            try:
+                status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []).remove("orphaned")
+                if not status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []):
+                    del status_filter_fields[inmanta.data.QueryType.NOT_CONTAINS]
+                if not status_filter_fields:
+                    del self.filter["status"]
+            except ValueError:
+                pass
             return SimpleQueryBuilder(
                 """
                 SELECT
@@ -513,11 +525,11 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                         END
                     ) as status
                 """,
-                """
+                from_clause="""
                 FROM resource r
-                JOIN resource_persistent_state prs ON r.resource_id = rps.resource_id AND r.environment = rps.environment
-                WHERE r.environment = $1 and r.model = latest_version
+                JOIN resource_persistent_state rps ON r.resource_id = rps.resource_id AND r.environment = rps.environment
                 """,
+                filter_statements=["r.environment = $1", "r.model = (SELECT latest_version.version FROM latest_version)"],
                 prelude="""
                 WITH latest_version AS (
                     SELECT MAX(public.configurationmodel.version) as version

@@ -640,19 +640,19 @@ async def test_resources_paging_performance(client, environment, very_big_env):
     result = await client.resource_list(environment, limit=5, deploy_summary=True, filter={"status": "!orphaned"})
     assert result.code == 200
     assert result.result["metadata"]["deploy_summary"] == {
-            "by_state": {
-                "available": very_big_env-1,
-                "cancelled": 0,
-                "deployed": (95 * very_big_env) ,
-                "deploying": 1,
-                "failed": very_big_env,
-                "skipped": very_big_env,
-                "skipped_for_undefined": very_big_env,
-                "unavailable": 0,
-                "undefined": very_big_env,
-            },
-            "total": very_big_env * 100,
-        }
+        "by_state": {
+            "available": very_big_env - 1,
+            "cancelled": 0,
+            "deployed": (95 * very_big_env),
+            "deploying": 1,
+            "failed": very_big_env,
+            "skipped": very_big_env,
+            "skipped_for_undefined": very_big_env,
+            "unavailable": 0,
+            "undefined": very_big_env,
+        },
+        "total": very_big_env * 100,
+    }
 
     port = get_bind_port()
     base_url = f"http://localhost:{port}"
@@ -667,12 +667,12 @@ async def test_resources_paging_performance(client, environment, very_big_env):
         {"agent": "agent1"},
         {"agent": "someotheragent"},
         {"agent": "someotheragent"},
-        {"resource_id_value":"sub39"},
+        {"resource_id_value": "sub39"},
     ]
 
     orders = [
-        f"{field}.{direction}" for field, direction in
-        [
+        f"{field}.{direction}"
+        for field, direction in [
             ("agent", "DESC"),
             ("agent", "ASC"),
             ("resource_type", "DESC"),
@@ -691,7 +691,7 @@ async def test_resources_paging_performance(client, environment, very_big_env):
                 start = time.monotonic()
                 result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=10, sort=order)
                 assert result.code == 200
-                return (time.monotonic() - start)*1000, result.result.get("links",{})
+                return (time.monotonic() - start) * 1000, result.result.get("links", {})
 
             async def time_page(links, name: str):
                 start = time.monotonic()
@@ -705,7 +705,7 @@ async def test_resources_paging_performance(client, environment, very_big_env):
                 response = await http_client.fetch(request, raise_error=False)
                 assert response.code == 200
                 result = json.loads(response.body.decode("utf-8"))
-                return (time.monotonic() - start)*1000, result["links"]
+                return (time.monotonic() - start) * 1000, result["links"]
 
             page1, prev = await time_call()
             page2, prev = await time_page(prev, "next")
