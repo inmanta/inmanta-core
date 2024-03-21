@@ -372,4 +372,4 @@ python environment of the agent can get corrupt in the following way:
    mod-a-1.0 is exported again, mod-b-2.0 is not (again because it doesn't have any resources). The old x.py file still
    exists in the agent code directory. It is loaded by the agent instead of the one from mod-b-2.0.
 
-This issue will persist after a restart of the agent process.
+This issue will be resolved by a restart of the agent process.

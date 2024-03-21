@@ -18,7 +18,6 @@
 
 import base64
 import hashlib
-import logging
 import os
 import py_compile
 import tempfile
@@ -28,14 +27,12 @@ from logging import DEBUG, INFO
 import pytest
 
 import inmanta
-from inmanta import const
 from inmanta.agent import Agent
 from inmanta.agent.agent import ResourceInstallSpec
 from inmanta.data import PipConfig
-from inmanta.data.model import Notification
 from inmanta.protocol import Client
 from inmanta.util import get_compiler_version
-from utils import LogSequence, log_contains, log_doesnt_contain
+from utils import LogSequence
 
 
 async def make_source_structure(
@@ -263,6 +260,14 @@ inmanta.test_agent_code_loading = 15
     await agent.ensure_code(code=resource_install_specs_6)
     assert getattr(inmanta, "test_agent_code_loading") == 10
 
+    # ensure we clean up on restart
+    assert os.path.exists(os.path.join(agent._loader.mod_dir, "tests/plugins/__init__.py"))
+    await agent.stop()
+    await agent_factory(
+        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
+    )
+    assert not os.path.exists(os.path.join(agent._loader.mod_dir, "tests"))
+
 
 @pytest.mark.slowtest
 async def test_agent_installs_dependency_containing_extras(
@@ -318,115 +323,3 @@ def test():
 
     assert agent._env.are_installed(["pkg", "dep-a"])
     assert not agent._env.are_installed(["dep-b", "dep-c"])
-
-
-async def test_warning_message_stale_python_code(
-    server,
-    client,
-    environment,
-    agent_factory,
-    clienthelper,
-    caplog,
-    local_module_package_index,
-) -> None:
-    """
-    If a certain module A depends on the plugin code of another module B, then the source of B must either:
-      * Be exported to the server (because module B has resources or providers)
-      * Or, not be exported and never been exported in any previous version.
-    Otherwise there is the possibility that stale code in the code directory of the agent gets picket up,
-    instead of the code from the Python package (V2 module) installed in the venv of the agent.
-
-    This test case verifies that a warning message is written the agent's log file when this scenario occurs.
-    """
-
-    sources_test_mod = {}
-    await make_source_structure(
-        into=sources_test_mod,
-        file="inmanta_plugins/test/__init__.py",
-        module="inmanta_plugins.test",
-        source="",
-        dependencies=["inmanta-module-minimalv2module"],
-        client=client,
-    )
-    sources_minimalv2module_mod = {}
-    await make_source_structure(
-        into=sources_minimalv2module_mod,
-        file="inmanta_plugins/minimalv2module/__init__.py",
-        module="inmanta_plugins.minimalv2module",
-        source="",
-        dependencies=[],
-        client=client,
-    )
-
-    version = await clienthelper.get_version()
-
-    res = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=[],
-        pip_config=PipConfig(index_url=local_module_package_index),
-        compiler_version=get_compiler_version(),
-    )
-    assert res.code == 200
-
-    res = await client.upload_code_batched(
-        tid=environment,
-        id=version,
-        resources={"test::Test": sources_test_mod, "minimalv2module::Test": sources_minimalv2module_mod},
-    )
-    assert res.code == 200
-
-    agent: Agent = await agent_factory(
-        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
-    )
-
-    install_specs, _ = await agent.get_code(
-        environment=uuid.UUID(environment),
-        version=version,
-        resource_types=["test::Test", "minimalv2module::Test"],
-    )
-    await agent.ensure_code(install_specs)
-
-    expected_warning_message = (
-        f"The source code for the modules minimalv2module is present in the modules directory of the agent "
-        f"({agent._loader.mod_dir})"
-    )
-    log_doesnt_contain(caplog, "agent", logging.WARNING, expected_warning_message)
-    result = await client.list_notifications(tid=environment)
-    assert result.code == 200
-    assert len(result.result["data"]) == 0
-
-    # Don't upload code for modb anymore in new version
-    version = await clienthelper.get_version()
-
-    res = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=[],
-        pip_config=PipConfig(index_url=local_module_package_index),
-        compiler_version=get_compiler_version(),
-    )
-    assert res.code == 200
-
-    res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources_test_mod})
-    assert res.code == 200
-
-    install_specs, _ = await agent.get_code(
-        environment=uuid.UUID(environment),
-        version=version,
-        resource_types=["test::Test"],
-    )
-    await agent.ensure_code(install_specs)
-
-    log_contains(caplog, "agent", logging.WARNING, expected_warning_message)
-    result = await client.list_notifications(tid=environment)
-    assert result.code == 200
-    assert len(result.result["data"]) == 1
-    notification = Notification(**result.result["data"][0])
-    assert notification.environment == uuid.UUID(environment)
-    assert notification.title == "Stale code in agent's code directory"
-    assert expected_warning_message in notification.message
-    assert notification.uri is None
-    assert notification.severity == const.NotificationSeverity.warning.value
-    assert not notification.read
-    assert not notification.cleared
