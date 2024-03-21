@@ -269,6 +269,9 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
+        if env.is_marked_for_deletion:
+            raise BadRequest("Cannot resume an environment that is marked for deletion.")
+
         async with self.agent_state_lock:
             async with data.Environment.get_connection() as connection:
                 async with connection.transaction():
@@ -475,10 +478,19 @@ class EnvironmentService(protocol.ServerSlice):
         if env is None:
             raise NotFound("The environment with given id does not exist.")
 
+        # Check if the model version is active
+        if await self.is_model_version_active(model_version_id):
+            raise BadRequest("Cannot delete an active model version.")
+
         is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
         if is_protected_environment:
             raise Forbidden(f"Environment {environment_id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
 
+        # Check if the environment is halted; if not, halt it
+        if not env.halted:
+            await self.halt(env)
+
+        await env.mark_for_deletion()
         self._disable_schedules(env)
         await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade())
 

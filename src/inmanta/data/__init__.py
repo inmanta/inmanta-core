@@ -2540,6 +2540,7 @@ class Environment(BaseDocument):
     halted: bool = False
     description: str = ""
     icon: str = ""
+    is_marked_for_deletion: bool = False
 
     def to_dto(self) -> m.Environment:
         return m.Environment(
@@ -2796,6 +2797,10 @@ class Environment(BaseDocument):
             del self.settings[key]
         else:
             await self.set(key, self._settings[key].default)
+
+    async def mark_for_deletion(self) -> None:
+        """Mark an environment as being in the process of deletion."""
+        await self.update_fields(is_marked_for_deletion=True)
 
     async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
