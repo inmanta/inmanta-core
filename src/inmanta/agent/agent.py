@@ -1325,11 +1325,6 @@ class Agent(SessionEndpoint):
         # store it outside the loop, but only load when required
         pip_config: Optional[PipConfig] = None
 
-        # The names of the modules that are included in the requirements list of a module source.
-        all_required_modules: set[str] = set()
-        # The names of the modules for which the source code was installed.
-        all_installed_modules: set[str] = set()
-
         for rt in set(resource_types):
             # only one logical thread can load a particular resource type at any time
             async with self._resource_loader_lock.get(rt):
