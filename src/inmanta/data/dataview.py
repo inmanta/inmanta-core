@@ -488,6 +488,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
 
     def get_base_query(self) -> SimpleQueryBuilder:
         status_filter_type, status_filter_fields = self.filter.get("status", (None, []))
+
         drop_orphans = (status_filter_type == inmanta.data.QueryType.NOT_CONTAINS and "orphaned" in status_filter_fields) or (
             status_filter_type == inmanta.data.QueryType.CONTAINS and "orphaned" not in status_filter_fields
         )

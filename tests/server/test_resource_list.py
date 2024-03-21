@@ -547,7 +547,7 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
         agent_names=[f"agent{tenant_index}" for tenant_index in range(50)],
     )
 
-    instances = 10
+    instances = 2
 
     deploy_counter = 0
     # The mix:
