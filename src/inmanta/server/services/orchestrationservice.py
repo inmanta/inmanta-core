@@ -1130,6 +1130,7 @@ class OrchestrationService(protocol.ServerSlice):
                             connection=connection_holder,
                         )
 
+
                         skippable = model.get_skipped_for_undeployable()
                         if skippable:
                             skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]

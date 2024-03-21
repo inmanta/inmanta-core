@@ -5105,12 +5105,12 @@ class Resource(BaseDocument):
         inner_query = f"""
         SELECT r.resource_id as resource_id,
         (
-                        CASE WHEN (r.status = 'deploying')
-                            THEN
-                                r.status::text
-                            ELSE
-                                rps.last_non_deploying_status::text
-                        END
+            CASE WHEN (r.status = 'deploying')
+                THEN
+                    r.status::text
+                ELSE
+                    rps.last_non_deploying_status::text
+            END
         ) as status
         FROM {cls.table_name()} as r
             JOIN resource_persistent_state rps ON r.resource_id = rps.resource_id and r.environment = rps.environment
@@ -5120,10 +5120,10 @@ class Resource(BaseDocument):
         """
 
         query = f"""
-            SELECT COUNT(r.resource_id) as count,
-                   r.status
-            FROM ({inner_query}) as r
-            GROUP BY r.status
+            SELECT COUNT(ro.resource_id) as count,
+                   ro.status
+            FROM ({inner_query}) as ro
+            GROUP BY ro.status
         """
         raw_results = await cls._fetch_query(query, cls._get_value(environment))
         results = {}
@@ -5306,6 +5306,9 @@ class Resource(BaseDocument):
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
+
+        if self.resource_id == 'test::XResource0[agent0,sub=10]':
+            breakpoint()
 
         invalues = {
             "last_deploy": last_deploy,

@@ -548,7 +548,7 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
         agent_names=[f"agent{tenant_index}" for tenant_index in range(50)],
     )
 
-    instances = 50
+    instances = 2
 
     deploy_counter = 0
     # The mix:
@@ -568,18 +568,22 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
         else:
             version = 0
 
+        def resource_id(ri: int) -> str:
+            nri = ri+10*iteration
+            return f"test::XResource{int(ri/10)}[agent{tenant_index},sub={nri}]"
+
         resources = [
             {
-                "id": f"test::XResource[agent{tenant_index},sub={ri}],v={version}",
+                "id": f"{resource_id(ri)},v={version}",
                 "send_event": False,
                 "purged": False,
-                "requires": [] if ri % 2 == 0 else [f"test::XResource[agent{tenant_index},sub={ri-1}]"],
+                "requires": [] if ri % 2 == 0 else [resource_id(ri-1)],
                 "my_attribute": iteration,
             }
             for ri in range(100)
         ]
-        resource_state = {f"test::XResource[agent{tenant_index},sub=0]": ResourceState.undefined}
-        resource_sets = {f"test::XResource[agent{tenant_index},sub={ri}]": f"set{tenant_index}" for ri in range(100)}
+        resource_state = {resource_id(0): ResourceState.undefined}
+        resource_sets = {resource_id(ri): f"set{tenant_index}" for ri in range(100)}
         if is_full:
             result = await client.put_version(
                 environment,
@@ -615,12 +619,14 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
             actionid = uuid.uuid4()
             deploy_counter = deploy_counter + 1
             await agent._client.resource_deploy_start(environment, rid, actionid)
-            if "sub=4]" in rid:
+            if "sub=10]" in rid:
+                print("X")
+            if "sub=14]" in rid:
                 return
             else:
-                if "sub=2]" in rid:
+                if "sub=12]" in rid:
                     status = ResourceState.failed
-                elif "sub=3]" in rid:
+                elif "sub=13]" in rid:
                     status = ResourceState.skipped
                 else:
                     status = ResourceState.deployed
@@ -638,7 +644,7 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
 
 async def test_resources_paging_performance(client, environment, very_big_env):
     # Basic sanity
-    result = await client.resource_list(environment, limit=5, deploy_summary=True, filter={"status": "!orphaned"})
+    result = await client.resource_list(environment, limit=5, deploy_summary=True)
     assert result.code == 200
     assert result.result["metadata"]["deploy_summary"] == {
         "by_state": {
@@ -661,7 +667,7 @@ async def test_resources_paging_performance(client, environment, very_big_env):
 
     # Test link for self page
     filters = [
-        {},
+        ({}, very_big_env * 100),
         {"status": "!orphaned"},
         {"status": "deploying"},
         {"status": "deployed"},
@@ -687,14 +693,15 @@ async def test_resources_paging_performance(client, environment, very_big_env):
     ]
 
     # inmanta.data.performance.hook_base_document()
-    for filter in filters:
+    for filter, totalcount in filters:
         for order in orders:
             # Pages 1-3 and -1 to -3
             async def time_call():
                 start = time.monotonic()
                 result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=10, sort=order)
                 assert result.code == 200
-                return (time.monotonic() - start) * 1000, result.result.get("links", {})
+                assert result.result["metadata"]["total"] == totalcount
+                return (time.monotonic() - start) * 1000, result.result.get("links", {}),
 
             async def time_page(links, name: str):
                 start = time.monotonic()
@@ -708,6 +715,7 @@ async def test_resources_paging_performance(client, environment, very_big_env):
                 response = await http_client.fetch(request, raise_error=False)
                 assert response.code == 200
                 result = json.loads(response.body.decode("utf-8"))
+                assert result["metadata"]["total"] == totalcount
                 return (time.monotonic() - start) * 1000, result["links"]
 
             page1, prev = await time_call()
