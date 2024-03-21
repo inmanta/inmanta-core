@@ -1,4 +1,4 @@
-description: Add index on resource table to speed query to get deployment progress in inmanta-lsm
+description: Change index on resource table to speed query to get deployment progress in inmanta-lsm
 issue-nr: 1630
 issue-repo: inmanta-lsm
 change-type: patch
