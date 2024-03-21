@@ -29,6 +29,7 @@ import pytest
 from dateutil.tz import UTC
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
+import inmanta.data.performance
 import inmanta.util
 import utils
 from inmanta import data
@@ -547,7 +548,7 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
         agent_names=[f"agent{tenant_index}" for tenant_index in range(50)],
     )
 
-    instances = 2
+    instances = 50
 
     deploy_counter = 0
     # The mix:
@@ -663,6 +664,7 @@ async def test_resources_paging_performance(client, environment, very_big_env):
         {},
         {"status": "!orphaned"},
         {"status": "deploying"},
+        {"status": "deployed"},
         {"status": "available"},
         {"agent": "agent1"},
         {"agent": "someotheragent"},
@@ -684,6 +686,7 @@ async def test_resources_paging_performance(client, environment, very_big_env):
         ]
     ]
 
+    # inmanta.data.performance.hook_base_document()
     for filter in filters:
         for order in orders:
             # Pages 1-3 and -1 to -3

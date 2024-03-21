@@ -471,6 +471,28 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         self.environment = env
         self.deploy_summary = deploy_summary
 
+        ## Rewrite the filter to special case orphan handling
+        ## This doesn't affect the paging links, as they use the raw filter
+
+        # TODO: cleanup
+        status_filter_type, status_filter_fields = self.filter.get("status", (None, {}))
+        assert status_filter_type is None or status_filter_type == inmanta.data.QueryType.COMBINED
+        assert isinstance(status_filter_fields, dict)
+        self.drop_orphans = "orphaned" in status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []) or (
+            "orphaned" not in status_filter_fields.get(inmanta.data.QueryType.CONTAINS, ["orphaned"])
+        )
+
+        if self.drop_orphans:
+            # clean filter for orphans
+            try:
+                status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []).remove("orphaned")
+                if not status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []):
+                    del status_filter_fields[inmanta.data.QueryType.NOT_CONTAINS]
+                if not status_filter_fields:
+                    del self.filter["status"]
+            except ValueError:
+                pass
+
     @property
     def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
@@ -487,25 +509,8 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        status_filter_type, status_filter_fields = self.filter.get("status", (None, {}))
-
-        assert status_filter_type is None or status_filter_type == inmanta.data.QueryType.COMBINED
-        assert isinstance(status_filter_fields, dict)
-
-        drop_orphans = "orphaned" in status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []) or (
-            "orphaned" not in status_filter_fields.get(inmanta.data.QueryType.CONTAINS, ["orphaned"])
-        )
-
-        if drop_orphans:
-            # clean filter for orphans
-            try:
-                status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []).remove("orphaned")
-                if not status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []):
-                    del status_filter_fields[inmanta.data.QueryType.NOT_CONTAINS]
-                if not status_filter_fields:
-                    del self.filter["status"]
-            except ValueError:
-                pass
+        if self.drop_orphans:
+            #  Simple query is we have no orphans
             return SimpleQueryBuilder(
                 """
                 SELECT
