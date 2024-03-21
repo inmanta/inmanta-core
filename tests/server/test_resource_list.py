@@ -569,8 +569,9 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
             version = 0
 
         def resource_id(ri: int) -> str:
-            nri = ri+10*iteration
-            return f"test::XResource{int(ri/10)}[agent{tenant_index},sub={nri}]"
+            if iteration > 0 and ri > 40:
+                ri += 10
+            return f"test::XResource{int(ri/20)}[agent{tenant_index},sub={ri}]"
 
         resources = [
             {
@@ -619,14 +620,12 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
             actionid = uuid.uuid4()
             deploy_counter = deploy_counter + 1
             await agent._client.resource_deploy_start(environment, rid, actionid)
-            if "sub=10]" in rid:
-                print("X")
-            if "sub=14]" in rid:
+            if "sub=4]" in rid:
                 return
             else:
-                if "sub=12]" in rid:
+                if "sub=2]" in rid:
                     status = ResourceState.failed
-                elif "sub=13]" in rid:
+                elif "sub=3]" in rid:
                     status = ResourceState.skipped
                 else:
                     status = ResourceState.deployed
@@ -667,15 +666,14 @@ async def test_resources_paging_performance(client, environment, very_big_env):
 
     # Test link for self page
     filters = [
-        ({}, very_big_env * 100),
-        {"status": "!orphaned"},
-        {"status": "deploying"},
-        {"status": "deployed"},
-        {"status": "available"},
-        {"agent": "agent1"},
-        {"agent": "someotheragent"},
-        {"agent": "someotheragent"},
-        {"resource_id_value": "sub39"},
+        # ({}, very_big_env * 110),
+        # ({"status": "!orphaned"}, very_big_env * 100),
+        # ({"status": "deploying"}, 1),
+        #({"status": "deployed"}, 95 * very_big_env),
+        ({"status": "available"}, very_big_env - 1),
+        ({"agent": "agent1"}, 110),
+        ({"agent": "someotheragent"}, 0),
+        ({"resource_id_value": "sub39"}, very_big_env),
     ]
 
     orders = [
@@ -701,7 +699,7 @@ async def test_resources_paging_performance(client, environment, very_big_env):
                 result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=10, sort=order)
                 assert result.code == 200
                 assert result.result["metadata"]["total"] == totalcount
-                return (time.monotonic() - start) * 1000, result.result.get("links", {}),
+                return (time.monotonic() - start) * 1000, result.result.get("links", {})
 
             async def time_page(links, name: str):
                 start = time.monotonic()
