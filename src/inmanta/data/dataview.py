@@ -482,17 +482,6 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
             "orphaned" not in status_filter_fields.get(inmanta.data.QueryType.CONTAINS, ["orphaned"])
         )
 
-        if self.drop_orphans:
-            # clean filter for orphans
-            try:
-                status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []).remove("orphaned")
-                if not status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []):
-                    del status_filter_fields[inmanta.data.QueryType.NOT_CONTAINS]
-                if not status_filter_fields:
-                    del self.filter["status"]
-            except ValueError:
-                pass
-
     @property
     def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
@@ -509,42 +498,6 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        if self.drop_orphans:
-            #  Simple query is we have no orphans
-            return SimpleQueryBuilder(
-                """
-                SELECT
-                    r.resource_id,
-                    r.attributes,
-                    r.resource_type,
-                    r.agent,
-                    r.resource_id_value,
-                    r.model,
-                    r.environment,
-                    (
-                        CASE WHEN (r.status = 'deploying')
-                            THEN
-                                r.status::text
-                            ELSE
-                                rps.last_non_deploying_status::text
-                        END
-                    ) as status
-                """,
-                from_clause="""
-                FROM resource r
-                JOIN resource_persistent_state rps ON r.resource_id = rps.resource_id AND r.environment = rps.environment
-                """,
-                filter_statements=["r.environment = $1", "r.model = (SELECT latest_version.version FROM latest_version)"],
-                prelude="""
-                WITH latest_version AS (
-                    SELECT MAX(public.configurationmodel.version) as version
-                    FROM public.configurationmodel
-                    WHERE public.configurationmodel.released=TRUE AND environment=$1
-                )
-                """,
-                values=[self.environment.id],
-            )
-
         def subquery_latest_version_for_single_resource(higher_than: Optional[str]) -> str:
             """
             Returns a subquery to select a single row from a resource table:
@@ -577,7 +530,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 LIMIT 1
             """
 
-        query_builder = SimpleQueryBuilder(
+        old_query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
             prelude=f"""
                 /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
@@ -606,7 +559,70 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
             from_clause="FROM cte r",
             values=[self.environment.id],
         )
-        return query_builder
+        new_query_builder = SimpleQueryBuilder(
+            select_clause="SELECT *",
+            prelude=f"""
+                /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
+                /* The latest_version CTE finds the maximum released version number in the environment */
+                WITH latest_version AS (
+                    SELECT MAX(public.configurationmodel.version) as version
+                    FROM public.configurationmodel
+                    WHERE public.configurationmodel.released=TRUE AND environment=$1
+                ), versioned_resources AS (
+                    SELECT
+                        rps.*,
+                        CASE
+                            -- TODO: first branch may be redundant
+                            WHEN EXISTS (
+                                SELECT 1
+                                FROM resource AS r
+                                WHERE r.environment = rps.environment AND r.resource_id = rps.resource_id AND r.model = (
+                                    SELECT version FROM latest_version
+                                )
+                            ) THEN (SELECT version FROM latest_version)
+                            ELSE (
+                                SELECT MAX(r.model)
+                                FROM resource AS r
+                                JOIN configurationmodel AS m
+                                    ON r.environment = m.environment AND r.model = m.version AND m.released = TRUE
+                                WHERE r.environment = rps.environment AND r.resource_id = rps.resource_id
+                                GROUP BY r.resource_id
+                            )
+                        END AS version
+                    FROM resource_persistent_state AS rps
+                    WHERE rps.environment = $1
+                ), result AS (
+                    SELECT
+                        r.resource_id,
+                        r.attributes,
+                        r.resource_type,
+                        r.agent,
+                        r.resource_id_value,
+                        r.model,
+                        r.environment,
+                        (
+                            CASE
+                                WHEN r.model < (SELECT version FROM latest_version)
+                                    THEN 'orphaned'
+                                WHEN (r.status = 'deploying')
+                                    THEN r.status::text
+                                ELSE
+                                    rps.last_non_deploying_status::text
+                            END
+                        ) as status
+                    FROM versioned_resources AS rps
+                    -- TODO: is this accurate? Greatly improves COUNT(*) performance, may slightly degrade sort performance
+                    -- TODO: LEFT iff including orphans
+                    {'' if self.drop_orphans else 'LEFT'} JOIN resource AS r
+                        -- TODO: replace rps.version with (SELECT version FROM latest_version) iff excluding orphans
+                        ON r.environment = rps.environment AND r.resource_id = rps.resource_id AND r.model = {'(SELECT version FROM latest_version)' if self.drop_orphans else 'rps.version'}
+                    WHERE rps.environment = $1
+                )
+            """,
+            from_clause="FROM result AS r",
+            values=[self.environment.id],
+        )
+        return new_query_builder
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.LatestReleasedResource]:
         dtos: Sequence[LatestReleasedResource] = [
