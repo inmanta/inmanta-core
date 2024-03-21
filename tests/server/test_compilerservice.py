@@ -18,6 +18,7 @@
 
 import asyncio
 import datetime
+import functools
 import logging
 import os
 import queue
@@ -132,30 +133,36 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         Collect all state updates, optionally hang the processing of listeners
         """
 
-        def __init__(self):
+        def __init__(self) -> None:
             self.seen = []
             self.preseen = []
             self.lock = Semaphore(1)
+            self.blocking = False
 
-        def reset(self):
+        def reset(self) -> None:
             self.seen = []
             self.preseen = []
 
-        async def compile_done(self, compile: data.Compile):
+        async def compile_done(self, compile: data.Compile) -> None:
             self.preseen.append(compile)
             print("Got compile done for ", compile.remote_id)
+            logger.info("Got compile done for %s (blocking: %s)", compile.remote_id, self.blocking)
             async with self.lock:
+                logger.info("INTO LOCK %s (blocking: %s)", compile.remote_id, self.blocking)
                 self.seen.append(compile)
 
-        async def hang(self):
+        async def hang(self) -> None:
             await self.lock.acquire()
 
-        def release(self):
+        def release(self) -> None:
             self.lock.release()
 
-        def verify(self, envs: uuid.UUID):
+        def verify(self, envs: uuid.UUID) -> None:
             assert sorted([x.remote_id for x in self.seen]) == sorted(envs)
             self.reset()
+
+        def is_blocking(self) -> bool:
+            return self.blocking
 
     class HangRunner:
         """
@@ -186,11 +193,11 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         hook in the hangrunner
         """
 
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
             self.locks = {}
 
-        def _get_compile_runner(self, compile: data.Compile, project_dir: str):
+        def _get_compile_runner(self, compile: data.Compile, project_dir: str) -> HangRunner:
             runner = HangRunner(compile)
             self.locks[compile.remote_id] = runner
             return runner
@@ -221,6 +228,10 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     collector = Collector()
     cs.add_listener(collector)
 
+    hanging_collector = Collector()
+    hanging_collector.blocking = True
+    cs.add_listener(hanging_collector)
+
     async def request_compile(env: data.Environment) -> uuid.UUID:
         """Request compile for given env, return remote_id"""
         u1 = uuid.uuid4()
@@ -231,6 +242,16 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         assert results[0].remote_id == u1
         print("request: ", results[0].id, env.id)
         return u1
+
+    async def get_compile(env: data.Environment, remote_id: uuid.UUID) -> data.Compile:
+        results = await data.Compile.get_by_remote_id(env.id, remote_id)
+        assert len(results) == 1
+        assert results[0].remote_id == remote_id
+        return results[0]
+
+    async def is_handled(env: data.Environment, remote_id: uuid.UUID) -> bool:
+        compile = await get_compile(env, remote_id)
+        return compile.handled
 
     # setup projects in the database
     project = data.Project(name="test")
@@ -247,7 +268,9 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     e2 = [await request_compile(env2) for i in range(4)]
     print("env 1:", e1)
 
-    async def check_compile_in_sequence(env: data.Environment, remote_ids: list[uuid.UUID], idx: int):
+    async def check_compile_in_sequence(
+        env: data.Environment, remote_ids: list[uuid.UUID], idx: int, can_handle: bool = True
+    ) -> None:
         """
         Check integrity of a compile sequence and progress the hangrunner.
         """
@@ -270,10 +293,27 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
                 nextrunner = cs.get_runner(rid)
                 assert nextrunner is None
 
+            logger.info("Test in-line handlers by making it block for %s", current)
+            await hanging_collector.hang()
+
+            logger.info("Progress compile for %s", current)
             cs.get_runner(current).release()
             await asyncio.sleep(0)
-            await retry_limited(lambda: cs.get_runner(current).done, 1)
 
+            # Wait for done
+            await retry_limited(lambda: cs.get_runner(current).done, 1)
+            logger.info("Compile done for %s", current)
+
+            # Ensure we are blocked on the handler
+            compile = await get_compile(env, current)
+            assert compile.handled is False
+
+            # Proceed
+            logger.info("Start handling for %s", current)
+            hanging_collector.release()
+            if can_handle:
+                await retry_limited(functools.partial(is_handled, env, current), 1)
+                logger.info("Handling done for %s", current)
         else:
 
             async def isdone():
@@ -302,7 +342,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     await collector.hang()
     # progress two steps into env2
     for i in range(2):
-        await check_compile_in_sequence(env2, e2, i)
+        await check_compile_in_sequence(env2, e2, i, can_handle=False)
         await compiler_cache_consistent(2 - i)
 
     assert not collector.seen
@@ -328,6 +368,10 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     await cs.start()
     collector = Collector()
     cs.add_listener(collector)
+
+    hanging_collector = Collector()
+    hanging_collector.blocking = True
+    cs.add_listener(hanging_collector)
 
     # one in cache, one running
     await compiler_cache_consistent(1)
@@ -1648,6 +1692,7 @@ async def test_uninstall_python_packages(
         compile_db_record = data.Compile(
             remote_id=uuid.uuid4(),
             environment=env.id,
+            used_environment_variables={},
             force_update=True,
         )
         await compile_db_record.insert()
