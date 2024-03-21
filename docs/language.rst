@@ -147,12 +147,6 @@ Example:
 Note that the result of the division operation is cast to the type ``int``. This is done because a division always
 results in a value of type ``float``.
 
-In addition to arithmetic, the ``+`` operator is also supported for string concatenation.
-
-.. code-block:: inmanta
-
-    var = "hello " + "world"
-
 
 Primitive types
 ==============================
@@ -334,6 +328,15 @@ included in:
 
     # Output when displayed:
     # Welcome to serv1.example.org
+
+String concatenation
+####################
+
+Strings can be concatenated with the ``+`` operator.
+
+.. code-block:: inmanta
+
+    hello_world = "hello " + "world"
 
 
 .. _lang-conditions:
