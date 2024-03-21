@@ -20,7 +20,7 @@ import re
 from abc import ABCMeta, abstractmethod
 from collections import abc
 from itertools import chain
-from typing import Optional, Type
+from typing import Optional, Type, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta import stable_api
@@ -514,19 +514,39 @@ class ArithmeticOperator(BinaryOperator):
     __slots__ = ()
 
     def _bin_op(self, arg1: object, arg2: object) -> object:
-        if not isinstance(arg1, (int, float)):
-            raise TypingException(self, f"The {self.get_name()} operator in not supported for {arg1} of type {type(arg1)}.")
-        if not isinstance(arg2, (int, float)):
-            raise TypingException(self, f"The {self.get_name()} operator in not supported for {arg2} of type {type(arg2)}.")
-        return self._arithmetic_op(arg1, arg2)
+        result: object = self._execute_operator(arg1, arg2)
+        if result is NotImplemented:
+            raise TypingException(
+                self,
+                (
+                    f"Unsupported operand type(s) for {self.get_name()}:"
+                    f" '{type(arg1).__name__}' ({repr(arg1)}) and '{type(arg2).__name__}' ({repr(arg2)})"
+                ),
+            )
+        return result
+
+    def _execute_operator(self, arg1: object, arg2: object) -> object:
+        """
+        Validate and execute this operator given two operands. When validation fails, may raise its
+        own custom TypingException or return the special value NotImplemented, which will result in a generic TypingException.
+
+        This class adds an implementation for numbers. This may be extended by operators that support additional types.
+        """
+        if isinstance(arg1, (int, float)) and isinstance(arg2, (int, float)):
+            return self._arithmetic_op(arg1, arg2)
+        return NotImplemented
 
     @abstractmethod
     def _arithmetic_op(self, arg1: int | float, arg2: int | float) -> int | float:
         """
-        The implementation for this ArithmeticOperator, excluding the type validation.
-        Type validation is done in the _bin_op() method.
+        The implementation for this ArithmeticOperator when applied to numbers, excluding the type validation.
+        Type validation is done in the _execute_operator() method.
+        Concrete implementations may widen the type signature.
         """
         raise NotImplementedError()
+
+
+T = TypeVar("T", int | float, str)
 
 
 class Plus(ArithmeticOperator):
@@ -536,7 +556,15 @@ class Plus(ArithmeticOperator):
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         ArithmeticOperator.__init__(self, "plus", op1, op2)
 
-    def _arithmetic_op(self, arg1: int | float, arg2: int | float) -> int | float:
+    def _execute_operator(self, arg1: object, arg2: object) -> object:
+        if isinstance(arg1, str):
+            if isinstance(arg2, str):
+                return self._arithmetic_op(arg1, arg2)
+            # raise more representative error to override generic one from ArithmeticOperator
+            raise TypingException(self, f"Can only concatenate str (not '{type(arg2).__name__}' ({repr(arg2)})) to str")
+        return super()._execute_operator(arg1, arg2)
+
+    def _arithmetic_op(self, arg1: T, arg2: T) -> T:
         return arg1 + arg2
 
 
