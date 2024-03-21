@@ -1,0 +1,5 @@
+description: Change index on resource table to speed up query to get deployment progress in inmanta-lsm
+issue-nr: 1630
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [master, iso7]
