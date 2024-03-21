@@ -20,6 +20,7 @@ from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
+    """Change index on resource table to speed query to get deployment progress in inmanta-lsm""
     schema = """
 -- Drop the old index
 DROP INDEX IF EXISTS resource_environment_model_resource_type_idx;
