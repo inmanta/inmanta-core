@@ -415,14 +415,18 @@ class OrchestrationService(protocol.ServerSlice):
                 n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP, connection=connection)
                 assert isinstance(n_versions, int)
                 versions = await data.ConfigurationModel.get_list(
-                    environment=env_item.id, connection=connection, no_status=True
+                    environment=env_item.id, connection=connection, no_status=True, order_by_column="version", order="DESC"
                 )
                 if len(versions) > n_versions:
-                    LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
                     version_dict = {x.version: x for x in versions}
+                    latest_released_version: Optional[int] = next((v.version for v in versions if v.released), None)
+                    if latest_released_version is not None:
+                        # Never cleanup the latest released version
+                        del version_dict[latest_released_version]
                     delete_list = sorted(version_dict.keys())
                     delete_list = delete_list[:-n_versions]
-
+                    if delete_list:
+                        LOGGER.info("Removing %s available versions from environment %s", len(delete_list), env_item.id)
                     for v in delete_list:
                         await version_dict[v].delete_cascade(connection=connection)
 
