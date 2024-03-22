@@ -5372,8 +5372,9 @@ class ConfigurationModel(BaseDocument):
         undeployable: abc.Sequence[ResourceIdStr],
         skipped_for_undeployable: abc.Sequence[ResourceIdStr],
         partial_base: int,
-        rids_in_partial_compile: abc.Set[ResourceIdStr],
         pip_config: Optional[PipConfig],
+        updated_resource_sets: abc.Set[str],
+        deleted_resource_sets: abc.Set[str],
         connection: Optional[Connection] = None,
     ) -> "ConfigurationModel":
         """
@@ -5390,14 +5391,42 @@ class ConfigurationModel(BaseDocument):
                 ) AS base_version_found
             ),
             rids_undeployable_base_version AS (
-                SELECT DISTINCT unnest(c2.undeployable) AS rid
-                FROM {cls.table_name()} AS c2
-                WHERE c2.environment=$1 AND c2.version=$8
+                SELECT t.rid
+                FROM (
+                    SELECT DISTINCT unnest(c2.undeployable) AS rid
+                    FROM {cls.table_name()} AS c2
+                    WHERE c2.environment=$1 AND c2.version=$8
+                ) AS t(rid)
+                WHERE (
+                    EXISTS (
+                        SELECT 1
+                        FROM {Resource.table_name()} AS r
+                        WHERE r.environment=$1
+                            AND r.model=$8
+                            AND r.resource_id=t.rid
+                            -- Keep resources that belong to the shared resource set or a resource set that was not updated
+                            AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($9))
+                    )
+                )
             ),
             rids_skipped_for_undeployable_base_version AS (
-                SELECT DISTINCT unnest(c3.skipped_for_undeployable) AS rid
-                FROM {cls.table_name()} AS c3
-                WHERE c3.environment=$1 AND c3.version=$8
+                SELECT t.rid
+                FROM(
+                    SELECT DISTINCT unnest(c3.skipped_for_undeployable) AS rid
+                    FROM {cls.table_name()} AS c3
+                    WHERE c3.environment=$1 AND c3.version=$8
+                ) AS t(rid)
+                WHERE (
+                    EXISTS (
+                        SELECT 1
+                        FROM {Resource.table_name()} AS r
+                        WHERE r.environment=$1
+                            AND r.model=$8
+                            AND r.resource_id=t.rid
+                            -- Keep resources that belong to the shared resource set or a resource set that was not updated
+                            AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($9))
+                    )
+                )
             )
             INSERT INTO {cls.table_name()}(
                 environment,
@@ -5421,9 +5450,7 @@ class ConfigurationModel(BaseDocument):
                     FROM (
                         -- Undeployables in previous version of the model that are not part of the partial compile.
                         (
-                            SELECT rid
-                            FROM rids_undeployable_base_version AS undepl
-                            WHERE NOT undepl.rid=ANY($9)
+                            SELECT rid FROM rids_undeployable_base_version AS undepl
                         )
                         UNION
                         -- Undeployables part of the partial compile.
@@ -5438,9 +5465,7 @@ class ConfigurationModel(BaseDocument):
                         -- skipped_for_undeployables in previous version of the model that are not part of the partial
                         -- compile.
                         (
-                            SELECT skipped.rid
-                            FROM rids_skipped_for_undeployable_base_version AS skipped
-                            WHERE NOT skipped.rid=ANY($9)
+                            SELECT skipped.rid FROM rids_skipped_for_undeployable_base_version AS skipped
                         )
                         UNION
                         -- Skipped_for_undeployables part of the partial compile.
@@ -5480,7 +5505,7 @@ class ConfigurationModel(BaseDocument):
                 undeployable,
                 skipped_for_undeployable,
                 partial_base,
-                list(rids_in_partial_compile),
+                updated_resource_sets | deleted_resource_sets,
                 cls._get_value(pip_config),
             )
             # Make mypy happy
