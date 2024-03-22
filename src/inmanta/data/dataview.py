@@ -564,7 +564,9 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                     -- TODO: LEFT iff including orphans
                     {'' if self.drop_orphans else 'LEFT'} JOIN resource AS r
                         -- TODO: replace rps.version with (SELECT version FROM latest_version) iff excluding orphans
-                        ON r.environment = rps.environment AND r.resource_id = rps.resource_id AND r.model = {'(SELECT version FROM latest_version)' if self.drop_orphans else 'rps.version'}
+                        ON r.environment = rps.environment
+                          AND r.resource_id = rps.resource_id
+                          AND r.model = {'(SELECT version FROM latest_version)' if self.drop_orphans else 'rps.version'}
                     WHERE rps.environment = $1
                 )
             """,
