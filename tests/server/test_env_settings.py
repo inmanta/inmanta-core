@@ -348,7 +348,7 @@ async def test_get_setting_no_longer_exist(server, client, environment):
 
 async def test_halt_env_before_deletion(server, client, caplog):
     """
-    verify env will be halted before it is deleted.
+    Verify env will be halted before it is deleted.
     """
     result = await client.create_project("env-test")
     assert result.code == 200
