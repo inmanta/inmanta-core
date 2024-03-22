@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import logging
 from uuid import UUID
 
 import pytest
@@ -23,6 +24,7 @@ import pytest
 from inmanta import data
 from inmanta.data import Environment, Setting, convert_boolean
 from inmanta.util import get_compiler_version
+from utils import log_contains
 
 
 def get_environment_setting_default(setting: str) -> object:
@@ -341,3 +343,22 @@ async def test_get_setting_no_longer_exist(server, client, environment):
     result = await client.list_settings(tid=environment)
     assert result.code == 200
     assert "new_setting" in result.result["settings"].keys()
+
+
+async def test_halt_env_before_deletion(server, client, caplog):
+    """
+    verify env will be halted before it is deleted.
+    """
+    result = await client.create_project("env-test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    result = await client.create_environment(project_id=project_id, name="dev")
+    assert result.code == 200
+    env_id = result.result["environment"]["id"]
+
+    with caplog.at_level(logging.INFO):
+        result = await client.environment_delete(env_id)
+        assert result.code == 200
+
+    log_contains(caplog, "inmanta.server.services.environmentservice", logging.INFO, f"Halting Environment {env_id}")

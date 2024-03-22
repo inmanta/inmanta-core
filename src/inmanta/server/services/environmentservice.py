@@ -484,6 +484,7 @@ class EnvironmentService(protocol.ServerSlice):
 
         # Check if the environment is halted; if not, halt it
         if not env.halted:
+            LOGGER.info("Halting Environment %s", str(environment_id))
             await self.halt(env)
 
         await env.mark_for_deletion()
