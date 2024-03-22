@@ -511,9 +511,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         new_query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
             prelude=f"""
-                /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
-                /* The latest_version CTE finds the maximum released version number in the environment */
-                WITH latest_version AS (
+               WITH latest_version AS (
                     SELECT MAX(public.configurationmodel.version) as version
                     FROM public.configurationmodel
                     WHERE public.configurationmodel.released=TRUE AND environment=$1
