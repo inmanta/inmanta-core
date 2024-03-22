@@ -2543,7 +2543,7 @@ class Environment(BaseDocument):
     is_marked_for_deletion: bool = False
 
     def to_dto(self) -> m.Environment:
-        test = m.Environment(
+        return m.Environment(
             id=self.id,
             name=self.name,
             project_id=self.project,
@@ -2555,7 +2555,6 @@ class Environment(BaseDocument):
             description=self.description,
             icon=self.icon,
         )
-        return test
 
     _settings: dict[str, Setting] = {
         AUTO_DEPLOY: Setting(
