@@ -167,7 +167,7 @@ Inmanta server.
 Step 1: Enable authentication
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Ensure that the ``server.auth`` configuration option is enabled and that the ``auth-method`` is set to ``database``.
+Ensure that the ``server.auth`` configuration option is enabled and that the ``auth-method`` is set to ``database``. Make sure your ``/etc/inmanta/inmanta.d/server.cfg`` contains the following settings:
 
 .. code-block:: ini
 
@@ -178,9 +178,60 @@ Ensure that the ``server.auth`` configuration option is enabled and that the ``a
 Step 2: Generate the JWT configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Running the ``/opt/inmanta/bin/inmanta-initial-user-setup`` command with no JWT configuration in-place will output the generated
+Run the ``/opt/inmanta/bin/inmanta-initial-user-setup`` command on the orchestrator server.
+Without any JWT configuration in-place on the server, this command will output a generated JWT config.
 
+.. code-block:: ini
 
+   $ /opt/inmanta/bin/inmanta-initial-user-setup
+   This command should be execute locally on the orchestrator you want to configure. Are you running this command locally? [y/N]: y
+   Server authentication:                            enabled
+   Server authentication method:                     database
+   Error: No signing config available in the configuration.
+   To use a new config, add the following to the configuration in /etc/inmanta/inmanta.d/auth.cfg:
+
+   [auth_jwt_default]
+   algorithm=HS256
+   sign=true
+   client_types=agent,compiler,api
+   key=NYR2LtAsKSs7TuY0D8ZIqmMaLcICC3lf_ur4FGlLUcQ
+   expire=0
+   issuer=https://localhost:8888/
+   audience=https://localhost:8888/
+
+   Error: Make sure signing configuration is added to the config. See the documentation for details.
+
+Verify whether the hostname, in the generated configuration section, is correct and put the configuration snippet in the location mentioned in the output of the command.
+
+Step 3: Create the initial user
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Re-run the same command again to create the initial user. The password for this new user must be at least 8 characters long.
+
+.. code-block:: ini
+
+   $ /opt/inmanta/bin/inmanta-initial-user-setup
+   This command should be execute locally on the orchestrator you want to configure. Are you running this command locally? [y/N]: y
+   Server authentication:                            enabled
+   Server authentication method:                     database
+   Authentication signing config:                    found
+   Trying to connect to DB:                          inmanta (localhost:5432)
+   Connection to database                            success
+   What username do you want to use? [admin]:
+   What password do you want to use?:
+   User admin:                                       created
+   Make sure to (re)start the orchestrator to activate all changes.
+
+Step 4: Restart the orchestrator
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Now, restart the orchestrator to activate the new configuration.
+
+.. code-block:: ini
+
+   $ sudo systemctl restart inmanta-server
+
+After the restart of the orchestrator, authentication is enabled on the server and the web-console will ask for your credentials when accessing the application.
 
 .. _auth-ext:
 
