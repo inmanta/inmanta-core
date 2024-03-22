@@ -471,16 +471,26 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         self.environment = env
         self.deploy_summary = deploy_summary
 
-        ## Rewrite the filter to special case orphan handling
-        ## This doesn't affect the paging links, as they use the raw filter
+        # Rewrite the filter to special case orphan handling
+        # This doesn't affect the paging links, as they use the raw filter
 
-        # TODO: cleanup
         status_filter_type, status_filter_fields = self.filter.get("status", (None, {}))
         assert status_filter_type is None or status_filter_type == inmanta.data.QueryType.COMBINED
         assert isinstance(status_filter_fields, dict)
         self.drop_orphans = "orphaned" in status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []) or (
             "orphaned" not in status_filter_fields.get(inmanta.data.QueryType.CONTAINS, ["orphaned"])
         )
+
+        if self.drop_orphans:
+            # clean filter for orphans
+            try:
+                status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []).remove("orphaned")
+                if not status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []):
+                    del status_filter_fields[inmanta.data.QueryType.NOT_CONTAINS]
+                if not status_filter_fields:
+                    del self.filter["status"]
+            except ValueError:
+                pass
 
     @property
     def allowed_filters(self) -> dict[str, type[Filter]]:
@@ -498,67 +508,6 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        def subquery_latest_version_for_single_resource(higher_than: Optional[str]) -> str:
-            """
-            Returns a subquery to select a single row from a resource table:
-                - for the first resource id higher than the given boundary
-                - the highest (released) version for which a resource with this id exists
-
-            :param higher_than: If given, the subquery selects the first resource id higher than this value (may be a column).
-                If not given, the subquery selects the first resource id, period.
-            """
-            higher_than_condition: str = f"AND r.resource_id > {higher_than}" if higher_than is not None else ""
-            return f"""
-                SELECT
-                    r.resource_id,
-                    r.attributes,
-                    r.resource_type,
-                    r.agent,
-                    r.resource_id_value,
-                    r.model,
-                    r.environment,
-                    (
-                        CASE WHEN (SELECT r.model < latest_version.version FROM latest_version)
-                            THEN 'orphaned' -- use the CTE to check the status
-                            ELSE r.status::text
-                        END
-                    ) as status
-                FROM resource r
-                JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
-                WHERE r.environment = $1 AND cm.released = TRUE {higher_than_condition}
-                ORDER BY resource_id, model DESC
-                LIMIT 1
-            """
-
-        old_query_builder = SimpleQueryBuilder(
-            select_clause="SELECT *",
-            prelude=f"""
-                /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
-                /* The latest_version CTE finds the maximum released version number in the environment */
-                WITH RECURSIVE latest_version AS (
-                    SELECT MAX(public.configurationmodel.version) as version
-                    FROM public.configurationmodel
-                    WHERE public.configurationmodel.released=TRUE AND environment=$1
-                ),
-                /*
-                emulate a loose (or skip) index scan (https://wiki.postgresql.org/wiki/Loose_indexscan):
-                1 resource_id at a time, select the latest (released) version it exists in.
-                */
-                cte AS (
-                    /* Initial row for recursion: select relevant version for first resource */
-                    ( {subquery_latest_version_for_single_resource(higher_than=None)} )
-                    UNION ALL
-                    SELECT next_r.*
-                    FROM cte curr_r
-                    CROSS JOIN LATERAL (
-                        /* Recurse: select relevant version for next resource (one higher in the sort order than current) */
-                        {subquery_latest_version_for_single_resource(higher_than="curr_r.resource_id")}
-                    ) next_r
-                )
-            """,
-            from_clause="FROM cte r",
-            values=[self.environment.id],
-        )
         new_query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
             prelude=f"""
@@ -634,6 +583,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 requires=json.loads(resource["attributes"]).get("requires", []),
             )
             for resource in records
+            if resource["resource_id"]  # filter out bad joins
         ]
         return dtos
 

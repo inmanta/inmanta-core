@@ -20,7 +20,6 @@ import asyncio
 import copy
 import datetime
 import enum
-import functools
 import hashlib
 import json
 import logging
@@ -5306,9 +5305,6 @@ class Resource(BaseDocument):
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
-
-        #if self.resource_id == 'test::XResource0[agent0,sub=10]':
-        #    breakpoint()
 
         invalues = {
             "last_deploy": last_deploy,

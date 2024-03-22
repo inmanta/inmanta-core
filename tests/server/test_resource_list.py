@@ -29,8 +29,8 @@ import pytest
 from dateutil.tz import UTC
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-import inmanta.data.performance
 import inmanta.util
+import util.performance
 import utils
 from inmanta import data
 from inmanta.const import ResourceState
@@ -122,6 +122,7 @@ async def test_has_only_one_version_from_resource(server, client):
         status=ResourceState.deployed,
     )
     await res1_v4.insert()
+    await res1_v4.update_persistent_state(last_non_deploying_status=ResourceState.deployed)
 
     version = 1
     path = "/etc/file" + str(2)
@@ -538,7 +539,7 @@ async def test_deploy_summary(server, client, env_with_resources):
 
 
 @pytest.fixture
-async def very_big_env(server, client, environment, clienthelper, agent_factory):
+async def very_big_env(server, client, environment, clienthelper, agent_factory, instances: int):
     env_obj = await data.Environment.get_by_id(environment)
     await env_obj.set(data.AUTO_DEPLOY, True)
 
@@ -547,9 +548,6 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
         agent_map={f"agent{tenant_index}": "local:" for tenant_index in range(50)},
         agent_names=[f"agent{tenant_index}" for tenant_index in range(50)],
     )
-
-    instances = 50
-
     deploy_counter = 0
     # The mix:
     # 100 versions -> increments , all hashes change after 50 steps
@@ -578,7 +576,7 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
                 "id": f"{resource_id(ri)},v={version}",
                 "send_event": False,
                 "purged": False,
-                "requires": [] if ri % 2 == 0 else [resource_id(ri-1)],
+                "requires": [] if ri % 2 == 0 else [resource_id(ri - 1)],
                 "my_attribute": iteration,
             }
             for ri in range(100)
@@ -641,7 +639,11 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory)
     return instances
 
 
-async def test_resources_paging_performance(client, environment, very_big_env):
+@pytest.mark.slowtest
+@pytest.mark.parametrize("instances", [2])  # set the size
+@pytest.mark.parametrize("trace", [False])  # make it analyze the queries
+async def test_resources_paging_performance(client, environment, very_big_env, trace, async_finalizer):
+    """Scaling test, not part of the norma testsuite"""
     # Basic sanity
     result = await client.resource_list(environment, limit=5, deploy_summary=True)
     assert result.code == 200
@@ -671,9 +673,9 @@ async def test_resources_paging_performance(client, environment, very_big_env):
         ({"status": "deploying"}, 1),
         ({"status": "deployed"}, 95 * very_big_env),
         ({"status": "available"}, very_big_env - 1),
-        ({"agent": "agent1"}, 110),
+        ({"agent": "agent0"}, 110),
         ({"agent": "someotheragent"}, 0),
-        ({"resource_id_value": "sub39"}, very_big_env),
+        ({"resource_id_value": "39"}, very_big_env),
     ]
 
     orders = [
@@ -690,16 +692,22 @@ async def test_resources_paging_performance(client, environment, very_big_env):
         ]
     ]
 
-    # inmanta.data.performance.hook_base_document()
+    if trace:
+        util.performance.hook_base_document()
+
+        async def unpatch():
+            util.performance.unhook_base_document()
+
+        async_finalizer(unpatch)
+
     for filter, totalcount in filters:
         for order in orders:
-            # Pages 1-3 and -1 to -3
+            # Pages 1-3
             async def time_call():
                 start = time.monotonic()
                 result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=10, sort=order)
                 assert result.code == 200
-                # TODO: why does this fail?
-                #assert result.result["metadata"]["total"] == totalcount
+                assert result.result["metadata"]["total"] == totalcount
                 return (time.monotonic() - start) * 1000, result.result.get("links", {})
 
             async def time_page(links, name: str):
@@ -714,15 +722,11 @@ async def test_resources_paging_performance(client, environment, very_big_env):
                 response = await http_client.fetch(request, raise_error=False)
                 assert response.code == 200
                 result = json.loads(response.body.decode("utf-8"))
-                # TODO: why does this fail?
-                #assert result["metadata"]["total"] == totalcount
+                assert result["metadata"]["total"] == totalcount
                 return (time.monotonic() - start) * 1000, result["links"]
 
             page1, prev = await time_call()
             page2, prev = await time_page(prev, "next")
             page3, prev = await time_page(prev, "next")
-            # pagen1, prev = await time_page(prev, "last")
-            # pagen2, prev = await time_page(prev, "prev")
-            # pagen3, prev = await time_page(prev, "prev")
 
             logging.getLogger(__name__).warning("Timings %s %s %d %d %d", filter, order, page1, page2, page3)
