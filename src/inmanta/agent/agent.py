@@ -35,7 +35,7 @@ from typing import Any, Dict, Optional, Union, cast
 
 import pkg_resources
 
-from inmanta import const, data, env, loader, module, protocol
+from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
@@ -1124,7 +1124,7 @@ class Agent(SessionEndpoint):
         if code_loader:
             self._env = env.VirtualEnv(self._storage["env"])
             self._env.use_virtual_env()
-            self._loader = CodeLoader(self._storage["code"])
+            self._loader = CodeLoader(self._storage["code"], clean=True)
             # Lock to ensure only one actual install runs at a time
             self._loader_lock = Lock()
             # Cache to prevent re-loading the same resource-version
@@ -1360,17 +1360,6 @@ class Agent(SessionEndpoint):
                             )
                             requirements.update(source["requirements"])
 
-                            module_name: str = loader.get_inmanta_module_name(source["module_name"])
-                            all_installed_modules.add(module_name)
-
-                        all_required_modules.update(
-                            {
-                                module.ModuleV2Source.get_inmanta_module_name(r)
-                                for r in requirements
-                                if r.startswith("inmanta-module-")
-                            }
-                        )
-
                         if pip_config is None:
                             pip_config = await self._get_pip_config(environment, version)
                         # Install required python packages and the list of ``ModuleSource`` with the provided pip config
@@ -1382,33 +1371,6 @@ class Agent(SessionEndpoint):
                     except Exception:
                         LOGGER.exception("Failed to install handler %s version=%d", rt, version)
                         failed_to_load.add(rt)
-
-        # If a certain module A depends on the plugin code of another module B, then the source of B must either:
-        #  * Be exported to the server (because module B has resources or providers)
-        #  * Or, not be exported and never been exported in any previous version.
-        # Otherwise there is the possibility that stale code in the code directory of the agent gets picket up,
-        # instead of the code from the Python package (V2 module) installed in the venv of the agent.
-        modules_not_expected_in_code_directory: set[str] = all_required_modules - all_installed_modules
-        modules_present_in_code_dir: set[str] = {d for d in os.listdir(self._loader.mod_dir)}
-        modules_with_stale_python_code: set[str] = modules_present_in_code_dir & modules_not_expected_in_code_directory
-        if modules_with_stale_python_code:
-            warning_message = f"""
-The source code for the modules {', '.join(modules_with_stale_python_code)} is present in the modules directory of the agent \
-({self._loader.mod_dir}), but these modules were not exported to the server in the latest version. This is likely \
-caused by the fact that the above-mentioned modules contained resources or providers in a previous version, but not \
-anymore in the current version, while there exists an inter-module dependency from another module to the above-mentioned \
-modules. If this is the case, the agent might pick up stale Python code for any of the above-mentioned modules. If this \
-problem occurs, a manual cleanup of the agent's code directory is required to resolve this problem.
-""".strip()
-            LOGGER.warning(warning_message)
-            result = await self._client.send_notification(
-                tid=self.environment,
-                title="Stale code in agent's code directory",
-                message=warning_message,
-                severity=const.NotificationSeverity.warning,
-            )
-            if result.code != 200:
-                LOGGER.error("Failed to send notification message regarding stale Python code in the agent code directory.")
 
         return failed_to_load
 

@@ -24,6 +24,7 @@ import inspect
 import logging
 import os
 import pathlib
+import shutil
 import sys
 import types
 from collections import abc
@@ -233,19 +234,22 @@ class CodeLoader:
     :param code_dir: The directory where the code is stored
     """
 
-    def __init__(self, code_dir: str) -> None:
+    def __init__(self, code_dir: str, clean: bool = False) -> None:
         self.__code_dir = code_dir
         self.__modules: dict[str, tuple[str, types.ModuleType]] = {}  # A map with all modules we loaded, and its hv
 
-        self.__check_dir()
+        self.__check_dir(clean)
 
         self.mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
         PluginModuleFinder.configure_module_finder(modulepaths=[self.mod_dir], prefer=True)
 
-    def __check_dir(self) -> None:
+    def __check_dir(self, clean: bool = False) -> None:
         """
         Check if the code directory
         """
+        if clean and os.path.exists(self.__code_dir):
+            shutil.rmtree(self.__code_dir)
+
         # check for the code dir
         if not os.path.exists(self.__code_dir):
             os.makedirs(self.__code_dir, exist_ok=True)

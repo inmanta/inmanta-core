@@ -22,7 +22,7 @@ import datetime
 import uuid
 from typing import Literal, Optional, Union
 
-from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, NotificationSeverity, ParameterSource, ResourceState
+from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
 from inmanta.protocol import methods
@@ -1391,34 +1391,6 @@ def update_notification(
     :param cleared: Whether the notification has been cleared
     :return: The updated notification
     :raise NotFound: When the referenced environment or notification is not found
-    """
-
-
-@typedmethod(
-    path="/notification",
-    operation="POST",
-    agent_server=True,
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def send_notification(
-    tid: uuid.UUID,
-    title: str,
-    message: str,
-    uri: Optional[str] = None,
-    severity: NotificationSeverity = NotificationSeverity.message,
-) -> None:
-    """
-    Create a new notification.
-
-    :param tid: The id of the environment.
-    :param title: The title of the notification message.
-    :param message: The message of the notification.
-    :param uri: A link to an api endpoint of the server, that is relevant to the message,
-                and can be used to get further information about the problem.
-                For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
-    :param severity: The severity level of the notification message.
     """
 
 
