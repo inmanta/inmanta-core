@@ -478,10 +478,6 @@ class EnvironmentService(protocol.ServerSlice):
         if env is None:
             raise NotFound("The environment with given id does not exist.")
 
-        # Check if the model version is active
-        if await self.is_model_version_active(model_version_id):
-            raise BadRequest("Cannot delete an active model version.")
-
         is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
         if is_protected_environment:
             raise Forbidden(f"Environment {environment_id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
