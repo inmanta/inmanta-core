@@ -209,6 +209,9 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     env_1_id = result.result["environment"]["id"]
     result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep)
     assert result.code == 200
+    # Make sure we don't have a released version. _purge_versions() always keeps the latest released version.
+    result = await client.set_setting(env_1_id, AUTO_DEPLOY, False)
+    assert result.code == 200
 
     # make a second environment to be sure we don't do cross env deletes
     # as it is empty, if it leaks, it will likely take everything with it on the other one
@@ -357,10 +360,16 @@ async def test_n_versions_env_setting_scope(client, server):
     env_1_id = result.result["environment"]["id"]
     result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep_env1)
     assert result.code == 200
+    # Make sure we don't have a released version. _purge_versions() always keeps the latest released version.
+    result = await client.set_setting(env_1_id, AUTO_DEPLOY, False)
+    assert result.code == 200
 
     result = await client.create_environment(project_id=project_id, name="env_2")
     env_2_id = result.result["environment"]["id"]
     result = await client.set_setting(tid=env_2_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep_env2)
+    assert result.code == 200
+    # Make sure we don't have a released version. _purge_versions() always keeps the latest released version.
+    result = await client.set_setting(env_2_id, AUTO_DEPLOY, False)
     assert result.code == 200
 
     # Create a lot of versions in both environments
