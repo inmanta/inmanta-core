@@ -408,9 +408,7 @@ class OrchestrationService(protocol.ServerSlice):
             # get available versions
             n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP)
             assert isinstance(n_versions, int)
-            versions = await data.ConfigurationModel.get_list(
-                environment=env_item.id, order_by_column="version", order="DESC"
-            )
+            versions = await data.ConfigurationModel.get_list(environment=env_item.id, order_by_column="version", order="DESC")
             if len(versions) > n_versions:
                 version_dict = {x.version: x for x in versions}
                 latest_released_version: Optional[int] = next((v.version for v in versions if v.released), None)
