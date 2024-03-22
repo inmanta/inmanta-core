@@ -509,7 +509,7 @@ class OrchestrationService(protocol.ServerSlice):
             return 404, {"message": "The given configuration model does not exist yet."}
 
         active_version = await data.ConfigurationModel.get_latest_version(env.id)
-        if active_version.version == version.version:
+        if active_version and active_version.version == version.version:
             raise BadRequest("Cannot delete the active version")
 
         await version.delete_cascade()
