@@ -1,0 +1,8 @@
+---
+description: Fix bug where the latest released version of the configurationmodel could be removed by the cleanup job.
+issue-nr: 7324
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso7, iso6]
+sections:
+  bugfix: "{{description}}"
