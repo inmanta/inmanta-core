@@ -1371,7 +1371,7 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
             "send_event": False,
             "purged": False,
             "requires": [f"test::Resource[agent1,key=key3],v={version}"],
-        }
+        },
     ]
     resource_sets = {
         "test::Resource[agent1,key=key1]": "set-a",
@@ -1435,7 +1435,7 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
             "send_event": False,
             "purged": False,
             "requires": ["test::Resource[agent1,key=key5],v=0"],
-        }
+        },
     ]
     resource_sets = {
         "test::Resource[agent1,key=key1]": "set-a",

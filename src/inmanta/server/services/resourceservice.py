@@ -904,7 +904,7 @@ class ResourceService(protocol.ServerSlice):
                 if len(resources) == 0 or (len(resources) != len(resource_ids)):
                     raise NotFound(
                         message="The resources with the given ids do not exist in the given environment. "
-                                f"Only {len(resources)} of {len(resource_ids)} resources found."
+                        f"Only {len(resources)} of {len(resource_ids)} resources found."
                     )
 
                 if only_update_from_states is not None:
@@ -942,7 +942,7 @@ class ResourceService(protocol.ServerSlice):
                     if resource_action.finished is not None:
                         raise ServerError(
                             message="An resource action can only be updated when it has not been finished yet. This action "
-                                    f"finished at {resource_action.finished}"
+                            f"finished at {resource_action.finished}"
                         )
                 for msg in messages:
                     # All other data is stored in the database. The msg was already formatted at the client side.
