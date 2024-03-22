@@ -1372,6 +1372,22 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
             "purged": False,
             "requires": [f"test::Resource[agent1,key=key3],v={version}"],
         },
+        {
+            "key": "key91",
+            "version": version,
+            "id": f"test::Resource[agent1,key=key91],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key92",
+            "version": version,
+            "id": f"test::Resource[agent1,key=key92],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"test::Resource[agent1,key=key91],v={version}"],
+        },
     ]
     resource_sets = {
         "test::Resource[agent1,key=key1]": "set-a",
@@ -1384,6 +1400,8 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         "test::Resource[agent1,key=key2]": const.ResourceState.available,
         "test::Resource[agent1,key=key3]": const.ResourceState.undefined,
         "test::Resource[agent1,key=key4]": const.ResourceState.available,
+        "test::Resource[agent1,key=key91]": const.ResourceState.undefined,
+        "test::Resource[agent1,key=key92]": const.ResourceState.available,
     }
     result = await client.put_version(
         tid=environment,
@@ -1399,8 +1417,12 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
 
     cm = await data.ConfigurationModel.get_one(environment=environment, version=version)
     assert cm is not None
-    assert sorted(cm.undeployable) == sorted(["test::Resource[agent1,key=key1]", "test::Resource[agent1,key=key3]"])
-    assert sorted(cm.skipped_for_undeployable) == sorted(["test::Resource[agent1,key=key2]", "test::Resource[agent1,key=key4]"])
+    assert sorted(cm.undeployable) == sorted(
+        ["test::Resource[agent1,key=key1]", "test::Resource[agent1,key=key3]", "test::Resource[agent1,key=key91]"]
+    )
+    assert sorted(cm.skipped_for_undeployable) == sorted(
+        ["test::Resource[agent1,key=key2]", "test::Resource[agent1,key=key4]", "test::Resource[agent1,key=key92]"]
+    )
 
     # Partial compile
     resources_partial = [
@@ -1465,8 +1487,12 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
 
     cm = await data.ConfigurationModel.get_one(environment=environment, version=version)
     assert cm is not None
-    assert sorted(cm.undeployable) == sorted(["test::Resource[agent1,key=key1]", "test::Resource[agent1,key=key5]"])
-    assert sorted(cm.skipped_for_undeployable) == sorted(["test::Resource[agent1,key=key2]", "test::Resource[agent1,key=key6]"])
+    assert sorted(cm.undeployable) == sorted(
+        ["test::Resource[agent1,key=key1]", "test::Resource[agent1,key=key5]", "test::Resource[agent1,key=key91]"]
+    )
+    assert sorted(cm.skipped_for_undeployable) == sorted(
+        ["test::Resource[agent1,key=key2]", "test::Resource[agent1,key=key6]", "test::Resource[agent1,key=key92]"]
+    )
 
 
 async def test_put_partial_with_unknowns(server, client, environment, clienthelper) -> None:
