@@ -2685,7 +2685,7 @@ class Environment(BaseDocument):
             default=100,
             typ="int",
             validator=convert_int,
-            doc="The number of versions to keep stored in the database",
+            doc="The number of versions to keep stored in the database, excluding the latest released version.",
         ),
         PURGE_ON_DELETE: Setting(
             name=PURGE_ON_DELETE,
