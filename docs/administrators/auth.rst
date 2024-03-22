@@ -1,17 +1,19 @@
 .. _auth-setup:
 
-Setting up authentication
-=========================
+Setting up SSL and authentication
+=================================
 
 This guide explains how to enable ssl and setup authentication.
 
-SSL is not strictly required for authentication but higly recommended. Inmanta uses bearer tokens
-for authorizing users and services. These tokens should be kept private and are visible in plain-text in the request headers
-without SSL.
+SSL
+---
 
+This section explain how to setup SSL. SSL is not strictly required for authentication but highly recommended.
+Inmanta uses bearer tokens for authorizing users and services. These tokens should be kept private and are visible
+in plain-text in the request headers without SSL.
 
 SSL: server side
-----------------
+****************
 Setting a private key and a public key in the server configuration enables SSL on the server. The two
 options to set are :inmanta.config:option:`server.ssl-cert-file` and :inmanta.config:option:`server.ssl-key-file`.
 
@@ -35,7 +37,7 @@ set :inmanta.config:option:`server.ssl-ca-cert-file` to the truststore.
 
 
 SSL: agents and compiler
---------------------------------------
+************************
 When using SSL, all remote components connecting to the server need to have SSL enabled as well.
 
 For each of the transport configurations (compiler, agent, rpc client, ...) ``ssl`` has to be
@@ -58,8 +60,8 @@ Authentication
 --------------
 Inmanta authentication uses JSON Web Tokens for authentication (bearer token). Inmanta issues tokens for service to service
 interaction (agent to server, compiler to server, cli to server and 3rd party API interactions). For user interaction through
-the web-console Inmanta uses 3rd party auth brokers. Currently the web-console only supports redirecting users to keycloak for
-authentication.
+the web-console Inmanta can rely on its built-in authentication provider or a 3rd party auth broker. Currently
+the web-console only supports keycloak as 3rd party auth broker.
 
 Inmanta expects a token of which it can validate the signature. Inmanta can verify both symmetric signatures with
 HS256 and asymmetric signatures with RSA (RS256). Tokens it signs itself for other processes are always signed using HS256.
@@ -69,7 +71,7 @@ The server also provides limited authorization by checking for inmanta specific 
 are prefixed with ``urn:inmanta:``. These claims are:
 
  * ``urn:inmanta:ct`` A *required* comma delimited list of client types for which this client is authenticated. Each API call
-   has a one or more allowed client types. The list of valid client types (ct) are:
+   has one or more allowed client types. The list of valid client types (ct) are:
 
     - agent
     - compiler
@@ -105,7 +107,7 @@ the settings page.
    Generating a new token in the web-console.
 
 
-Configure an external issuer (See :ref:`auth-ext`) for web-console access to bootstrap access to the create token api call.
+Setup the built-in authentication provider of the Inmanta server (See :ref:`auth-int`) or configure an external issuer (See :ref:`auth-ext`) for web-console access to bootstrap access to the create token api call.
 When no external issuer is available and web-console access is not required, the ``inmanta-cli token bootstrap`` command
 can be used to create a token that has access to everything. However, it expires after 3600s for security reasons.
 
@@ -148,11 +150,37 @@ An example configuration is:
     issuer=https://localhost:8888/
     audience=https://localhost:8888/
 
-To generate a secure key symmetric key and encode it correctly use the following command:
+To generate a secure symmetric key and encode it correctly use the following command:
 
 .. code-block:: sh
 
     openssl rand 32 | python3 -c "import sys; import base64; print(base64.urlsafe_b64encode(sys.stdin.buffer.read()).decode().rstrip('='));"
+
+.. _auth-int:
+
+Built-in authentication provider
+--------------------------------
+
+This section explains how to setup authentication using the authentication provider that is built-in into the
+Inmanta server.
+
+Step 1: Enable authentication
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Ensure that the ``server.auth`` configuration option is enabled and that the ``auth-method`` is set to ``database``.
+
+.. code-block:: ini
+
+   [server]
+   auth=true
+   auth-method=database
+
+Step 2: Generate the JWT configuration
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Running the ``/opt/inmanta/bin/inmanta-initial-user-setup`` command with no JWT configuration in-place will output the generated
+
+
 
 .. _auth-ext:
 
@@ -265,12 +293,12 @@ added to the access token.
 
    Add the ct claim to all access tokens for this client.
 
-Add a second mapper to add inmanta to the audience (only required for Keycloak 4.6 and higher). Click `add` again as in the previous step. 
+Add a second mapper to add inmanta to the audience (only required for Keycloak 4.6 and higher). Click `add` again as in the previous step.
 
 .. figure:: /administrators/images/kc_audience_mapper.png
    :width: 100%
    :align: center
-      
+
    Fill in the following values:
 
    * Name: inmanta-audience
