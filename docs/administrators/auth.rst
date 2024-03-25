@@ -8,8 +8,8 @@ This guide explains how to enable ssl and setup authentication.
 SSL
 ---
 
-This section explain how to setup SSL. SSL is not strictly required for authentication but highly recommended.
-Inmanta uses bearer tokens for authorizing users and services. These tokens should be kept private and are visible
+This section explain how to setup SSL. SSL is not strictly required for authentication but it is highly recommended.
+Inmanta uses bearer tokens to authorize users and services. These tokens should be kept private and are visible
 in plain-text in the request headers without SSL.
 
 SSL: server side
@@ -164,6 +164,7 @@ Built-in authentication provider
 The Inmanta server has a built-in authentication provider. This provider stores the authentication and authorization
 information into the PostgreSQL database. As such, there is no need to rely on a 3rd party auth broker. The sections
 below describe how to enable the built-in authentication provider and how to create the initial admin user.
+Additional users can then be created via the API or through the web console.
 
 Step 1: Enable authentication
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
