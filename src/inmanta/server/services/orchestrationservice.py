@@ -761,15 +761,15 @@ class OrchestrationService(protocol.ServerSlice):
                 # Make mypy happy
                 assert partial_base_version is not None
                 # This dict maps a resource id to its resource set for unchanged resource sets.
-                rids_unchanged_resource_sets: dict[ResourceIdStr, str] = (
-                    await data.Resource.copy_resources_from_unchanged_resource_set(
-                        environment=env.id,
-                        source_version=partial_base_version,
-                        destination_version=version,
-                        updated_resource_sets=updated_resource_sets,
-                        deleted_resource_sets=deleted_resource_sets_as_set,
-                        connection=connection,
-                    )
+                rids_unchanged_resource_sets: dict[
+                    ResourceIdStr, str
+                ] = await data.Resource.copy_resources_from_unchanged_resource_set(
+                    environment=env.id,
+                    source_version=partial_base_version,
+                    destination_version=version,
+                    updated_resource_sets=updated_resource_sets,
+                    deleted_resource_sets=deleted_resource_sets_as_set,
+                    connection=connection,
                 )
                 resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
                 if resources_that_moved_resource_sets:
