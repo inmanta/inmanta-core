@@ -474,30 +474,31 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_delete, environment_id="id")
     async def environment_delete(self, environment_id: uuid.UUID) -> None:
-        async with data.Environment.get_connection() as connection:
-            env = await data.Environment.get_by_id(environment_id, connection=connection)
-            if env is None:
-                raise NotFound("The environment with given id does not exist.")
+        async with self.agent_state_lock:
+            async with data.Environment.get_connection() as connection:
+                env = await data.Environment.get_by_id(environment_id, connection=connection)
+                if env is None:
+                    raise NotFound("The environment with given id does not exist.")
 
-            is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT, connection)
-            if is_protected_environment:
-                raise Forbidden(
-                    f"Environment {environment_id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}"
-                )
+                is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT, connection)
+                if is_protected_environment:
+                    raise Forbidden(
+                        f"Environment {environment_id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}"
+                    )
 
-            # Check if the environment is halted; if not, halt it
-            if not env.halted:
-                LOGGER.info("Halting Environment %s", str(environment_id))
-                await self.halt(env)
+                # Check if the environment is halted; if not, halt it
+                if not env.halted:
+                    LOGGER.info("Halting Environment %s", str(environment_id))
+                    await self.halt(env)
 
-            await env.mark_for_deletion(connection=connection)
-            self._disable_schedules(env)
-            await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade(connection=connection))
+                await env.mark_for_deletion(connection=connection)
+                self._disable_schedules(env)
+                await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade(connection=connection))
 
-            self.resource_service.close_resource_action_logger(environment_id)
-            await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
+                self.resource_service.close_resource_action_logger(environment_id)
+                await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
 
-            self._delete_environment_dir(environment_id)
+                self._delete_environment_dir(environment_id)
 
     @handle(methods_v2.environment_clear, env="id")
     async def environment_clear(self, env: data.Environment) -> None:
