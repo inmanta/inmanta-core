@@ -161,8 +161,9 @@ To generate a secure symmetric key and encode it correctly use the following com
 Built-in authentication provider
 --------------------------------
 
-This section explains how to setup authentication using the authentication provider that is built-in into the
-Inmanta server.
+The Inmanta server has a built-in authentication provider. This provider stores the authentication and authorization
+information into the PostgreSQL database. As such, there is no need to rely on a 3rd party auth broker. The sections
+below describe how to enable the built-in authentication provider and how to create the initial admin user.
 
 Step 1: Enable authentication
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -233,7 +234,8 @@ Now, restart the orchestrator to activate the new configuration.
 
    $ sudo systemctl restart inmanta-server
 
-After the restart of the orchestrator, authentication is enabled on the server and the web-console will ask for your credentials.
+After the restart of the orchestrator, authentication is enabled on all API endpoints. This also means that the
+web-console will ask for your credentials.
 
 .. _auth-ext:
 
