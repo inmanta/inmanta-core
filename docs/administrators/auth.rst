@@ -354,10 +354,10 @@ Add a second mapper to add inmanta to the audience (only required for Keycloak 4
 
 Fill in the following values:
 
-   * Name: inmanta-audience
-   * Mapper type: Audience
-   * Included Client Audience: inmanta
-   * Add to access token: on
+* Name: inmanta-audience
+* Mapper type: Audience
+* Included Client Audience: inmanta
+* Add to access token: on
 
 Click save.
 
