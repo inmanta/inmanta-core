@@ -13,6 +13,9 @@ entity TopLevelService extends lsm::ServiceEntity:
     This service entity demonstrates how a single allocator
     can be used for both a service entity and its embedded
     entities.
+    
+    :attr name: The name identifying the service instance.
+    :attr top_level_value: A read-only value, automatically assigned by the api.
     """
 
     string                      name
@@ -26,6 +29,13 @@ TopLevelService.embedded_services [0:] -- EmbeddedService
 
 
 entity EmbeddedService extends lsm::EmbeddedEntity:
+    """
+    An embedded service, attached to a TopLevelService instance.
+    
+    :attr id: The identifier of this embedded service instance, it should be unique across
+        all other embedded service instances of the service it is attached to.
+    :attr embedded_value: A read-only value, automatically assigned by the api.
+    """
     string                      id
     lsm::attribute_modifier     id__modifier="rw"
     int?                        embedded_value
