@@ -5,13 +5,13 @@ Allocation V3
 
 Allocation V3 is a new framework that changes significantly compared to Allocation V2. The purpose is
 the same as V2: filling up the read-only values of a service instance during the first validation compile
-of the lifecycle. The difference is that allocated attributes are not set in the LSM unwrapping anymore,
-but instead in an implementation of the service, using plugins.
+of the lifecycle. Allocation is now performed via a plugin call.
 
 The advantage of this approach is that it simplifies greatly the process: you don't need anymore to write
 allocator classes and all the required functions (``needs_allocation``, ``allocate``, etc.). You also don't need to instantiate many
 ``AllocationSpecV2`` with your allocators inside. Instead, you just need to write one plugin per attribute
-you want to allocate, it is less verbose and a much more straightforward approach.
+you want to allocate and register it as an ``allocator``, it is less verbose and a much more straightforward approach.
+LSM comes with build-in allocators that can be used out of the box, e.g. :func:`get_first_free_integer<lsm::allocators.get_first_free_integer>`.
 
 Create an allocator
 ###################
@@ -54,7 +54,7 @@ the model:
    :language: inmanta
    :caption: main.cf (Plugin call ordering)
    :linenos:
-   :emphasize-lines: 42
+   :emphasize-lines: 61
 
 
 
@@ -70,8 +70,7 @@ In the plugins directory:
 
 In the model:
 
-3. Add a new implementation for the service to set the values of the properties
-requiring allocation by calling the relevant allocator plugin.
+3. Call the relevant allocator plugin for each value requiring allocation in the ``lsm::all`` unwrapping.
 
 Basic example
 =============
@@ -111,13 +110,13 @@ Baseline V2 allocation in the model:
    :linenos:
 
 
-When moving to V3 allocation, on the model side, add a new implementation
-that calls the allocator defined in the plugin:
+When moving to V3 allocation, on the model side, call the allocators for
+the values requiring allocation:
 
 .. literalinclude:: allocation_sources/allocation_v3/basic_example/v3_main.cf
    :language: inmanta
    :caption: main.cf (V3 allocation)
-   :emphasize-lines: 45,49-53
+   :emphasize-lines: 76,81-89
    :linenos:
 
 
@@ -154,13 +153,13 @@ Baseline V2 allocation in the model:
    :linenos:
 
 
-When moving to V3 allocation, on the model side, add a new implementation
-that calls the allocators defined in the plugin:
+When moving to V3 allocation, on the model side, call the allocators for
+the values requiring allocation:
 
 .. literalinclude:: allocation_sources/allocation_v3/complex_example/v3_main.cf
    :language: inmanta
    :caption: main.cf (V3 allocation)
    :linenos:
-   :emphasize-lines: 26-32
+   :emphasize-lines: 46-54
 
 

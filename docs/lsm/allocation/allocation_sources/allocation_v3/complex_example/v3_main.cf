@@ -36,6 +36,7 @@ vlan_binding = lsm::ServiceEntityBindingV2(
     service_entity_name="vlan-assignment",
 )
 
+# Collect all service instances
 for assignment in lsm::all(vlan_binding):
     service = VlanAssignment(
         instance_id=assignment["id"],

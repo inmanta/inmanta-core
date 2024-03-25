@@ -35,8 +35,8 @@ entity EmbeddedService extends lsm::EmbeddedEntity:
     """
     An embedded service, attached to a TopLevelService instance.
 
-    :attr id: The identifier of this embedded service instance, it should be unique across
-        all other embedded service instances of the service it is attached to.
+    :attr id: The identifier of this embedded service instance, it should be unique
+        across all other embedded service instances of the service it is attached to.
     :attr embedded_value: A read-only value, automatically assigned by the api.
     """
     string                      id
@@ -65,6 +65,7 @@ top_level_service_binding = lsm::ServiceEntityBindingV2(
 )
 
 
+# Collect all service instances
 for assignment in lsm::all(top_level_service_binding):
     attributes = assignment["attributes"]
     service = TopLevelService(

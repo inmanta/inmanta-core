@@ -41,6 +41,7 @@ ordered_allocation_binding = lsm::ServiceEntityBindingV2(
     service_entity_name="allocation_order_enforcement",
 )
 
+# Collect all service instances
 for assignment in lsm::all(ordered_allocation_binding):
     service = ServiceWithOrderedAllocation(
         instance_id=assignment["id"],

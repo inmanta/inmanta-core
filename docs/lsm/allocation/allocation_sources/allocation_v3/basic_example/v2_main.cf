@@ -9,37 +9,60 @@ import lsm
 import lsm::fsm
 
 entity TopLevelService extends lsm::ServiceEntity:
+    """
+    Top-level service to demonstrate V2 allocation.
+
+    :attr name: The name identifying the service instance.
+    :attr top_level_value: A read-only value, automatically assigned by the api.
+    """
     string                      name
     lsm::attribute_modifier     name__modifier="rw"
-    int?                        top_level_value
+    int?                        top_level_value=null
     lsm::attribute_modifier     top_level_value__modifier="r"
 end
 
+# Enforce uniqueness based on the service's name
 index TopLevelService(name)
+
+# Each top level service may have zero or more embedded services attached to it
 TopLevelService.embedded_services [0:] -- EmbeddedService
 
 entity EmbeddedService extends lsm::EmbeddedEntity:
+    """
+    An embedded service, attached to a TopLevelService instance.
+
+    :attr id: The identifier of this embedded service instance, it should be unique
+        across all other embedded service instances of the service it is attached to.
+    :attr embedded_value: A read-only value, automatically assigned by the api.
+    """
     string                      id
     lsm::attribute_modifier     id__modifier="rw"
-    int?                        embedded_value
+    int?                        embedded_value=null
     lsm::attribute_modifier     embedded_value__modifier="r"
     string[]? __lsm_key_attributes = ["id"]
 end
 
+# Uniquely identify embedded services within a top level service through their id
 index EmbeddedService(id)
 
+# Inherit parent entity's implementations
 implement TopLevelService using parents
+
 implement EmbeddedService using std::none
 
+# Create a binding to enable service creation through the service catalog
 value_binding = lsm::ServiceEntityBindingV2(
     service_entity="allocatorv3_demo::TopLevelService",
     lifecycle=lsm::fsm::simple,
     service_entity_name="value-service",
+    # V2 allocation requires passing the allocation_spec argument.
+    # The value_allocation is defined in the plugin:
     allocation_spec="value_allocation",
     service_identity="name",
     service_identity_display_name="Name",
 )
 
+# Collect all service instances
 for assignment in lsm::all(value_binding):
     attributes = assignment["attributes"]
 

@@ -1,13 +1,25 @@
 """
-    Inmanta LSM
-    :copyright: 2024 Inmanta
-    :contact: code@inmanta.com
-    :license: Inmanta EULA
+    Copyright 2024 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
 """
 
-allocation.AllocationSpec(
+from inmanta_plugins.lsm.allocation import AllocationSpec, AnyUniqueInt, LSM_Allocator
+
+# Define an AllocationSpec using the build-in LSM_Allocator allocator:
+AllocationSpec(
     "allocate_vlan",
-    allocation.LSM_Allocator(
-        attribute="vlan_id", strategy=allocation.AnyUniqueInt(lower=50000, upper=70000)
-    ),
+    LSM_Allocator(attribute="vlan_id", strategy=AnyUniqueInt(lower=50000, upper=70000)),
 )
