@@ -5404,7 +5404,7 @@ class ConfigurationModel(BaseDocument):
                         WHERE r.environment=$1
                             AND r.model=$8
                             AND r.resource_id=t.rid
-                            -- Keep resources that belong to the shared resource set or a resource set that was not updated
+                            -- Keep only resources that belong to the shared resource set or a resource set that was not updated
                             AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($9))
                     )
                 )
