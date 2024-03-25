@@ -49,7 +49,7 @@ from inmanta.data.model import (
 )
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
+from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound, ServerError
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
@@ -864,12 +864,9 @@ class ResourceService(protocol.ServerSlice):
                     connection=inner_connection,
                 )
                 if len(resources) == 0 or (len(resources) != len(resource_ids)):
-                    return (
-                        404,
-                        {
-                            "message": "The resources with the given ids do not exist in the given environment. "
-                            "Only %s of %s resources found." % (len(resources), len(resource_ids))
-                        },
+                    raise NotFound(
+                        message="The resources with the given ids do not exist in the given environment. "
+                        f"Only {len(resources)} of {len(resource_ids)} resources found."
                     )
 
                 if only_update_from_states is not None:
@@ -890,7 +887,7 @@ class ResourceService(protocol.ServerSlice):
                 if resource_action is None:
                     # new
                     if started is None:
-                        return 500, {"message": "A resource action can only be created with a start datetime."}
+                        raise ServerError(message="A resource action can only be created with a start datetime.")
 
                     version = Id.parse_id(resource_ids[0]).version
                     resource_action = data.ResourceAction(
@@ -905,16 +902,10 @@ class ResourceService(protocol.ServerSlice):
                 else:
                     # existing
                     if resource_action.finished is not None:
-                        return (
-                            500,
-                            {
-                                "message": (
-                                    "An resource action can only be updated when it has not been finished yet. This action "
-                                    "finished at %s" % resource_action.finished
-                                )
-                            },
+                        raise ServerError(
+                            message="An resource action can only be updated when it has not been finished yet. This action "
+                            f"finished at {resource_action.finished}"
                         )
-
                 for msg in messages:
                     # All other data is stored in the database. The msg was already formatted at the client side.
                     self.log_resource_action(

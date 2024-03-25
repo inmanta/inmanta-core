@@ -716,6 +716,8 @@ class OrchestrationService(protocol.ServerSlice):
         undeployable_ids: abc.Sequence[ResourceIdStr] = [
             res.resource_id for res in rid_to_resource.values() if res.status in const.UNDEPLOYABLE_STATES
         ]
+        updated_resource_sets: abc.Set[str] = {sr for sr in resource_sets.values() if sr is not None}
+        deleted_resource_sets_as_set: abc.Set[str] = set(removed_resource_sets)
         async with connection.transaction():
             try:
                 if is_partial_update:
@@ -733,7 +735,8 @@ class OrchestrationService(protocol.ServerSlice):
                             self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
                         ),
                         partial_base=partial_base_version,
-                        rids_in_partial_compile=set(rid_to_resource.keys()),
+                        updated_resource_sets=updated_resource_sets,
+                        deleted_resource_sets=deleted_resource_sets_as_set,
                         connection=connection,
                     )
                 else:
@@ -758,15 +761,15 @@ class OrchestrationService(protocol.ServerSlice):
                 # Make mypy happy
                 assert partial_base_version is not None
                 # This dict maps a resource id to its resource set for unchanged resource sets.
-                rids_unchanged_resource_sets: dict[
-                    ResourceIdStr, str
-                ] = await data.Resource.copy_resources_from_unchanged_resource_set(
-                    environment=env.id,
-                    source_version=partial_base_version,
-                    destination_version=version,
-                    updated_resource_sets={sr for sr in resource_sets.values() if sr is not None},
-                    deleted_resource_sets=set(removed_resource_sets),
-                    connection=connection,
+                rids_unchanged_resource_sets: dict[ResourceIdStr, str] = (
+                    await data.Resource.copy_resources_from_unchanged_resource_set(
+                        environment=env.id,
+                        source_version=partial_base_version,
+                        destination_version=version,
+                        updated_resource_sets=updated_resource_sets,
+                        deleted_resource_sets=deleted_resource_sets_as_set,
+                        connection=connection,
+                    )
                 )
                 resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
                 if resources_that_moved_resource_sets:
