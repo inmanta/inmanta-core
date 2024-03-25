@@ -18,7 +18,12 @@ def get_value(
     """
     Store a given value in the attributes of a service.
 
-    :param value: The value to store on the service.
+    :param service: The service instance for which the attribute value
+        is being allocated.
+    :param attribute_path: DictPath to the attribute of the service
+        instance in which the allocated value will be stored.
+    :param value: The value to store for this attribute of this service.
     """
 
     return value
+

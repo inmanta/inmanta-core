@@ -12,40 +12,29 @@ import lsm::fsm
 entity ServiceWithOrderedAllocation extends lsm::ServiceEntity:
     """
     This service entity demonstrates how to enforce a specific order during
-    the allocation process. Here we want to allocate the attributes in the
-    following order:
-        - value_allocated_first
-        - value_allocated_last
+    the allocation process. Here we want to allocate some attributes in a
+    specific order: value_allocated_first and then value_allocated_last.
+
+    :attr name: The name identifying the service instance.
+    :attr value_allocated_first: A read-only value, automatically assigned by the api
+        before value_allocated_last.
+    :attr value_allocated_last: A read-only value, automatically assigned by the api
+        after value_allocated_first.
     """
 
     string                      name
     lsm::attribute_modifier     name__modifier="rw"
-    string?                     value_allocated_first
+    string?                     value_allocated_first=null
     lsm::attribute_modifier     value_allocated_first__modifier="r"
-    string?                     value_allocated_last
+    string?                     value_allocated_last=null
     lsm::attribute_modifier     value_allocated_last__modifier="r"
 end
 
-
-implementation allocate_in_order for ServiceWithOrderedAllocation:
-    # Regular allocation:
-    self.value_allocated_first = ordered_allocation(
-        self,
-        "value_allocated_first"
-    )
-
-    # Passing value_allocated_first as a parameter to this allocator
-    # will enforce the ordering:
-    self.value_allocated_last = ordered_allocation(
-        self,
-        "value_allocated_last",
-        requires=[self.value_allocated_first]
-    )
-end
-
-implement ServiceWithOrderedAllocation using parents, allocate_in_order
+# Inherit parent entity's implementations
+implement ServiceWithOrderedAllocation using parents
 
 
+# Create a binding to enable service creation through the service catalog
 ordered_allocation_binding = lsm::ServiceEntityBindingV2(
     service_entity="allocatorv3_demo::ServiceWithOrderedAllocation",
     lifecycle=lsm::fsm::simple,
@@ -53,9 +42,24 @@ ordered_allocation_binding = lsm::ServiceEntityBindingV2(
 )
 
 for assignment in lsm::all(ordered_allocation_binding):
-    ServiceWithOrderedAllocation(
+    service = ServiceWithOrderedAllocation(
         instance_id=assignment["id"],
         entity_binding=ordered_allocation_binding,
         name=assignment["attributes"]["name"],
+
+        # Regular allocation:
+        value_allocated_first=ordered_allocation(
+            service,
+            "value_allocated_first"
+        ),
+
+        # Passing value_allocated_first as a parameter to this allocator
+        # will enforce the ordering:
+        value_allocated_last = ordered_allocation(
+            service,
+            "value_allocated_last",
+            requires=[service.value_allocated_first]
+        )
+
     )
 end

@@ -13,59 +13,49 @@ entity TopLevelService extends lsm::ServiceEntity:
     This service entity demonstrates how a single allocator
     can be used for both a service entity and its embedded
     entities.
-    
+
     :attr name: The name identifying the service instance.
     :attr top_level_value: A read-only value, automatically assigned by the api.
     """
 
     string                      name
     lsm::attribute_modifier     name__modifier="rw"
-    int?                        top_level_value
+    int?                        top_level_value=null
     lsm::attribute_modifier     top_level_value__modifier="r"
 end
 
+# Enforce uniqueness based on the service's name
 index TopLevelService(name)
+
+# Each top level service may have zero or more embedded services attached to it
 TopLevelService.embedded_services [0:] -- EmbeddedService
 
 
 entity EmbeddedService extends lsm::EmbeddedEntity:
     """
     An embedded service, attached to a TopLevelService instance.
-    
+
     :attr id: The identifier of this embedded service instance, it should be unique across
         all other embedded service instances of the service it is attached to.
     :attr embedded_value: A read-only value, automatically assigned by the api.
     """
     string                      id
     lsm::attribute_modifier     id__modifier="rw"
-    int?                        embedded_value
+    int?                        embedded_value=null
     lsm::attribute_modifier     embedded_value__modifier="r"
     string[]? __lsm_key_attributes = ["id"]
 end
 
+# Uniquely identify embedded services within a top level service through their id
 index EmbeddedService(id)
 
-implement TopLevelService using parents, allocate_values
+# Inherit parent entity's implementations
+implement TopLevelService using parents
+
 implement EmbeddedService using std::none
 
 
-implementation allocate_values for TopLevelService:
-    # Allocation for an attribute in the top level service
-    # using the get_value allocator:
-    self.top_level_value = get_value(self, "top_level_value", value=1)
-
-    # The same allocator can be used for allocation in the embedded services:
-    for embedded_service in self.embedded_services:
-        embedded_service.embedded_value = get_value(
-            self,
-            "embedded_services[id={{embedded_service.id}}].embedded_value",
-            value=3
-        )
-    end
-end
-
-
-
+# Create a binding to enable service creation through the service catalog
 top_level_service_binding = lsm::ServiceEntityBindingV2(
     service_entity="allocatorv3_demo::TopLevelService",
     lifecycle=lsm::fsm::simple,
@@ -74,18 +64,30 @@ top_level_service_binding = lsm::ServiceEntityBindingV2(
     service_identity_display_name="Name",
 )
 
+
 for assignment in lsm::all(top_level_service_binding):
     attributes = assignment["attributes"]
-
     service = TopLevelService(
         instance_id=assignment["id"],
         entity_binding=top_level_service_binding,
         name=attributes["name"],
+        # Allocator call
+        top_level_value=get_value(service, "top_level_value", value=1),
+        embedded_services=[
+            EmbeddedService(
+                id=embedded_service["id"],
+                # Allocator call
+                embedded_value=get_value(
+                    service,
+                    lsm::format(
+                        "embedded_services[id={embedded_service_id}].embedded_value",
+                        [],
+                        {"embedded_service_id": embedded_service["id"]},
+                    ),
+                    value=3,
+                ),
+            )
+            for embedded_service in attributes["embedded_services"]
+        ],
     )
-
-    for embedded_service in attributes["embedded_services"]:
-        service.embedded_services += EmbeddedService(
-            id=embedded_service["id"],
-        )
-    end
 end
