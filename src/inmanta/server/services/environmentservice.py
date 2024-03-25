@@ -118,13 +118,18 @@ class EnvironmentService(protocol.ServerSlice):
     orchestration_service: OrchestrationService
     resource_service: ResourceService
     listeners: dict[EnvironmentAction, list[EnvironmentListener]]
+    # Lock for managing changes to agent states (e.g., halting or resuming agents)
     agent_state_lock: asyncio.Lock
+    # Lock for managing environment deletion, ensuring consistent state
+    # when environments are being marked for deletion or checked for this mark.
+    environment_deletion_lock: asyncio.Lock
     icon_regex: Pattern[str] = re.compile("^(image/png|image/jpeg|image/webp|image/svg\\+xml);(base64),(.+)$")
 
     def __init__(self) -> None:
         super().__init__(SLICE_ENVIRONMENT)
         self.listeners = defaultdict(list)
         self.agent_state_lock = asyncio.Lock()
+        self.environment_deletion_lock = asyncio.Lock()
 
     def get_dependencies(self) -> list[str]:
         return [
@@ -269,24 +274,27 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
-        if env.is_marked_for_deletion:
-            raise BadRequest("Cannot resume an environment that is marked for deletion.")
+        async with self.environment_deletion_lock:
+            if env.is_marked_for_deletion:
+                raise BadRequest("Cannot resume an environment that is marked for deletion.")
 
-        async with self.agent_state_lock:
-            async with data.Environment.get_connection() as connection:
-                async with connection.transaction():
-                    refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
-                    if refreshed_env is None:
-                        raise NotFound("Environment %s does not exist" % env.id)
+            async with self.agent_state_lock:
+                async with data.Environment.get_connection() as connection:
+                    async with connection.transaction():
+                        refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(
+                            env.id, connection=connection
+                        )
+                        if refreshed_env is None:
+                            raise NotFound("Environment %s does not exist" % env.id)
 
-                    # silently ignore requests if this environment has already been resumed
-                    if not refreshed_env.halted:
-                        return
+                        # silently ignore requests if this environment has already been resumed
+                        if not refreshed_env.halted:
+                            return
 
-                    await refreshed_env.update_fields(halted=False, connection=connection)
-                    await self.agent_manager.resume_agents(refreshed_env, connection=connection)
-            await self.autostarted_agent_manager.restart_agents(refreshed_env)
-        await self.server_slice.compiler.resume_environment(refreshed_env.id)
+                        await refreshed_env.update_fields(halted=False, connection=connection)
+                        await self.agent_manager.resume_agents(refreshed_env, connection=connection)
+                await self.autostarted_agent_manager.restart_agents(refreshed_env)
+            await self.server_slice.compiler.resume_environment(refreshed_env.id)
 
     @handle(methods.clear_environment, env="id")
     async def clear_environment(self, env: data.Environment) -> Apireturn:
@@ -474,7 +482,7 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_delete, environment_id="id")
     async def environment_delete(self, environment_id: uuid.UUID) -> None:
-        async with self.agent_state_lock:
+        async with self.environment_deletion_lock:
             async with data.Environment.get_connection() as connection:
                 env = await data.Environment.get_by_id(environment_id, connection=connection)
                 if env is None:
@@ -489,16 +497,16 @@ class EnvironmentService(protocol.ServerSlice):
                 # Check if the environment is halted; if not, halt it
                 if not env.halted:
                     LOGGER.info("Halting Environment %s", str(environment_id))
-                    await self.halt(env)
+                    await self.halt(env, connection=connection)
 
                 await env.mark_for_deletion(connection=connection)
                 self._disable_schedules(env)
                 await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade(connection=connection))
 
-                self.resource_service.close_resource_action_logger(environment_id)
-                await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
+            self.resource_service.close_resource_action_logger(environment_id)
+            await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
 
-                self._delete_environment_dir(environment_id)
+            self._delete_environment_dir(environment_id)
 
     @handle(methods_v2.environment_clear, env="id")
     async def environment_clear(self, env: data.Environment) -> None:
