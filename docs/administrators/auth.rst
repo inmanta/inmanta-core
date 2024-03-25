@@ -13,7 +13,7 @@ Inmanta uses bearer tokens for authorizing users and services. These tokens shou
 in plain-text in the request headers without SSL.
 
 SSL: server side
-****************
+^^^^^^^^^^^^^^^^
 Setting a private key and a public key in the server configuration enables SSL on the server. The two
 options to set are :inmanta.config:option:`server.ssl-cert-file` and :inmanta.config:option:`server.ssl-key-file`.
 
@@ -37,7 +37,7 @@ set :inmanta.config:option:`server.ssl-ca-cert-file` to the truststore.
 
 
 SSL: agents and compiler
-************************
+^^^^^^^^^^^^^^^^^^^^^^^^
 When using SSL, all remote components connecting to the server need to have SSL enabled as well.
 
 For each of the transport configurations (compiler, agent, rpc client, ...) ``ssl`` has to be
@@ -81,7 +81,7 @@ are prefixed with ``urn:inmanta:``. These claims are:
    they belong to.
 
 Setup server auth
-*****************
+^^^^^^^^^^^^^^^^^
 The server requests authentication for all API calls when :inmanta.config:option:`server.auth` is set to true. When
 authentication is enabled all other components require a valid token.
 
@@ -116,7 +116,7 @@ For this command to function, it requires the issuers configuration with sign=tr
 .. _auth-config:
 
 JWT auth configuration
-**********************
+^^^^^^^^^^^^^^^^^^^^^^
 
 The server searches for configuration sections that start with ``auth_jwt_``, after the last _ an id has to be present. This
 section expects the following keys:
@@ -247,7 +247,7 @@ to implement the OAuth2 implicit flow, required to obtain a JWT.
     integration services.
 
 Keycloak configuration
-**********************
+^^^^^^^^^^^^^^^^^^^^^^
 The web-console has out of the box support for authentication with `Keycloak <http://www.keycloak.org>`_. Install keycloak and
 create an initial login as described in the Keycloak documentation and login with admin credentials.
 
@@ -258,7 +258,7 @@ able to fetch user information from the authentication provider.
 
 
 Step 1: Optionally create a new realm
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+"""""""""""""""""""""""""""""""""""""
 
 Create a new realm if you want to use keycloak for other purposes (it is an SSO solution) than Inmanta authentication. Another
 reason to create a new realm (or not) is that the master realm also provides the credentials to configure keycloak itself.
@@ -280,7 +280,7 @@ For example call the realm inmanta
 
 
 Step 2: Add a new client to keycloak
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""""""""""""""""""""
 
 Make sure the correct realm is active (the name is shown in the realm selection dropdown) to which you want to add a new client.
 
@@ -360,7 +360,7 @@ Add a second mapper to add inmanta to the audience (only required for Keycloak 4
 Click save.
 
 Step 3: Configure inmanta server
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""""""""""""""""
 
 .. figure:: /administrators/images/kc_install.png
    :width: 100%
@@ -417,7 +417,7 @@ the examples above this url is http://localhost:8080/realms/inmanta/.well-known/
     to false in the ``auth_jwt_keycloak`` block for keycloak.
 
 Custom claims
-*************
+-------------
 
 Access to the orchestrator can be controlled using claim match expressions. In the section of the identity provider that
 you want to restrict you can configure the ``claims`` options. This is a multiline option where each line contains a match
