@@ -405,6 +405,8 @@ class ResourceService(protocol.ServerSlice):
         :param version: Version of the resources to consider.
         :param filter: Filter function that takes a resource id as an argument and returns True if it should be kept.
         """
+        if not resources_id:
+            return
         resources_version_ids: list[ResourceVersionIdStr] = [
             ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
         ]
