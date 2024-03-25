@@ -346,40 +346,25 @@ async def test_get_setting_no_longer_exist(server, client, environment):
     assert "new_setting" in result.result["settings"].keys()
 
 
-async def test_halt_env_before_deletion(server, client, caplog):
+async def test_halt_env_before_deletion(environment, server, client, caplog):
     """
     Verify env will be halted before it is deleted.
     """
-    result = await client.create_project("env-test")
-    assert result.code == 200
-    project_id = result.result["project"]["id"]
-
-    result = await client.create_environment(project_id=project_id, name="dev")
-    assert result.code == 200
-    env_id = result.result["environment"]["id"]
-
     with caplog.at_level(logging.INFO):
-        result = await client.environment_delete(env_id)
+        result = await client.environment_delete(environment)
         assert result.code == 200
 
-    log_contains(caplog, "inmanta.server.services.environmentservice", logging.INFO, f"Halting Environment {env_id}")
+    log_contains(caplog, "inmanta.server.services.environmentservice", logging.INFO, f"Halting Environment {environment}")
 
 
-async def test_resume_marked_for_delete(server, client, caplog):
+async def test_resume_marked_for_delete(environment, server, client, caplog):
     """
     Cannot resume environment that is marked for deletion
     """
-    result = await client.create_project("env-test")
-    assert result.code == 200
-    project_id = result.result["project"]["id"]
 
-    result = await client.create_environment(project_id=project_id, name="dev")
-    assert result.code == 200
-    env_id = result.result["environment"]["id"]
-
-    env1 = await data.Environment.get_by_id(uuid.UUID(env_id))
+    env1 = await data.Environment.get_by_id(environment)
     await env1.mark_for_deletion()
 
-    result = await client.resume_environment(env_id)
+    result = await client.resume_environment(environment)
     assert result.code == 400
     assert result.result["message"] == "Invalid request: Cannot resume an environment that is marked for deletion."

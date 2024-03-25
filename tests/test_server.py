@@ -2044,7 +2044,9 @@ async def test_delete_active_version(client, clienthelper, server, environment):
 
     await clienthelper.put_version_simple(resources, version)
 
-    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    result = await client.release_version(
+        environment, version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
     assert result.code == 200
 
     # Remove version 1

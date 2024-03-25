@@ -503,17 +503,18 @@ class OrchestrationService(protocol.ServerSlice):
 
     @handle(methods.delete_version, version_id="id", env="tid")
     async def delete_version(self, env: data.Environment, version_id: int) -> Apireturn:
-        version = await data.ConfigurationModel.get_version(env.id, version_id)
+        async with data.ConfigurationModel.get_connection() as connection:
+            version = await data.ConfigurationModel.get_version(env.id, version_id, connection=connection)
 
-        if version is None:
-            return 404, {"message": "The given configuration model does not exist yet."}
+            if version is None:
+                return 404, {"message": "The given configuration model does not exist yet."}
 
-        active_version = await data.ConfigurationModel.get_latest_version(env.id)
-        if active_version and active_version.version == version.version:
-            raise BadRequest("Cannot delete the active version")
+            active_version = await data.ConfigurationModel.get_latest_version(env.id, connection=connection)
+            if active_version and active_version.version == version.version:
+                raise BadRequest("Cannot delete the active version")
 
-        await version.delete_cascade()
-        return 200
+            await version.delete_cascade(connection=connection)
+            return 200
 
     @handle(methods_v2.reserve_version, env="tid")
     async def reserve_version(self, env: data.Environment) -> int:

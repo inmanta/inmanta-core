@@ -2799,9 +2799,9 @@ class Environment(BaseDocument):
         else:
             await self.set(key, self._settings[key].default)
 
-    async def mark_for_deletion(self) -> None:
+    async def mark_for_deletion(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """Mark an environment as being in the process of deletion."""
-        await self.update_fields(is_marked_for_deletion=True)
+        await self.update_fields(is_marked_for_deletion=True, connection=connection)
 
     async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """

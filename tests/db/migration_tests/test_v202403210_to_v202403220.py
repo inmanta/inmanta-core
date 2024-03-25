@@ -39,5 +39,6 @@ async def test_add_column(
 
     client = Client("client")
     result = await client.list_environments()
+    assert len(result.result["environments"]) > 0
     for env in result.result["environments"]:
         assert env["is_marked_for_deletion"] is False
