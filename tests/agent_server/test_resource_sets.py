@@ -1458,6 +1458,14 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
             "purged": False,
             "requires": ["test::Resource[agent1,key=key5],v=0"],
         },
+        {
+            "key": "key91",
+            "version": 0,
+            "id": "test::Resource[agent1,key=key91],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
     ]
     resource_sets = {
         "test::Resource[agent1,key=key1]": "set-a",
@@ -1470,6 +1478,7 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         "test::Resource[agent1,key=key2]": const.ResourceState.available,
         "test::Resource[agent1,key=key5]": const.ResourceState.undefined,
         "test::Resource[agent1,key=key6]": const.ResourceState.available,
+        "test::Resource[agent1,key=key91]": const.ResourceState.undefined,
     }
     result = await client.put_partial(
         tid=environment,
