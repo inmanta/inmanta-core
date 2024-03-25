@@ -2050,6 +2050,6 @@ async def test_delete_active_version(client, clienthelper, server, environment):
     assert result.code == 200
 
     # Remove version 1
-    result = await client.delete_version(tid=environment, id=1)
+    result = await client.delete_version(tid=environment, id=version)
     assert result.code == 400
     assert result.result["message"] == "Invalid request: Cannot delete the active version"
