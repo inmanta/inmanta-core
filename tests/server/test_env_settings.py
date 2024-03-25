@@ -17,7 +17,6 @@
 """
 
 import logging
-import uuid
 from uuid import UUID
 
 import pytest
