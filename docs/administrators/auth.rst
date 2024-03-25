@@ -60,8 +60,8 @@ Authentication
 --------------
 Inmanta authentication uses JSON Web Tokens for authentication (bearer token). Inmanta issues tokens for service to service
 interaction (agent to server, compiler to server, cli to server and 3rd party API interactions). For user interaction through
-the web-console Inmanta can rely on its built-in authentication provider or a 3rd party auth broker. Currently
-the web-console only supports keycloak as 3rd party auth broker.
+the web-console Inmanta can rely on its built-in authentication provider or on a 3rd party auth broker. Currently
+the web-console only supports Keycloak as 3rd party auth broker.
 
 Inmanta expects a token of which it can validate the signature. Inmanta can verify both symmetric signatures with
 HS256 and asymmetric signatures with RSA (RS256). Tokens it signs itself for other processes are always signed using HS256.
@@ -70,15 +70,15 @@ There are no key distribution issues because the server is both the signing and 
 The server also provides limited authorization by checking for inmanta specific claims inside the token. All inmanta claims
 are prefixed with ``urn:inmanta:``. These claims are:
 
- * ``urn:inmanta:ct`` A *required* comma delimited list of client types for which this client is authenticated. Each API call
-   has one or more allowed client types. The list of valid client types (ct) are:
+* ``urn:inmanta:ct`` A *required* comma delimited list of client types for which this client is authenticated. Each API call
+  has one or more allowed client types. The list of valid client types (ct) are:
 
-    - agent
-    - compiler
-    - api (cli, web-console, 3rd party service)
- * ``urn:inmanta:env`` An *optional* claim. When this claim is present the token is scoped to this inmanta environment. All
-   tokens that the server generates for agents and compilers have this claim present to limit their access to the environment
-   they belong to.
+  * agent
+  * compiler
+  * api (cli, web-console, 3rd party service)
+* ``urn:inmanta:env`` An *optional* claim. When this claim is present the token is scoped to this inmanta environment. All
+  tokens that the server generates for agents and compilers have this claim present to limit their access to the environment
+  they belong to.
 
 Setup server auth
 ^^^^^^^^^^^^^^^^^
@@ -167,19 +167,21 @@ Inmanta server.
 Step 1: Enable authentication
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Ensure that the ``server.auth`` configuration option is enabled and that the ``auth-method`` is set to ``database``. Make sure your ``/etc/inmanta/inmanta.d/server.cfg`` contains the following settings:
+Ensure that the ``server.auth`` configuration option is enabled and that the ``server.auth-method`` configuration option
+is set to ``database``. This means that the ``/etc/inmanta/inmanta.d/server.cfg`` file should contains the following:
 
 .. code-block:: ini
 
    [server]
    auth=true
    auth-method=database
+   ...
 
 Step 2: Generate the JWT configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Run the ``/opt/inmanta/bin/inmanta-initial-user-setup`` command on the orchestrator server.
-Without any JWT configuration in-place on the server, this command will output a generated JWT config.
+This command will output a generated JWT configuration if no JWT configuration is already in-place on the server.
 
 .. code-block:: ini
 
@@ -231,7 +233,7 @@ Now, restart the orchestrator to activate the new configuration.
 
    $ sudo systemctl restart inmanta-server
 
-After the restart of the orchestrator, authentication is enabled on the server and the web-console will ask for your credentials when accessing the application.
+After the restart of the orchestrator, authentication is enabled on the server and the web-console will ask for your credentials.
 
 .. _auth-ext:
 
@@ -350,7 +352,7 @@ Add a second mapper to add inmanta to the audience (only required for Keycloak 4
    :width: 100%
    :align: center
 
-   Fill in the following values:
+Fill in the following values:
 
    * Name: inmanta-audience
    * Mapper type: Audience
