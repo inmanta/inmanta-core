@@ -559,11 +559,12 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                             END
                         ) as status
                     FROM versioned_resource_state AS rps
-                    -- LEFT join for trivial `COUNT(*)`. Not applicable when filtering orphans because left table contains orphans.
+            -- LEFT join for trivial `COUNT(*)`. Not applicable when filtering orphans because left table contains orphans.
                     {'' if self.drop_orphans else 'LEFT'} JOIN resource AS r
                         ON r.environment = rps.environment
                           AND r.resource_id = rps.resource_id
-                          -- shortcut the version selection to the latest one iff we wish to exclude orphans => no per-resource MAX required + wider index application
+           -- shortcut the version selection to the latest one iff we wish to exclude orphans
+           -- => no per-resource MAX required + wider index application
                           AND r.model = {'(SELECT version FROM latest_version)' if self.drop_orphans else 'rps.version'}
                     WHERE rps.environment = $1
                 )

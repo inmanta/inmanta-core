@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import time
+import typing
 import uuid
 from datetime import datetime
 from operator import itemgetter
@@ -642,7 +643,7 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory,
 @pytest.mark.slowtest
 @pytest.mark.parametrize("instances", [2])  # set the size
 @pytest.mark.parametrize("trace", [False])  # make it analyze the queries
-async def test_resources_paging_performance(client, environment, very_big_env: int, trace: boolean, async_finalizer):
+async def test_resources_paging_performance(client, environment, very_big_env: int, trace: bool, async_finalizer):
     """Scaling test, not part of the norma testsuite"""
     # Basic sanity
     result = await client.resource_list(environment, limit=5, deploy_summary=True)
@@ -703,14 +704,14 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
     for filter, totalcount in filters:
         for order in orders:
             # Pages 1-3
-            async def time_call() -> Union[float, dict[str, str]]:
+            async def time_call() -> typing.Union[float, dict[str, str]]:
                 start = time.monotonic()
                 result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=10, sort=order)
                 assert result.code == 200
                 assert result.result["metadata"]["total"] == totalcount
                 return (time.monotonic() - start) * 1000, result.result.get("links", {})
 
-            async def time_page(links: dict[str, str], name: str) -> Union[float, dict[str, str]]:
+            async def time_page(links: dict[str, str], name: str) -> typing.Union[float, dict[str, str]]:
                 start = time.monotonic()
                 if name not in links:
                     return 0, {}
@@ -729,4 +730,6 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
             latency_page2, links = await time_page(links, "next")
             latency_page3, links = await time_page(links, "next")
 
-            logging.getLogger(__name__).warning("Timings %s %s %d %d %d", filter, order, latency_page1, latency_page2, latency_page3)
+            logging.getLogger(__name__).warning(
+                "Timings %s %s %d %d %d", filter, order, latency_page1, latency_page2, latency_page3
+            )
