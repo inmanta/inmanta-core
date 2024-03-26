@@ -1,0 +1,5 @@
+description: Drop compatibility section from the documentation.
+issue-nr: 1982
+issue-repo: irt
+change-type: patch
+destination-branches: [master, iso7, iso6]
