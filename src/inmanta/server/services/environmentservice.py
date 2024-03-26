@@ -259,7 +259,7 @@ class EnvironmentService(protocol.ServerSlice):
     @handle(methods_v2.halt_environment, env="tid")
     async def halt(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         async with self.environment_state_operation_lock:
-            self._halt(env, connection)
+            await self._halt(env, connection)
 
     async def _halt(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
