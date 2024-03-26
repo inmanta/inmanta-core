@@ -54,7 +54,7 @@ the model:
    :language: inmanta
    :caption: main.cf (Plugin call ordering)
    :linenos:
-   :emphasize-lines: 61
+   :emphasize-lines: 62
 
 
 
@@ -116,7 +116,7 @@ the values requiring allocation:
 .. literalinclude:: allocation_sources/allocation_v3/basic_example/v3_main.cf
    :language: inmanta
    :caption: main.cf (V3 allocation)
-   :emphasize-lines: 76,81-89
+   :emphasize-lines: 75,80-88
    :linenos:
 
 
