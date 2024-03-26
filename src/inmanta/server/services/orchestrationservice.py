@@ -522,7 +522,6 @@ class OrchestrationService(protocol.ServerSlice):
             await ResourcePersistentState.trim(env.id)
             return 200
 
-
     @handle(methods_v2.reserve_version, env="tid")
     async def reserve_version(self, env: data.Environment) -> int:
         return await env.get_next_version()
