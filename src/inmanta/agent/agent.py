@@ -988,7 +988,7 @@ class AgentInstance:
     _get_resource_timeout: float
     _get_resource_duration: float
 
-    def __init__(self, process: "Agent", name: str, uri: str) -> None:
+    def __init__(self, process: "Agent", name: str, uri: str, ensure_deploy_on_start: bool = False) -> None:
         self.process = process
         self.name = name
         self._uri = uri
@@ -1032,6 +1032,11 @@ class AgentInstance:
 
         self._getting_resources = False
         self._get_resource_timeout = 0
+
+        # If this instance has no deploy timer set, deploy anyway
+        # This is used for agents that are started via the agentmap
+        # To give smooth deploy experience, we want these agents to start immediately.
+        self.ensure_deploy_on_start = ensure_deploy_on_start
 
     async def stop(self) -> None:
         self._stopped = True
@@ -1123,7 +1128,7 @@ class AgentInstance:
             interval: Union[int, str],
             splay_value: int,
             initial_time: datetime.datetime,
-        ) -> None:
+        ) -> bool:
             if isinstance(interval, int) and interval > 0:
                 self.logger.info(
                     "Scheduling periodic %s with interval %d and splay %d (first run at %s)",
@@ -1136,14 +1141,28 @@ class AgentInstance:
                     interval=float(interval), initial_delay=float(splay_value)
                 )
                 self._enable_time_trigger(action, interval_schedule)
+                return True
 
             if isinstance(interval, str):
                 self.logger.info("Scheduling periodic %s with cron expression '%s'", kind, interval)
                 cron_schedule = CronSchedule(cron=interval)
                 self._enable_time_trigger(action, cron_schedule)
+                return True
+            return False
 
         now = datetime.datetime.now().astimezone()
-        periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
+        did_schedule = periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
+        if not did_schedule and self.ensure_deploy_on_start:
+            self.process.add_background_task(
+                self.get_latest_version_for_agent(
+                    DeployRequest(
+                        reason="Initial deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
+                        is_full_deploy=False,
+                        is_periodic=True,
+                    )
+                )
+            )
+            self.ensure_deploy_on_start = False
         periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value, now)
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
@@ -1472,7 +1491,7 @@ class Agent(SessionEndpoint):
         async with self._instances_lock:
             await self._add_end_point_name(name)
 
-    async def _add_end_point_name(self, name: str) -> None:
+    async def _add_end_point_name(self, name: str, ensure_deploy_on_start: bool = False) -> None:
         """
         Note: always call under _instances_lock
         """
@@ -1486,7 +1505,7 @@ class Agent(SessionEndpoint):
         if name in self.agent_map:
             hostname = self.agent_map[name]
 
-        self._instances[name] = AgentInstance(self, name, hostname)
+        self._instances[name] = AgentInstance(self, name, hostname, ensure_deploy_on_start)
 
     async def remove_end_point_name(self, name: str) -> None:
         async with self._instances_lock:
@@ -1535,11 +1554,11 @@ class Agent(SessionEndpoint):
                 agent_name for agent_name in update_uri_agents if self._instances[agent_name].is_enabled()
             ]
 
-            to_be_gathered = [self._add_end_point_name(agent_name) for agent_name in agents_to_add]
+            to_be_gathered = [self._add_end_point_name(agent_name, True) for agent_name in agents_to_add]
             to_be_gathered += [self._remove_end_point_name(agent_name) for agent_name in agents_to_remove + update_uri_agents]
             await asyncio.gather(*to_be_gathered)
             # Re-add agents with updated URI
-            await asyncio.gather(*[self._add_end_point_name(agent_name) for agent_name in update_uri_agents])
+            await asyncio.gather(*[self._add_end_point_name(agent_name, True) for agent_name in update_uri_agents])
             # Enable agents with updated URI that were enabled before
             for agent_to_enable in updated_uri_agents_to_enable:
                 self.unpause(agent_to_enable)

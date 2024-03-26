@@ -371,6 +371,9 @@ class ClientHelper:
         lookup = {v["version"]: v["released"] for v in versions.result["versions"]}
         return lookup[version]
 
+    async def wait_for_deployed(self, version: int) -> None:
+        await _wait_until_deployment_finishes(client=self.client, environment=self.environment, version=version)
+
 
 def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> dict[str, Any]:
     return {
