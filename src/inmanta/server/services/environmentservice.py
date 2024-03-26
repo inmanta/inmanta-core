@@ -259,19 +259,27 @@ class EnvironmentService(protocol.ServerSlice):
     @handle(methods_v2.halt_environment, env="tid")
     async def halt(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         async with self.environment_state_operation_lock:
-            async with data.Environment.get_connection(connection=connection) as con:
-                async with con.transaction():
-                    refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=con)
-                    if refreshed_env is None:
-                        raise NotFound("Environment %s does not exist" % env.id)
+            self._halt(env, connection)
 
-                    # silently ignore requests if this environment has already been halted
-                    if refreshed_env.halted:
-                        return
+    async def _halt(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Halts the specified environment without acquiring the environment_state_operation_lock.
+        This method is designed to be an internal helper that allows for halting an environment
+        as part of a larger operation (e.g., deletion), where the lock is managed by the caller and prevent double locking.
+        """
+        async with data.Environment.get_connection(connection=connection) as con:
+            async with con.transaction():
+                refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=con)
+                if refreshed_env is None:
+                    raise NotFound("Environment %s does not exist" % env.id)
 
-                    await refreshed_env.update_fields(halted=True, connection=con)
-                    await self.agent_manager.halt_agents(refreshed_env, connection=con)
-            await self.autostarted_agent_manager.stop_agents(refreshed_env)
+                # silently ignore requests if this environment has already been halted
+                if refreshed_env.halted:
+                    return
+
+                await refreshed_env.update_fields(halted=True, connection=con)
+                await self.agent_manager.halt_agents(refreshed_env, connection=con)
+        await self.autostarted_agent_manager.stop_agents(refreshed_env)
 
     @handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
@@ -493,7 +501,7 @@ class EnvironmentService(protocol.ServerSlice):
                 # Check if the environment is halted; if not, halt it
                 if not env.halted:
                     LOGGER.info("Halting Environment %s", str(environment_id))
-                    await self.halt(env, connection=connection)
+                    await self._halt(env, connection=connection)
 
                 await env.mark_for_deletion(connection=connection)
                 self._disable_schedules(env)
