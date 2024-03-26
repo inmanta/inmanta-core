@@ -31,6 +31,7 @@ from enum import Enum
 from re import Pattern
 from typing import Optional, cast
 
+import asyncpg
 from asyncpg import StringDataRightTruncationError
 
 from inmanta import config, data
@@ -118,18 +119,18 @@ class EnvironmentService(protocol.ServerSlice):
     orchestration_service: OrchestrationService
     resource_service: ResourceService
     listeners: dict[EnvironmentAction, list[EnvironmentListener]]
-    # Lock for managing changes to agent states (e.g., halting or resuming agents)
-    agent_state_lock: asyncio.Lock
-    # Lock for managing environment deletion, ensuring consistent state
-    # when environments are being marked for deletion or checked for this mark.
-    environment_deletion_lock: asyncio.Lock
+    # environment_state_operation_lock is to prevent concurrent execution of
+    # operations that modify the state of an environment, such as halting, resuming, or deleting.
+    # This lock helps prevent race conditions and ensures that state changes are carried out in a safe and
+    # sequential manner. It guarantees that operations affecting the agent states and environment status
+    # do not overlap.
+    environment_state_operation_lock: asyncio.Lock
     icon_regex: Pattern[str] = re.compile("^(image/png|image/jpeg|image/webp|image/svg\\+xml);(base64),(.+)$")
 
     def __init__(self) -> None:
         super().__init__(SLICE_ENVIRONMENT)
         self.listeners = defaultdict(list)
-        self.agent_state_lock = asyncio.Lock()
-        self.environment_deletion_lock = asyncio.Lock()
+        self.environment_state_operation_lock = asyncio.Lock()
 
     def get_dependencies(self) -> list[str]:
         return [
@@ -256,11 +257,11 @@ class EnvironmentService(protocol.ServerSlice):
         return 200
 
     @handle(methods_v2.halt_environment, env="tid")
-    async def halt(self, env: data.Environment) -> None:
-        async with self.agent_state_lock:
-            async with data.Environment.get_connection() as connection:
-                async with connection.transaction():
-                    refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+    async def halt(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        async with self.environment_state_operation_lock:
+            async with data.Environment.get_connection(connection=connection) as con:
+                async with con.transaction():
+                    refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=con)
                     if refreshed_env is None:
                         raise NotFound("Environment %s does not exist" % env.id)
 
@@ -268,33 +269,28 @@ class EnvironmentService(protocol.ServerSlice):
                     if refreshed_env.halted:
                         return
 
-                    await refreshed_env.update_fields(halted=True, connection=connection)
-                    await self.agent_manager.halt_agents(refreshed_env, connection=connection)
+                    await refreshed_env.update_fields(halted=True, connection=con)
+                    await self.agent_manager.halt_agents(refreshed_env, connection=con)
             await self.autostarted_agent_manager.stop_agents(refreshed_env)
 
     @handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
-        async with self.environment_deletion_lock:
-            if env.is_marked_for_deletion:
-                raise BadRequest("Cannot resume an environment that is marked for deletion.")
+        async with self.environment_state_operation_lock:
+            async with data.Environment.get_connection() as connection:
+                async with connection.transaction():
+                    refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+                    if refreshed_env is None:
+                        raise NotFound("Environment %s does not exist" % env.id)
+                    if refreshed_env.is_marked_for_deletion:
+                        raise BadRequest("Cannot resume an environment that is marked for deletion.")
+                    # silently ignore requests if this environment has already been resumed
+                    if not refreshed_env.halted:
+                        return
 
-            async with self.agent_state_lock:
-                async with data.Environment.get_connection() as connection:
-                    async with connection.transaction():
-                        refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(
-                            env.id, connection=connection
-                        )
-                        if refreshed_env is None:
-                            raise NotFound("Environment %s does not exist" % env.id)
-
-                        # silently ignore requests if this environment has already been resumed
-                        if not refreshed_env.halted:
-                            return
-
-                        await refreshed_env.update_fields(halted=False, connection=connection)
-                        await self.agent_manager.resume_agents(refreshed_env, connection=connection)
-                await self.autostarted_agent_manager.restart_agents(refreshed_env)
-            await self.server_slice.compiler.resume_environment(refreshed_env.id)
+                    await refreshed_env.update_fields(halted=False, connection=connection)
+                    await self.agent_manager.resume_agents(refreshed_env, connection=connection)
+            await self.autostarted_agent_manager.restart_agents(refreshed_env)
+        await self.server_slice.compiler.resume_environment(refreshed_env.id)
 
     @handle(methods.clear_environment, env="id")
     async def clear_environment(self, env: data.Environment) -> Apireturn:
@@ -482,7 +478,7 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_delete, environment_id="id")
     async def environment_delete(self, environment_id: uuid.UUID) -> None:
-        async with self.environment_deletion_lock:
+        async with self.environment_state_operation_lock:
             async with data.Environment.get_connection() as connection:
                 env = await data.Environment.get_by_id(environment_id, connection=connection)
                 if env is None:
