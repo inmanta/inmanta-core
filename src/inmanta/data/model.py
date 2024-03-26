@@ -260,6 +260,7 @@ class Environment(BaseModel):
     repo_branch: str
     settings: dict[str, EnvSettingType]
     halted: bool
+    is_marked_for_deletion: bool = False
     description: Optional[str] = None
     icon: Optional[str] = None
 
