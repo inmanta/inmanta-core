@@ -584,7 +584,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 requires=json.loads(resource["attributes"]).get("requires", []),
             )
             for resource in records
-            if resource["resource_id"]  # filter out bad joins
+            if resource["attributes"]  # filter out bad joins
         ]
         return dtos
 
