@@ -520,7 +520,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                     SELECT
                         rps.*,
                         CASE
-                            -- TODO: first branch may be redundant
+                            -- try the cheap, trivial option first because the lookup has a big performance impact
                             WHEN EXISTS (
                                 SELECT 1
                                 FROM resource AS r
@@ -528,13 +528,14 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                                     SELECT version FROM latest_version
                                 )
                             ) THEN (SELECT version FROM latest_version)
+                            -- only if the resource does not exist in the latest released version, search for the latest
+                            -- version it does exist in
                             ELSE (
                                 SELECT MAX(r.model)
                                 FROM resource AS r
                                 JOIN configurationmodel AS m
                                     ON r.environment = m.environment AND r.model = m.version AND m.released = TRUE
                                 WHERE r.environment = rps.environment AND r.resource_id = rps.resource_id
-                                GROUP BY r.resource_id
                             )
                         END AS version
                     FROM resource_persistent_state AS rps
