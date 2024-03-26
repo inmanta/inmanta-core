@@ -541,13 +541,13 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                     WHERE rps.environment = $1
                 ), result AS (
                     SELECT
-                        r.resource_id,
+                        rps.resource_id,
                         r.attributes,
                         r.resource_type,
                         r.agent,
                         r.resource_id_value,
                         r.model,
-                        r.environment,
+                        rps.environment,
                         (
                             CASE
                                 WHEN r.model < (SELECT version FROM latest_version)
@@ -559,12 +559,11 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                             END
                         ) as status
                     FROM versioned_resource_state AS rps
-                    -- TODO: is this accurate? Greatly improves COUNT(*) performance, may slightly degrade sort performance
-                    -- TODO: LEFT iff including orphans
+                    -- LEFT join for trivial `COUNT(*)`. Not applicable when filtering orphans because left table contains orphans.
                     {'' if self.drop_orphans else 'LEFT'} JOIN resource AS r
-                        -- TODO: replace rps.version with (SELECT version FROM latest_version) iff excluding orphans
                         ON r.environment = rps.environment
                           AND r.resource_id = rps.resource_id
+                          -- shortcut the version selection to the latest one iff we wish to exclude orphans => no per-resource MAX required + wider index application
                           AND r.model = {'(SELECT version FROM latest_version)' if self.drop_orphans else 'rps.version'}
                     WHERE rps.environment = $1
                 )
