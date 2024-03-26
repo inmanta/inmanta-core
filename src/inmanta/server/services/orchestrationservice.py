@@ -512,6 +512,8 @@ class OrchestrationService(protocol.ServerSlice):
             return 404, {"message": "The given configuration model does not exist yet."}
 
         await version.delete_cascade()
+        # Make sure the ResourcePersistentState is consistent with resources
+        await ResourcePersistentState.trim(env.id)
         return 200
 
     @handle(methods_v2.reserve_version, env="tid")
