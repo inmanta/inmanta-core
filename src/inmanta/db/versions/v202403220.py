@@ -16,21 +16,14 @@
     Contact: code@inmanta.com
 """
 
-import os
-import re
-from collections import abc
-
-import asyncpg
-import pytest
-
-file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
-part = file_name_regex.match(__name__)[1]
+from asyncpg import Connection
 
 
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_replace_index(
-    postgresql_client: asyncpg.Connection,
-    migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
-) -> None:
-    # This migration script only replaces an index. Just verify that the script doesn't fail.
-    await migrate_db_from()
+async def update(connection: Connection) -> None:
+    schema = """
+    -- Add the 'is_marked_for_deletion' column to mark an environment as in the process of being deleted.
+
+    ALTER TABLE public.environment ADD COLUMN is_marked_for_deletion BOOLEAN DEFAULT FALSE;
+
+    """
+    await connection.execute(schema)
