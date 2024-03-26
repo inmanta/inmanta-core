@@ -338,7 +338,11 @@ class ColumnType:
 
 
 def TablePrefixWrapper(table_name: Optional[str], child: ColumnType) -> ColumnType:
-    """replace former class"""
+    """
+    This method is named like a class, because it replaces a former class.
+
+    The functionality is not part ColumnType itself.
+    """
     if table_name is None:
         return child
     return child.with_prefix(table_prefix=table_name)

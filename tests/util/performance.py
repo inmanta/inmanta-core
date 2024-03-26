@@ -21,7 +21,7 @@ import logging
 
 import inmanta.data
 
-basic = inmanta.data.BaseDocument.select_query
+original_select_query = inmanta.data.BaseDocument.select_query
 
 
 def hook_base_document():
@@ -51,4 +51,4 @@ def hook_base_document():
 
 
 def unhook_base_document():
-    inmanta.data.BaseDocument.select_query = basic
+    inmanta.data.BaseDocument.select_query = original_select_query

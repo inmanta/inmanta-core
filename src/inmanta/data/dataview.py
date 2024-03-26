@@ -472,6 +472,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         self.deploy_summary = deploy_summary
 
         # Rewrite the filter to special case orphan handling
+        # We handle the non-orphan case by changing the query, so we don't need the filter
         # This doesn't affect the paging links, as they use the raw filter
 
         status_filter_type, status_filter_fields = self.filter.get("status", (None, {}))
@@ -515,7 +516,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                     SELECT MAX(public.configurationmodel.version) as version
                     FROM public.configurationmodel
                     WHERE public.configurationmodel.released=TRUE AND environment=$1
-                ), versioned_resources AS (
+                ), versioned_resource_state AS (
                     SELECT
                         rps.*,
                         CASE
@@ -557,7 +558,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                                     rps.last_non_deploying_status::text
                             END
                         ) as status
-                    FROM versioned_resources AS rps
+                    FROM versioned_resource_state AS rps
                     -- TODO: is this accurate? Greatly improves COUNT(*) performance, may slightly degrade sort performance
                     -- TODO: LEFT iff including orphans
                     {'' if self.drop_orphans else 'LEFT'} JOIN resource AS r
