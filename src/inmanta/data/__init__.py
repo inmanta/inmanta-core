@@ -257,9 +257,11 @@ class ColumnType:
     This implementation supports the PRIMITIVE_SQL_TYPES types, for more specific behavior, make a subclass.
     """
 
-    def __init__(self, base_type: type[PRIMITIVE_SQL_TYPES], nullable: bool):
+    def __init__(self, base_type: type[PRIMITIVE_SQL_TYPES], nullable: bool, table_prefix: Optional[str] = None) -> None:
         self.base_type = base_type
         self.nullable = nullable
+        self.table_prefix = table_prefix
+        self.table_prefix_dot = "" if table_prefix is None else f"{table_prefix}."
 
     def as_basic_filter_elements(self, name: str, value: object) -> Sequence[tuple[str, "ColumnType", object]]:
         """
@@ -306,7 +308,7 @@ class ColumnType:
         """
         return the sql statement to get this column, as used in filter and other statements
         """
-        table_prefix_value = "" if table_prefix is None else table_prefix + "."
+        table_prefix_value = self.table_prefix_dot if table_prefix is None else table_prefix + "."
         return table_prefix_value + column_name
 
     def coalesce_to_min(self, value_reference: str) -> str:
@@ -331,26 +333,19 @@ class ColumnType:
 
         return value_reference
 
+    def with_prefix(self, table_prefix: Optional[str]) -> "ColumnType":
+        return ColumnType(self.base_type, self.nullable, table_prefix)
 
-class TablePrefixWrapper(ColumnType):
-    def __init__(self, table_name: str, child: ColumnType) -> None:
-        self.table_name = table_name
-        self.child = child
 
-    @property
-    def nullable(self) -> bool:
-        return self.child.nullable
+def TablePrefixWrapper(table_name: Optional[str], child: ColumnType) -> ColumnType:
+    """
+    This method is named like a class, because it replaces a former class.
 
-    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
-        return self.child.get_value(value)
-
-    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
-        if not table_prefix:
-            table_prefix = self.table_name
-        return self.child.get_accessor(column_name, table_prefix)
-
-    def coalesce_to_min(self, value_reference: str) -> str:
-        return self.child.coalesce_to_min(value_reference)
+    The functionality is not part ColumnType itself.
+    """
+    if table_name is None:
+        return child
+    return child.with_prefix(table_prefix=table_name)
 
 
 class ForcedStringColumn(ColumnType):
@@ -368,8 +363,8 @@ class ForcedStringColumn(ColumnType):
 
 
 class ResourceVersionIdColumnType(ColumnType):
-    def __init__(self) -> None:
-        self.nullable = False
+    def __init__(self, table_prefix: Optional[str] = None) -> None:
+        super().__init__(base_type=None, nullable=False, table_prefix=table_prefix)
 
     def as_basic_filter_elements(self, name: str, value: object) -> Sequence[tuple[str, "ColumnType", object]]:
         """
@@ -382,8 +377,16 @@ class ResourceVersionIdColumnType(ColumnType):
         assert isinstance(value, str)
         id = resources.Id.parse_resource_version_id(value)
         return [
-            ("resource_id", StringColumn, StringColumn.get_value(id.resource_str())),
-            ("model", PositiveIntColumn, PositiveIntColumn.get_value(id.version)),
+            (
+                "resource_id",
+                StringColumn.with_prefix(self.table_prefix),
+                StringColumn.get_value(id.resource_str()),
+            ),
+            (
+                "model",
+                PositiveIntColumn.with_prefix(self.table_prefix),
+                PositiveIntColumn.get_value(id.version),
+            ),
         ]
 
     def as_basic_order_elements(self, name: str, order: PagingOrder) -> Sequence[tuple[str, "ColumnType", PagingOrder]]:
@@ -393,7 +396,10 @@ class ResourceVersionIdColumnType(ColumnType):
         :param name: column name, intended to be passed through get_accessor
         :return: a list of (name, type, order) items
         """
-        return [("resource_id", StringColumn, order), ("model", PositiveIntColumn, order)]
+        return [
+            ("resource_id", StringColumn.with_prefix(self.table_prefix), order),
+            ("model", PositiveIntColumn.with_prefix(self.table_prefix), order),
+        ]
 
     def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
         """
@@ -509,6 +515,7 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
 
     # Configuration methods
     @classmethod
+    # TODO: cache this!
     def get_valid_sort_columns(cls) -> dict[ColumnNameStr, ColumnType]:
         """Return all valid columns for lookup and their type"""
         raise NotImplementedError()
@@ -745,7 +752,7 @@ class ResourceOrder(VersionedResourceOrder):
         return {
             ColumnNameStr("resource_type"): StringColumn,
             ColumnNameStr("agent"): StringColumn,
-            ColumnNameStr("resource_id"): StringColumn,
+            ColumnNameStr("resource_id"): TablePrefixWrapper("rps", StringColumn),
             ColumnNameStr("resource_id_value"): StringColumn,
             ColumnNameStr("status"): TextColumn,
         }
@@ -753,7 +760,7 @@ class ResourceOrder(VersionedResourceOrder):
     @property
     def id_column(self) -> tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
-        return ColumnNameStr("resource_version_id"), ResourceVersionIdColumn
+        return ColumnNameStr("resource_version_id"), ResourceVersionIdColumnType(table_prefix="r")
 
     def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
         if self.get_order() == PagingOrder.ASC:
@@ -5098,13 +5105,28 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
-        query = f"""
-            SELECT COUNT(r.resource_id) as count, status
-            FROM {cls.table_name()} as r
+        inner_query = f"""
+        SELECT r.resource_id as resource_id,
+        (
+            CASE WHEN (r.status = 'deploying')
+                THEN
+                    r.status::text
+                ELSE
+                    rps.last_non_deploying_status::text
+            END
+        ) as status
+        FROM {cls.table_name()} as r
+            JOIN resource_persistent_state rps ON r.resource_id = rps.resource_id and r.environment = rps.environment
                 WHERE r.environment=$1 AND r.model=(SELECT MAX(cm.version)
-                                                  FROM public.configurationmodel AS cm
-                                                  WHERE cm.environment=$1 AND cm.released=TRUE)
-            GROUP BY r.status
+                                                    FROM public.configurationmodel AS cm
+                                                    WHERE cm.environment=$1 AND cm.released=TRUE)
+        """
+
+        query = f"""
+            SELECT COUNT(ro.resource_id) as count,
+                   ro.status
+            FROM ({inner_query}) as ro
+            GROUP BY ro.status
         """
         raw_results = await cls._fetch_query(query, cls._get_value(environment))
         results = {}
