@@ -539,7 +539,7 @@ async def test_deploy_summary(server, client, env_with_resources):
 
 
 @pytest.fixture
-async def very_big_env(server, client, environment, clienthelper, agent_factory, instances: int):
+async def very_big_env(server, client, environment, clienthelper, agent_factory, instances: int) -> int:
     env_obj = await data.Environment.get_by_id(environment)
     await env_obj.set(data.AUTO_DEPLOY, True)
 
@@ -559,7 +559,7 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory,
     # 500 orphans: in second half, produce 10 orphans each
     # every 10th version is not released
 
-    async def make_resource_set(tenant_index: int, iteration: int):
+    async def make_resource_set(tenant_index: int, iteration: int) -> int:
         is_full = tenant_index == 0 and iteration == 0
         if is_full:
             version = await clienthelper.get_version()
@@ -612,7 +612,7 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory,
         assert result.code == 200
         assert result.result["resources"]
 
-        async def deploy(resource):
+        async def deploy(resource) -> None:
             nonlocal deploy_counter
             rid = resource["id"]
             actionid = uuid.uuid4()
@@ -642,7 +642,7 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory,
 @pytest.mark.slowtest
 @pytest.mark.parametrize("instances", [2])  # set the size
 @pytest.mark.parametrize("trace", [False])  # make it analyze the queries
-async def test_resources_paging_performance(client, environment, very_big_env, trace, async_finalizer):
+async def test_resources_paging_performance(client, environment, very_big_env: int, trace: boolean, async_finalizer):
     """Scaling test, not part of the norma testsuite"""
     # Basic sanity
     result = await client.resource_list(environment, limit=5, deploy_summary=True)
@@ -703,14 +703,14 @@ async def test_resources_paging_performance(client, environment, very_big_env, t
     for filter, totalcount in filters:
         for order in orders:
             # Pages 1-3
-            async def time_call():
+            async def time_call() -> Union[float, dict[str, str]]:
                 start = time.monotonic()
                 result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=10, sort=order)
                 assert result.code == 200
                 assert result.result["metadata"]["total"] == totalcount
                 return (time.monotonic() - start) * 1000, result.result.get("links", {})
 
-            async def time_page(links, name: str):
+            async def time_page(links: dict[str, str], name: str) -> Union[float, dict[str, str]]:
                 start = time.monotonic()
                 if name not in links:
                     return 0, {}
@@ -725,8 +725,8 @@ async def test_resources_paging_performance(client, environment, very_big_env, t
                 assert result["metadata"]["total"] == totalcount
                 return (time.monotonic() - start) * 1000, result["links"]
 
-            page1, prev = await time_call()
-            page2, prev = await time_page(prev, "next")
-            page3, prev = await time_page(prev, "next")
+            latency_page1, links = await time_call()
+            latency_page2, links = await time_page(links, "next")
+            latency_page3, links = await time_page(links, "next")
 
-            logging.getLogger(__name__).warning("Timings %s %s %d %d %d", filter, order, page1, page2, page3)
+            logging.getLogger(__name__).warning("Timings %s %s %d %d %d", filter, order, latency_page1, latency_page2, latency_page3)

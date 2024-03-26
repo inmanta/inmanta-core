@@ -360,7 +360,7 @@ class ForcedStringColumn(ColumnType):
 
 class ResourceVersionIdColumnType(ColumnType):
     def __init__(self, table_prefix: Optional[str] = None) -> None:
-        super().__init__(None, False, table_prefix)
+        super().__init__(base_type=None, nullable=False, table_prefix=table_prefix)
 
     def as_basic_filter_elements(self, name: str, value: object) -> Sequence[tuple[str, "ColumnType", object]]:
         """
@@ -748,7 +748,7 @@ class ResourceOrder(VersionedResourceOrder):
         return {
             ColumnNameStr("resource_type"): StringColumn,
             ColumnNameStr("agent"): StringColumn,
-            ColumnNameStr("resource_id"): TablePrefixWrapper("r", StringColumn),
+            ColumnNameStr("resource_id"): TablePrefixWrapper("rps", StringColumn),
             ColumnNameStr("resource_id_value"): StringColumn,
             ColumnNameStr("status"): TextColumn,
         }
