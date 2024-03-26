@@ -517,9 +517,9 @@ class OrchestrationService(protocol.ServerSlice):
             if active_version and active_version.version == version.version:
                 raise BadRequest("Cannot delete the active version")
 
-            await version.delete_cascade()
+            await version.delete_cascade(connection=connection)
             # Make sure the ResourcePersistentState is consistent with resources
-            await ResourcePersistentState.trim(env.id)
+            await ResourcePersistentState.trim(env.id, connection=connection)
             return 200
 
     @handle(methods_v2.reserve_version, env="tid")
