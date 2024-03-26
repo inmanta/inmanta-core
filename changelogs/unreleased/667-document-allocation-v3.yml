@@ -1,5 +1,5 @@
 description: Add documentation for allocation v3
 issue-nr: 667
 issue-repo: lsm
-change-type: patch
+change-type: minor
 destination-branches: [master, iso7]

@@ -21,7 +21,7 @@ entity TopLevelService extends lsm::ServiceEntity:
     lsm::attribute_modifier     top_level_value__modifier="r"
 end
 
-# Enforce uniqueness based on the service's name
+# Uniquely identify top level services through their name attribute
 index TopLevelService(name)
 
 # Each top level service may have zero or more embedded services attached to it
@@ -31,8 +31,7 @@ entity EmbeddedService extends lsm::EmbeddedEntity:
     """
     An embedded service, attached to a TopLevelService instance.
 
-    :attr id: The identifier of this embedded service instance, it should be unique
-        across all other embedded service instances of the service it is attached to.
+    :attr id: Identifier for this embedded service instance.
     :attr embedded_value: A read-only value, automatically assigned by the api.
     """
     string                      id
@@ -42,13 +41,13 @@ entity EmbeddedService extends lsm::EmbeddedEntity:
     string[]? __lsm_key_attributes = ["id"]
 end
 
-# Uniquely identify embedded services within a top level service through their id
+# Uniquely identify embedded services through their id attribute
 index EmbeddedService(id)
 
 # Inherit parent entity's implementations
 implement TopLevelService using parents
 
-implement EmbeddedService using std::none
+implement EmbeddedService using parents
 
 # Create a binding to enable service creation through the service catalog
 value_binding = lsm::ServiceEntityBindingV2(
@@ -71,11 +70,11 @@ for assignment in lsm::all(value_binding):
         entity_binding=value_binding,
         name=attributes["name"],
         top_level_value=attributes["top_level_value"],
+        embedded_services=[
+            EmbeddedService(
+                **embedded_service
+            )
+            for embedded_service in attributes["embedded_services"]
+        ],
     )
-
-    for embedded_service in attributes["embedded_services"]:
-        service.embedded_services += EmbeddedService(
-            **embedded_service
-        )
-    end
 end
