@@ -988,7 +988,7 @@ class AgentInstance:
     _get_resource_timeout: float
     _get_resource_duration: float
 
-    def __init__(self, process: "Agent", name: str, uri: str, ensure_deploy_on_start: bool = False) -> None:
+    def __init__(self, process: "Agent", name: str, uri: str, *, ensure_deploy_on_start: bool = False) -> None:
         self.process = process
         self.name = name
         self._uri = uri
@@ -1151,8 +1151,7 @@ class AgentInstance:
             return False
 
         now = datetime.datetime.now().astimezone()
-        did_schedule = periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
-        if not did_schedule and self.ensure_deploy_on_start:
+        if self.ensure_deploy_on_start:
             self.process.add_background_task(
                 self.get_latest_version_for_agent(
                     DeployRequest(
@@ -1163,6 +1162,7 @@ class AgentInstance:
                 )
             )
             self.ensure_deploy_on_start = False
+        periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
         periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value, now)
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
@@ -1491,7 +1491,7 @@ class Agent(SessionEndpoint):
         async with self._instances_lock:
             await self._add_end_point_name(name)
 
-    async def _add_end_point_name(self, name: str, ensure_deploy_on_start: bool = False) -> None:
+    async def _add_end_point_name(self, name: str, *, ensure_deploy_on_start: bool = False) -> None:
         """
         Note: always call under _instances_lock
         """
@@ -1505,7 +1505,7 @@ class Agent(SessionEndpoint):
         if name in self.agent_map:
             hostname = self.agent_map[name]
 
-        self._instances[name] = AgentInstance(self, name, hostname, ensure_deploy_on_start)
+        self._instances[name] = AgentInstance(self, name, hostname, ensure_deploy_on_start=ensure_deploy_on_start)
 
     async def remove_end_point_name(self, name: str) -> None:
         async with self._instances_lock:
@@ -1554,11 +1554,13 @@ class Agent(SessionEndpoint):
                 agent_name for agent_name in update_uri_agents if self._instances[agent_name].is_enabled()
             ]
 
-            to_be_gathered = [self._add_end_point_name(agent_name, True) for agent_name in agents_to_add]
+            to_be_gathered = [self._add_end_point_name(agent_name, ensure_deploy_on_start=True) for agent_name in agents_to_add]
             to_be_gathered += [self._remove_end_point_name(agent_name) for agent_name in agents_to_remove + update_uri_agents]
             await asyncio.gather(*to_be_gathered)
             # Re-add agents with updated URI
-            await asyncio.gather(*[self._add_end_point_name(agent_name, True) for agent_name in update_uri_agents])
+            await asyncio.gather(
+                *[self._add_end_point_name(agent_name, ensure_deploy_on_start=True) for agent_name in update_uri_agents]
+            )
             # Enable agents with updated URI that were enabled before
             for agent_to_enable in updated_uri_agents_to_enable:
                 self.unpause(agent_to_enable)
