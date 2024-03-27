@@ -20,7 +20,7 @@ import enum
 import inspect
 import json
 from datetime import datetime
-from typing import Optional, Union, Literal
+from typing import Literal, Optional, Union
 from uuid import UUID
 
 import pydantic
@@ -292,7 +292,7 @@ def test_openapi_types_union() -> None:
             Schema(type="string"),
             Schema(type="string", format="binary"),
             Schema(type="string", enum=["test"]),
-        ]
+        ],
     )
 
 
@@ -314,7 +314,7 @@ def test_openapi_types_list():
                 Schema(type="string", format="uuid"),
                 Schema(type="string", enum=["test"]),
             ]
-        )
+        ),
     )
 
     # Test list type wrapped into an object
@@ -340,7 +340,7 @@ def test_openapi_types_list():
                 Schema(type="string", format="uuid"),
                 Schema(type="string", enum=["test"]),
             ]
-        )
+        ),
     )
 
 
