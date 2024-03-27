@@ -87,7 +87,10 @@ def test_direct_execute_error(snippetcompiler):
 
         A()
         """,
-        "The statement Format({{{{a}}}}) can not be executed in this context (reported in Format({{{{a}}}}) ({dir}/main.cf:4))",
+        (
+            "The statement Format('{{{{a}}}}') can not be executed in this context"
+            " (reported in Format('{{{{a}}}}') ({dir}/main.cf:4))"
+        ),
     )
 
 
