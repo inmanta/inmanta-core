@@ -34,7 +34,7 @@ an allocator, use the ``allocation_helpers.allocator()`` decorator:
 
 
 An allocator must accept exactly two positional arguments:
-    1. ``service``, the service instance for which the value is being allocated (usually ``self`` in the model).
+    1. ``service``, the service instance for which the value is being allocated.
     2. ``attribute_path``, the attribute of the service instance in which the allocated
     value should be saved, as a :class:`~inmanta.util.dict_path.DictPath` expression. The decorated function can define a default value.
 
@@ -56,6 +56,13 @@ the model:
    :linenos:
    :emphasize-lines: 62
 
+On the plugin side, add an optional argument to enforce ordering:
+
+.. literalinclude:: allocation_sources/allocation_v3/ordering_example/plugin.py
+   :language: python
+   :caption: __init__.py (Plugin call ordering)
+   :linenos:
+   :emphasize-lines: 29
 
 
 V2 to V3 migration
