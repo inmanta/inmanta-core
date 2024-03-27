@@ -20,7 +20,7 @@ import enum
 import inspect
 import json
 from datetime import datetime
-from typing import Optional, Union
+from typing import Optional, Union, Literal
 from uuid import UUID
 
 import pytest
@@ -382,6 +382,12 @@ def test_openapi_types_uuid():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(UUID)
     assert openapi_type == Schema(type="string", format="uuid")
+
+
+def test_openapi_types_constant() -> None:
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Literal["test"])
+    assert openapi_type == Schema(type="string", enum=["test"])
 
 
 def test_openapi_types_anyurl():
