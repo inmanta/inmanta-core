@@ -133,11 +133,13 @@ class Config:
 
     @overload
     @classmethod
-    def get(cls) -> ConfigParser: ...
+    def get(cls) -> ConfigParser:
+        ...
 
     @overload
     @classmethod
-    def get(cls, section: str, name: str, default_value: Optional[T] = None) -> Optional[str | T]: ...
+    def get(cls, section: str, name: str, default_value: Optional[T] = None) -> Optional[str | T]:
+        ...
 
     # noinspection PyNoneFunctionAssignment
     @classmethod

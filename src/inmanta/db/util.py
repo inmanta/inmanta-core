@@ -311,7 +311,6 @@ class ConnectionNotInTransaction(ConnectionMaybeInTransaction):
 
 
 class ConnectionInTransaction(ConnectionMaybeInTransaction):
-
     def __init__(self, connection: Connection) -> None:
         super().__init__(connection)
         self.finished_callbacks: list[Callable[[], object]] = []
