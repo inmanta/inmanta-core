@@ -601,12 +601,10 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService, use_trx_b
     u2 = uuid.uuid4()
     await request_compile(remote_id=u2, env_vars={"my_unique_var": str(u2)})
 
-    assert await compilerservice.is_compiling(env.id) == 200
-
     async def compile_done():
         res = await compilerservice.is_compiling(env.id)
         print(res)
-        return res == 204
+        return res == 204 and compilerservice._queue_count_cache == 0
 
     await retry_limited(compile_done, 10)
     # All compiles are finished. The queue should be empty
