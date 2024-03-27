@@ -814,7 +814,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             return
         env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
         if env is None:
-            LOGGER.warning("Can't dequeue compile: environment %s does not exist" % environment)
+            LOGGER.warning("Can't dequeue compile: environment %s does not exist", environment)
             return
         if not env.halted and (compile.environment not in self._recompiles or self._recompiles[compile.environment].done()):
             task = self.add_background_task(self._run(compile))
