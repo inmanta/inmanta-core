@@ -20,7 +20,7 @@ Types of Allocation
 ####################
 
 We distinguish several types of allocation. The next sections will explain each type, from simplest to most advanced.
-After the basic explanation, a more in-depth explanation is give for the different types.
+After the basic explanation, a more in-depth explanation is given for the different types.
 When first learning about LSM allocation (or allocation in general), it is important to have a basic understanding of the different types, before diving into the details.
 
 
@@ -57,8 +57,8 @@ The allocation spec specifies how to allocate the attribute:
 2. To select a new value, use the `AnyUniqueInt` strategy, which selects a random number in the specified range
 
 Internally, this works by storing allocations in read-only attributes on the instance.
-The lsm::all function ensures that if a value is already in the attribute, that value is used
-Otherwise the allocator gets an appropriate, new value, that doesn’t collide with any value in any attribute-set of any other service instance.
+The lsm::all function ensures that if a value is already in the attribute, that value is used.
+Otherwise, the allocator gets an appropriate, new value, that doesn't collide with any value in any attribute-set of any other service instance.
 
 *In practice, this means that a value is allocated as long as it's in the active, candidate or rollback attribute sets of any non-terminated service instance.*
 When a service instance is terminated, or clears one of its attribute sets, all identifiers are automatically deallocated.
