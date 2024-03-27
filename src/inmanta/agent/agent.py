@@ -1158,7 +1158,7 @@ class AgentInstance:
                     DeployRequest(
                         reason="Initial deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
                         is_full_deploy=False,
-                        is_periodic=True,
+                        is_periodic=False,
                     )
                 )
             )
