@@ -21,7 +21,7 @@ from typing import Union
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import Namespace, NotFoundException
+from inmanta.ast import Namespace
 from inmanta.ast.variables import AttributeReference, Reference
 from test_parser import parse_code
 

@@ -1059,7 +1059,6 @@ def test_string_format_v2():
     stmt = statements[0]
     assert isinstance(stmt, StringFormatV2)
     assert len(stmt._variables) == 2
-    variables = {ref.name: full_name for ref, full_name in stmt._variables.items()}
     assert {ref.name: full_name for ref, full_name in stmt._variables.items()} == {"world": " world", "width": "width "}
     assert stmt._format_string == "hello { world:>{width }}"
 

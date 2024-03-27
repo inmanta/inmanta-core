@@ -930,7 +930,7 @@ def p_constant_fstring(p: YaccProduction) -> None:
     formatter = string.Formatter()
 
     # formatter.parse returns an iterable of tuple (literal_text, field_name, format_spec, conversion)
-    parsed: Sequence[tuple[str, Optional[str], Optional[str], Optional[str]]]
+    parsed: abc.Sequence[tuple[str, Optional[str], Optional[str], Optional[str]]]
     try:
         parsed = list(formatter.parse(str(p[1])))
     except ValueError as e:
