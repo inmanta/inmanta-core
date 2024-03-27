@@ -29,6 +29,7 @@ from inmanta.data import ConfigurationModel, Environment, ResourceAction, Resour
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
+
     await migrate_db_from()
     env = await Environment.get_one(name="dev-1")
     assert env
