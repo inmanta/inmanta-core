@@ -234,6 +234,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
     async def request_compile(env: data.Environment) -> uuid.UUID:
         """Request compile for given env, return remote_id"""
+        logger.info("Requesting compile for %s", env)
         u1 = uuid.uuid4()
         # add unique environment variables to prevent merging in request_recompile
         await cs.request_recompile(env, False, False, u1, env_vars={"uuid": str(u1)})
@@ -373,15 +374,24 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     await hanging_collector.hang()  # Can we boot when a handler hangs?
     cs.add_listener(hanging_collector)
     await cs.start()
+
+    # Can we request compiles while recovery is ongoing?
+    extra_compile = await request_compile(env2)
+    e2.append(extra_compile)
+
+    # We haven't started, because we hang on a handler,
+    assert [rc for rc in cs._recompiles.values() if rc is not None] == []
+
+    # Continue
     hanging_collector.release()
 
-    # one in cache, one running
-    await compiler_cache_consistent(1)
+    # two in cache, one running
+    await compiler_cache_consistent(2)
 
     # complete the sequence, expect re-run of third compile
-    for i in range(3):
+    for i in range(4):
         await check_compile_in_sequence(env2, e2[2:], i)
-        await compiler_cache_consistent(0)
+    await compiler_cache_consistent(0)
 
     # all are re-run, entire sequence present
     collector.verify(e2)

@@ -517,8 +517,8 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         self._recompiles: dict[uuid.UUID, Task[None | Result]] = {}
 
         self._global_lock = asyncio.locks.Lock()
-        # event indicating when everything is up and processing can start
-        self.ready = asyncio.Event()
+        # boolean indicating when everything is up and processing can start
+        self.fully_ready = False
 
         self.blocking_listeners: list[CompileStateListener] = []
         self.async_listeners: list[CompileStateListener] = []
@@ -643,7 +643,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             If multiple values are compacted, they will be joined using spaces
         :return: the compile id of the requested compile and any warnings produced during the request
         """
-        await self.ready.wait()
         if in_db_transaction and not connection:
             raise Exception("A connection should be provided when in_db_transaction is True.")
         if in_db_transaction and connection and not connection.is_in_transaction():
@@ -729,6 +728,8 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         async with self._global_lock:
             if self.is_stopping():
                 return
+            if not self.fully_ready:
+                return
             env: Optional[data.Environment] = await data.Environment.get_by_id(compile.environment)
             if env is None:
                 raise Exception("Can't queue compile: environment %s does not exist" % compile.environment)
@@ -789,11 +790,12 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             unhandled = await data.Compile.get_unhandled_compiles()
             for u in unhandled:
                 await self._notify_listeners(u)
+            # We are ready to start!
+            self.fully_ready = True
             # one run per env max to get started
             runs = await data.Compile.get_next_run_all()
             for run in runs:
                 await self._queue(run)
-            self.ready.set()
 
         self.add_background_task(sub_recovery())
 
