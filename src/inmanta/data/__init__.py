@@ -362,65 +362,6 @@ class ForcedStringColumn(ColumnType):
         return super().get_accessor(column_name, table_prefix) + "::" + self.forced_type
 
 
-class ResourceVersionIdColumnType(ColumnType):
-    def __init__(self, table_prefix: Optional[str] = None) -> None:
-        super().__init__(base_type=None, nullable=False, table_prefix=table_prefix)
-
-    def as_basic_filter_elements(self, name: str, value: object) -> Sequence[tuple[str, "ColumnType", object]]:
-        """
-        Break down this filter into more elementary filters
-
-        :param name: column name, intended to be passed through get_accessor
-        :param value: the value of this column
-        :return: a list of (name, type, value) items
-        """
-        assert isinstance(value, str)
-        id = resources.Id.parse_resource_version_id(value)
-        return [
-            (
-                "resource_id",
-                StringColumn.with_prefix(self.table_prefix),
-                StringColumn.get_value(id.resource_str()),
-            ),
-            (
-                "model",
-                PositiveIntColumn.with_prefix(self.table_prefix),
-                PositiveIntColumn.get_value(id.version),
-            ),
-        ]
-
-    def as_basic_order_elements(self, name: str, order: PagingOrder) -> Sequence[tuple[str, "ColumnType", PagingOrder]]:
-        """
-        Break down this filter into more elementary filters
-
-        :param name: column name, intended to be passed through get_accessor
-        :return: a list of (name, type, order) items
-        """
-        return [
-            ("resource_id", StringColumn.with_prefix(self.table_prefix), order),
-            ("model", PositiveIntColumn.with_prefix(self.table_prefix), order),
-        ]
-
-    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
-        """
-        Prepare the actual value for use as an argument in a prepared statement for this type
-        """
-        raise NotImplementedError()
-
-    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
-        """
-        return the sql statement to get this column, as used in filter and other statements
-        """
-        raise NotImplementedError()
-
-    def coalesce_to_min(self, value_reference: str) -> str:
-        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
-        This is required for the comparisons used for paging, because comparing a value to
-        NULL always yields NULL.
-        """
-        raise NotImplementedError()
-
-
 StringColumn = ColumnType(base_type=str, nullable=False)
 OptionalStringColumn = ColumnType(base_type=str, nullable=True)
 
@@ -434,7 +375,6 @@ TextColumn = ForcedStringColumn("text")
 
 UUIDColumn = ColumnType(base_type=uuid.UUID, nullable=False)
 BoolColumn = ColumnType(base_type=bool, nullable=False)
-ResourceVersionIdColumn = ResourceVersionIdColumnType()
 
 
 class DatabaseOrderV2(ABC):
@@ -744,43 +684,17 @@ class VersionedResourceOrder(AbstractDatabaseOrderV2):
         return ColumnNameStr("resource_id"), StringColumn
 
 
-class ResourceOrder(VersionedResourceOrder):
-    """Represents the ordering by which resources should be sorted"""
-
+class ResourceStatusOrder(VersionedResourceOrder):
+    """
+    Resources with a status field
+    """
     @classmethod
     def get_valid_sort_columns(cls) -> dict[ColumnNameStr, ColumnType]:
         return {
-            ColumnNameStr("resource_type"): StringColumn,
-            ColumnNameStr("agent"): StringColumn,
-            ColumnNameStr("resource_id"): TablePrefixWrapper("rps", StringColumn),
-            ColumnNameStr("resource_id_value"): StringColumn,
+            **super().get_valid_sort_columns(),
+            ColumnNameStr("resource_id"): StringColumn,
             ColumnNameStr("status"): TextColumn,
         }
-
-    @property
-    def id_column(self) -> tuple[ColumnNameStr, ColumnType]:
-        """Name of the id column of this database order"""
-        return ColumnNameStr("resource_version_id"), ResourceVersionIdColumnType(table_prefix="r")
-
-    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
-        if self.get_order() == PagingOrder.ASC:
-            first, last = last, first
-
-        order_column_name = self.order_by_column
-        order_type: ColumnType = self.get_order_by_column_type()
-
-        def make_id(record: abc.Mapping[str, object]) -> str:
-            resource_id = record["resource_id"]
-            assert isinstance(resource_id, str)
-            model = record["model"]
-            return resource_id + ",v=" + str(model)
-
-        return PagingBoundaries(
-            start=order_type.get_value(first[order_column_name]),
-            first_id=make_id(first),
-            end=order_type.get_value(last[order_column_name]),
-            last_id=make_id(last),
-        )
 
 
 class ResourceHistoryOrder(AbstractDatabaseOrderV2):
@@ -4495,6 +4409,11 @@ class ResourcePersistentState(BaseDocument):
     # ID related
     resource_id: m.ResourceIdStr
 
+    # TODO: check
+    resource_type: str
+    resource_id_value: str
+    agent: str
+
     # Field based on content from the resource actions
     last_deploy: Optional[datetime.datetime] = None
     # Last deployment completed of any kind, including marking-deployed-for-know-good-state for increments
@@ -5234,9 +5153,13 @@ class Resource(BaseDocument):
         await super().insert(connection=connection)
         # TODO: On conflict or is not exists or just make every update an upsert?
         await self._execute_query(
-            """INSERT INTO resource_persistent_state(environment, resource_id) VALUES ($1, $2) ON CONFLICT DO NOTHING""",
+            # TODO: check
+            """INSERT INTO resource_persistent_state(environment, resource_id, resource_type, resource_id_value, agent) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING""",
             self.environment,
             self.resource_id,
+            self.resource_type,
+            self.resource_id_value,
+            self.agent,
             connection=connection,
         )
 
@@ -5249,9 +5172,13 @@ class Resource(BaseDocument):
         # TODO performance?
         for doc in documents:
             await cls._execute_query(
-                """INSERT INTO resource_persistent_state(environment, resource_id) VALUES ($1, $2) ON CONFLICT DO NOTHING""",
+                # TODO: check
+                """INSERT INTO resource_persistent_state(environment, resource_id, resource_type, resource_id_value, agent) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING""",
                 doc.environment,
                 doc.resource_id,
+                doc.resource_type,
+                doc.resource_id_value,
+                doc.agent,
                 connection=connection,
             )
         await super().insert_many(documents, connection=connection)

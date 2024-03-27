@@ -53,7 +53,6 @@ from inmanta.data import (
     ResourceAction,
     ResourceHistoryOrder,
     ResourceLogOrder,
-    ResourceOrder,
     SimpleQueryBuilder,
     VersionedResourceOrder,
     model,
@@ -446,7 +445,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         return limit
 
 
-class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
+class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
     def __init__(
         self,
         env: data.Environment,
@@ -460,7 +459,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         deploy_summary: bool = False,
     ) -> None:
         super().__init__(
-            order=ResourceOrder.parse_from_string(sort),
+            order=ResourceStatusOrder.parse_from_string(sort),
             limit=limit,
             first_id=first_id,
             last_id=last_id,
@@ -509,6 +508,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
+        # TODO: document changes
         new_query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
             prelude=f"""
@@ -544,9 +544,9 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                     SELECT
                         rps.resource_id,
                         r.attributes,
-                        r.resource_type,
-                        r.agent,
-                        r.resource_id_value,
+                        rps.resource_type,
+                        rps.agent,
+                        rps.resource_id_value,
                         r.model,
                         rps.environment,
                         (
