@@ -224,7 +224,7 @@ def test_fstring_expected_error(snippetcompiler, capsys):
         'f"{}{}"',
         (
             "f-strings do not support positional substitutions via '{{}}', use variable or attribute keys instead"
-            " (reported in 'hello {{}}' ({dir}/main.cf:1:1))"
+            " (reported in '{{}}{{}}' ({dir}/main.cf:1:1))"
         ),
     )
 
