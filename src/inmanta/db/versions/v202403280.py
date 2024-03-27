@@ -25,12 +25,6 @@ async def update(connection: Connection) -> None:
     # TODO: cleanup
     # TODO: document
 
-    await connection.execute("CREATE INDEX ON public.resource (environment, resource_id, model)")
-    await connection.execute("CREATE INDEX ON public.configurationmodel (environment, released, version)")
-    await connection.execute(
-        "CREATE INDEX ON public.resource (environment, resource_type NULLS FIRST, resource_id NULLS FIRST)"
-    )
-
     await connection.execute("ALTER TABLE public.resource_persistent_state ADD COLUMN resource_type varchar")
     await connection.execute("ALTER TABLE public.resource_persistent_state ADD COLUMN resource_id_value varchar")
     await connection.execute("ALTER TABLE public.resource_persistent_state ADD COLUMN agent varchar")
