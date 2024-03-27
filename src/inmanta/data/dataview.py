@@ -53,6 +53,7 @@ from inmanta.data import (
     ResourceAction,
     ResourceHistoryOrder,
     ResourceLogOrder,
+    ResourceStatusOrder,
     SimpleQueryBuilder,
     VersionedResourceOrder,
     model,
