@@ -1,5 +1,5 @@
 description: make sure an environment can not be resumed while deleting, that deleting an environment first halts the environment and that the active model cannot be deleted.
 change-type: patch
-destination-branches: [master, iso7, iso6]
+destination-branches: [iso6]
 sections:
   bugfix: "{{description}}"
