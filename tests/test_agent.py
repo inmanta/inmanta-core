@@ -23,7 +23,6 @@ import uuid
 
 import pytest
 
-import utils
 from inmanta import config, data, protocol
 from inmanta.agent import Agent, reporting
 from inmanta.agent.handler import HandlerContext, InvalidOperation

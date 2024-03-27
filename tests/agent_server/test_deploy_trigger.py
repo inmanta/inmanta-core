@@ -17,7 +17,6 @@
 """
 
 import logging
-import uuid
 
 import inmanta.data
 import utils
