@@ -785,7 +785,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         async with self._queue_count_cache_lock:
             self._queue_count_cache = await data.Compile.get_total_length_of_all_compile_queues(exclude_started_compiles=False)
 
-        # we run the recovery and start off main thread to prevent deadlocks with sync handlers
+        # we run the recovery and start in the background to prevent deadlocks with sync handlers
         async def sub_recovery() -> None:
             unhandled = await data.Compile.get_unhandled_compiles()
             for u in unhandled:
