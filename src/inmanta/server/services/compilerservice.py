@@ -517,7 +517,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         self._recompiles: dict[uuid.UUID, Task[None | Result]] = {}
 
         self._global_lock = asyncio.locks.Lock()
-        # boolean indicating when everything is up and processing can start
+        # boolean indicating when everything is up and compile execution can start
         self.fully_ready = False
 
         self.blocking_listeners: list[CompileStateListener] = []
