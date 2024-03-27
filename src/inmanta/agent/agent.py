@@ -664,6 +664,7 @@ class ResourceAction(ResourceActionBase):
                     self.running = False
 
             async with self.scheduler.ratelimiter:
+
                 self.running = True
 
                 try:
@@ -1234,6 +1235,7 @@ class AgentInstance:
         return 200
 
     async def do_run_dryrun(self, version: int, dry_run_id: uuid.UUID) -> None:
+
         async with self.dryrunlock:
             async with self.ratelimiter:
                 response = await self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)

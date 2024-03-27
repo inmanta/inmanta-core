@@ -36,6 +36,7 @@ from inmanta.protocol.ipc_light import ConnectionLost
 
 
 class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
+
     def __init__(self, args: list[str]) -> None:
         self.args = args
 
@@ -45,6 +46,7 @@ class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
 
 
 class GetConfig(inmanta.protocol.ipc_light.IPCMethod[str, None]):
+
     def __init__(self, section: str, name: str) -> None:
         self.section = section
         self.name = name

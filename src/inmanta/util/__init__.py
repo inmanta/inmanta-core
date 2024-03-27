@@ -777,6 +777,7 @@ class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextMana
 
 
 class FinallySet(contextlib.AbstractAsyncContextManager[asyncio.Event]):
+
     def __init__(self, event: asyncio.Event) -> None:
         self.event = event
 

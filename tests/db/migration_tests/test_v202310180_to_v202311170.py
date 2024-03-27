@@ -28,5 +28,6 @@ part = file_name_regex.match(__name__)[1]
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
 async def test_add_pip_config(migrate_db_from: abc.Callable[[], abc.Awaitable[None]]) -> None:
+
     # This migration script adds a column. Just verify that the script doesn't fail.
     await migrate_db_from()

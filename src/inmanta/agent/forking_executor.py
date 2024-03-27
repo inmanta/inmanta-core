@@ -104,6 +104,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
 
 class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+
     async def call(self, context: ExecutorContext) -> None:
         await context.stop()
 
