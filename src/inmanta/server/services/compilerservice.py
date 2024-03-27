@@ -794,6 +794,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             for run in runs:
                 await self._queue(run)
             self.ready.set()
+
         self.add_background_task(sub_recovery())
 
     async def resume_environment(self, environment: uuid.UUID) -> None:

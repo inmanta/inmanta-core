@@ -365,13 +365,15 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     # restart new server
     cs = HookedCompilerService()
     await cs.prestart(server)
-    await cs.start()
     collector = Collector()
     cs.add_listener(collector)
 
     hanging_collector = Collector()
     hanging_collector.blocking = True
+    await hanging_collector.hang()  # Can we boot when a handler hangs?
     cs.add_listener(hanging_collector)
+    await cs.start()
+    hanging_collector.release()
 
     # one in cache, one running
     await compiler_cache_consistent(1)
