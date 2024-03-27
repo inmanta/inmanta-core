@@ -790,14 +790,35 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             unhandled = await data.Compile.get_unhandled_compiles()
             for u in unhandled:
                 await self._notify_listeners(u)
-            # We are ready to start!
-            self.fully_ready = True
             # one run per env max to get started
             runs = await data.Compile.get_next_run_all()
-            for run in runs:
-                await self._queue(run)
+
+            # prevent races by holding global lock
+            async with self._global_lock:
+                # We are ready to start!
+                self.fully_ready = True
+                for run in runs:
+                    await self.__queue_no_lock(run.environment, run)
 
         self.add_background_task(sub_recovery())
+
+    async def __queue_no_lock(self, environment: uuid.UUID, compile: data.Compile) -> None:
+        """
+        Internal helper that starts the next task if required
+
+
+
+            Must be called under the _global_lock
+        """
+        if self.is_stopping():
+            return
+        env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
+        if env is None:
+            LOGGER.warning("Can't dequeue compile: environment %s does not exist" % environment)
+            return
+        if not env.halted and (compile.environment not in self._recompiles or self._recompiles[compile.environment].done()):
+            task = self.add_background_task(self._run(compile))
+            self._recompiles[environment] = task
 
     async def resume_environment(self, environment: uuid.UUID) -> None:
         """
