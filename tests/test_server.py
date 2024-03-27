@@ -1819,3 +1819,29 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
         f"because Request conflicts with the current state of the resource: "
         f"The version 2 on environment {environment} is older then the latest released version",
     )
+
+
+async def test_delete_active_version(client, clienthelper, server, environment):
+    """
+    Test that the active version cannot be deleted
+    """
+    version = await clienthelper.get_version()
+    assert version == 1
+    res1 = "test::Resource[agent1,key=key1]"
+    res2 = "test::Resource[agent1,key=key2]"
+    resources = [
+        {"key": "key1", "value": "value", "id": f"{res1},v={version}", "requires": [], "purged": False, "send_event": False},
+        {"key": "key2", "value": "value", "id": f"{res2},v={version}", "requires": [], "purged": False, "send_event": False},
+    ]
+
+    await clienthelper.put_version_simple(resources, version)
+
+    result = await client.release_version(
+        environment, version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
+    assert result.code == 200
+
+    # Remove version 1
+    result = await client.delete_version(tid=environment, id=version)
+    assert result.code == 400
+    assert result.result["message"] == "Invalid request: Cannot delete the active version"
