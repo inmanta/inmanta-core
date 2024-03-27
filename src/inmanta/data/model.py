@@ -255,8 +255,8 @@ class Environment(BaseModel):
     description: Optional[str]
     icon: Optional[str]
     is_marked_for_deletion: bool = False
-    description: Optional[str] = None
-    icon: Optional[str] = None
+    description: Optional[str]
+    icon: Optional[str]
 
 
 class Project(BaseModel):
