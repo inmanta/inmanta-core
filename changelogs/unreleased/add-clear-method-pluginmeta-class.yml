@@ -1,4 +1,4 @@
 ---
-description: Added clear() method to the PluginMeta class to support resetting its state after a compile.
+description: Added clear() method to the Exporter class to support resetting its state after a compile.
 change-type: patch
 destination-branches: [master, iso7, iso6]
