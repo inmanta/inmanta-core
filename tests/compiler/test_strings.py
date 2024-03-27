@@ -21,7 +21,7 @@ from typing import Union
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import Namespace, NotFoundException
+from inmanta.ast import Namespace
 from inmanta.ast.variables import AttributeReference, Reference
 from test_parser import parse_code
 
@@ -187,6 +187,7 @@ std::print(z)
         (r"f'{arg}'", "123\n"),
         (r"f'{arg}{arg}{arg}'", "123123123\n"),
         (r"f'{arg:@>5}'", "@@123\n"),
+        (r"f'{arg:@>{width}}'", "@@@@@@@123\n"),
         (r"f'{arg:^5}'", " 123 \n"),
         (r"f' {  \t\narg  \n  } '", " 123 \n"),
     ],
@@ -195,6 +196,7 @@ def test_fstring_formatting(snippetcompiler, capsys, f_string, expected_output):
     snippetcompiler.setup_for_snippet(
         f"""
 arg = 123
+width = 10
 z={f_string}
 std::print(z)
         """,
@@ -205,13 +207,48 @@ std::print(z)
 
 
 def test_fstring_expected_error(snippetcompiler, capsys):
-    with pytest.raises(NotFoundException):
-        snippetcompiler.setup_for_snippet(
-            """
-std::print(f"{unknown}")
-            """,
-        )
-        compiler.do_compile()
+    snippetcompiler.setup_for_error(
+        'std::print(f"{unknown}")',
+        "variable unknown not found (reported in '{{unknown}}' ({dir}/main.cf:1:12))",
+    )
+
+    snippetcompiler.setup_for_error(
+        'f"hello {}"',
+        (
+            "f-strings do not support positional substitutions via '{{}}', use variable or attribute keys instead"
+            " (reported in 'hello {{}}' ({dir}/main.cf:1:1))"
+        ),
+    )
+
+    snippetcompiler.setup_for_error(
+        'f"{}{}"',
+        (
+            "f-strings do not support positional substitutions via '{{}}', use variable or attribute keys instead"
+            " (reported in '{{}}{{}}' ({dir}/main.cf:1:1))"
+        ),
+    )
+
+    snippetcompiler.setup_for_error(
+        """
+        world = "myworld"
+        f"hello { world:{} }"
+        """,
+        (
+            "f-strings do not support positional substitutions via '{{}}', use variable or attribute keys instead"
+            " (reported in 'hello {{ world:{{}} }}' ({dir}/main.cf:3:9))"
+        ),
+    )
+
+    snippetcompiler.setup_for_error(
+        """
+        world = "myworld"
+        f"hello {world:invalid_specifier}"
+        """,
+        (
+            "Invalid f-string: Invalid format specifier 'invalid_specifier' for object of type 'str'"
+            " (reported in 'hello {{world:invalid_specifier}}' ({dir}/main.cf:3:9))"
+        ),
+    )
 
 
 def test_fstring_relations(snippetcompiler, capsys):
