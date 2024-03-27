@@ -515,9 +515,14 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)
         self._recompiles: dict[uuid.UUID, Task[None | Result]] = {}
+
         self._global_lock = asyncio.locks.Lock()
+        # event indicating when everything is up and processing can start
+        self.ready = asyncio.Event()
+
         self.blocking_listeners: list[CompileStateListener] = []
         self.async_listeners: list[CompileStateListener] = []
+
         self._scheduled_full_compiles: dict[uuid.UUID, tuple[TaskMethod, str]] = {}
         # In-memory cache to keep track of the total length of all the compile queues on this Inmanta server.
         # This cache is used by the /serverstatus endpoint.
@@ -638,6 +643,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             If multiple values are compacted, they will be joined using spaces
         :return: the compile id of the requested compile and any warnings produced during the request
         """
+        await self.ready.wait()
         if in_db_transaction and not connection:
             raise Exception("A connection should be provided when in_db_transaction is True.")
         if in_db_transaction and connection and not connection.is_in_transaction():
@@ -774,15 +780,21 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     async def _recover(self) -> None:
         """Restart runs after server restart"""
+        # patch up in-memory state
         async with self._queue_count_cache_lock:
             self._queue_count_cache = await data.Compile.get_total_length_of_all_compile_queues(exclude_started_compiles=False)
-        # one run per env max to get started
-        runs = await data.Compile.get_next_run_all()
-        for run in runs:
-            await self._queue(run)
-        unhandled = await data.Compile.get_unhandled_compiles()
-        for u in unhandled:
-            await self._notify_listeners(u)
+
+        # we run the recovery and start off main thread to prevent deadlocks with sync handlers
+        async def sub_recovery() -> None:
+            unhandled = await data.Compile.get_unhandled_compiles()
+            for u in unhandled:
+                await self._notify_listeners(u)
+            # one run per env max to get started
+            runs = await data.Compile.get_next_run_all()
+            for run in runs:
+                await self._queue(run)
+            self.ready.set()
+        self.add_background_task(sub_recovery())
 
     async def resume_environment(self, environment: uuid.UUID) -> None:
         """
