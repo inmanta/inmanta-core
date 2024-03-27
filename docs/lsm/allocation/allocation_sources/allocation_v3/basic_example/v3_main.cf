@@ -80,9 +80,9 @@ for assignment in lsm::all(top_level_service_binding):
                 embedded_value=get_value(
                     service,
                     lsm::format(
-                        "embedded_services[id={embedded_service_id}].embedded_value",
-                        [],
-                        {"embedded_service_id": embedded_service["id"]},
+                        "embedded_services[id={id}].embedded_value",
+                        args=[],
+                        kwargs=embedded_service,
                     ),
                     value=3,
                 ),
