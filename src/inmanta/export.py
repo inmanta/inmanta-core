@@ -128,6 +128,13 @@ class Exporter:
     __dep_manager: list[Callable[[ModelDict, ResourceDict], None]] = []
 
     @classmethod
+    def clear(cls) -> None:
+        cls.types = None
+        cls.scopes = None
+        cls.__export_functions = {}
+        cls.__dep_manager = []
+
+    @classmethod
     def add(cls, name: str, types: list[str], function: Callable[["Exporter", ProxiedType], None]) -> None:
         """
         Add a new export function
