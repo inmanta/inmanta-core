@@ -60,16 +60,23 @@ from inmanta.data.model import (
 from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
+from inmanta.protocol.exceptions import BadRequest, Conflict, Forbidden, NotFound, ServerError
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
 from inmanta.server import config as opt
-from inmanta.server import protocol
+from inmanta.server import extensions, protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 from inmanta.util import parse_timestamp
+
+resource_discovery = extensions.BoolFeature(
+    slice=SLICE_RESOURCE,
+    name="resource_discovery",
+    description="Enable resource discovery. This feature controls the APIs it does not affect the use of discovery resources.",
+)
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -137,6 +144,9 @@ class ResourceService(protocol.ServerSlice):
 
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
+
+    def define_features(self) -> list[extensions.Feature]:
+        return [resource_discovery]
 
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
@@ -892,12 +902,9 @@ class ResourceService(protocol.ServerSlice):
                     connection=inner_connection,
                 )
                 if len(resources) == 0 or (len(resources) != len(resource_ids)):
-                    return (
-                        404,
-                        {
-                            "message": "The resources with the given ids do not exist in the given environment. "
-                            "Only %s of %s resources found." % (len(resources), len(resource_ids))
-                        },
+                    raise NotFound(
+                        message="The resources with the given ids do not exist in the given environment. "
+                        f"Only {len(resources)} of {len(resource_ids)} resources found."
                     )
 
                 if only_update_from_states is not None:
@@ -918,7 +925,7 @@ class ResourceService(protocol.ServerSlice):
                 if resource_action is None:
                     # new
                     if started is None:
-                        return 500, {"message": "A resource action can only be created with a start datetime."}
+                        raise ServerError(message="A resource action can only be created with a start datetime.")
 
                     version = Id.parse_id(resource_ids[0]).version
                     resource_action = data.ResourceAction(
@@ -933,16 +940,10 @@ class ResourceService(protocol.ServerSlice):
                 else:
                     # existing
                     if resource_action.finished is not None:
-                        return (
-                            500,
-                            {
-                                "message": (
-                                    "An resource action can only be updated when it has not been finished yet. This action "
-                                    "finished at %s" % resource_action.finished
-                                )
-                            },
+                        raise ServerError(
+                            message="An resource action can only be updated when it has not been finished yet. This action "
+                            f"finished at {resource_action.finished}"
                         )
-
                 for msg in messages:
                     # All other data is stored in the database. The msg was already formatted at the client side.
                     self.log_resource_action(
@@ -1349,6 +1350,9 @@ class ResourceService(protocol.ServerSlice):
     async def discovered_resources_get(
         self, env: data.Environment, discovered_resource_id: ResourceIdStr
     ) -> DiscoveredResource:
+        if not self.feature_manager.enabled(resource_discovery):
+            raise Forbidden(message="The resource discovery feature is not enabled.")
+
         result = await data.DiscoveredResource.get_one(environment=env.id, discovered_resource_id=discovered_resource_id)
         if not result:
             raise NotFound(f"discovered_resource with name {discovered_resource_id} not found in env {env.id}")
@@ -1364,6 +1368,9 @@ class ResourceService(protocol.ServerSlice):
         end: Optional[str] = None,
         sort: str = "discovered_resource_id.asc",
     ) -> ReturnValue[Sequence[DiscoveredResource]]:
+        if not self.feature_manager.enabled(resource_discovery):
+            raise Forbidden(message="The resource discovery feature is not enabled.")
+
         try:
             handler = DiscoveredResourceView(
                 environment=env,

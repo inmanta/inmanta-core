@@ -30,16 +30,15 @@ part = file_name_regex.match(__name__)[1]
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_drop_not_null_constraint(
+async def test_add_column(
     postgresql_client: asyncpg.Connection,
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
-    # This migration script adds a column. Just verify that the script doesn't fail.
+    # This migration script adds a column.
     await migrate_db_from()
 
     client = Client("client")
-    result = await client.get_reports(tid="4d6d694b-0915-495a-909c-582832c504fe")
-    assert result.result["reports"]
-    assert result.code == 200
-    for report in result.result["reports"]:
-        assert report["soft_delete"] is False
+    result = await client.list_environments()
+    assert len(result.result["environments"]) > 0
+    for env in result.result["environments"]:
+        assert env["is_marked_for_deletion"] is False
