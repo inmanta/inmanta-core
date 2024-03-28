@@ -1,0 +1,3 @@
+description: Fix a db migration test that prevents adding new columns to the environment table.
+change-type: patch
+destination-branches: [iso6]
