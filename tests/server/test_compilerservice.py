@@ -551,7 +551,7 @@ async def test_compilerservice_compile_data(environment_factory: EnvironmentFact
         assert result.code == 200
 
         async def compile_done():
-            return (await client.is_compiling(env.id)).code == 204
+            return (await client.get_compile_queue(env.id)).result["queue"] == []
 
         await retry_limited(compile_done, 10)
 
