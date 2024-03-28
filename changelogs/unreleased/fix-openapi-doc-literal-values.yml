@@ -3,6 +3,6 @@ description: Fix bug that causes literal values to be rendered incorrectly in th
 issue-nr: 1586
 issue-repo: inmanta-lsm
 change-type: patch
-destination-branches: [master, iso7, iso6]
+destination-branches: [master, iso7]
 sections:
   bugfix: "{{description}}"
