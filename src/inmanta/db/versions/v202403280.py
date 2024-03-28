@@ -25,8 +25,6 @@ async def update(connection: Connection) -> None:
     sorting. These tables are derived from the resource id and are therefore part of the identity of a resource. They will not
     change for the lifetime of a resource (with a given resource id).
     """
-    # TODO: better still might be to have a resource identity table, then reference that one from both resource and
-    #   resource_persistent_state. Consider or follow-up ticket?
     # TODO: migration test
 
     await connection.execute(
@@ -51,8 +49,3 @@ async def update(connection: Connection) -> None:
             ;
         """
     )
-
-    # TODO: these seem to not be required. Probably because scale is still relatively small when it comes to distinct resources (5000)
-    #await connection.execute("CREATE INDEX ON public.resource_persistent_state (environment, resource_type, resource_id)")
-    #await connection.execute("CREATE INDEX ON public.resource_persistent_state (environment, resource_id_value, resource_id)")
-    #await connection.execute("CREATE INDEX ON public.resource_persistent_state (environment, agent, resource_id)")
