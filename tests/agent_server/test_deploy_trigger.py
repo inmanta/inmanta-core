@@ -17,6 +17,8 @@
 """
 import logging
 
+import inmanta.data
+import utils
 from agent_server.conftest import _deploy_resources, get_agent
 from utils import get_resource, log_contains, log_doesnt_contain, retry_limited
 
@@ -92,3 +94,27 @@ async def test_deploy_trigger(
         agents=["agent1"],
         warnings=["Could not reach agents named [agent2]", f"Model version {version} does not contain agents named [agent5]"],
     )
+
+
+async def test_update_agent_map(server, client, environment, agent_factory, resource_container, clienthelper):
+    """
+    If the URI of an enabled agent changes, it should still be enabled after the change
+    """
+    agent_map = {"node1": "localhost"}
+
+    result = await client.set_setting(environment, inmanta.data.AUTO_DEPLOY, True)
+    assert result.code == 200
+    result = await client.set_setting(environment, inmanta.data.PUSH_ON_AUTO_DEPLOY, True)
+    assert result.code == 200
+
+    version = await clienthelper.get_version()
+    await clienthelper.put_version_simple([utils.get_resource(version, agent="node2")], version)
+
+    agent1 = await agent_factory(hostname="node1", environment=environment, agent_map=agent_map)
+    assert agent1.agent_map == agent_map
+
+    await agent1._update_agent_map({"node1": "localhost2", "node2": "local:"})
+
+    assert agent1._instances["node1"].is_enabled()
+
+    await clienthelper.wait_for_deployed(version)
