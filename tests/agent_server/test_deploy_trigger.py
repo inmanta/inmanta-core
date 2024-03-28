@@ -108,7 +108,7 @@ async def test_update_agent_map(server, client, environment, agent_factory, reso
     assert result.code == 200
 
     version = await clienthelper.get_version()
-    await clienthelper.put_version_simple([utils.get_resource(version, agent="node2")], version, wait_for_released=True)
+    await clienthelper.put_version_simple([utils.get_resource(version, agent="node2")], version)
 
     agent1 = await agent_factory(hostname="node1", environment=environment, agent_map=agent_map)
     assert agent1.agent_map == agent_map
