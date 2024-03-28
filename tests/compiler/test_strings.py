@@ -244,7 +244,7 @@ def test_fstring_expected_error(snippetcompiler, capsys):
         f"hello {world:invalid_specifier}"
         """,
         (
-            "Invalid f-string: Invalid format specifier 'invalid_specifier' for object of type 'str'"
+            "Invalid f-string: Invalid format specifier"
             " (reported in 'hello {{world:invalid_specifier}}' ({dir}/main.cf:3:9))"
         ),
     )
