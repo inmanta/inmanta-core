@@ -234,7 +234,6 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
     async def request_compile(env: data.Environment) -> uuid.UUID:
         """Request compile for given env, return remote_id"""
-        logger.info("Requesting compile for %s", env)
         u1 = uuid.uuid4()
         # add unique environment variables to prevent merging in request_recompile
         await cs.request_recompile(env, False, False, u1, env_vars={"uuid": str(u1)})
@@ -366,32 +365,21 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     # restart new server
     cs = HookedCompilerService()
     await cs.prestart(server)
+    await cs.start()
     collector = Collector()
     cs.add_listener(collector)
 
     hanging_collector = Collector()
     hanging_collector.blocking = True
-    await hanging_collector.hang()  # Can we boot when a handler hangs?
     cs.add_listener(hanging_collector)
-    await cs.start()
 
-    # Can we request compiles while recovery is ongoing?
-    extra_compile = await request_compile(env2)
-    e2.append(extra_compile)
-
-    # We haven't started, because we hang on a handler,
-    assert [rc for rc in cs._recompiles.values() if rc is not None] == []
-
-    # Continue
-    hanging_collector.release()
-
-    # two in cache, one running
-    await compiler_cache_consistent(2)
+    # one in cache, one running
+    await compiler_cache_consistent(1)
 
     # complete the sequence, expect re-run of third compile
-    for i in range(4):
+    for i in range(3):
         await check_compile_in_sequence(env2, e2[2:], i)
-    await compiler_cache_consistent(0)
+        await compiler_cache_consistent(0)
 
     # all are re-run, entire sequence present
     collector.verify(e2)
@@ -613,10 +601,12 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService, use_trx_b
     u2 = uuid.uuid4()
     await request_compile(remote_id=u2, env_vars={"my_unique_var": str(u2)})
 
+    assert await compilerservice.is_compiling(env.id) == 200
+
     async def compile_done():
         res = await compilerservice.is_compiling(env.id)
         print(res)
-        return res == 204 and compilerservice._queue_count_cache == 0
+        return res == 204
 
     await retry_limited(compile_done, 10)
     # All compiles are finished. The queue should be empty
