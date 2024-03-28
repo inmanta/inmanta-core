@@ -509,7 +509,6 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        # TODO: document changes
         new_query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
             prelude=f"""

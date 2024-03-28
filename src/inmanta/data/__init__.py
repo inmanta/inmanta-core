@@ -4408,11 +4408,9 @@ class ResourcePersistentState(BaseDocument):
 
     # ID related
     resource_id: m.ResourceIdStr
-
-    # TODO: check
     resource_type: str
-    resource_id_value: str
     agent: str
+    resource_id_value: str
 
     # Field based on content from the resource actions
     last_deploy: Optional[datetime.datetime] = None
@@ -5153,13 +5151,16 @@ class Resource(BaseDocument):
         await super().insert(connection=connection)
         # TODO: On conflict or is not exists or just make every update an upsert?
         await self._execute_query(
-            # TODO: check
-            """INSERT INTO resource_persistent_state(environment, resource_id, resource_type, resource_id_value, agent) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING""",
+            """
+            INSERT INTO resource_persistent_state (environment, resource_id, resource_type, agent, resource_id_value)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT DO NOTHING
+            """,
             self.environment,
             self.resource_id,
             self.resource_type,
-            self.resource_id_value,
             self.agent,
+            self.resource_id_value,
             connection=connection,
         )
 
@@ -5172,13 +5173,16 @@ class Resource(BaseDocument):
         # TODO performance?
         for doc in documents:
             await cls._execute_query(
-                # TODO: check
-                """INSERT INTO resource_persistent_state(environment, resource_id, resource_type, resource_id_value, agent) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING""",
+                """
+                INSERT INTO resource_persistent_state (environment, resource_id, resource_type, agent, resource_id_value)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT DO NOTHING
+                """,
                 doc.environment,
                 doc.resource_id,
                 doc.resource_type,
-                doc.resource_id_value,
                 doc.agent,
+                doc.resource_id_value,
                 connection=connection,
             )
         await super().insert_many(documents, connection=connection)
