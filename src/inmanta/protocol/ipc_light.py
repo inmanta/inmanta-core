@@ -190,12 +190,12 @@ class IPCClient(IPCFrameProtocol[ServerContext]):
         # All outstanding calls
 
     @typing.overload
-    def call(
-        self, method: IPCMethod[ServerContext, ReturnType], has_reply: typing.Literal[True] = True
-    ) -> Future[ReturnType]: ...
+    def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: typing.Literal[True] = True) -> Future[ReturnType]:
+        ...
 
     @typing.overload
-    def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: typing.Literal[False]) -> None: ...
+    def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: typing.Literal[False]) -> None:
+        ...
 
     def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None:
         """Call a method with given arguments"""

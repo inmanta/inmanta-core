@@ -90,6 +90,12 @@ class DatabaseService(protocol.ServerSlice):
         )
         LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
 
+        # Check if JIT is enabled
+        async with self._pool.acquire() as connection:
+            jit_enabled = await connection.fetchval("SHOW jit;")
+            if jit_enabled == "on":
+                LOGGER.warning("JIT is enabled in the PostgreSQL database. This will affect performances.")
+
     async def disconnect_database(self) -> None:
         """Disconnect the database"""
         await data.disconnect()

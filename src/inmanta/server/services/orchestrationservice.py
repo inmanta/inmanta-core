@@ -202,14 +202,14 @@ class PartialUpdateMerger:
         A replacement constructor method for this class. This method is used to work around the limitation that no async
         calls can be done in a constructor. See docstring real constructor for meaning of arguments.
         """
-        updated_and_shared_resources_old: abc.Mapping[ResourceIdStr, data.Resource] = (
-            await data.Resource.get_resources_in_resource_sets(
-                environment=env_id,
-                version=base_version,
-                resource_sets=updated_resource_sets,
-                include_shared_resources=True,
-                connection=connection,
-            )
+        updated_and_shared_resources_old: abc.Mapping[
+            ResourceIdStr, data.Resource
+        ] = await data.Resource.get_resources_in_resource_sets(
+            environment=env_id,
+            version=base_version,
+            resource_sets=updated_resource_sets,
+            include_shared_resources=True,
+            connection=connection,
         )
         rids_deleted_resource_sets: abc.Set[ResourceIdStr] = {
             rid
@@ -787,15 +787,15 @@ class OrchestrationService(protocol.ServerSlice):
                 # Make mypy happy
                 assert partial_base_version is not None
                 # This dict maps a resource id to its resource set for unchanged resource sets.
-                rids_unchanged_resource_sets: dict[ResourceIdStr, str] = (
-                    await data.Resource.copy_resources_from_unchanged_resource_set(
-                        environment=env.id,
-                        source_version=partial_base_version,
-                        destination_version=version,
-                        updated_resource_sets=updated_resource_sets,
-                        deleted_resource_sets=deleted_resource_sets_as_set,
-                        connection=connection,
-                    )
+                rids_unchanged_resource_sets: dict[
+                    ResourceIdStr, str
+                ] = await data.Resource.copy_resources_from_unchanged_resource_set(
+                    environment=env.id,
+                    source_version=partial_base_version,
+                    destination_version=version,
+                    updated_resource_sets=updated_resource_sets,
+                    deleted_resource_sets=deleted_resource_sets_as_set,
+                    connection=connection,
                 )
                 resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
                 if resources_that_moved_resource_sets:
@@ -1165,13 +1165,16 @@ class OrchestrationService(protocol.ServerSlice):
                             )
 
                     if latest_version:
-                        version, increment_ids, neg_increment, neg_increment_per_agent = (
-                            await self.resource_service.get_increment(
-                                env,
-                                version_id,
-                                connection=connection,
-                                run_ahead_lock=version_run_ahead_lock,
-                            )
+                        (
+                            version,
+                            increment_ids,
+                            neg_increment,
+                            neg_increment_per_agent,
+                        ) = await self.resource_service.get_increment(
+                            env,
+                            version_id,
+                            connection=connection,
+                            run_ahead_lock=version_run_ahead_lock,
                         )
 
                         await self.resource_service.mark_deployed(
