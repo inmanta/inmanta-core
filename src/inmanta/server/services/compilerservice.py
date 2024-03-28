@@ -64,21 +64,14 @@ COMPILER_LOGGER: Logger = LOGGER.getChild("report")
 class CompileStateListener:
     @abc.abstractmethod
     async def compile_done(self, compile: data.Compile) -> None:
-        """
-        Coroutine to execute when this listener is notified of a completed compile
+        """Receive notification of all completed compiles
 
         1- Notifications are delivered at least once (retry until all listeners have returned or raise an exception other
         than CancelledError)
-        2- If this listener is blocking, the next compile can only start after this coroutine is done
-        3- Multiple notifications can be in flight at any given time, out-of-order delivery is possible but highly unlikely.
-        4- This coroutine is cancelled upon shutdown
+        2- Notification are delivered out-of-band (i.e. the next compile can already start, multiple notifications can be in
+        flight at any given time, out-of-order delivery is possible but highly unlikely)
+        3- Notification are cancelled upon shutdown
         """
-
-    def is_blocking(self) -> bool:
-        """
-        Should this handler be run before the next compile can start?
-        """
-        return False
 
 
 class CompileRun:
@@ -515,14 +508,8 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)
         self._recompiles: dict[uuid.UUID, Task[None | Result]] = {}
-
         self._global_lock = asyncio.locks.Lock()
-        # boolean indicating when everything is up and compile execution can start
-        self.fully_ready = False
-
-        self.blocking_listeners: list[CompileStateListener] = []
-        self.async_listeners: list[CompileStateListener] = []
-
+        self.listeners: list[CompileStateListener] = []
         self._scheduled_full_compiles: dict[uuid.UUID, tuple[TaskMethod, str]] = {}
         # In-memory cache to keep track of the total length of all the compile queues on this Inmanta server.
         # This cache is used by the /serverstatus endpoint.
@@ -530,13 +517,10 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         self._queue_count_cache_lock = asyncio.locks.Lock()
 
     async def get_status(self) -> dict[str, ArgumentTypes]:
-        return {"task_queue": self._queue_count_cache, "listeners": len(self.async_listeners) + len(self.blocking_listeners)}
+        return {"task_queue": self._queue_count_cache, "listeners": len(self.listeners)}
 
     def add_listener(self, listener: CompileStateListener) -> None:
-        if listener.is_blocking():
-            self.blocking_listeners.append(listener)
-        else:
-            self.async_listeners.append(listener)
+        self.listeners.append(listener)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE]
@@ -728,8 +712,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         async with self._global_lock:
             if self.is_stopping():
                 return
-            if not self.fully_ready:
-                return
             env: Optional[data.Environment] = await data.Environment.get_by_id(compile.environment)
             if env is None:
                 raise Exception("Can't queue compile: environment %s does not exist" % compile.environment)
@@ -768,57 +750,21 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             except Exception:
                 logging.exception("CompileStateListener failed")
 
-        blockers = asyncio.gather(*[notify(listener) for listener in self.blocking_listeners])
-
-        async def _sub_notify() -> None:
-            await asyncio.gather(*[notify(listener) for listener in self.async_listeners])
-            await blockers
-            await compile.update_fields(handled=True)
-            LOGGER.log(const.LOG_LEVEL_TRACE, "listeners notified for %s", compile.id)
-
-        self.add_background_task(_sub_notify())
-        await blockers
+        await asyncio.gather(*[notify(listener) for listener in self.listeners])
+        await compile.update_fields(handled=True)
+        LOGGER.log(const.LOG_LEVEL_TRACE, "listeners notified for %s", compile.id)
 
     async def _recover(self) -> None:
         """Restart runs after server restart"""
-        # patch up in-memory state
         async with self._queue_count_cache_lock:
             self._queue_count_cache = await data.Compile.get_total_length_of_all_compile_queues(exclude_started_compiles=False)
-
-        # we run the recovery and start in the background to prevent deadlocks with sync handlers
-        async def sub_recovery() -> None:
-            unhandled = await data.Compile.get_unhandled_compiles()
-            for u in unhandled:
-                await self._notify_listeners(u)
-            # one run per env max to get started
-            runs = await data.Compile.get_next_run_all()
-
-            # prevent races by holding global lock
-            async with self._global_lock:
-                # We are ready to start!
-                self.fully_ready = True
-                for run in runs:
-                    await self.__queue_no_lock(run.environment, run)
-
-        self.add_background_task(sub_recovery())
-
-    async def __queue_no_lock(self, environment: uuid.UUID, compile: data.Compile) -> None:
-        """
-        Internal helper that starts the next task if required
-
-
-
-            Must be called under the _global_lock
-        """
-        if self.is_stopping():
-            return
-        env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
-        if env is None:
-            LOGGER.warning("Can't dequeue compile: environment %s does not exist", environment)
-            return
-        if not env.halted and (compile.environment not in self._recompiles or self._recompiles[compile.environment].done()):
-            task = self.add_background_task(self._run(compile))
-            self._recompiles[environment] = task
+        # one run per env max to get started
+        runs = await data.Compile.get_next_run_all()
+        for run in runs:
+            await self._queue(run)
+        unhandled = await data.Compile.get_unhandled_compiles()
+        for u in unhandled:
+            self.add_background_task(self._notify_listeners(u))
 
     async def resume_environment(self, environment: uuid.UUID) -> None:
         """
@@ -946,9 +892,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             self._queue_count_cache -= len(merge_candidates)
         if self.is_stopping():
             return
-        await asyncio.gather(
-            self._notify_listeners(compile), *(self._notify_listeners(merge_candidate) for merge_candidate in merge_candidates)
-        )
+        self.add_background_task(self._notify_listeners(compile))
+        for merge_candidate in merge_candidates:
+            self.add_background_task(self._notify_listeners(merge_candidate))
         await self._dequeue(compile.environment)
 
     def _get_compile_runner(self, compile: data.Compile, project_dir: str) -> CompileRun:
