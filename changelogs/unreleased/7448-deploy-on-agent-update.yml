@@ -1,0 +1,7 @@
+description: Agent started using std::Agentconfig now always deploy when first started
+issue-nr: 7448
+change-type: patch
+destination-branches: [master, iso7, iso6]
+sections:
+  minor-improvement: "{{description}}"
+
