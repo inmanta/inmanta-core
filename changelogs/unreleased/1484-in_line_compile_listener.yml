@@ -1,5 +1,0 @@
-description: Added inline compile listeners
-issue-nr: 1484
-issue-repo: inmanta-lsm
-change-type: minor
-destination-branches: [master, iso7]
