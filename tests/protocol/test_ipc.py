@@ -68,6 +68,7 @@ def test_package_reassembly():
 
 
 class Error(inmanta.protocol.ipc_light.IPCMethod[None, None]):
+
     async def call(self, ctx: None) -> None:
         raise Exception("raise")
 
