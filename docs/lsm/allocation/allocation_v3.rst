@@ -23,6 +23,7 @@ an allocator, use the ``allocation_helpers.allocator()`` decorator:
 
 .. code-block:: python
     :linenos:
+
     from inmanta_plugins.lsm.allocation_helpers import allocator
 
     @allocator()
