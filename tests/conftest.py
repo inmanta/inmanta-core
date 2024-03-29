@@ -1671,15 +1671,9 @@ def tmpvenv_active(
     env.mock_process_env(python_path=str(python_path))
     env.process_env.notify_change()
 
-    # Force refresh build's decision on whether it should use virtualenv or venv. This decision is made based on the active
-    # environment, which we're changing now.
-    #build.env._PipBackend_should_use_virtualenv.cache_clear()
-
     yield tmpvenv
 
     loader.unload_modules_for_path(site_packages)
-    # Force refresh build's cache once more
-    build.env._should_use_virtualenv.cache_clear()
 
 
 @pytest.fixture
