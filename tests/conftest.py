@@ -1673,7 +1673,7 @@ def tmpvenv_active(
 
     # Force refresh build's decision on whether it should use virtualenv or venv. This decision is made based on the active
     # environment, which we're changing now.
-    build.env._should_use_virtualenv.cache_clear()
+    #build.env._PipBackend_should_use_virtualenv.cache_clear()
 
     yield tmpvenv
 
