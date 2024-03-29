@@ -101,7 +101,6 @@ from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
-import build.env
 import inmanta
 import inmanta.agent
 import inmanta.app
