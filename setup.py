@@ -49,7 +49,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "8.7.4"
+version = "8.7.5"
 
 setup(
     version=version,
