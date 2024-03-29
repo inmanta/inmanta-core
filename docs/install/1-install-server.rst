@@ -358,7 +358,7 @@ to
   host    all             all             ::1/128                 md5
 
 Make sur JIT is disabled for the psql database as it will impact performances.
-To disable JIT, set ``jit = off`` in in ``/etc/postgresql/13/main/postgresql.conf``.
+To disable JIT, set ``jit = off`` in ``/etc/postgresql/13/main/postgresql.conf``.
 
 Restart the PostgreSQL server to apply the changes made in the ``pg_hba.conf`` and  ``postgresql.conf`` files:
 
