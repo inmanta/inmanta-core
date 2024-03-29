@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 from abc import ABC, abstractmethod
 from typing import Callable, Optional, TypeVar

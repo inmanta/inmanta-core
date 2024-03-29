@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import collections
 import os
 import subprocess
@@ -26,21 +27,26 @@ from tornado import process
 from inmanta import deploy
 
 
-def test_deploy(snippetcompiler, tmpdir, postgres_db):
+@pytest.mark.parametrize("default_main_file", [True, False])
+def test_deploy(snippetcompiler, tmpdir, postgres_db, default_main_file: bool):
+    """
+    Test the deploy command. The default_main_file parameter checks that the deploy command accepts
+    files other than `main.cf` through its `-f` cli option.
+    """
     file_name = tmpdir.join("test_file")
     # TODO: when agentconfig deploys no longer require an agent restart, define a new agent. Currently this makes the
     # test to slow.
-    snippetcompiler.setup_for_snippet(
-        """
-    host = std::Host(name="internal", os=std::linux)
-    file = std::Symlink(host=host, source="/dev/null", target="%s")
+    code = f"""
+        host = std::Host(name="internal", os=std::linux)
+        file = std::Symlink(host=host, source="/dev/null", target="{file_name}")
     """
-        % file_name
-    )
+
+    main_file = "main.cf" if default_main_file else "other.cf"
+    project = snippetcompiler.setup_for_snippet(code, main_file=main_file)
 
     os.chdir(snippetcompiler.project_dir)
-    Options = collections.namedtuple("Options", ["dryrun", "dashboard"])
-    options = Options(dryrun=False, dashboard=False)
+    Options = collections.namedtuple("Options", ["dryrun", "dashboard", "main_file"])
+    options = Options(dryrun=False, dashboard=False, main_file=main_file)
 
     assert not file_name.exists()
 
@@ -53,6 +59,8 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db):
         run.stop()
 
     assert file_name.exists()
+
+    assert project.main_file == main_file
 
 
 @pytest.mark.slowtest

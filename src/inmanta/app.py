@@ -29,6 +29,7 @@
     ------------
     @command annotation to register new command
 """
+
 import argparse
 import asyncio
 import contextlib
@@ -81,13 +82,26 @@ except ImportError:
 LOGGER = logging.getLogger("inmanta")
 
 
-@command("server", help_msg="Start the inmanta server")
+def server_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[argparse.ArgumentParser]) -> None:
+    parser.add_argument(
+        "--db-wait-time",
+        type=int,
+        dest="db_wait_time",
+        help="Maximum time in seconds the server will wait for the database to be up before starting. "
+        "A value of 0 means the server will not wait. If set to a negative value, the server will wait indefinitely.",
+    )
+
+
+@command("server", help_msg="Start the inmanta server", parser_config=server_parser_config)
 def start_server(options: argparse.Namespace) -> None:
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
     if options.config_dir and not os.path.isdir(options.config_dir):
         LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
+
+    if options.db_wait_time is not None:
+        Config.set("database", "wait_time", str(options.db_wait_time))
 
     util.ensure_event_loop()
 
@@ -542,6 +556,13 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
         "be used together with the --partial option.",
         action="append",
+    )
+    parser.add_argument(
+        "--soft-delete",
+        dest="soft_delete",
+        help="Use in combination with --delete-resource-set to delete these resource sets only if they are not being exported",
+        action="store_true",
+        default=False,
     )
     moduletool.add_deps_check_arguments(parser)
 

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import hashlib
 import importlib.abc
 import importlib.machinery
@@ -105,13 +106,13 @@ def test_code_manager(tmpdir: py.path.local):
 
     # verify requirements behavior
     source_info: SourceInfo = single_type_list[0]
-    # by default only install non-module dependencies
-    assert source_info.requires == ["lorem"]
-    project._metadata.agent_install_dependency_modules = True
+    # by default also install dependencies on other modules
+    assert source_info.requires == ["inmanta-module-std", "lorem"]
+    project._metadata.agent_install_dependency_modules = False
     # reset cache
     source_info._requires = None
-    # when enabled, also install dependencies on other modules
-    assert source_info.requires == ["inmanta-module-std", "lorem"]
+    # when disabled only install non-module dependencies
+    assert source_info.requires == ["lorem"]
 
 
 def test_code_loader(tmp_path, caplog):

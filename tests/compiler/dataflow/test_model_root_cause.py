@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 import pytest
 
 from compiler.dataflow.conftest import DataflowTestHelper, get_dataflow_node
@@ -81,18 +80,22 @@ x.n = u.v.n
 %s
         """
         % (
-            """
+            (
+                """
 c.i = cc.i
 cc = C(i = c.i)
             """
-            if attribute_equivalence
-            else "",
-            """
+                if attribute_equivalence
+                else ""
+            ),
+            (
+                """
 c.i = i
 i = c.i
             """
-            if variable_equivalence
-            else "",
+                if variable_equivalence
+                else ""
+            ),
         ),
         MultiException,
     )

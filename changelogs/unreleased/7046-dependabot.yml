@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump cryptography from 42.0.0 to 42.0.1
+destination-branches:
+- master
+- iso7
+sections: {}

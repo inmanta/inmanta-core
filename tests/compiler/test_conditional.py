@@ -447,13 +447,14 @@ end
 def test_1808_non_boolean_condition_direct_exec(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
-typedef mytype as string matching self in ["a", "b"] or null
+typedef mytype as string matching self in ["a","b"] or null
 entity A:
     mytype myvalue = "x"
 end
 implement A using std::none
         """,
-        "Invalid right hand value `null`: `or` expects a boolean (reported in ((self in ['a','b']) or null) ({dir}/main.cf:2))",
+        "Invalid right hand value `null`: `or` expects a boolean "
+        "(reported in ((self in ['a', 'b']) or null) ({dir}/main.cf:2))",
     )
 
 
@@ -464,7 +465,7 @@ str = "some_string"
 if not str:
 end
         """,
-        "Invalid value `some_string`: `not` expects a boolean (reported in If ({dir}/main.cf:3))",
+        "Invalid value `some_string`: `not` expects a boolean (reported in Not(str) ({dir}/main.cf:3))",
     )
 
 
@@ -692,3 +693,15 @@ def test_conditional_expression_unknown(snippetcompiler) -> None:
         )
     )
     compiler.do_compile()
+
+
+def test_if_inline_error_1(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+x = 1
+std::print(x ? "test" : "no test")
+        """,
+        "Invalid value `1`: the condition for a conditional expression must be a "
+        "boolean expression (reported in x ? 'test' : 'no test' "
+        "({dir}/main.cf:3:12))",
+    )

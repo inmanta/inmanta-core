@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import logging
 import uuid
@@ -71,7 +72,7 @@ class ParameterService(protocol.ServerSlice):
         """
         Send out requests to renew facts.
         """
-        LOGGER.info("Renewing parameters")
+        LOGGER.info("Renewing facts")
 
         updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, self._fact_renew)
         params_to_renew = await data.Parameter.get_updated_before_active_env(updated_before)
@@ -115,7 +116,7 @@ class ParameterService(protocol.ServerSlice):
         LOGGER.info("Done renewing parameters")
 
     @handle(methods.get_param, param_id="id", env="tid")
-    async def get_param(self, env: data.Environment, param_id: str, resource_id: Optional[str] = None) -> Apireturn:
+    async def get_param(self, env: data.Environment, param_id: str, resource_id: Optional[ResourceIdStr] = None) -> Apireturn:
         if resource_id is None:
             params = await data.Parameter.get_list(environment=env.id, name=param_id)
         else:
@@ -129,12 +130,15 @@ class ParameterService(protocol.ServerSlice):
 
         param = params[0]
 
-        # check if it was expired
+        # check if it was expired:
+        #   - If it's not associated with a resource, this is a regular parameter that never expires
+        #   - Else, it's a fact: check if it can expire and if it has expired.
+
         now = datetime.datetime.now().astimezone()
-        if resource_id is None or (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
+        if resource_id is None or not param.expires or (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, {"parameter": params[0]}
 
-        LOGGER.info("Parameter %s of resource %s expired.", param_id, resource_id)
+        LOGGER.info("Fact %s of resource %s expired.", param_id, resource_id)
         out = await self.agentmanager.request_parameter(env.id, resource_id)
         return out
 
@@ -144,18 +148,27 @@ class ParameterService(protocol.ServerSlice):
         name: str,
         value: str,
         source: str,
-        resource_id: str,
+        resource_id: Optional[str],
         metadata: JsonType,
         recompile: bool = False,
+        expires: Optional[bool] = None,
     ) -> bool:
         """
-        Update or set a parameter.
+        Update or set a parameter or fact.
+
+        :param expires: When setting a new parameter/fact: if set to None, then a sensible default will be provided (i.e. False
+            for parameter and True for fact). When updating a parameter or fact, a None value will leave the existing value
+            unchanged.
 
         This method returns true if:
         - this update resolves an unknown
         - recompile is true and the parameter updates an existing parameter to a new value
         """
-        LOGGER.debug("Updating/setting parameter %s in env %s (for resource %s)", name, env.id, resource_id)
+        if resource_id:
+            LOGGER.debug("Updating/setting fact %s in env %s (for resource %s)", name, env.id, resource_id)
+        else:
+            LOGGER.debug("Updating/setting parameter %s in env %s", name, env.id)
+
         if not isinstance(value, str):
             value = str(value)
 
@@ -165,7 +178,14 @@ class ParameterService(protocol.ServerSlice):
         params = await data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id)
 
         value_updated = True
+
         if len(params) == 0:
+            if expires is None:
+                # By default:
+                #   - parameters (i.e. not associated with a resource id) don't expire
+                #   - facts (i.e. associated with a resource id) expire
+                expires = bool(resource_id)
+
             param = data.Parameter(
                 environment=env.id,
                 name=name,
@@ -174,12 +194,18 @@ class ParameterService(protocol.ServerSlice):
                 source=source,
                 updated=datetime.datetime.now().astimezone(),
                 metadata=metadata,
+                expires=expires,
             )
             await param.insert()
         else:
             param = params[0]
             value_updated = param.value != value
-            await param.update(source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata)
+            if expires is not None:
+                await param.update(
+                    source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata, expires=expires
+                )
+            else:
+                await param.update(source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata)
 
         # check if the parameter is an unknown
         unknown_params = await data.UnknownParameter.get_list(
@@ -196,31 +222,46 @@ class ParameterService(protocol.ServerSlice):
 
         return recompile and value_updated
 
-    @handle(methods.set_param, param_id="id", env="tid")
+    def _validate_parameter(
+        self,
+        name: str,
+        resource_id: Optional[str],
+        expires: Optional[bool],
+    ) -> None:
+        if not resource_id and expires:
+            # Parameters cannot expire
+            raise BadRequest(
+                "Cannot update or set parameter %s: `expire` set to True but parameters cannot expire."
+                " Consider using a fact instead by providing a resource_id." % name,
+            )
+
+    @handle(methods.set_param, name="id", env="tid")
     async def set_param(
         self,
         env: data.Environment,
-        param_id: str,
+        name: str,
         source: ParameterSource,
         value: str,
-        resource_id: str,
+        resource_id: Optional[str],
         metadata: JsonType,
         recompile: bool,
+        expires: Optional[bool] = None,
     ) -> Apireturn:
-        result = await self._update_param(env, param_id, value, source, resource_id, metadata, recompile)
+        self._validate_parameter(name, resource_id, expires)
+        result = await self._update_param(env, name, value, source, resource_id, metadata, recompile, expires)
         warnings = None
         if result:
             compile_metadata = {
                 "message": "Recompile model because one or more parameters were updated",
                 "type": "param",
-                "params": [(param_id, resource_id)],
+                "params": [(name, resource_id)],
             }
             warnings = await self.server_slice._async_recompile(env, False, metadata=compile_metadata)
 
         if resource_id is None:
             resource_id = ""
 
-        params = await data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
+        params = await data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id)
 
         return attach_warnings(200, {"parameter": params[0]}, warnings)
 
@@ -228,21 +269,45 @@ class ParameterService(protocol.ServerSlice):
     async def set_parameters(self, env: data.Environment, parameters: list[dict[str, Any]]) -> Apireturn:
         recompile = False
 
+        updating_facts: bool = False
+        updating_parameters: bool = False
+        parameters_and_or_facts: str = "parameters"
+
         params: list[tuple[str, ResourceIdStr]] = []
+
+        # Validate the full list of parameters before applying any changes
+        for param in parameters:
+            self._validate_parameter(
+                param["id"],
+                param["resource_id"] if "resource_id" in param else None,
+                param["expires"] if "expires" in param else None,
+            )
+
         for param in parameters:
             name: str = param["id"]
             source = param["source"]
             value = param["value"] if "value" in param else None
             resource_id: ResourceIdStr = param["resource_id"] if "resource_id" in param else None
             metadata = param["metadata"] if "metadata" in param else None
+            expires = param["expires"] if "expires" in param else None
 
-            result = await self._update_param(env, name, value, source, resource_id, metadata)
+            if resource_id:
+                updating_facts = True
+            else:
+                updating_parameters = True
+
+            result = await self._update_param(env, name, value, source, resource_id, metadata, expires=expires)
             if result:
                 recompile = True
                 params.append((name, resource_id))
 
+        if updating_facts:
+            parameters_and_or_facts = "facts"
+        if updating_parameters and updating_facts:
+            parameters_and_or_facts = "parameters and facts"
+
         compile_metadata = {
-            "message": "Recompile model because one or more parameters were updated",
+            "message": f"Recompile model because one or more {parameters_and_or_facts} were updated",
             "type": "param",
             "params": params,
         }
@@ -281,8 +346,7 @@ class ParameterService(protocol.ServerSlice):
             200,
             {
                 "parameters": params,
-                "expire": self._fact_expire,
-                # Serialization happens in the RESTHandler's json encoder
+                "expire": self._fact_expire,  # Serialization happens in the RESTHandler's json encoder
                 "now": datetime.datetime.now().astimezone(),
             },
         )
@@ -299,6 +363,84 @@ class ParameterService(protocol.ServerSlice):
         if not param:
             raise NotFound(f"Fact with id {id} does not exist")
         return param.as_fact()
+
+    async def _update_and_recompile(
+        self,
+        env: data.Environment,
+        name: str,
+        value: str,
+        source: ParameterSource,
+        metadata: dict[str, str],
+        recompile: bool,
+        resource_id: Optional[str] = None,
+        expires: Optional[bool] = None,
+    ) -> tuple[data.Parameter, Optional[list[str]]]:
+        """
+        Update a parameter or fact and optionally trigger recompilation.
+        """
+        if resource_id is None:
+            resource_id = ""
+        # Validate parameter or fact
+        self._validate_parameter(name, resource_id, expires)
+
+        # Update parameter/fact with new value and metadata
+        recompile_required: bool = await self._update_param(env, name, value, source, resource_id, metadata, recompile, expires)
+        warnings = None
+        if recompile_required:
+            compile_metadata = {
+                "message": "Recompile model because one or more parameters/facts were updated",
+                "type": "fact" if resource_id else "param",
+                "params": [(name, resource_id)],
+            }
+            warnings = await self.server_slice._async_recompile(env, update_repo=False, metadata=compile_metadata)
+
+        # Retrieve the updated parameter/fact
+        param = await data.Parameter.get_one(environment=env.id, name=name, resource_id=resource_id)
+        if not param:
+            error_base = f"{name} for resource_id: {resource_id}" if resource_id else name
+            error_prefix = "Fact" if resource_id else "Parameter"
+            error_message = f"{error_prefix} with id {error_base} does not exist in environment {env.id}"
+            raise NotFound(error_message)
+
+        return param, warnings
+
+    @handle(methods_v2.set_parameter, env="tid")
+    async def set_parameter(
+        self,
+        env: data.Environment,
+        name: str,
+        source: ParameterSource,
+        value: str,
+        metadata: Optional[dict[str, str]] = None,
+        recompile: bool = False,
+    ) -> ReturnValue[Parameter]:
+        if metadata is None:
+            metadata = {}
+        param, warnings = await self._update_and_recompile(env, name, value, source, metadata, recompile)
+        return_value = ReturnValue(response=param.as_param())
+        if warnings:
+            return_value.add_warnings(warnings)
+        return return_value
+
+    @handle(methods_v2.set_fact, env="tid")
+    async def set_fact(
+        self,
+        env: data.Environment,
+        name: str,
+        source: ParameterSource,
+        value: str,
+        resource_id: str,
+        metadata: Optional[dict[str, str]] = None,
+        recompile: bool = False,
+        expires: Optional[bool] = True,
+    ) -> ReturnValue[Fact]:
+        if metadata is None:
+            metadata = {}
+        param, warnings = await self._update_and_recompile(env, name, value, source, metadata, recompile, resource_id, expires)
+        return_value = ReturnValue(response=param.as_fact())
+        if warnings:
+            return_value.add_warnings(warnings)
+        return return_value
 
     @handle(methods_v2.get_parameters, env="tid")
     async def get_parameters(

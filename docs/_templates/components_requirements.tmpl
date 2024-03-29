@@ -1,0 +1,28 @@
+.. -*- mode: rst -*-
+
+Inmanta core and extensions versions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+{% if data['component_requirements']%}
+.. list-table:: Inmanta core and extensions versions
+   :header-rows: 1
+
+   * - Component
+     - Required version
+
+   {% for key, value in data["component_requirements"] | dictsort %}
+   * - {{ key }}
+     - {{ value }}
+   {% endfor %}
+
+.. note::
+
+    This information is also available as a constraints file in `requirements.components.txt <./requirements.components.txt>`_
+    and in json format in the `compatibility.json <./compatibility.json>`_ file.
+
+
+{% else %}
+Components are not pinned for major version |version_major| because it is not released yet.
+{% endif %}
+

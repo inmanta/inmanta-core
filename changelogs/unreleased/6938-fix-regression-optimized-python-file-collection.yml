@@ -1,0 +1,4 @@
+description: "Fix a regression in '_list_python_files' that happened during an optimization (issue 4799)"
+change-type: patch
+issue-nr: 6938
+destination-branches: [master, iso7, iso6]

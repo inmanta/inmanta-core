@@ -19,7 +19,7 @@
 import pytest
 
 from inmanta import config, const
-from inmanta.protocol import common, endpoints
+from inmanta.protocol import auth, endpoints
 from inmanta.server import SLICE_USER, protocol
 
 
@@ -39,7 +39,7 @@ def server_pre_start(server_config):
 
 @pytest.fixture
 def auth_client(server_pre_start):
-    token = common.encode_token([str(const.ClientType.api.value)], expire=None)
+    token = auth.encode_token([str(const.ClientType.api.value)], expire=None)
     config.Config.set("client_rest_transport", "token", token)
     auth_client = protocol.Client("client")
     return auth_client
@@ -110,6 +110,10 @@ async def test_login(server: protocol.Server, client: endpoints.Client, auth_cli
     assert "token" in response.result["data"]
     assert "user" in response.result["data"]
     assert response.result["data"]["user"]["username"] == "admin"
+
+    data = auth.decode_token(response.result["data"]["token"])
+    assert "sub" in data
+    assert data["sub"] == "admin"
 
     token = response.result["data"]["token"]
     config.Config.set("client_rest_transport", "token", token)

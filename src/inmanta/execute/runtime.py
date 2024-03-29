@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from abc import abstractmethod
 from collections.abc import Hashable, Sequence
 from typing import TYPE_CHECKING, Deque, Generic, List, Literal, Optional, TypeVar, Union, cast
@@ -1015,8 +1016,7 @@ class ExecutionUnit(Waiter):
         try:
             self._unsafe_execute()
         except RuntimeException as e:
-            e.set_statement(self.owner)
-            e.location = self.owner.location
+            e.set_statement(self.owner, False)
             raise e
 
     def __repr__(self) -> str:

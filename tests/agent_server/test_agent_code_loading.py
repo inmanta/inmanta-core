@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import base64
 import hashlib
 import os
@@ -214,6 +215,14 @@ inmanta.test_agent_code_loading = 15
     # Now load the python only version again
     await agent.ensure_code(environment=environment, version=version_4, resource_types=["test::Test4"])
     assert getattr(inmanta, "test_agent_code_loading") == 10
+
+    # ensure we clean up on restart
+    assert os.path.exists(os.path.join(agent._loader.mod_dir, "tests/plugins/__init__.py"))
+    await agent.stop()
+    await agent_factory(
+        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
+    )
+    assert not os.path.exists(os.path.join(agent._loader.mod_dir, "tests"))
 
 
 @pytest.mark.slowtest

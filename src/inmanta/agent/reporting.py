@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import os
 import platform
@@ -68,24 +69,6 @@ def report_hostname(agent: "Agent") -> str:
 
 
 reports["hostname"] = report_hostname
-
-
-def report_ips(agent: "Agent") -> Union[str, dict[str, list[str]]]:
-    try:
-        import netifaces
-
-        alladdresses = [netifaces.ifaddresses(i) for i in netifaces.interfaces()]
-        v4 = [str(y["addr"]) for x in alladdresses if netifaces.AF_INET in x for y in x[netifaces.AF_INET]]
-        v6 = [str(y["addr"]) for x in alladdresses if netifaces.AF_INET6 in x for y in x[netifaces.AF_INET6]]
-        out = {"v4": v4, "v6": v6}
-        return out
-    except ImportError:
-        import socket
-
-        return socket.gethostbyname(socket.gethostname())
-
-
-reports["ips"] = report_ips
 
 
 def report_python(agent: "Agent") -> str:

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import functools
 import operator
 import uuid
@@ -42,7 +43,7 @@ from inmanta.server.services.environment_metrics_service import (
     ResourceCountMetricsCollector,
 )
 from inmanta.util import get_compiler_version, parse_timestamp
-from utils import ClientHelper
+from utils import ClientHelper, wait_until_version_is_released
 
 env_uuid = uuid.uuid4()
 
@@ -459,6 +460,10 @@ async def test_resource_count_metric(clienthelper, client, agent):
     )
     assert result.code == 200
     assert len(await data.Resource.get_list()) == 6
+
+    # Wait until the latest version in each environment is released
+    await wait_until_version_is_released(client, environment=env_uuid1, version=version_env1)
+    await wait_until_version_is_released(client, environment=env_uuid2, version=version_env2)
 
     # adds the ResourceCountMetricsCollector
     rcmc = ResourceCountMetricsCollector()

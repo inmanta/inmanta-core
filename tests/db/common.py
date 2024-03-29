@@ -18,6 +18,7 @@
 
     Tool to populate the database and dump it for database update testing
 """
+
 import asyncio
 import importlib
 import os

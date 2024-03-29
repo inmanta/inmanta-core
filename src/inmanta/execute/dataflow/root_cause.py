@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from collections.abc import Iterable
 from itertools import chain
 
