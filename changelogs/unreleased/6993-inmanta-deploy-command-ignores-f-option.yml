@@ -1,0 +1,7 @@
+description: Deploy command no longer ignores ``-f`` option.
+issue-nr: 6993
+change-type: patch
+destination-branches: [iso6]
+sections:
+  bugfix: "{{description}}"
+

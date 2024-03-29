@@ -87,7 +87,10 @@ def test_direct_execute_error(snippetcompiler):
 
         A()
         """,
-        "The statement Format({{{{a}}}}) can not be executed in this context (reported in Format({{{{a}}}}) ({dir}/main.cf:4))",
+        (
+            "The statement Format('{{{{a}}}}') can not be executed in this context"
+            " (reported in Format('{{{{a}}}}') ({dir}/main.cf:4))"
+        ),
     )
 
 
@@ -317,7 +320,7 @@ def test_reference_nonexisting_namespace(snippetcompiler, namespace: str) -> Non
     with pytest.raises(
         NotFoundException,
         match=re.escape(
-            f"Namespace {namespace} not found. Try importing it with `import {namespace}`"
+            f"Namespace {namespace} not found.\nTry importing it with `import {namespace}`"
             f" (reported in {namespace}::x ({snippetcompiler.project_dir}/main.cf:3:1))"
         ),
     ):

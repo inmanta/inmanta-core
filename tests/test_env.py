@@ -26,7 +26,7 @@ import tempfile
 from importlib.abc import Loader
 from re import Pattern
 from subprocess import CalledProcessError
-from typing import Optional
+from typing import Callable, Optional
 from unittest.mock import patch
 
 import py
@@ -76,43 +76,39 @@ def test_venv_pyton_env_empty_string(tmpdir):
 
 @pytest.mark.slowtest
 def test_basic_install(tmpdir):
-    """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it."""
     env_dir1 = tmpdir.mkdir("env1").strpath
-
-    with pytest.raises(ImportError):
-        import lorem  # NOQA
-
     venv1 = env.VirtualEnv(env_dir1)
+    assert not venv1.are_installed(["lorem"])
 
     venv1.use_virtual_env()
     venv1.install_from_list(["lorem"])
-    import lorem  # NOQA
+    assert venv1.are_installed(["lorem"])
 
-    lorem.sentence()
-
-    with pytest.raises(ImportError):
-        import yummy  # NOQA
+    assert not venv1.are_installed(["dummy-yummy"])
 
     venv1 = env.VirtualEnv(env_dir1)
-
     venv1.use_virtual_env()
     venv1.install_from_list(["dummy-yummy"])
-    import yummy  # NOQA
+    assert venv1.are_installed(["dummy-yummy"])
 
-    with pytest.raises(ImportError):
-        import iplib  # NOQA
 
-    venv1 = env.VirtualEnv(env_dir1)
+def test_git_based_install(tmpdir: py.path.local) -> None:
+    """
+    Verify that the install methods can handle git-based installs over https.
+    """
+    venv = env.VirtualEnv(tmpdir.mkdir("env").strpath)
+    venv.use_virtual_env()
 
-    venv1.use_virtual_env()
+    pkg_name: str = "pytest-inmanta"
+    assert not venv.are_installed([pkg_name])
+
     try:
-        venv1.install_from_list(
-            ["lorem == 0.1.1", "dummy-yummy", "iplib@git+https://github.com/bartv/python3-iplib", "lorem", "iplib >=0.0.1"]
-        )
+        venv.install_from_list([f"{pkg_name}@git+https://github.com/inmanta/{pkg_name}"])
     except CalledProcessError as ep:
         print(ep.stdout)
         raise
-    import iplib  # NOQA
+
+    assert venv.are_installed([pkg_name])
 
 
 @pytest.mark.slowtest
@@ -277,13 +273,73 @@ def test_process_env_install_from_index(
 
 
 @pytest.mark.slowtest
-def test_process_env_install_from_index_not_found(tmpvenv_active: tuple[py.path.local, py.path.local]) -> None:
+@pytest.mark.parametrize_any("use_env_url", [False, True])
+@pytest.mark.parametrize_any("use_extra_indexes", [False, True])
+def test_process_env_install_from_index_not_found(
+    create_empty_local_package_index_factory: Callable[[str], str],
+    monkeypatch,
+    use_env_url: bool,
+    use_extra_indexes: bool,
+) -> None:
     """
     Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
     """
-    with pytest.raises(env.PackageNotFound):
-        # pass empty index list for security reasons (anyone could publish this package to PyPi)
-        env.process_env.install_from_index([Requirement.parse("this-package-does-not-exist")], index_urls=[])
+    index_urls = []
+    if not use_env_url:
+        index_urls.extend([create_empty_local_package_index_factory()])
+        if use_extra_indexes:
+            index_urls.extend(
+                [
+                    create_empty_local_package_index_factory("extra1"),
+                    create_empty_local_package_index_factory("extra2"),
+                ]
+            )
+    else:
+        env_url = create_empty_local_package_index_factory("env1")
+        monkeypatch.setenv("PIP_INDEX_URL", env_url)
+        index_urls.extend([env_url])
+        if use_extra_indexes:
+            extra_env_indexes = [
+                create_empty_local_package_index_factory("extra_env1"),
+                create_empty_local_package_index_factory("extra_env2"),
+            ]
+            monkeypatch.setenv("PIP_EXTRA_INDEX_URL", " ".join(extra_env_indexes))
+            index_urls.extend(extra_env_indexes)
+
+    expected = (
+        "Packages this-package-does-not-exist were not "
+        "found in the given indexes. (Looking in indexes: %s)" % ", ".join(index_urls)
+    )
+
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
+        env.process_env.install_from_index(
+            [Requirement.parse("this-package-does-not-exist")], index_urls=None if use_env_url else index_urls
+        )
+
+
+@pytest.mark.parametrize_any("has_index_url", [True, False])
+def test_process_env_install_no_index(
+    tmpdir: py.path.local, create_empty_local_package_index_factory: Callable[[str], str], monkeypatch, has_index_url: bool
+) -> None:
+    """
+    Attempt to install a package that does not exist with --no-index.
+    To have --no-index set in the pip cmd, index_urls needs to be an empty list
+    it can also be set in the env_vars:
+    If index_urls is set to none, the env vars are used and if PIP_NO_INDEX is true
+    --no-index is used.
+    """
+    index_urls: Optional[list[str]] = []  # explicitly set to [] to have --no-index in the pip command
+    if not has_index_url:
+        # If index_urls is set to none, the env vars are used.
+        index_urls = None
+        monkeypatch.setenv("PIP_NO_INDEX", "true")
+
+    expected = "Packages this-package-does-not-exist were not found. No indexes were used."
+
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
+        env.process_env.install_from_index(
+            requirements=[Requirement.parse("this-package-does-not-exist")], index_urls=index_urls
+        )
 
 
 @pytest.mark.slowtest

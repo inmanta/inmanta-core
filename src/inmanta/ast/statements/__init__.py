@@ -532,9 +532,13 @@ class ReferenceStatement(ExpressionStatement):
         return [req for v in self.children for req in v.requires()]
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
-        requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
-        requires.update({rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()})
-        return requires
+        try:
+            requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
+            requires.update({rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()})
+            return requires
+        except RuntimeException as e:
+            e.set_statement(self, False)
+            raise e
 
 
 class AssignStatement(DynamicStatement):

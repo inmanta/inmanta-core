@@ -540,6 +540,7 @@ def get_resource_actions(
     action_id: Optional[uuid.UUID] = None,
     first_timestamp: Optional[datetime.datetime] = None,
     last_timestamp: Optional[datetime.datetime] = None,
+    exclude_changes: Optional[list[Change]] = None,
 ) -> ReturnValue[list[model.ResourceAction]]:
     """
     Return resource actions matching the search criteria.
@@ -558,10 +559,12 @@ def get_resource_actions(
     :param last_timestamp: Limit the results to resource actions that started earlier
             than the value of this parameter (exclusive).
             Only the first_timestamp or last_timestamp parameter should be supplied
-    :return: the list of matching Resource Actions in a descending order according to the 'started' timestamp.
-            If a limit was specified, also return the links to the next and previous pages.
-            The "next" page always refers to the actions that started earlier,
-            while the "prev" page refers to actions that started later.
+    :param exclude_changes: only return ResourceActions where the change type is different from the one in this list.
+    :return: The list of matching Resource Actions.
+            The order is ascending if first_timestamp is provided, otherwise descending.
+            If a limit is specified, also return links to the next and previous pages.
+            The "next" page refers to actions that started earlier, while the "prev" page refers to actions that started later.
+
 
     :raises BadRequest: When the supplied parameters are not valid.
 

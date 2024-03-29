@@ -52,7 +52,7 @@ db_connection_pool_min_size = Option(
     "database", "connection_pool_min_size", 10, "Number of connections the pool will be initialized with", is_int
 )
 db_connection_pool_max_size = Option(
-    "database", "connection_pool_max_size", 10, "Max number of connections in the pool", is_int
+    "database", "connection_pool_max_size", 70, "Max number of connections in the pool", is_int
 )
 db_connection_timeout = Option("database", "connection_timeout", 60, "Connection timeout in seconds", is_float)
 

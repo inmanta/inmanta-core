@@ -494,6 +494,8 @@ class AgentManager(ServerSlice, SessionListener):
         """
         async with data.AgentProcess.get_connection() as connection:
             async with connection.transaction():
+                # Make sure to access the database tables in the order defined in docs string of inmanta/data/__init__.py
+                # to prevent deadlock issues.
                 await data.AgentProcess.expire_process(session.id, now, connection)
                 await data.AgentInstance.log_instance_expiry(session.id, session.endpoint_names, now, connection)
                 await data.Agent.update_primary(tid, endpoints_with_new_primary, now, connection)
@@ -851,7 +853,7 @@ class AgentManager(ServerSlice, SessionListener):
 
                 client = self.get_agent_client(env_id, res.agent)
                 if client is not None:
-                    self.add_background_task(client.get_parameter(str(env_id), res.agent, res.to_dict()))
+                    await client.get_parameter(str(env_id), res.agent, res.to_dict())
 
                 self._fact_resource_block_set[resource_id] = now
 

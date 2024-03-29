@@ -208,6 +208,9 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     env_1_id = result.result["environment"]["id"]
     result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep)
     assert result.code == 200
+    # Make sure we don't have a released version. _purge_versions() always keeps the latest released version.
+    result = await client.set_setting(env_1_id, AUTO_DEPLOY, False)
+    assert result.code == 200
 
     # Check value was set
     result = await client.get_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP)
@@ -231,6 +234,68 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     assert versions.result["count"] == min(n_versions_to_keep, n_versions_to_create)
 
 
+@pytest.mark.parametrize("has_released_versions", [True, False])
+async def test_purge_versions(server, client, environment, has_released_versions: bool) -> None:
+    """
+    Verify that the `OrchestrationService._purge_versions()` method works correctly and that it doesn't cleanup
+    the latest released version.
+    """
+    result = await client.set_setting(tid=environment, id=data.AUTO_DEPLOY, value="false")
+    assert result.code == 200
+
+    versions = []
+    for _ in range(5):
+        version = (await client.reserve_version(environment)).result["data"]
+        versions.append(version)
+        res = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=[
+                {
+                    "id": f"unittest::Resource[internal,name=ok],v={version}",
+                    "name": "root",
+                    "desired_value": "ok",
+                    "send_event": "false",
+                    "purged": False,
+                    "requires": [],
+                }
+            ],
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
+
+    if has_released_versions:
+        for v in versions[0:2]:
+            result = await client.release_version(environment, id=v)
+            assert result.code == 200
+
+    result = await client.set_setting(tid=environment, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=3)
+    assert result.code == 200
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    result = await client.list_versions(environment)
+    assert result.code == 200
+    assert result.result["count"] == (4 if has_released_versions else 3)
+    if has_released_versions:
+        assert {v["version"] for v in result.result["versions"]} == {versions[1], *versions[2:]}
+    else:
+        assert {v["version"] for v in result.result["versions"]} == {*versions[2:]}
+
+    result = await client.set_setting(tid=environment, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=1)
+    assert result.code == 200
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    result = await client.list_versions(environment)
+    assert result.code == 200
+    assert result.result["count"] == (2 if has_released_versions else 1)
+    if has_released_versions:
+        assert {v["version"] for v in result.result["versions"]} == {versions[1], *versions[4:]}
+    else:
+        assert {v["version"] for v in result.result["versions"]} == {*versions[4:]}
+
+
 async def test_n_versions_env_setting_scope(client, server):
     """
     The AVAILABLE_VERSIONS_TO_KEEP environment setting used to be a global config option.
@@ -252,10 +317,16 @@ async def test_n_versions_env_setting_scope(client, server):
     env_1_id = result.result["environment"]["id"]
     result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep_env1)
     assert result.code == 200
+    # Make sure we don't have a released version. _purge_versions() always keeps the latest released version.
+    result = await client.set_setting(env_1_id, AUTO_DEPLOY, False)
+    assert result.code == 200
 
     result = await client.create_environment(project_id=project_id, name="env_2")
     env_2_id = result.result["environment"]["id"]
     result = await client.set_setting(tid=env_2_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep_env2)
+    assert result.code == 200
+    # Make sure we don't have a released version. _purge_versions() always keeps the latest released version.
+    result = await client.set_setting(env_2_id, AUTO_DEPLOY, False)
     assert result.code == 200
 
     # Create a lot of versions in both environments
@@ -652,7 +723,7 @@ async def test_tokens(server_multi, client_multi, environment_multi, request):
 
     # try to access a non environment call (global)
     result = await client_multi.list_environments()
-    assert result.code == 401
+    assert result.code == 403
 
     result = await client_multi.list_versions(environment_multi)
     assert result.code == 200
@@ -662,7 +733,7 @@ async def test_tokens(server_multi, client_multi, environment_multi, request):
 
     client_multi._transport_instance.token = agent_jot
     result = await client_multi.list_versions(environment_multi)
-    assert result.code == 401
+    assert result.code == 403
 
 
 async def test_token_without_auth(server, client, environment):
@@ -841,6 +912,25 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
             }
         )
 
+    #  adding a resource action with its change field set to "created" to test the get_resource_actions
+    #  filtering on resources with changes
+
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file200],v={version}"
+    resources.append(
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": rvid_r1_v1,
+            "owner": "root",
+            "path": "/tmp/file200",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "version": version,
+        }
+    )
+
     res = await client.put_version(
         tid=environment,
         version=version,
@@ -854,19 +944,33 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     result = await client.release_version(environment, version, False)
     assert result.code == 200
 
-    resource_ids = [x["id"] for x in resources]
+    resource_ids_nochange = [x["id"] for x in resources[0:-1]]
+    resource_ids_created = [resources[-1]["id"]]
 
     # Start the deploy
     action_id = uuid.uuid4()
     now = datetime.now().astimezone()
     result = await aclient.resource_action_update(
-        environment, resource_ids, action_id, "deploy", now, status=const.ResourceState.deploying
+        environment,
+        resource_ids_created,
+        action_id,
+        "deploy",
+        now,
+        status=const.ResourceState.deploying,
+        change=const.Change.created,
+    )
+    assert result.code == 200
+
+    action_id = uuid.uuid4()
+    result = await aclient.resource_action_update(
+        environment, resource_ids_nochange, action_id, "deploy", now, status=const.ResourceState.deploying
     )
     assert result.code == 200
 
     # Get the status from a resource
     result = await client.get_resource_actions(tid=environment)
     assert result.code == 200
+    assert len(result.result["data"]) == 3
 
     result = await client.get_resource_actions(tid=environment, attribute="path")
     assert result.code == 400
@@ -883,14 +987,34 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     # Query actions happening later than the start of the test case
     result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1))
     assert result.code == 200
-    assert len(result.result["data"]) == 2
+    assert len(result.result["data"]) == 3
     result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1), last_timestamp=now)
     assert result.code == 400
     result = await client.get_resource_actions(tid=environment, action_id=action_id)
     assert result.code == 400
     result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1), action_id=action_id)
     assert result.code == 200
-    assert len(result.result["data"]) == 2
+    assert len(result.result["data"]) == 3
+
+    exclude_changes = [const.Change.nochange.value, const.Change.created.value]
+    result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+
+    exclude_changes = []
+    result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
+    assert result.code == 200
+    assert len(result.result["data"]) == 3
+
+    exclude_changes = [const.Change.nochange.value]
+    result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1  # only one of the 3 resource_actions has change != nochange
+
+    exclude_changes = ["error"]
+    result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
+    assert result.code == 400
+    assert "Failed to validate argument" in result.result["message"]
 
 
 async def test_resource_action_pagination(postgresql_client, client, clienthelper, server, agent):
@@ -1695,3 +1819,29 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
         f"because Request conflicts with the current state of the resource: "
         f"The version 2 on environment {environment} is older then the latest released version",
     )
+
+
+async def test_delete_active_version(client, clienthelper, server, environment):
+    """
+    Test that the active version cannot be deleted
+    """
+    version = await clienthelper.get_version()
+    assert version == 1
+    res1 = "test::Resource[agent1,key=key1]"
+    res2 = "test::Resource[agent1,key=key2]"
+    resources = [
+        {"key": "key1", "value": "value", "id": f"{res1},v={version}", "requires": [], "purged": False, "send_event": False},
+        {"key": "key2", "value": "value", "id": f"{res2},v={version}", "requires": [], "purged": False, "send_event": False},
+    ]
+
+    await clienthelper.put_version_simple(resources, version)
+
+    result = await client.release_version(
+        environment, version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
+    assert result.code == 200
+
+    # Remove version 1
+    result = await client.delete_version(tid=environment, id=version)
+    assert result.code == 400
+    assert result.result["message"] == "Invalid request: Cannot delete the active version"

@@ -464,7 +464,7 @@ str = "some_string"
 if not str:
 end
         """,
-        "Invalid value `some_string`: `not` expects a boolean (reported in If ({dir}/main.cf:3))",
+        "Invalid value `some_string`: `not` expects a boolean (reported in Not(str) ({dir}/main.cf:3))",
     )
 
 
@@ -692,3 +692,15 @@ def test_conditional_expression_unknown(snippetcompiler) -> None:
         )
     )
     compiler.do_compile()
+
+
+def test_if_inline_error_1(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+x = 1
+std::print(x ? "test" : "no test")
+        """,
+        "Invalid value `1`: the condition for a conditional expression must be a "
+        "boolean expression (reported in x ? 'test' : 'no test' "
+        "({dir}/main.cf:3:12))",
+    )

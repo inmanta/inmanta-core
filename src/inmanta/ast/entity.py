@@ -238,7 +238,11 @@ class Entity(NamedType, WithComment):
         if attribute.name not in self._attributes:
             self._attributes[attribute.name] = attribute
         else:
-            raise DuplicateException(self._attributes[attribute.name], attribute, "attribute already exists")
+            raise DuplicateException(
+                self._attributes[attribute.name],
+                attribute,
+                "attribute '%s' already exists on entity '%s'" % (attribute.name, self.name),
+            )
 
     def get_attribute(self, name: str) -> Optional["Attribute"]:
         """
@@ -524,6 +528,9 @@ class Implementation(NamedType):
     def normalize(self) -> None:
         try:
             self.statements.normalize()
+        except RuntimeException as e:
+            e.set_statement(self, False)
+            raise
         except CompilerException as e:
             e.set_location(self.location)
             raise

@@ -124,7 +124,7 @@ class FileService(protocol.ServerSlice):
     @handle(methods.stat_files)
     async def stat_files(self, files: list[str]) -> Apireturn:
         """
-        Return which files in the list exist on the server
+        Return which files in the list don't exist on the server
         """
         return 200, {"files": self.stat_file_internal(files)}
 

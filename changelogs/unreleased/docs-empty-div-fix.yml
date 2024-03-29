@@ -1,0 +1,6 @@
+description: Fixed empty div appearing at top of docs pages
+change-type: patch
+destination-branches:
+  - master
+  - iso7
+  - iso6

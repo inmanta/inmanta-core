@@ -34,7 +34,7 @@ requires = [
     "setuptools",
     "texttable~=1.0",
     "tornado~=6.0",
-    "typing-extensions~=4.8.0",
+    "typing-extensions>=4.8,<4.10",
     # lower bound because of ilevkivskyi/typing_inspect#100
     "typing_inspect~=0.9",
     "ruamel.yaml~=0.17",
@@ -49,7 +49,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "8.7.3"
+version = "8.7.4"
 
 setup(
     version=version,

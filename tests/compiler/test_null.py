@@ -97,7 +97,7 @@ def test_null_err(snippetcompiler):
         a = A()
 
     """,
-        "Invalid value 'null', expected String (reported in string a = null ({dir}/main.cf:3:20))",
+        "Invalid value 'null', expected string (reported in string a = null ({dir}/main.cf:3:20))",
     )
 
 

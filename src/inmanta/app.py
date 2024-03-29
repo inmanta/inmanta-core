@@ -543,6 +543,13 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "be used together with the --partial option.",
         action="append",
     )
+    parser.add_argument(
+        "--soft-delete",
+        dest="soft_delete",
+        help="Use in combination with --delete-resource-set to delete these resource sets only if they are not being exported",
+        action="store_true",
+        default=False,
+    )
     moduletool.add_deps_check_arguments(parser)
 
 

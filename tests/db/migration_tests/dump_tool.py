@@ -102,6 +102,30 @@ async def test_dump_db(server, client, postgres_db, database_name):
     await client.notify_change(id=env_id_1)
     versions = await wait_for_version(client, env_id_1, 4)
 
+    # Partial compile
+    rid2 = "test::Resource[agent2,key=key2]"
+    resources_partial = [
+        {
+            "key": "key2",
+            "version": 0,
+            "id": f"{rid2},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid2: "set-a"}
+    resource_states = {rid2: const.ResourceState.available}
+    result = await client.put_partial(
+        tid=env_id_1,
+        resources=resources_partial,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info=None,
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
     proc = await asyncio.create_subprocess_exec(
         "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name
     )
