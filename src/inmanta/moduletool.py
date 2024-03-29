@@ -1283,9 +1283,7 @@ version: 0.0.1dev0"""
         stable_releases: list[Version] = gitprovider.get_version_tags(module_dir, only_return_stable_versions=True)
 
         path_changelog_file = os.path.join(module_dir, const.MODULE_CHANGELOG_FILE)
-        changelog: Optional[ModuleChangelog] = (
-            ModuleChangelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
-        )
+        changelog: Optional[Changelog] = Changelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
 
         requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
         if not requested_version_bump and dev:
@@ -1301,7 +1299,7 @@ version: 0.0.1dev0"""
             new_version = current_version
 
         if not changelog and changelog_message:
-            changelog = ModuleChangelog.create_changelog_file(path_changelog_file, new_version, changelog_message)
+            changelog = Changelog.create_changelog_file(path_changelog_file, new_version, changelog_message)
         elif changelog:
             if current_version.is_devrelease:
                 # Update the existing dev version to the new dev version
@@ -1344,9 +1342,9 @@ version: 0.0.1dev0"""
             self.release(dev=True, message="Bump version to next development version", patch=True)
 
 
-class ModuleChangelog:
+class Changelog:
     """
-    This class represent the changelog file in an Inmanta module.
+    This class represent a changelog file e.g. in an Inmanta module or an Inmanta python package.
 
     The expected format of the changelog is the following:
 
@@ -1370,7 +1368,7 @@ class ModuleChangelog:
         self.path_changelog_file = os.path.abspath(path_changelog_file)
 
     @classmethod
-    def create_changelog_file(cls, path: str, version: Version, changelog_message: str) -> "ModuleChangelog":
+    def create_changelog_file(cls, path: str, version: Version, changelog_message: str) -> "Changelog":
         """
         Create a new changelog file at the given path. Add a section for the given version and write the given
         changelog message to it.
@@ -1513,6 +1511,9 @@ class ModuleChangelog:
                     "Failed to add changelog entry to section for version %s.",
                     str(version.base_version),
                 )
+
+
+ModuleChangelog = Changelog  # For backwards compatibility after class rename
 
 
 class ModuleBuildFailedError(Exception):
@@ -1757,7 +1758,16 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         """
         Copy all files that have to be packaged into the Python package of the module
         """
-        python_pkg_dir = os.path.join(build_path, "inmanta_plugins", self._module.name)
+        python_pkg_dir: str = os.path.join(build_path, "inmanta_plugins", self._module.name)
+        model_dir: str = os.path.join(python_pkg_dir, "model")
+        if os.path.exists(model_dir):
+            raise ModuleBuildFailedError(
+                msg="There is already a model directory in %s. "
+                "The `inmanta_plugins.%s.model` package is reserved for bundling the inmanta model files. "
+                "Please use a different name for this Python package."
+                % (os.path.join(self._module.path, "inmanta_plugins", self._module.name), self._module.name)
+            )
+
         for dir_name in ["model", "files", "templates"]:
             fq_dir_name = os.path.join(build_path, dir_name)
             if os.path.exists(fq_dir_name):

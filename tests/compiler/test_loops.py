@@ -47,7 +47,9 @@ def test_for_error(snippetcompiler):
         for i in a:
         end
     """,
-        "A for loop can only be applied to lists and relations (reported in For(i) ({dir}/main.cf:7))",
+        "A for loop can only be applied to lists and relations. Hint: 'a' resolves to "
+        "'__config__::A (instantiated at {dir}/main.cf:6)'. (reported in "
+        "For(i) ({dir}/main.cf:7))",
     )
 
 
@@ -57,7 +59,26 @@ def test_for_error_2(snippetcompiler):
         for i in "foo":
         end
     """,
-        "A for loop can only be applied to lists and relations (reported in For(i) ({dir}/main.cf:2))",
+        "A for loop can only be applied to lists and relations. Hint: 'foo' is not a "
+        "list. (reported in For(i) ({dir}/main.cf:2))",
+    )
+
+
+def test_for_error_nullable_list(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            string[]? elements=null
+        end
+        implement A using std::none
+
+        a = A()
+        for element in a.elements:
+            std::print(element)
+        end
+    """,
+        "A for loop can only be applied to lists and relations. "
+        "Hint: 'a.elements' resolves to 'null'. (reported in For(element) ({dir}/main.cf:8))",
     )
 
 

@@ -83,7 +83,6 @@
     troubleshooting
     changelogs
 
-
 PDF version
 -----------
 

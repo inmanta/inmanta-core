@@ -208,7 +208,7 @@ implement Test using std::none
 
 Test(t = ["str"])
         """,
-        "Invalid value '1', expected String (reported in string[]? t = List() ({dir}/main.cf:3:15))",
+        "Invalid value '1', expected string (reported in string[]? t = List() ({dir}/main.cf:3:15))",
     )
 
 

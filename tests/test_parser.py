@@ -35,6 +35,7 @@ from inmanta.ast.statements.assign import (
     SetAttribute,
     ShortIndexLookup,
     StringFormat,
+    StringFormatV2,
 )
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineTypeConstraint, TypeDeclaration
@@ -1017,6 +1018,30 @@ a="j{{c.d}}s"
     assert str(stmt.value._variables[0][0].attribute) == "d"
     assert stmt.value._variables[0][0].instance.locatable_name.location == Range("test", 2, 7, 2, 8)
     assert stmt.value._variables[0][0].attribute.location == Range("test", 2, 9, 2, 10)
+
+
+def test_string_format_v2():
+    statements = parse_code('f"hello { world }"')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, StringFormatV2)
+    assert len(stmt._variables) == 1
+    ref: Reference
+    full_name: str
+    ref, full_name = list(stmt._variables.items())[0]
+    assert ref.name == "world"
+    assert full_name == " world "
+
+    statements = parse_code('f"hello { world:>{width }}"')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, StringFormatV2)
+    assert len(stmt._variables) == 2
+    assert {ref.name: full_name for ref, full_name in stmt._variables.items()} == {"world": " world", "width": "width "}
+    assert stmt._format_string == "hello { world:>{width }}"
+
+    with pytest.raises(ParserException, match=r"Syntax error: Invalid f-string:.*\(test:1:1\)"):
+        statements = parse_code('f"hello {"')
 
 
 def test_attribute_reference():

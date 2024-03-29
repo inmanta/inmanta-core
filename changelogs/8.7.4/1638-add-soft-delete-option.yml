@@ -1,0 +1,8 @@
+description: >
+    Add `--soft-delete` option to the exporter. This option makes sure that resource sets, specified using the `--delete-resource-set` option, are only deleted if there are no resources exported for this set.
+issue-nr: 1638
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [iso6]
+sections:
+    minor-improvement: "{{description}}"

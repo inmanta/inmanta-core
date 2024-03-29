@@ -1298,6 +1298,177 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     assert rid_to_res["test::Resource[agent1,key=key7]"].status is const.ResourceState.available
 
 
+async def test_put_partial_with_undeployable_resources(server, client, environment, clienthelper, agent) -> None:
+    """
+    Test whether the put_partial() endpoint correctly merges the undeployable and skipped_for_undeployable list
+    of a configurationmodel.
+    """
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "version": version,
+            "id": f"test::Resource[agent1,key=key1],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "version": version,
+            "id": f"test::Resource[agent1,key=key2],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"test::Resource[agent1,key=key1],v={version}"],
+        },
+        {
+            "key": "key3",
+            "version": version,
+            "id": f"test::Resource[agent1,key=key3],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key4",
+            "version": version,
+            "id": f"test::Resource[agent1,key=key4],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"test::Resource[agent1,key=key3],v={version}"],
+        },
+        {
+            "key": "key91",
+            "version": version,
+            "id": f"test::Resource[agent1,key=key91],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key92",
+            "version": version,
+            "id": f"test::Resource[agent1,key=key92],v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"test::Resource[agent1,key=key91],v={version}"],
+        },
+    ]
+    resource_sets = {
+        "test::Resource[agent1,key=key1]": "set-a",
+        "test::Resource[agent1,key=key2]": "set-a",
+        "test::Resource[agent1,key=key3]": "set-a",
+        "test::Resource[agent1,key=key4]": "set-a",
+    }
+    resource_states = {
+        "test::Resource[agent1,key=key1]": const.ResourceState.undefined,
+        "test::Resource[agent1,key=key2]": const.ResourceState.available,
+        "test::Resource[agent1,key=key3]": const.ResourceState.undefined,
+        "test::Resource[agent1,key=key4]": const.ResourceState.available,
+        "test::Resource[agent1,key=key91]": const.ResourceState.undefined,
+        "test::Resource[agent1,key=key92]": const.ResourceState.available,
+    }
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200, result.result
+
+    cm = await data.ConfigurationModel.get_one(environment=environment, version=version)
+    assert cm is not None
+    assert sorted(cm.undeployable) == sorted(
+        ["test::Resource[agent1,key=key1]", "test::Resource[agent1,key=key3]", "test::Resource[agent1,key=key91]"]
+    )
+    assert sorted(cm.skipped_for_undeployable) == sorted(
+        ["test::Resource[agent1,key=key2]", "test::Resource[agent1,key=key4]", "test::Resource[agent1,key=key92]"]
+    )
+
+    # Partial compile
+    resources_partial = [
+        {
+            "key": "key1",
+            "version": 0,
+            "id": "test::Resource[agent1,key=key1],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "version": 0,
+            "id": "test::Resource[agent1,key=key2],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key1],v=0"],
+        },
+        {
+            "key": "key5",
+            "version": 0,
+            "id": "test::Resource[agent1,key=key5],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key6",
+            "version": 0,
+            "id": "test::Resource[agent1,key=key6],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key5],v=0"],
+        },
+        {
+            "key": "key91",
+            "version": 0,
+            "id": "test::Resource[agent1,key=key91],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {
+        "test::Resource[agent1,key=key1]": "set-a",
+        "test::Resource[agent1,key=key2]": "set-a",
+        "test::Resource[agent1,key=key5]": "set-a",
+        "test::Resource[agent1,key=key6]": "set-a",
+    }
+    resource_states = {
+        "test::Resource[agent1,key=key1]": const.ResourceState.undefined,
+        "test::Resource[agent1,key=key2]": const.ResourceState.available,
+        "test::Resource[agent1,key=key5]": const.ResourceState.undefined,
+        "test::Resource[agent1,key=key6]": const.ResourceState.available,
+        "test::Resource[agent1,key=key91]": const.ResourceState.undefined,
+    }
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info=None,
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200, result.result
+    version = result.result["data"]
+
+    result = await client.release_version(tid=environment, id=version)
+    assert result.code == 200, result.result
+
+    cm = await data.ConfigurationModel.get_one(environment=environment, version=version)
+    assert cm is not None
+    assert sorted(cm.undeployable) == sorted(
+        ["test::Resource[agent1,key=key1]", "test::Resource[agent1,key=key5]", "test::Resource[agent1,key=key91]"]
+    )
+    assert sorted(cm.skipped_for_undeployable) == sorted(
+        ["test::Resource[agent1,key=key2]", "test::Resource[agent1,key=key6]", "test::Resource[agent1,key=key92]"]
+    )
+
+
 async def test_put_partial_with_unknowns(server, client, environment, clienthelper) -> None:
     """
     Test whether the put_partial() endpoint correctly merges unknowns.
@@ -1559,6 +1730,11 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
     rid_to_resource = {res.resource_id: res for res in resources_in_model}
     assert rid_to_resource[rid1].attributes["requires"] == []
     assert rid_to_resource[rid2].provides == []
+
+    # Test for: https://github.com/inmanta/inmanta-core/issues/7065
+    # Make sure dryrun succeeds after a put_partial call
+    result = await client.dryrun_trigger(tid=environment, version=2)
+    assert result.code == 200
 
 
 async def test_put_partial_dep_on_non_existing_resource(server, client, environment, clienthelper) -> None:

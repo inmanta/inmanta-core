@@ -10,8 +10,6 @@ In the network, this virtual wire is implemented as a VXlan tunnel, tied to both
 Each such tunnel requires a "VXLAN Network Identifier (VNI)" that uniquely identifies the tunnel.
 In the allocation phase, the orchestrator selects a VNI and ensures no other customer is assigned the same VNI.
 
-.. todo: add picture of service
-
 Correct allocation is crucial for the correct functioning of automated services.
 However, when serving multiple customers at once or when mediating between multiple inventories, correct allocation can be challenging, due to concurrency and distribution effects.
 

@@ -47,9 +47,9 @@
 
     - The name of the service entity
     - A list of attributes that have a name, a type (number, string, ...) and a modifier. This modifier determines whether the attribute is:
-        - r / readonly: readonly from the client perspective and allocated server side by the LSM
-        - rw / read-write: Attributes can be set at creation time, but are readonly after the creation
-        - rw+ / read-write always: Attribute can be set at creation time and modified when the service state allows it
+        - ``r`` / readonly: readonly from the client perspective and allocated server side by the LSM
+        - ``rw`` / read-write: Attributes can be set at creation time, but are readonly after the creation
+        - ``rw+`` / read-write always: Attribute can be set at creation time and modified when the service state allows it
     - The :ref:`fsm` that defines the lifecycle of the service.
 
     For each service entity the lifecycle service manager will create an REST API endpoint on the service inventory to perform create,
@@ -57,17 +57,31 @@
 
     Creating service entities
     =========================
+    Service entities are :ref:`entities <lang-entity>` that extend ``lsm::ServiceEntity``
+    We define attributes for the service entity the same way as for entities. We can also define a modifier for the attribute.
+    If no modifier is defined for an attribute, it will be ``rw`` by default.
+    Here is an example of an entity definition where the modifier of the ``address`` attribute is set to ``rw+``.
 
-    TODO:
-    How to define a new service entity. "Exported" entity is high level entity in a service model.
+    .. literalinclude:: index_sources/service_creation.cf
+        :linenos:
+        :language: inmanta
+        :lines: 1-29
+
+    We also need to add a lifecycle and a name to the service. This is done by creating an instance of the ``ServiceEntityBinding`` entity:
+
+    .. literalinclude:: index_sources/service_creation.cf
+        :linenos:
+        :language: inmanta
+        :lines: 30-36
+        :lineno-start: 25
 
     It's also possible to define a service identity for a service. For more information, see :ref:`service_identity`.
 
-    Updating service entities
-    =========================
-
-    TODO:
-    How to update the definition of a service entity and keeping the instance in the inventory stable
+    ..
+        TODO:
+        Updating service entities
+        =========================
+        How to update the definition of a service entity and keeping the instance in the inventory stable
 
     Service Inventory
     -----------------
@@ -89,12 +103,15 @@
 
     The state machine attached to the lifecycle will determine whether the API call is successful or not.
 
-    TODO: Three set of attributes
+    ..
+        TODO: Three set of attributes
+
 
     Lifecycle Manager
     -----------------
 
-    TODO: add example/default lifecycle
+    ..
+        TODO: add example/default lifecycle
 
 
     .. _fsm:

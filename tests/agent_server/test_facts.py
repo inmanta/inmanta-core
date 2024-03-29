@@ -378,6 +378,17 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     assert result.code == 200
     assert len(result.result["parameters"]) == 4
 
+    # Create version 3 to be able to delete version 2
+    version = await clienthelper.get_version()
+    assert version == 3
+
+    await clienthelper.put_version_simple([], version)
+
+    result = await client.release_version(
+        environment, version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
+    assert result.code == 200
+
     # Remove version 2
     result = await client.delete_version(tid=environment, id=2)
     assert result.code == 200

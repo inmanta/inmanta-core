@@ -128,7 +128,6 @@ class InmantaLoggerConfig:
 
         logging.root.handlers = []
         logging.root.addHandler(self._handler)
-        logging.root.setLevel(0)
 
         self._inmanta_plugin_pkg_regex = re.compile(r"^inmanta_plugins\.(?P<module_name>[^.]+)")
         # Regex that extracts the name of the module from a fully qualified import of a Python
@@ -280,6 +279,7 @@ class InmantaLoggerConfig:
         # Converts the Inmanta log level to the Python log level
         python_log_level = log_levels[inmanta_log_level]
         self._handler.setLevel(python_log_level)
+        logging.root.setLevel(python_log_level)
 
     @stable_api
     def set_log_formatter(self, formatter: logging.Formatter) -> None:

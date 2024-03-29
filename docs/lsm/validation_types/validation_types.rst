@@ -55,7 +55,7 @@ Example
 
 .. code-block:: inmanta
 
-    typedef lowercase as string matching "/^[a-z]+$/"
+    typedef lowercase as string matching /^[a-z]+$/
 
 ------------
 

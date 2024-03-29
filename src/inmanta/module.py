@@ -18,7 +18,6 @@
 
 import configparser
 import enum
-import glob
 import importlib
 import logging
 import operator
@@ -71,7 +70,6 @@ try:
     from typing import TYPE_CHECKING
 except ImportError:
     TYPE_CHECKING = False
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1814,7 +1812,7 @@ class ModuleLikeWithYmlMetadataFile(ABC):
         # Parse cfg file
         content: CommentedMap = PreservativeYamlParser.parse(self.get_metadata_file_path())
         # Update requires
-        if "requires" in content:
+        if "requires" in content and content["requires"]:
             existing_matching_reqs: list[str] = [
                 r for r in content["requires"] if InmantaModuleRequirement.parse(r).key == requirement.key
             ]
@@ -2705,6 +2703,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         self._ast_cache: dict[str, tuple[list[Statement], BasicBlock]] = {}  # Cache for expensive method calls
         self._import_cache: dict[str, list[DefineImport]] = {}  # Cache for expensive method calls
+        self._dir_cache: Dict[str, list[str]] = {}  # Cache containing all the filepaths present in a dir
 
     @classmethod
     @abstractmethod
@@ -2885,20 +2884,57 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         raise NotImplementedError()
 
     def _list_python_files(self, plugin_dir: str) -> list[str]:
-        """Generate a list of all python files"""
+        """
+        Generate a list of all Python files in the given plugin directory.
+        This method prioritizes .pyc files over .py files, uses caching to avoid duplicate directory walks,
+        includes namespace packages and excludes the model directory.
+        """
+        # Return cached results if this directory has been processed before
+        if plugin_dir in self._dir_cache:
+            return self._dir_cache[plugin_dir]
+
         files: dict[str, str] = {}
+        model_dir_path: str = os.path.join(plugin_dir, "inmanta_plugins", self.name, "model")
 
-        for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.pyc"), recursive=True):
-            # Filter out pyc files in the default cache dir. Only support our compiled pyc files.
-            if "__pycache__" not in file_name:
-                files[file_name[:-3]] = file_name
+        for dirpath, dirnames, filenames in os.walk(plugin_dir, topdown=True):
+            # Modify dirnames in-place to stop os.walk from descending into any more subdirectories of the model directory
+            if dirpath.startswith(model_dir_path):
+                dirnames[:] = []
+                continue
 
-        for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
-            # store the python source file if we do not have a python file
-            if file_name[:-2] not in files:
-                files[file_name[:-2]] = file_name
+            # Skip this directory if it's already in the cache
+            if dirpath in self._dir_cache:
+                cached_files = self._dir_cache[dirpath]
+                for file in cached_files:
+                    base_file_path = os.path.splitext(file)[0]
+                    files[base_file_path] = file
+                continue
 
-        return list(files.values())
+            current_path_files = []
+
+            for filename in filenames:
+                file_path = os.path.join(dirpath, filename)
+
+                # Skip files in the default cache directory
+                if "__pycache__" in file_path:
+                    continue
+
+                base_file_path = os.path.splitext(file_path)[0]
+
+                # Prioritize .pyc files over .py files
+                if file_path.endswith(".pyc"):
+                    files[base_file_path] = file_path
+                    current_path_files.append(file_path)
+                elif file_path.endswith(".py") and base_file_path not in files:
+                    files[base_file_path] = file_path
+                    current_path_files.append(file_path)
+
+            # Update the cache with files found in the current directory
+            self._dir_cache[dirpath] = current_path_files
+
+        # Cache the final list of files for the root directory and return it
+        self._dir_cache[plugin_dir] = list(files.values())
+        return self._dir_cache[plugin_dir]
 
     def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
         """

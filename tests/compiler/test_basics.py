@@ -22,7 +22,7 @@ from typing import Optional
 import pytest
 
 from inmanta import compiler, const
-from inmanta.ast import DoubleSetException
+from inmanta.ast import DoubleSetException, RuntimeException
 from inmanta.plugins import PluginDeprecationWarning
 from utils import module_from_template, v1_module_from_template
 
@@ -184,7 +184,7 @@ Test1(a=3)
         """Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:6)` """
         """(reported in Construct(Test1) ({dir}/main.cf:6))
 caused by:
-  Invalid value '3', expected String (reported in Construct(Test1) ({dir}/main.cf:6))""",
+  Invalid value '3', expected string (reported in Construct(Test1) ({dir}/main.cf:6))""",
     )
 
 
@@ -204,7 +204,7 @@ t1.a=3
 """,
         """Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:10)` (reported in t1.a = 3 ({dir}/main.cf:11))
 caused by:
-  Invalid value '3', expected String (reported in t1.a = 3 ({dir}/main.cf:11))""",  # noqa: E501
+  Invalid value '3', expected string (reported in t1.a = 3 ({dir}/main.cf:11))""",  # noqa: E501
     )
 
 
@@ -646,3 +646,79 @@ def get_one() -> "int":
                 has_warning = True
                 assert "Plugin 'test_module::custom_name' is deprecated." in str(warning.message)
         assert has_warning
+
+
+def test_var_not_found_in_implement(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+end
+implementation test for Test:
+    std::print("This is test {{n}}")
+end
+implement Test using test
+Test()
+""",
+        r"variable n not found (reported in Format('This is test {{{{n}}}}') ({dir}/main.cf:5))",
+    )
+
+
+def test_var_not_found_in_implement_2(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity A: end
+implementation a for A:
+    x = y
+end
+implement A using a
+A()
+""",
+        r"variable y not found (reported in x = y ({dir}/main.cf:4))",
+    )
+
+
+def test_var_not_found_nested_case(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+end
+A.x [1] -- B                # 5
+entity B:
+end
+implementation a for A:     # 10
+    x
+end
+implementation b for B:
+    std::print(u)           # 15
+end
+implement A using a
+implement B using b
+A(x=B())
+""",
+        r"variable u not found (reported in std::print(u) ({dir}/main.cf:11))",
+    )
+
+
+def test_implementation_import_missing_error(snippetcompiler) -> None:
+    """
+    Verify that an error is raised when referring to something that is not imported in an implementation
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        entity A:
+        end
+
+        implementation a for A:
+            test = tests::length("one")
+        end
+
+        implement A using a
+
+        """
+    )
+
+    with pytest.raises(RuntimeException) as exception:
+        snippetcompiler.do_export()
+    assert "could not find type tests::length in namespace __config__" in exception.value.msg
+    assert exception.value.location.lnr == 6
+    assert exception.value.location.start_char == 20
