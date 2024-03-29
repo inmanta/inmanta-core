@@ -40,7 +40,8 @@ def test_modules_compiler_finalizer(
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
-    test_module_plugin_contents: str = """
+    test_module_plugin_contents: str = (
+        """
 from inmanta.plugins import plugin
 from inmanta import compiler
 
@@ -71,6 +72,7 @@ def finalize2():
     if connection2:
         connection2 = "closed"
         """.strip()
+    )
 
     v1_module_from_template(
         v1_template_path,
@@ -111,7 +113,8 @@ def test_modules_compiler_exception_finalizer(tmpdir: str, snippetcompiler_clean
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
-    test_module_plugin_contents: str = """
+    test_module_plugin_contents: str = (
+        """
 from inmanta import compiler
 
 connection = None
@@ -121,6 +124,7 @@ def finalize():
     global connection
     connection = "closed"
         """.strip()
+    )
 
     v1_module_from_template(
         v1_template_path,
@@ -167,7 +171,8 @@ def test_modules_compiler_finalizer_exception(
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
-    test_module_plugin_contents: str = """
+    test_module_plugin_contents: str = (
+        """
 from inmanta import compiler
 
 @compiler.finalizer
@@ -178,6 +183,7 @@ def finalize1():
 def finalize2():
     raise Exception("big mistake")
         """.strip()
+    )
 
     v1_module_from_template(
         v1_template_path,

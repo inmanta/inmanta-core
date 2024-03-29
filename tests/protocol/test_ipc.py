@@ -73,6 +73,7 @@ class Error(inmanta.protocol.ipc_light.IPCMethod[None, None]):
 
 
 class Echo(inmanta.protocol.ipc_light.IPCMethod[list[int], None]):
+
     def __init__(self, args: list[int]) -> None:
         self.args = args
 

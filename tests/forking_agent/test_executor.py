@@ -45,6 +45,7 @@ class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
 
 
 class GetConfig(inmanta.protocol.ipc_light.IPCMethod[str, None]):
+
     def __init__(self, section: str, name: str) -> None:
         self.section = section
         self.name = name
