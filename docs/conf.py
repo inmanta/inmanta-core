@@ -207,7 +207,7 @@ html_theme_options = {
         },
     ],
     "light_css_variables": {
-        "color-announcement-background": "#2b9af3",
+        "color-announcement-background": "#f0ab00",
         "color-announcement-text": "#000000",
     }
 }
