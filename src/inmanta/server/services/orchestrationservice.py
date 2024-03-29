@@ -1165,16 +1165,13 @@ class OrchestrationService(protocol.ServerSlice):
                             )
 
                     if latest_version:
-                        (
-                            version,
-                            increment_ids,
-                            neg_increment,
-                            neg_increment_per_agent,
-                        ) = await self.resource_service.get_increment(
-                            env,
-                            version_id,
-                            connection=connection,
-                            run_ahead_lock=version_run_ahead_lock,
+                        version, increment_ids, neg_increment, neg_increment_per_agent = (
+                            await self.resource_service.get_increment(
+                                env,
+                                version_id,
+                                connection=connection,
+                                run_ahead_lock=version_run_ahead_lock,
+                            )
                         )
 
                         await self.resource_service.mark_deployed(
