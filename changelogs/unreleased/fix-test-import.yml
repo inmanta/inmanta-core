@@ -1,3 +1,0 @@
-description: fix flaky test by not importing lorem explicitly anymore as it will modify sys.modules
-change-type: patch
-destination-branches: [master, iso7, iso6]
