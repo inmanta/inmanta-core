@@ -15,13 +15,14 @@
 
     Contact: code@inmanta.com
 """
+
 import warnings
 
 from tornado.httpclient import AsyncHTTPClient
 
 import toml
-from inmanta.config import AuthJWTConfig
 from inmanta.logging import InmantaLoggerConfig
+from inmanta.protocol import auth
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -100,7 +101,6 @@ from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
-import build.env
 import inmanta
 import inmanta.agent
 import inmanta.app
@@ -147,7 +147,9 @@ from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_ty
 
 logger = logging.getLogger(__name__)
 
-TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["resourceaction_resource"]  # Join table
+TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
+    "resourceaction_resource",
+]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
@@ -577,7 +579,7 @@ def reset_all_objects():
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
     V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
-    AuthJWTConfig.reset()
+    auth.AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
     AsyncHTTPClient.configure(None)
 
@@ -599,9 +601,9 @@ def restore_cwd():
 @pytest.fixture(scope="function")
 def no_agent_backoff(inmanta_config: ConfigParser) -> None:
     old_backoff = agent_cfg.agent_get_resource_backoff.get()
-    inmanta_config.set(section="config", option="agent-get-resource-backoff", value="0")
+    agent_cfg.agent_get_resource_backoff.set("0")
     yield
-    inmanta_config.set(section="config", option="agent-get-resource-backoff", value=str(old_backoff))
+    agent_cfg.agent_get_resource_backoff.set(str(old_backoff))
 
 
 @pytest.fixture()
@@ -629,7 +631,7 @@ def inmanta_config() -> Iterator[ConfigParser]:
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
 
-    yield config.Config._get_instance()
+    yield config.Config.get_instance()
 
 
 @pytest.fixture
@@ -765,11 +767,14 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     with tempfile.TemporaryDirectory() as state_dir:
         port = str(unused_tcp_port_factory())
 
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
+
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "password", pg_password)
         config.Config.set("database", "connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -860,12 +865,15 @@ async def server_multi(
                 token = protocol.encode_token(ct)
                 config.Config.set(x, "token", token)
 
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
+
         port = str(unused_tcp_port_factory())
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "password", pg_password)
         config.Config.set("database", "connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -1145,6 +1153,7 @@ class SnippetCompilationTest(KeepOnFail):
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
+        main_file: str = "main.cf",
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1165,6 +1174,8 @@ class SnippetCompilationTest(KeepOnFail):
         :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
         :param use_pip_config_file: True iff the pip config file should be used and no source is required for v2 to work
                                     False if a package source is needed for v2 modules to work
+        :param main_file: Path to the .cf file to use as main entry point. A relative or an absolute path can be provided.
+            If a relative path is used, it's interpreted relative to the root of the project directory.
         """
         self.setup_for_snippet_external(
             snippet,
@@ -1177,8 +1188,11 @@ class SnippetCompilationTest(KeepOnFail):
             use_pip_config_file,
             index_url,
             extra_index_url,
+            main_file,
         )
-        return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
+        return self._load_project(
+            autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check, main_file=main_file
+        )
 
     def _load_project(
         self,
@@ -1240,6 +1254,7 @@ class SnippetCompilationTest(KeepOnFail):
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
+        main_file: str = "main.cf",
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1286,7 +1301,7 @@ class SnippetCompilationTest(KeepOnFail):
                 )
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
-        self.main = os.path.join(self.project_dir, "main.cf")
+        self.main = os.path.join(self.project_dir, main_file)
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
 
@@ -1304,6 +1319,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete=False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         return self._do_export(
             deploy=False,
@@ -1311,6 +1327,7 @@ class SnippetCompilationTest(KeepOnFail):
             do_raise=do_raise,
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            soft_delete=soft_delete,
         )
 
     def get_exported_json(self) -> JsonType:
@@ -1324,6 +1341,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete=False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         """
         helper function to allow actual export to be run on a different thread
@@ -1338,6 +1356,7 @@ class SnippetCompilationTest(KeepOnFail):
         options.depgraph = False
         options.deploy = deploy
         options.ssl = False
+        options.soft_delete = soft_delete
 
         from inmanta.export import Exporter  # noqa: H307
 
@@ -1369,6 +1388,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete: bool = False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
         """Export to an actual server"""
         return await asyncio.get_running_loop().run_in_executor(
@@ -1379,6 +1399,7 @@ class SnippetCompilationTest(KeepOnFail):
                 do_raise=do_raise,
                 partial_compile=partial_compile,
                 resource_sets_to_remove=resource_sets_to_remove,
+                soft_delete=soft_delete,
             ),
         )
 
@@ -1649,15 +1670,9 @@ def tmpvenv_active(
     env.mock_process_env(python_path=str(python_path))
     env.process_env.notify_change()
 
-    # Force refresh build's decision on whether it should use virtualenv or venv. This decision is made based on the active
-    # environment, which we're changing now.
-    build.env._should_use_virtualenv.cache_clear()
-
     yield tmpvenv
 
     loader.unload_modules_for_path(site_packages)
-    # Force refresh build's cache once more
-    build.env._should_use_virtualenv.cache_clear()
 
 
 @pytest.fixture
@@ -1673,12 +1688,41 @@ def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env
     loader.unload_modules_for_path(venv.site_packages_dir)
 
 
+@pytest.fixture
+def create_empty_local_package_index_factory() -> Callable[[str], str]:
+    """
+    A fixture that acts as a factory to create empty local pip package indexes.
+    Each call creates a new index in a different temporary directory.
+    """
+
+    created_directories: list[str] = []
+
+    def _create_local_package_index(prefix: str = "test"):
+        """
+        Creates an empty pip index. The prefix argument is used as a prefix for the temporary directory name
+        for clarity and debugging purposes. The 'dir2pi' tool will then create a 'simple' directory inside
+        this temporary directory, which contains the index files.
+        """
+        tmpdir = tempfile.mkdtemp(prefix=f"{prefix}-")
+        created_directories.append(tmpdir)  # Keep track of the tempdir for cleanup
+        dir2pi(argv=["dir2pi", tmpdir])
+        index_dir = os.path.join(tmpdir, "simple")  # The 'simple' directory is created inside the tmpdir by dir2pi
+        return index_dir
+
+    yield _create_local_package_index
+
+    # Cleanup after the session ends
+    for directory in created_directories:
+        shutil.rmtree(directory)
+
+
 @pytest.fixture(scope="session")
 def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
     :return: The path to the index
     """
+
     cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
     build_dir = os.path.join(cache_dir, "build")
     index_dir = os.path.join(build_dir, "simple")
@@ -1700,8 +1744,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         )
 
     if _should_rebuild_cache():
-        logger.info(f"Cache {cache_dir} is dirty. Rebuilding cache.")
-        # Remove cache
+        logger.info("Cache %s is dirty. Rebuilding cache.", cache_dir)  # Remove cache
         if os.path.exists(cache_dir):
             shutil.rmtree(cache_dir)
         os.makedirs(build_dir)
@@ -1719,7 +1762,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         # Update timestamp file
         open(timestamp_file, "w").close()
     else:
-        logger.info(f"Using cache {cache_dir}")
+        logger.info("Using cache %s", cache_dir)
 
     yield index_dir
 
@@ -1739,6 +1782,7 @@ async def migrate_db_from(
     # restore old version
     with open(marker.args[0]) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
+        logger.debug("Restored %s", marker.args[0])
 
     bootloader: InmantaBootloader = InmantaBootloader()
 

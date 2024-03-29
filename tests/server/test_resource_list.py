@@ -15,14 +15,24 @@
 
     Contact: code@inmanta.com
 """
+
+import asyncio
 import json
+import logging
+import time
+import typing
+import uuid
 from datetime import datetime
 from operator import itemgetter
 from uuid import UUID
 
 import pytest
+from dateutil.tz import UTC
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
+import inmanta.util
+import util.performance
+import utils
 from inmanta import data
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource, ResourceVersionIdStr
@@ -113,6 +123,7 @@ async def test_has_only_one_version_from_resource(server, client):
         status=ResourceState.deployed,
     )
     await res1_v4.insert()
+    await res1_v4.update_persistent_state(last_non_deploying_status=ResourceState.deployed)
 
     version = 1
     path = "/etc/file" + str(2)
@@ -170,6 +181,10 @@ async def env_with_resources(server, client):
                 status=status,
             )
             await res.insert()
+            await res.update_persistent_state(
+                last_deploy=datetime.now(tz=UTC),
+                last_non_deploying_status=status if status not in [ResourceState.available, ResourceState.deploying] else None,
+            )
 
     await create_resource("agent1", "/etc/file1", "std::File", ResourceState.available, [1, 2, 3])
     await create_resource("agent1", "/etc/file2", "std::File", ResourceState.deploying, [1, 2])  # Orphaned
@@ -522,3 +537,199 @@ async def test_deploy_summary(server, client, env_with_resources):
     result = await client.resource_list(env2.id, deploy_summary=True)
     assert result.code == 200
     assert result.result["metadata"]["deploy_summary"] == empty_summary
+
+
+@pytest.fixture
+async def very_big_env(server, client, environment, clienthelper, agent_factory, instances: int) -> int:
+    env_obj = await data.Environment.get_by_id(environment)
+    await env_obj.set(data.AUTO_DEPLOY, True)
+
+    agent = await agent_factory(
+        environment=environment,
+        agent_map={f"agent{tenant_index}": "local:" for tenant_index in range(50)},
+        agent_names=[f"agent{tenant_index}" for tenant_index in range(50)],
+    )
+    deploy_counter = 0
+    # The mix:
+    # 100 versions -> increments , all hashes change after 50 steps
+    # each with 5000 resources (50 sets of 100 resources)
+    # one undefined
+    # one skip for undef
+    # one failed
+    # one skipped
+    # 500 orphans: in second half, produce 10 orphans each
+    # every 10th version is not released
+
+    async def make_resource_set(tenant_index: int, iteration: int) -> int:
+        is_full = tenant_index == 0 and iteration == 0
+        if is_full:
+            version = await clienthelper.get_version()
+        else:
+            version = 0
+
+        def resource_id(ri: int) -> str:
+            if iteration > 0 and ri > 40:
+                ri += 10
+            return f"test::XResource{int(ri/20)}[agent{tenant_index},sub={ri}]"
+
+        resources = [
+            {
+                "id": f"{resource_id(ri)},v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [] if ri % 2 == 0 else [resource_id(ri - 1)],
+                "my_attribute": iteration,
+            }
+            for ri in range(100)
+        ]
+        resource_state = {resource_id(0): ResourceState.undefined}
+        resource_sets = {resource_id(ri): f"set{tenant_index}" for ri in range(100)}
+        if is_full:
+            result = await client.put_version(
+                environment,
+                version,
+                resources,
+                resource_state,
+                [],
+                {},
+                compiler_version=inmanta.util.get_compiler_version(),
+                resource_sets=resource_sets,
+            )
+            assert result.code == 200
+        else:
+            result = await client.put_partial(
+                environment,
+                resource_state=resource_state,
+                unknowns=[],
+                version_info={},
+                resources=resources,
+                resource_sets=resource_sets,
+            )
+            assert result.code == 200
+            version = result.result["data"]
+        await utils.wait_until_version_is_released(client, environment, version)
+
+        result = await agent._client.get_resources_for_agent(environment, f"agent{tenant_index}", incremental_deploy=True)
+        assert result.code == 200
+        assert result.result["resources"]
+
+        async def deploy(resource) -> None:
+            nonlocal deploy_counter
+            rid = resource["id"]
+            actionid = uuid.uuid4()
+            deploy_counter = deploy_counter + 1
+            await agent._client.resource_deploy_start(environment, rid, actionid)
+            if "sub=4]" in rid:
+                return
+            else:
+                if "sub=2]" in rid:
+                    status = ResourceState.failed
+                elif "sub=3]" in rid:
+                    status = ResourceState.skipped
+                else:
+                    status = ResourceState.deployed
+                await agent._client.resource_deploy_done(environment, rid, actionid, status)
+
+        await asyncio.gather(*(deploy(resource) for resource in result.result["resources"]))
+
+    for iteration in [0, 1]:
+        for tenant in range(instances):
+            await make_resource_set(tenant, iteration)
+            logging.getLogger(__name__).warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
+
+    return instances
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("instances", [2])  # set the size
+@pytest.mark.parametrize("trace", [False])  # make it analyze the queries
+async def test_resources_paging_performance(client, environment, very_big_env: int, trace: bool, async_finalizer):
+    """Scaling test, not part of the norma testsuite"""
+    # Basic sanity
+    result = await client.resource_list(environment, limit=5, deploy_summary=True)
+    assert result.code == 200
+    assert result.result["metadata"]["deploy_summary"] == {
+        "by_state": {
+            "available": very_big_env - 1,
+            "cancelled": 0,
+            "deployed": (95 * very_big_env),
+            "deploying": 1,
+            "failed": very_big_env,
+            "skipped": very_big_env,
+            "skipped_for_undefined": very_big_env,
+            "unavailable": 0,
+            "undefined": very_big_env,
+        },
+        "total": very_big_env * 100,
+    }
+
+    port = get_bind_port()
+    base_url = f"http://localhost:{port}"
+    http_client = AsyncHTTPClient()
+
+    # Test link for self page
+    filters = [
+        ({}, very_big_env * 110),
+        ({"status": "!orphaned"}, very_big_env * 100),
+        ({"status": "deploying"}, 1),
+        ({"status": "deployed"}, 95 * very_big_env),
+        ({"status": "available"}, very_big_env - 1),
+        ({"agent": "agent0"}, 110),
+        ({"agent": "someotheragent"}, 0),
+        ({"resource_id_value": "39"}, very_big_env),
+    ]
+
+    orders = [
+        f"{field}.{direction}"
+        for field, direction in [
+            ("agent", "DESC"),
+            ("agent", "ASC"),
+            ("resource_type", "DESC"),
+            ("resource_type", "ASC"),
+            ("status", "DESC"),
+            ("status", "ASC"),
+            ("resource_id_value", "DESC"),
+            ("resource_id_value", "ASC"),
+        ]
+    ]
+
+    if trace:
+        util.performance.hook_base_document()
+
+        async def unpatch():
+            util.performance.unhook_base_document()
+
+        async_finalizer(unpatch)
+
+    for filter, totalcount in filters:
+        for order in orders:
+            # Pages 1-3
+            async def time_call() -> typing.Union[float, dict[str, str]]:
+                start = time.monotonic()
+                result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=10, sort=order)
+                assert result.code == 200
+                assert result.result["metadata"]["total"] == totalcount
+                return (time.monotonic() - start) * 1000, result.result.get("links", {})
+
+            async def time_page(links: dict[str, str], name: str) -> typing.Union[float, dict[str, str]]:
+                start = time.monotonic()
+                if name not in links:
+                    return 0, {}
+                url = f"""{base_url}{links[name]}"""
+                request = HTTPRequest(
+                    url=url,
+                    headers={"X-Inmanta-tid": str(environment)},
+                )
+                response = await http_client.fetch(request, raise_error=False)
+                assert response.code == 200
+                result = json.loads(response.body.decode("utf-8"))
+                assert result["metadata"]["total"] == totalcount
+                return (time.monotonic() - start) * 1000, result["links"]
+
+            latency_page1, links = await time_call()
+            latency_page2, links = await time_page(links, "next")
+            latency_page3, links = await time_page(links, "next")
+
+            logging.getLogger(__name__).warning(
+                "Timings %s %s %d %d %d", filter, order, latency_page1, latency_page2, latency_page3
+            )

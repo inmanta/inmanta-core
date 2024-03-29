@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from typing import Optional
 
 from inmanta.types import JsonType

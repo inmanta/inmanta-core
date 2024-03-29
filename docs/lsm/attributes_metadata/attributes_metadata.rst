@@ -95,14 +95,19 @@ Annotations
 Definition
 ##########
 
-Annotations are key-value pairs that can be associated with an entity (service entity or embedded entity) or an attribute (simple attribute or relational attribute). These annotations  don't influence the behavior of LSM or the Inmanta Service Orchestrator itself, but are intended to pass meta data to other components. For example, they can be used to pass on visualization meta-data to the the web-console to improve the user-experience.
+Annotations are key-value pairs that can be associated with an entity (service entity or embedded entity) or an attribute
+(simple attribute or relational attribute). These annotations don't influence the behavior of LSM or the Inmanta Service
+Orchestrator itself, but are intended to pass meta data to other components. For example, they can be used to pass on
+visualization meta-data to the the web-console to improve the user-experience.
 
 Annotations on entities
 #######################
 
-Annotations can be attached to an entity using the ``__annotations`` attribute. This attribute has the type ``dict``
-and requires a default value that defines the annotations. Each key-value pair in the dictionary contains respectively
-the name and the value of the annotation. The value of an annotation must always be a string.
+Annotations can be attached to an entity using the ``__annotations`` attribute. This attribute has the type ``dict`` and
+requires a default value that defines the annotations. Each key-value pair in the dictionary contains respectively the name and
+the value of the annotation. The value of an annotation can be any of the simple types (string, float, int, bool), lists and
+dicts. Note: These values are the default values of an attribute, therefore they must be constants and cannot include varables,
+attribute access or plugins.
 
 Example
 #######
@@ -168,4 +173,3 @@ The example below illustrates how the annotation ``annotation=value`` can be att
         annotations={"annotation": "value"}
     )
     Router.ports [0:] __annotations__ Port._router [1]
-

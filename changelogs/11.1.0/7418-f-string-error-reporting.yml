@@ -1,0 +1,9 @@
+description: "Improved f-string error reporting"
+issue-nr: 7418
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches:
+  - master
+  - iso7
+  - iso6

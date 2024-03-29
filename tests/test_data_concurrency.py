@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from utils import get_resource
 
 """

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import dataclasses
 import logging
@@ -30,6 +31,7 @@ import psutil
 import pytest
 from psutil import NoSuchProcess, Process
 
+import utils
 from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent, wait_for_n_deployed_resources
 from inmanta import agent, config, const, data, execute
 from inmanta.agent import config as agent_config
@@ -1233,7 +1235,14 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
 
 
 async def test_cross_agent_deps(
-    resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer
+    resource_container,
+    server,
+    client,
+    environment,
+    clienthelper,
+    no_agent_backoff,
+    async_finalizer,
+    caplog,
 ):
     """
     deploy a configuration model with cross host dependency
@@ -1334,6 +1343,9 @@ async def test_cross_agent_deps(
     assert resource_container.Provider.get("agent 1", "key1") == "value1"
     assert resource_container.Provider.get("agent 1", "key2") == "value2"
     assert resource_container.Provider.get("agent2", "key3") == "value3"
+    # CAD's involve some background tasks of which the exceptions don't propagate
+    # It is also sufficiently redundant to succeed if they fail, be it slowly
+    utils.no_error_in_logs(caplog)
 
 
 @pytest.mark.parametrize(
@@ -1402,14 +1414,14 @@ async def test_auto_deploy(
         result = await client.set_setting(environment, data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, agent_trigger_method)
         assert result.code == 200
 
-        await clienthelper.put_version_simple(resources, version)
+        await clienthelper.put_version_simple(resources, version, wait_for_released=True)
 
         # check deploy
         result = await client.get_version(environment, version)
         assert result.code == 200
         assert result.result["model"]["released"]
         assert result.result["model"]["total"] == 3
-        assert result.result["model"]["result"] == "deploying"
+        assert result.result["model"]["result"] in ["deploying", "success"]
 
         await _wait_until_deployment_finishes(client, environment, version)
 
@@ -1421,10 +1433,15 @@ async def test_auto_deploy(
         assert resource_container.Provider.get("agent1", "key2") == value_resource_two
         assert not resource_container.Provider.isset("agent1", "key3")
 
-    assert resource_container.Provider.readcount("agent1", "key1") == read_resource1
-    assert resource_container.Provider.changecount("agent1", "key1") == change_resource1
-    assert resource_container.Provider.readcount("agent1", "key2") == read_resource2
-    assert resource_container.Provider.changecount("agent1", "key2") == change_resource2
+    async def check_final() -> bool:
+        return (
+            (resource_container.Provider.readcount("agent1", "key1") == read_resource1)
+            and (resource_container.Provider.changecount("agent1", "key1") == change_resource1)
+            and (resource_container.Provider.readcount("agent1", "key2") == read_resource2)
+            and (resource_container.Provider.changecount("agent1", "key2") == change_resource2)
+        )
+
+    await retry_limited(check_final, 1)
 
 
 async def test_auto_deploy_no_splay(server, client, clienthelper, resource_container, environment, no_agent_backoff):
@@ -1555,8 +1572,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
         },
     ]
 
-    await clienthelper.put_version_simple(resources, version)
-
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
     # check deploy
     result = await client.get_version(environment, version)
     assert result.code == 200
@@ -2657,17 +2673,20 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
         DeployRequest(reason="Second Deploy", is_full_deploy=False, is_periodic=False)
     )
 
-    async def resume_waiters_and_wait_until_deploy_finishes() -> bool:
-        # Try to resume the waiters on each call to this method. The resources for the resumed deployment
-        # are only created when the incremental deploy finished. This ensures we resume it.
-        await resource_container.wait_for_done_with_waiters(client, environment, version2)
+    async def should_wait_for_all_deploys_done() -> bool:
+        """
+        Return true iff we should continue waiting for all deploys to finish.
+        """
         result = await client.resource_logs(environment, "test::Resource[agent1,key=key3]", filter={"action": ["deploy"]})
         assert result.code == 200
         end_run_lines = [line for line in result.result["data"] if "End run" in line.get("msg", "")]
         # incremental deploy + full deploy resumed
-        return len(end_run_lines) >= 2
+        return len(end_run_lines) < 2
 
-    await retry_limited(resume_waiters_and_wait_until_deploy_finishes, timeout=10)
+    await resource_container.wait_for_condition_with_waiters(
+        wait_condition=should_wait_for_all_deploys_done,
+        timeout=2,
+    )
 
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Interrupting run 'Initial Deploy' for 'Second Deploy'")
 
@@ -3614,6 +3633,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key1]",
         source=ParameterSource.fact.value,
+        expires=True,
     )
     param2 = data.Parameter(
         name="key2",
@@ -3621,6 +3641,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key2]",
         source=ParameterSource.fact.value,
+        expires=True,
     )
 
     version = await clienthelper.get_version()
@@ -3659,6 +3680,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key1]",
         source=ParameterSource.fact.value,
+        expires=True,
     )
     param4 = data.Parameter(
         name="returned_fact_key2",
@@ -3666,10 +3688,120 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key2]",
         source=ParameterSource.fact.value,
+        expires=True,
     )
 
     params = await data.Parameter.get_list()
     compare_params(params, [param1, param2, param3, param4])
+
+
+async def test_set_non_expiring_fact_in_handler_6560(
+    server, client, environment, agent, clienthelper, resource_container, no_agent_backoff
+):
+    """
+    Check that getting a non expiring fact doesn't trigger a parameter request from the agent.
+    In this test:
+        - create 2 facts, one that expires, one that doesn't expire
+        - wait for the _fact_expire delay
+        - when getting the facts back, check that only the fact that does expire triggers a refresh from the agent
+    """
+
+    # Setup a high fact expiry rate:
+    param_service = server.get_slice(SLICE_PARAM)
+    param_service._fact_expire = 0.1
+
+    def get_resources(version: str, params: list[data.Parameter]) -> list[dict[str, Any]]:
+        return [
+            {
+                "key": param.name,
+                "value": param.value,
+                "metadata": param.metadata,
+                "id": f"{param.resource_id},v={version}",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": False,
+                "requires": [],
+            }
+            for param in params
+        ]
+
+    def compare_params(actual_params: list[data.Parameter], expected_params: list[data.Parameter]) -> None:
+        actual_params = sorted(actual_params, key=lambda p: p.name)
+        expected_params = sorted(expected_params, key=lambda p: p.name)
+        assert len(expected_params) == len(actual_params), f"{expected_params=} {actual_params=}"
+        for i in range(len(expected_params)):
+            for attr_name in ["name", "value", "environment", "resource_id", "source", "metadata", "expires"]:
+                expected = getattr(expected_params[i], attr_name)
+                actual = getattr(actual_params[i], attr_name)
+                assert expected == actual, f"{expected=} {actual=}"
+
+    # Assert initial state
+    params = await data.Parameter.get_list()
+    assert len(params) == 0
+
+    param1 = data.Parameter(
+        name="non_expiring",
+        value="value1",
+        environment=uuid.UUID(environment),
+        resource_id="test::SetNonExpiringFact[agent1,key=non_expiring]",
+        source=ParameterSource.fact.value,
+        expires=False,
+    )
+    param2 = data.Parameter(
+        name="expiring",
+        value="value2",
+        environment=uuid.UUID(environment),
+        resource_id="test::SetNonExpiringFact[agent1,key=expiring]",
+        source=ParameterSource.fact.value,
+        expires=True,
+    )
+
+    version = await clienthelper.get_version()
+    resources = get_resources(version, [param1, param2])
+
+    # Ensure that facts are pushed when ctx.set_fact() is called during resource deployment
+    await _deploy_resources(client, environment, resources, version, push=True)
+    await wait_for_n_deployed_resources(client, environment, version, n=2, timeout=10)
+
+    params = await data.Parameter.get_list()
+    compare_params(params, [param1, param2])
+
+    # Ensure that:
+    # * Facts set in the handler.facts() method via ctx.set_fact() method are pushed to the Inmanta server.
+    # * Facts returned via the handler.facts() method are pushed to the Inmanta server.
+    await asyncio.gather(*[p.delete() for p in params])
+    params = await data.Parameter.get_list()
+    assert len(params) == 0
+
+    result = await client.get_param(
+        tid=environment, id="non_expiring", resource_id="test::SetNonExpiringFact[agent1,key=non_expiring]"
+    )
+    assert result.code == 503
+    result = await client.get_param(tid=environment, id="expiring", resource_id="test::SetNonExpiringFact[agent1,key=expiring]")
+    assert result.code == 503
+
+    async def _wait_until_facts_are_available():
+        params = await data.Parameter.get_list()
+        return len(params) == 2
+
+    await retry_limited(_wait_until_facts_are_available, 10)
+
+    # Wait for a bit to let facts expire
+    await asyncio.sleep(0.5)
+
+    # Non expiring fact is returned straight away
+    result = await client.get_param(
+        tid=environment, id="non_expiring", resource_id="test::SetNonExpiringFact[agent1,key=non_expiring]"
+    )
+    assert result.code == 200
+    # Expired fact has to be refreshed
+    result = await client.get_param(tid=environment, id="expiring", resource_id="test::SetNonExpiringFact[agent1,key=expiring]")
+    assert result.code == 503
+
+    await retry_limited(_wait_until_facts_are_available, 10)
+
+    params = await data.Parameter.get_list()
+    compare_params(params, [param1, param2])
 
 
 async def test_deploy_handler_method(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):

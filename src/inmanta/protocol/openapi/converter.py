@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import inspect
 import json
 import re
@@ -176,9 +177,48 @@ class OpenApiTypeConverter:
             definitions: dict[str, dict[str, object]] = schema.pop(self._pydantic_ref_key)
             if self.components.schemas is not None:
                 for key, definition in definitions.items():
-                    definition = self._add_type_field_to_enum_value(definition)
-                    self.components.schemas[key] = Schema(**definition)
+                    patched_definition = self._handle_pydantic_model_recursively(definition)
+                    self.components.schemas[key] = Schema(**patched_definition)
+
+        schema = self._handle_pydantic_model_recursively(schema)
         return Schema(**schema)
+
+    def _handle_pydantic_model_recursively(self, definition: dict[str, object]) -> dict[str, object]:
+        """
+        The json-schema is not 1-to-1 compatible with the OpenAPI schema. This method patches the
+        given json-schema as such that it becomes compatible with the OpenAPI schema.
+        """
+        # Recursive calls
+        if definition.get("properties") is not None:
+            properties = definition["properties"]
+            for property_name in list(properties.keys()):
+                properties[property_name] = self._handle_pydantic_model_recursively(properties[property_name])
+        if definition.get("additionalProperties") is not None and isinstance(definition["additionalProperties"], dict):
+            definition["additionalProperties"] = self._handle_pydantic_model_recursively(definition["additionalProperties"])
+        if definition.get("items") is not None:
+            definition["items"] = self._handle_pydantic_model_recursively(definition["items"])
+        for attr_name in ["anyOf", "allOf", "oneOf"]:
+            if definition.get(attr_name) is not None:
+                for i in range(len(definition[attr_name])):
+                    definition[attr_name][i] = self._handle_pydantic_model_recursively(definition[attr_name][i])
+
+        definition = self._convert_const_to_enum(definition)
+        definition = self._add_type_field_to_enum_value(definition)
+        return definition
+
+    def _convert_const_to_enum(self, definition: dict[str, object]) -> dict[str, object]:
+        """
+        The 'const' field, which is part of the JSON schema, is not part of the OpenAPI schema.
+        We convert the 'const' field into an 'enum' field here to make sure the constant value
+        of the parameter is available in the OpenAPI schema.
+        """
+        if definition.get("enum") is not None:
+            # The enum field is already populated
+            return definition
+        if definition.get("const") is not None:
+            definition["enum"] = [str(definition["const"])]
+            del definition["const"]
+        return definition
 
     def _add_type_field_to_enum_value(self, definition: dict[str, object]) -> dict[str, object]:
         """

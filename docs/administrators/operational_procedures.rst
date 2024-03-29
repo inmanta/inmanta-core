@@ -25,7 +25,7 @@ section for more information on how to set the project's pip configuration.
 Context
 ++++++++
 * The project development and testing is complete
-* All modules have been properly released.
+* All modules have been properly released (See :ref:`Releasing and distributing modules` for the procedure).
 * The project is in a git repo, with a specific branch dedicated to production releases
 * The project is checked out on disk.
 * All modules are checked out on the correct, tagged commit.
@@ -33,23 +33,34 @@ Context
 Procedure
 ++++++++++
 
-1. Verify in `project.yml` that `install_mode` is set to `release`.
-2. Freeze all modules with
+1. Check modules install mode:
+    - For v1 modules (if any): ensure that ``install_mode`` in ``project.yml`` is set to ``release``.
+    - For v2 modules (if any): ensure that ``pip.pre`` is not set in ``project.yml``.
+
+2. Freeze all modules with:
 
 .. code-block:: bash
 
     inmanta -vv -X project freeze --recursive --operator "=="
 
+This will cause the ``project.yml`` file to be updated with constraints that only allow this project to work with
+this exact set of module versions. This ensures that no unwanted updates can 'leak' into the production environment.
 
-    This will cause the `project.yml` file to be updated with constraints that only allow this project to work with
-    this exact set of module versions. This ensures that no unwanted updates can 'leak' into the production environment.
+3. Verify that all modules are frozen to the correct version.
 
-4. Verify that all modules are frozen to the correct version.
+    Open ``project.yml`` and verify that all module versions are frozen to the expected versions
 
-    * Open `project.yml` and verify that all module versions are frozen to the expected versions
+4. Commit this change.
 
-5. Commit this change (`git commit -a`)
-6. Push to the release branch (`git push`)
+.. code-block:: bash
+
+    git commit -a
+
+5. Push to the release branch.
+
+.. code-block:: bash
+
+    git push
 
 .. _operational_procedures_upgrade:
 

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import abc
 import asyncio
 import dataclasses
@@ -27,7 +28,7 @@ import time
 import uuid
 from asyncio import Lock
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Callable, Coroutine, Iterable, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Dict, Optional, Union, cast
@@ -81,8 +82,6 @@ class ResourceActionBase(abc.ABC):
     resource_id: Id
     future: ResourceActionResultFuture
     dependencies: list["ResourceActionBase"]
-    # resourceid -> attribute -> {current: , desired:}
-    changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]
 
     def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str) -> None:
         """
@@ -96,7 +95,6 @@ class ResourceActionBase(abc.ABC):
         self.running: bool = False
         self.gid: uuid.UUID = gid
         self.status: Optional[const.ResourceState] = None
-        self.change: Optional[const.Change] = const.Change.nochange
         self.undeployable: Optional[const.ResourceState] = None
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
@@ -114,7 +112,7 @@ class ResourceActionBase(abc.ABC):
 
     def cancel(self) -> None:
         if not self.is_running() and not self.is_done():
-            LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource_id)
+            self.logger.info("Cancelled deploy of %s %s %s", self.__class__.__name__, self.gid, self.resource_id)
             self.future.set_result(ResourceActionResult(cancel=True))
 
     def long_string(self) -> str:
@@ -137,12 +135,16 @@ class DummyResourceAction(ResourceActionBase):
 
 
 class ResourceAction(ResourceActionBase):
+    # resourceid -> attribute -> {current: , desired:}
+    changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]
+
     def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
         """
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         super().__init__(scheduler, resource.id, gid, reason)
         self.resource: Resource = resource
+        self.change: Optional[const.Change] = const.Change.nochange
 
     async def send_in_progress(self, action_id: uuid.UUID) -> dict[ResourceIdStr, const.ResourceState]:
         result = await self.scheduler.get_client().resource_deploy_start(
@@ -313,62 +315,14 @@ class RemoteResourceAction(ResourceActionBase):
     async def execute(
         self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
     ) -> None:
-        await dummy.future
-        async with self.scheduler.agent.process.cad_ratelimiter:
-            try:
-                # got event or cancel first
-                if self.is_done():
-                    return
-
-                result = await self.scheduler.get_client().get_resource(
-                    self.scheduler.agent._env_id,
-                    self.resource_id.resource_version_str(),
-                    logs=True,
-                    log_action=const.ResourceAction.deploy,
-                    log_limit=1,
-                )
-                if result.code != 200 or result.result is None:
-                    LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id), result.result)
-                    return
-
-                status = const.ResourceState[result.result["resource"]["status"]]
-
-                self.running = True
-
-                if status in const.TRANSIENT_STATES or self.future.done():
-                    # wait for event
-                    pass
-                else:
-                    if "logs" in result.result and len(result.result["logs"]) > 0:
-                        log = result.result["logs"][0]
-
-                        if "change" in log and log["change"] is not None:
-                            self.change = const.Change[log["change"]]
-                        else:
-                            self.change = const.Change.nochange
-
-                        if "changes" in log and log["changes"] is not None and str(self.resource_id) in log["changes"]:
-                            self.changes = log["changes"]
-                        else:
-                            self.changes = {}
-                        self.status = status
-
-                    self.future.set_result(ResourceActionResult(cancel=False))
-            except Exception:
-                LOGGER.exception("could not get status for remote resource")
-            finally:
-                self.running = False
+        pass
 
     def notify(
         self,
         status: const.ResourceState,
-        change: const.Change,
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]],
     ) -> None:
         if not self.future.done():
             self.status = status
-            self.change = change
-            self.changes = changes
             self.future.set_result(ResourceActionResult(cancel=False))
 
 
@@ -486,6 +440,7 @@ class ResourceScheduler:
 
         self.running: Optional[DeployRequest] = None
         self.deferred: Optional[DeployRequest] = None
+        self.cad_resolver: Optional[asyncio.Task[None]] = None
 
         self.logger: Logger = agent.logger
 
@@ -504,6 +459,9 @@ class ResourceScheduler:
         """
         for ra in self.generation.values():
             ra.cancel()
+        if self.cad_resolver is not None:
+            self.cad_resolver.cancel()
+            self.cad_resolver = None
         self.generation = {}
         self.cad = {}
 
@@ -565,11 +523,17 @@ class ResourceScheduler:
                 self.generation[key].undeployable = undeployable[vid]
 
         # hook up Cross Agent Dependencies
-        cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
+        cross_agent_dependencies = {q for r in resources for q in r.requires if q.get_agent_name() != self.name}
+        cads_by_rid: dict[ResourceIdStr, RemoteResourceAction] = {}
         for cad in cross_agent_dependencies:
             ra = RemoteResourceAction(self, cad, gid, self.running.reason)
             self.cad[str(cad)] = ra
-            self.generation[cad.resource_str()] = ra
+            rid = cad.resource_str()
+            cads_by_rid[rid] = ra
+            self.generation[rid] = ra
+
+        if cads_by_rid:
+            self.cad_resolver = self.agent.process.add_background_task(self.resolve_cads(self.version, cads_by_rid))
 
         # Create dummy to give start signal
         dummy = DummyResourceAction(self, gid, self.running.reason)
@@ -598,6 +562,24 @@ class ResourceScheduler:
                 self.agent.process.add_background_task(self.agent.get_latest_version_for_agent(self.deferred))
                 self.deferred = None
 
+    async def resolve_cads(self, version: int, cads: dict[ResourceIdStr, RemoteResourceAction]) -> None:
+        """Batch resolve all CAD's"""
+        async with self.agent.process.cad_ratelimiter:
+            result = await self.get_client().resources_status(
+                tid=self.agent._env_id,
+                version=version,
+                rids=list(cads.keys()),
+            )
+            if result.code != 200 or result.result is None:
+                LOGGER.error("Failed to get the status for remote resources %s (%s)", list(cads.keys()), result.result)
+                return
+
+            for rid_raw, status_raw in result.result["data"].items():
+                status = const.ResourceState[status_raw]
+                rra = cads[rid_raw]
+                if status not in const.TRANSIENT_STATES:
+                    rra.notify(status)
+
     def notify_ready(
         self,
         resourceid: ResourceVersionIdStr,
@@ -608,7 +590,7 @@ class ResourceScheduler:
         if resourceid not in self.cad:
             # received CAD notification for which no resource are waiting, so return
             return
-        self.cad[resourceid].notify(state, change, changes)
+        self.cad[resourceid].notify(state)
 
     def dump(self) -> None:
         print("Waiting:")
@@ -623,7 +605,7 @@ class AgentInstance:
     _get_resource_timeout: float
     _get_resource_duration: float
 
-    def __init__(self, process: "Agent", name: str, uri: str) -> None:
+    def __init__(self, process: "Agent", name: str, uri: str, *, ensure_deploy_on_start: bool = False) -> None:
         self.process = process
         self.name = name
         self._uri = uri
@@ -667,6 +649,11 @@ class AgentInstance:
 
         self._getting_resources = False
         self._get_resource_timeout = 0
+
+        # If this instance has no deploy timer set, deploy anyway
+        # This is used for agents that are started via the agentmap
+        # To give smooth deploy experience, we want these agents to start immediately.
+        self.ensure_deploy_on_start = ensure_deploy_on_start
 
     async def stop(self) -> None:
         self._stopped = True
@@ -754,11 +741,11 @@ class AgentInstance:
 
         def periodic_schedule(
             kind: str,
-            action: Callable[[], Awaitable[object]],
+            action: Callable[[], Coroutine[object, None, object]],
             interval: Union[int, str],
             splay_value: int,
             initial_time: datetime.datetime,
-        ) -> None:
+        ) -> bool:
             if isinstance(interval, int) and interval > 0:
                 self.logger.info(
                     "Scheduling periodic %s with interval %d and splay %d (first run at %s)",
@@ -771,13 +758,27 @@ class AgentInstance:
                     interval=float(interval), initial_delay=float(splay_value)
                 )
                 self._enable_time_trigger(action, interval_schedule)
+                return True
 
             if isinstance(interval, str):
                 self.logger.info("Scheduling periodic %s with cron expression '%s'", kind, interval)
                 cron_schedule = CronSchedule(cron=interval)
                 self._enable_time_trigger(action, cron_schedule)
+                return True
+            return False
 
         now = datetime.datetime.now().astimezone()
+        if self.ensure_deploy_on_start:
+            self.process.add_background_task(
+                self.get_latest_version_for_agent(
+                    DeployRequest(
+                        reason="Initial deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
+                        is_full_deploy=False,
+                        is_periodic=False,
+                    )
+                )
+            )
+            self.ensure_deploy_on_start = False
         periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
         periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value, now)
 
@@ -1062,7 +1063,7 @@ class AgentInstance:
                     resource = Resource.deserialize(res["attributes"], use_generic=True)
                     loaded_resources.append(resource)
 
-            except TypeError:
+            except Exception:
                 failed_resources.append(res["id"])
                 undeployable[res["id"]] = const.ResourceState.unavailable
                 resource = Resource.deserialize(res["attributes"], use_generic=True)
@@ -1142,7 +1143,7 @@ class Agent(SessionEndpoint):
         if code_loader:
             self._env = env.VirtualEnv(self._storage["env"])
             self._env.use_virtual_env()
-            self._loader = CodeLoader(self._storage["code"])
+            self._loader = CodeLoader(self._storage["code"], clean=True)
             # Lock to ensure only one actual install runs at a time
             self._loader_lock = Lock()
             # Cache to prevent re-loading the same resource-version
@@ -1211,7 +1212,7 @@ class Agent(SessionEndpoint):
         async with self._instances_lock:
             await self._add_end_point_name(name)
 
-    async def _add_end_point_name(self, name: str) -> None:
+    async def _add_end_point_name(self, name: str, *, ensure_deploy_on_start: bool = False) -> None:
         """
         Note: always call under _instances_lock
         """
@@ -1225,7 +1226,7 @@ class Agent(SessionEndpoint):
         if name in self.agent_map:
             hostname = self.agent_map[name]
 
-        self._instances[name] = AgentInstance(self, name, hostname)
+        self._instances[name] = AgentInstance(self, name, hostname, ensure_deploy_on_start=ensure_deploy_on_start)
 
     async def remove_end_point_name(self, name: str) -> None:
         async with self._instances_lock:
@@ -1274,11 +1275,13 @@ class Agent(SessionEndpoint):
                 agent_name for agent_name in update_uri_agents if self._instances[agent_name].is_enabled()
             ]
 
-            to_be_gathered = [self._add_end_point_name(agent_name) for agent_name in agents_to_add]
+            to_be_gathered = [self._add_end_point_name(agent_name, ensure_deploy_on_start=True) for agent_name in agents_to_add]
             to_be_gathered += [self._remove_end_point_name(agent_name) for agent_name in agents_to_remove + update_uri_agents]
             await asyncio.gather(*to_be_gathered)
             # Re-add agents with updated URI
-            await asyncio.gather(*[self._add_end_point_name(agent_name) for agent_name in update_uri_agents])
+            await asyncio.gather(
+                *[self._add_end_point_name(agent_name, ensure_deploy_on_start=True) for agent_name in update_uri_agents]
+            )
             # Enable agents with updated URI that were enabled before
             for agent_to_enable in updated_uri_agents_to_enable:
                 self.unpause(agent_to_enable)
@@ -1332,7 +1335,10 @@ class Agent(SessionEndpoint):
             agent_instance.pause("Connection to server lost")
 
     async def ensure_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> set[str]:
-        """Ensure that the code for the given environment and version is loaded"""
+        """
+        Ensure that the code for the given environment and version is loaded.
+        Return a list of all the ``resource_types`` that it failed to load.
+        """
         failed_to_load: set[str] = set()
         if self._loader is None:
             return failed_to_load
@@ -1358,6 +1364,7 @@ class Agent(SessionEndpoint):
                         LOGGER.debug("Installing handler %s version=%d", rt, version)
                         requirements = set()
                         sources = []
+                        # Encapsulate source code details in ``ModuleSource`` objects
                         for source in result.result["data"]:
                             sources.append(
                                 ModuleSource(
@@ -1371,8 +1378,11 @@ class Agent(SessionEndpoint):
 
                         if pip_config is None:
                             pip_config = await self._get_pip_config(environment, version)
+                        # Install required python packages and the list of ``ModuleSource`` with the provided pip config
                         await self._install(sources, list(requirements), pip_config=pip_config)
                         LOGGER.debug("Installed handler %s version=%d", rt, version)
+                        # Update the ``_last_loaded`` cache to indicate that the given resource type's code
+                        # was loaded successfully at the specified version.
                         self._last_loaded[rt] = version
                     except Exception:
                         LOGGER.exception("Failed to install handler %s version=%d", rt, version)

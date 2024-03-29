@@ -581,7 +581,7 @@ def release_version(
     :param agent_trigger_method: Optional. Indicates whether the agents should perform a full or an incremental deploy when
                                 push is true.
 
-     :return: Returns the following status codes:
+    :return: Returns the following status codes:
             200: The version is released
             404: The requested version does not exist
             409: The requested version was already released
@@ -724,10 +724,12 @@ def get_param(tid: uuid.UUID, id: str, resource_id: Optional[str] = None):
     :param resource_id: Optional. scope the parameter to resource (fact),
                         if the resource id should not contain a version, the latest version is used
     :return: Returns the following status codes:
-            200: The parameter content is returned
-            404: The parameter is not found and unable to find it because its resource is not known to the server
-            410: The parameter has expired
-            503: The parameter is not found but its value is requested from an agent
+
+        - 200: The parameter content is returned
+        - 404: The parameter is not found and unable to find it because its resource is not known to the server
+        - 410: The parameter has expired
+        - 503: The parameter is not found but its value is requested from an agent
+
     """
 
 
@@ -745,10 +747,12 @@ def set_param(
     resource_id: Optional[str] = None,
     metadata: dict = {},
     recompile: bool = False,
+    expires: Optional[bool] = None,
 ):
     """
     Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
     Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
+    [DEPRECATED] Please use the new endpoints `/facts/<name>` and `/parameters/<name>` instead.
 
     :param tid: The id of the environment
     :param id: The name of the parameter
@@ -757,6 +761,9 @@ def set_param(
     :param resource_id: Optional. Scope the parameter to resource (fact)
     :param metadata: Optional. Metadata about the parameter
     :param recompile: Optional. Whether to trigger a recompile
+    :param expires: When setting a new parameter/fact: if set to None, then a sensible default will be provided (i.e. False
+        for parameter and True for fact). When updating a parameter or fact, a None value will leave the existing value
+        unchanged.
     """
 
 
@@ -804,10 +811,12 @@ def set_parameters(tid: uuid.UUID, parameters: list):
 
     :param tid: The id of the environment
     :param parameters: A list of dicts with the following keys:
+
         - id The name of the parameter
         - source The source of the parameter. Valid values are defined in the ParameterSource enum (see: inmanta/const.py)
         - value The value of the parameter
         - resource_id Optionally, scope the parameter to resource (fact)
+        - expires Defaults to true. Set to false to create a never expiring fact
         - metadata metadata about the parameter
     """
 
@@ -815,10 +824,22 @@ def set_parameters(tid: uuid.UUID, parameters: list):
 # Get parameters from the agent
 
 
-@method(path="/agent_parameter", operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
+@method(
+    path="/agent_parameter",
+    operation="POST",
+    server_agent=True,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+    reply=False,
+)
 def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     """
     Get all parameters/facts known by the agents for the given resource
+
+    This method will not actually return them.
+    This call wil register the request with the agent and return,
+    The agent will push the parameters back to the server when they are available.
 
     :param tid: The environment
     :param agent: The agent to get the parameters from

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import json
 import uuid
@@ -58,7 +59,6 @@ async def create_resource_in_multiple_versions(
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
             attributes={**attributes, **{"path": path}},
             status=status,
-            last_deploy=datetime.datetime.now(),
         )
         await res.insert()
 

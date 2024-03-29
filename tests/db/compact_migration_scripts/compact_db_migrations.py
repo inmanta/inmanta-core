@@ -18,6 +18,7 @@
 
     Tool to compact db migration scripts
 """
+
 import os
 
 from common import compact_and_dump

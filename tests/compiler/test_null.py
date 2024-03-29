@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import NoneValue
@@ -97,7 +96,7 @@ def test_null_err(snippetcompiler):
         a = A()
 
     """,
-        "Invalid value 'null', expected String (reported in string a = null ({dir}/main.cf:3:20))",
+        "Invalid value 'null', expected string (reported in string a = null ({dir}/main.cf:3:20))",
     )
 
 

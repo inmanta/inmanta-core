@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 
 import asyncpg
@@ -24,7 +25,7 @@ import nacl.pwhash
 from inmanta import const, data, protocol
 from inmanta.const import MIN_PASSWORD_LENGTH
 from inmanta.data import AuthMethod, model
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import auth, common, exceptions
 from inmanta.server import SLICE_DATABASE, SLICE_TRANSPORT, SLICE_USER
 from inmanta.server import config as server_config
 from inmanta.server import protocol as server_protocol
@@ -116,7 +117,7 @@ class UserService(server_protocol.ServerSlice):
         except nacl.exceptions.InvalidkeyError:
             raise exceptions.UnauthorizedException()
 
-        token = common.encode_token([str(const.ClientType.api.value)], expire=None)
+        token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims={"sub": username})
         return common.ReturnValue(
             status_code=200,
             headers={"Authentication": f"Bearer {token}"},

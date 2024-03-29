@@ -1,0 +1,8 @@
+---
+description: Prevent deadlock between the `_log_session_expiry_to_db` and the `_log_session_seen_to_db` and `_log_session_creation_to_db` methods.
+issue-nr: 7024
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso7, iso6]
+sections:
+  bugfix: "{{description}}"

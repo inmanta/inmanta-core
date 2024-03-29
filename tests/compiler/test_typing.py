@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import re
 
 import pytest
@@ -629,5 +630,40 @@ test = test_674::test_error_float()
             "caused by:\n"
             "  Invalid value '1', expected float (reported in "
             "test_674::test_error_float() ({dir}/main.cf:4))"
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "type, value",
+    [
+        ("int", "hello"),
+        ("float", "hello"),
+        ("number", "hello"),
+        ("string", 5),
+        ("bool", "hello"),
+        ("list", "hello"),
+        ("dict", "hello"),
+    ],
+)
+def test_type_error_message(snippetcompiler, caplog, type, value):
+    snippetcompiler.setup_for_error(
+        f"""
+entity Test:
+    {type} test
+end
+
+implement Test using std::none
+
+x = Test()
+x.test = {repr(value)}
+        """,
+        (
+            "Could not set attribute `test` on instance `__config__::Test (instantiated "
+            f"at {{dir}}/main.cf:8)` (reported in x.test = {repr(value)} "
+            "({dir}/main.cf:9))\n"
+            "caused by:\n"
+            f"  Invalid value '{value}', expected {type} (reported in x.test = {repr(value)} "
+            "({dir}/main.cf:9))"
         ),
     )

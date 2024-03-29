@@ -1,0 +1,5 @@
+description: Make the typeparameter for ReturnValue covariant
+change-type: patch
+destination-branches:
+  - master
+  - iso7

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import json
 import logging
@@ -24,16 +25,14 @@ from typing import TYPE_CHECKING, Optional, Union, cast
 
 from tornado import routing, web
 
-from inmanta import data
+from inmanta import config, data
 from inmanta.const import ApiDocsFormat
 from inmanta.data.model import FeatureStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, handle, methods, methods_v2
 from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
 from inmanta.protocol.openapi.converter import OpenApiConverter
 from inmanta.protocol.openapi.model import OpenAPI
-from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
-from inmanta.server import config as opt
-from inmanta.server import protocol
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT, protocol
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
@@ -87,12 +86,12 @@ class Server(protocol.ServerSlice):
                 os.mkdir(directory)
             return directory
 
-        state_dir = opt.state_dir.get()
+        state_dir = config.state_dir.get()
         server_state_dir = os.path.join(state_dir, "server")
         dir_map = {"server": _ensure_directory_exist(state_dir, "server")}
         dir_map["environments"] = _ensure_directory_exist(server_state_dir, "environments")
         dir_map["agents"] = _ensure_directory_exist(server_state_dir, "agents")
-        dir_map["logs"] = _ensure_directory_exist(opt.log_dir.get())
+        dir_map["logs"] = _ensure_directory_exist(config.log_dir.get())
         return dir_map
 
     @handle(methods.notify_change_get, env="id")
