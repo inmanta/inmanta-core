@@ -1,17 +1,19 @@
 .. _auth-setup:
 
-Setting up authentication
-=========================
+Setting up SSL and authentication
+=================================
 
 This guide explains how to enable ssl and setup authentication.
 
-SSL is not strictly required for authentication but higly recommended. Inmanta uses bearer tokens
-for authorizing users and services. These tokens should be kept private and are visible in plain-text in the request headers
-without SSL.
+SSL
+---
 
+This section explain how to setup SSL. SSL is not strictly required for authentication but it is highly recommended.
+Inmanta uses bearer tokens to authorize users and services. These tokens should be kept private and are visible
+in plain-text in the request headers without SSL.
 
 SSL: server side
-----------------
+^^^^^^^^^^^^^^^^
 Setting a private key and a public key in the server configuration enables SSL on the server. The two
 options to set are :inmanta.config:option:`server.ssl-cert-file` and :inmanta.config:option:`server.ssl-key-file`.
 
@@ -35,7 +37,7 @@ set :inmanta.config:option:`server.ssl-ca-cert-file` to the truststore.
 
 
 SSL: agents and compiler
---------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^
 When using SSL, all remote components connecting to the server need to have SSL enabled as well.
 
 For each of the transport configurations (compiler, agent, rpc client, ...) ``ssl`` has to be
@@ -58,8 +60,8 @@ Authentication
 --------------
 Inmanta authentication uses JSON Web Tokens for authentication (bearer token). Inmanta issues tokens for service to service
 interaction (agent to server, compiler to server, cli to server and 3rd party API interactions). For user interaction through
-the web-console Inmanta uses 3rd party auth brokers. Currently the web-console only supports redirecting users to keycloak for
-authentication.
+the web-console Inmanta can rely on its built-in authentication provider or on a 3rd party auth broker. Currently
+the web-console only supports Keycloak as 3rd party auth broker.
 
 Inmanta expects a token of which it can validate the signature. Inmanta can verify both symmetric signatures with
 HS256 and asymmetric signatures with RSA (RS256). Tokens it signs itself for other processes are always signed using HS256.
@@ -68,18 +70,18 @@ There are no key distribution issues because the server is both the signing and 
 The server also provides limited authorization by checking for inmanta specific claims inside the token. All inmanta claims
 are prefixed with ``urn:inmanta:``. These claims are:
 
- * ``urn:inmanta:ct`` A *required* comma delimited list of client types for which this client is authenticated. Each API call
-   has a one or more allowed client types. The list of valid client types (ct) are:
+* ``urn:inmanta:ct`` A *required* comma delimited list of client types for which this client is authenticated. Each API call
+  has one or more allowed client types. The list of valid client types (ct) are:
 
-    - agent
-    - compiler
-    - api (cli, web-console, 3rd party service)
- * ``urn:inmanta:env`` An *optional* claim. When this claim is present the token is scoped to this inmanta environment. All
-   tokens that the server generates for agents and compilers have this claim present to limit their access to the environment
-   they belong to.
+  * agent
+  * compiler
+  * api (cli, web-console, 3rd party service)
+* ``urn:inmanta:env`` An *optional* claim. When this claim is present the token is scoped to this inmanta environment. All
+  tokens that the server generates for agents and compilers have this claim present to limit their access to the environment
+  they belong to.
 
 Setup server auth
-*****************
+^^^^^^^^^^^^^^^^^
 The server requests authentication for all API calls when :inmanta.config:option:`server.auth` is set to true. When
 authentication is enabled all other components require a valid token.
 
@@ -105,7 +107,7 @@ the settings page.
    Generating a new token in the web-console.
 
 
-Configure an external issuer (See :ref:`auth-ext`) for web-console access to bootstrap access to the create token api call.
+Setup the built-in authentication provider of the Inmanta server (See :ref:`auth-int`) or configure an external issuer (See :ref:`auth-ext`) for web-console access to bootstrap access to the create token api call.
 When no external issuer is available and web-console access is not required, the ``inmanta-cli token bootstrap`` command
 can be used to create a token that has access to everything. However, it expires after 3600s for security reasons.
 
@@ -114,7 +116,7 @@ For this command to function, it requires the issuers configuration with sign=tr
 .. _auth-config:
 
 JWT auth configuration
-**********************
+^^^^^^^^^^^^^^^^^^^^^^
 
 The server searches for configuration sections that start with ``auth_jwt_``, after the last _ an id has to be present. This
 section expects the following keys:
@@ -148,11 +150,93 @@ An example configuration is:
     issuer=https://localhost:8888/
     audience=https://localhost:8888/
 
-To generate a secure key symmetric key and encode it correctly use the following command:
+To generate a secure symmetric key and encode it correctly use the following command:
 
 .. code-block:: sh
 
     openssl rand 32 | python3 -c "import sys; import base64; print(base64.urlsafe_b64encode(sys.stdin.buffer.read()).decode().rstrip('='));"
+
+.. _auth-int:
+
+Built-in authentication provider
+--------------------------------
+
+The Inmanta server has a built-in authentication provider. This provider stores the authentication and authorization
+information into the PostgreSQL database. As such, there is no need to rely on a 3rd party auth broker. The sections
+below describe how to enable the built-in authentication provider and how to create the initial admin user.
+Additional users can then be created via the API or through the web console.
+
+Step 1: Enable authentication
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Ensure that the ``server.auth`` configuration option is enabled and that the ``server.auth-method`` configuration option
+is set to ``database``. This means that the ``/etc/inmanta/inmanta.d/server.cfg`` file should contains the following:
+
+.. code-block:: ini
+
+   [server]
+   auth=true
+   auth-method=database
+   ...
+
+Step 2: Generate the JWT configuration
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Run the ``/opt/inmanta/bin/inmanta-initial-user-setup`` command on the orchestrator server.
+This command will output a generated JWT configuration if no JWT configuration is already in-place on the server.
+
+.. code-block:: ini
+
+   $ /opt/inmanta/bin/inmanta-initial-user-setup
+   This command should be execute locally on the orchestrator you want to configure. Are you running this command locally? [y/N]: y
+   Server authentication:                            enabled
+   Server authentication method:                     database
+   Error: No signing config available in the configuration.
+   To use a new config, add the following to the configuration in /etc/inmanta/inmanta.d/auth.cfg:
+
+   [auth_jwt_default]
+   algorithm=HS256
+   sign=true
+   client_types=agent,compiler,api
+   key=NYR2LtAsKSs7TuY0D8ZIqmMaLcICC3lf_ur4FGlLUcQ
+   expire=0
+   issuer=https://localhost:8888/
+   audience=https://localhost:8888/
+
+   Error: Make sure signing configuration is added to the config. See the documentation for details.
+
+Verify whether the hostname, in the generated configuration section, is correct and put the configuration snippet in the location mentioned in the output of the command.
+
+Step 3: Create the initial user
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Re-run the same command again to create the initial user. The password for this new user must be at least 8 characters long.
+
+.. code-block:: ini
+
+   $ /opt/inmanta/bin/inmanta-initial-user-setup
+   This command should be execute locally on the orchestrator you want to configure. Are you running this command locally? [y/N]: y
+   Server authentication:                            enabled
+   Server authentication method:                     database
+   Authentication signing config:                    found
+   Trying to connect to DB:                          inmanta (localhost:5432)
+   Connection to database                            success
+   What username do you want to use? [admin]:
+   What password do you want to use?:
+   User admin:                                       created
+   Make sure to (re)start the orchestrator to activate all changes.
+
+Step 4: Restart the orchestrator
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Now, restart the orchestrator to activate the new configuration.
+
+.. code-block:: ini
+
+   $ sudo systemctl restart inmanta-server
+
+After the restart of the orchestrator, authentication is enabled on all API endpoints. This also means that the
+web-console will ask for your credentials.
 
 .. _auth-ext:
 
@@ -168,7 +252,7 @@ to implement the OAuth2 implicit flow, required to obtain a JWT.
     integration services.
 
 Keycloak configuration
-**********************
+^^^^^^^^^^^^^^^^^^^^^^
 The web-console has out of the box support for authentication with `Keycloak <http://www.keycloak.org>`_. Install keycloak and
 create an initial login as described in the Keycloak documentation and login with admin credentials.
 
@@ -179,7 +263,7 @@ able to fetch user information from the authentication provider.
 
 
 Step 1: Optionally create a new realm
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+"""""""""""""""""""""""""""""""""""""
 
 Create a new realm if you want to use keycloak for other purposes (it is an SSO solution) than Inmanta authentication. Another
 reason to create a new realm (or not) is that the master realm also provides the credentials to configure keycloak itself.
@@ -201,7 +285,7 @@ For example call the realm inmanta
 
 
 Step 2: Add a new client to keycloak
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""""""""""""""""""""
 
 Make sure the correct realm is active (the name is shown in the realm selection dropdown) to which you want to add a new client.
 
@@ -265,23 +349,23 @@ added to the access token.
 
    Add the ct claim to all access tokens for this client.
 
-Add a second mapper to add inmanta to the audience (only required for Keycloak 4.6 and higher). Click `add` again as in the previous step. 
+Add a second mapper to add inmanta to the audience (only required for Keycloak 4.6 and higher). Click `add` again as in the previous step.
 
 .. figure:: /administrators/images/kc_audience_mapper.png
    :width: 100%
    :align: center
-      
-   Fill in the following values:
 
-   * Name: inmanta-audience
-   * Mapper type: Audience
-   * Included Client Audience: inmanta
-   * Add to access token: on
+Fill in the following values:
+
+* Name: inmanta-audience
+* Mapper type: Audience
+* Included Client Audience: inmanta
+* Add to access token: on
 
 Click save.
 
 Step 3: Configure inmanta server
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""""""""""""""""
 
 .. figure:: /administrators/images/kc_install.png
    :width: 100%
@@ -336,3 +420,39 @@ the examples above this url is http://localhost:8080/realms/inmanta/.well-known/
 
 .. warning:: When the certificate of keycloak is not trusted by the system on which inmanta is installed, set ``validate_cert``
     to false in the ``auth_jwt_keycloak`` block for keycloak.
+
+Custom claims
+-------------
+
+Access to the orchestrator can be controlled using claim match expressions. In the section of the identity provider that
+you want to restrict you can configure the ``claims`` options. This is a multiline option where each line contains a match
+expression. There are two operators available:
+
+- ``in`` for exact string match on a claim that contains a list of string values
+- ``is`` for exact string match on a claim that is a string
+
+You can use them as follows, for example each user gets two additional claims:
+
+- ``my:environments`` which is a list of network environments the user is allowed to access. For example: lab and prod
+- ``my:scope`` which indicates the scope of automation the orchestrator does. For example: network and dc
+
+A user is allowed to have multiple environments but they can only have one scope. So that is why the environments is a list and
+scope is single string value.
+
+On the lab orchestrator for the datacenter we can then configure it as follows:
+
+.. code-block:: ini
+
+   [auth_jwt_keycloak]
+   algorithm=RS256
+   sign=false
+   client_types=api
+   issuer=http://localhost:8080/realms/inmanta
+   audience=inmantaso
+   jwks_uri=http://keycloak:8080/realms/inmanta/protocol/openid-connect/certs
+   validate_cert=false
+   claims=
+     lab in my:environments
+     my:scope is dc
+
+This will only allow users with ``lab`` in the ``my:environments`` claim and ``my:scope`` equal to ``dc``.

@@ -15,33 +15,34 @@
 
     Contact: code@inmanta.com
 """
+
 import os
 from collections import abc
 
 import pytest
 
 from inmanta import const
-from inmanta.data import ConfigurationModel, Environment, Resource, ResourceAction
+from inmanta.data import ConfigurationModel, Environment, ResourceAction, ResourcePersistentState
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202306060.sql"))
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
+
     await migrate_db_from()
     env = await Environment.get_one(name="dev-1")
     assert env
     model = await ConfigurationModel.get_latest_version(env.id)
     assert model
     assert model.version == 3
-    resources = await Resource.get_list(environment=env.id, model=model.version)
-    assert resources
+
+    rps = await ResourcePersistentState.get_list(environment=env.id)
 
     expected = 0
-    for resource in resources:
+    for resource in rps:
         if resource.resource_id == "std::AgentConfig[internal,agentname=localhost]":
             # always success
-            assert resource.last_success
             # verify time on last success
             actions = await ResourceAction.query_resource_actions(
                 environment=env.id, resource_id=resource.resource_id, action=const.ResourceAction.deploy

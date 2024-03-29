@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import dataclasses
 import datetime

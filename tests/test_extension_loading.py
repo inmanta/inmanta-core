@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import importlib
 import logging
 import os
@@ -242,11 +243,15 @@ async def test_custom_feature_manager(
     with splice_extension_in("test_module_path"):
         state_dir = str(tmp_path)
         port = str(unused_tcp_port_factory())
+
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
+
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "password", pg_password)
         config.Config.set("database", "connection_timeout", str(1))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))

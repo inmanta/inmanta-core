@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from inmanta.plugins import plugin
 
 

@@ -50,6 +50,7 @@ class UnmanagedInterface(pydantic.BaseModel):
     Datastructure used by the InterfaceDiscoveryHandler to return the attributes
     of the discovered resources.
     """
+
     host: str
     interface_name: str
     ip_address: str
@@ -108,7 +109,8 @@ class InterfaceDiscoveryHandler(Authenticator, DiscoveryHandler[InterfaceDiscove
         Entrypoint that is called by the agent when the discovery resource is deployed.
         """
         discovered: abc.Iterator[UnmanagedInterface] = (
-            UnmanagedInterface(**attributes) for attributes in self._get_discovered_interfaces(discovery_resource)
+            UnmanagedInterface(**attributes)
+            for attributes in self._get_discovered_interfaces(discovery_resource)
             if discovery_resource.name_filter is None or re.match(discovery_resource.name_filter, attributes["interface_name"])
         )
         return {

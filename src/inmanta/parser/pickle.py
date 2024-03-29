@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from io import BytesIO
 from pickle import Pickler, Unpickler, UnpicklingError
 from typing import Optional

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import argparse
 import configparser
 import datetime
@@ -37,14 +38,14 @@ from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import TYPE_CHECKING, Any, Optional
+from typing import IO, TYPE_CHECKING, Any, Optional
 
 import click
 import more_itertools
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
-from pkg_resources import Requirement, parse_version
+from pkg_resources import Requirement
 
 import build
 import inmanta
@@ -161,11 +162,14 @@ class ModuleLikeTool:
             project.load()
         return project
 
-    def determine_new_version(self, old_version, version, major, minor, patch, dev):
+    def determine_new_version(
+        self, old_version: Version, version: Optional[Version], major: bool, minor: bool, patch: bool, dev: bool
+    ) -> Optional[Version]:
         """
         Only used by the `inmanta module commit` command.
         """
         was_dev = old_version.is_prerelease
+        outversion: Version
 
         if was_dev:
             if major or minor or patch:
@@ -175,17 +179,17 @@ class ModuleLikeTool:
             if version is not None:
                 baseversion = version
             else:
-                baseversion = old_version.base_version
+                baseversion = Version(old_version.base_version)
 
             if not dev:
                 outversion = baseversion
             else:
-                outversion = "%s.dev%d" % (baseversion, time.time())
+                outversion = Version("%s.dev%d" % (baseversion, time.time()))
         else:
             opts = [x for x in [major, minor, patch] if x]
             if version is not None:
                 if len(opts) > 0:
-                    LOGGER.warn("when using the --version option, --major, --minor and --patch are ignored")
+                    LOGGER.warning("when using the --version option, --major, --minor and --patch are ignored")
                 outversion = version
             else:
                 if len(opts) == 0:
@@ -199,14 +203,13 @@ class ModuleLikeTool:
                 revision = False
                 change_type: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
                 if change_type:
-                    outversion = str(VersionOperation.bump_version(change_type, old_version, version_tag=""))
+                    outversion = Version(str(VersionOperation.bump_version(change_type, old_version, version_tag="")))
                 else:
-                    outversion = str(VersionOperation.set_version_tag(old_version, version_tag=""))
+                    outversion = Version(str(VersionOperation.set_version_tag(old_version, version_tag="")))
 
             if dev:
-                outversion = "%s.dev%d" % (outversion, time.time())
+                outversion = Version("%s.dev%d" % (outversion, time.time()))
 
-        outversion = parse_version(outversion)
         if outversion <= old_version:
             LOGGER.error(f"new versions ({outversion}) is not larger then old version ({old_version}), aborting")
             return None
@@ -417,20 +420,21 @@ compatible with the dependencies specified by the updated modules.
 
         close = False
 
+        outfile_fd: IO[str]
         if outfile is None:
-            outfile = open(project.get_metadata_file_path(), "w", encoding="UTF-8")
+            outfile_fd = open(project.get_metadata_file_path(), "w", encoding="UTF-8")
             close = True
         elif outfile == "-":
-            outfile = sys.stdout
+            outfile_fd = sys.stdout
         else:
-            outfile = open(outfile, "w", encoding="UTF-8")
+            outfile_fd = open(outfile, "w", encoding="UTF-8")
             close = True
 
         try:
-            outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+            outfile_fd.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
         finally:
             if close:
-                outfile.close()
+                outfile_fd.close()
 
     def init(self, output_dir: str, name: str, default: bool) -> None:
         os.makedirs(output_dir, exist_ok=True)
@@ -554,9 +558,6 @@ class ModuleTool(ModuleLikeTool):
     """
     A tool to manage configuration modules
     """
-
-    def __init__(self) -> None:
-        self._mod_handled_list = set()
 
     @classmethod
     def modules_parser_config(cls, parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
@@ -831,10 +832,10 @@ When a development release is done using the \--dev option, this command:
         """
         Convert a V1 module to a V2 module in place
         """
-        module = self.get_module(module)
-        if not isinstance(module, ModuleV1):
-            raise ModuleVersionException(f"Expected a v1 module, but found v{module.GENERATION.value} module")
-        ModuleConverter(module).convert_in_place()
+        mod = self.get_module(module)
+        if not isinstance(mod, ModuleV1):
+            raise ModuleVersionException(f"Expected a v1 module, but found v{mod.GENERATION.value} module")
+        ModuleConverter(mod).convert_in_place()
 
     def build(
         self, path: Optional[str] = None, output_dir: Optional[str] = None, dev_build: bool = False, byte_code: bool = False
@@ -1079,23 +1080,23 @@ version: 0.0.1dev0"""
             )
         )
         # find module
-        module = self.get_module(module)
-        if not isinstance(module, ModuleV1):
-            raise CLIException(f"{module.name} is a v2 module and does not support this operation.", exitcode=1)
+        mod = self.get_module(module)
+        if not isinstance(mod, ModuleV1):
+            raise CLIException(f"{mod.name} is a v2 module and does not support this operation.", exitcode=1)
         # get version
-        old_version = parse_version(str(module.version))
+        old_version = Version(str(mod.version))
 
-        outversion = self.determine_new_version(old_version, version, major, minor, patch, dev)
+        outversion = self.determine_new_version(old_version, Version(version) if version else None, major, minor, patch, dev)
 
         if outversion is None:
             return
 
-        module.rewrite_version(str(outversion))
+        mod.rewrite_version(str(outversion))
         # commit
-        gitprovider.commit(module._path, message, commit_all, [module.get_metadata_file_path()])
+        gitprovider.commit(mod._path, message, commit_all, [mod.get_metadata_file_path()])
         # tag
         if not dev or tag:
-            gitprovider.tag(module._path, str(outversion))
+            gitprovider.tag(mod._path, str(outversion))
 
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: str, module: Optional[str] = None) -> None:
         """
@@ -1131,7 +1132,7 @@ version: 0.0.1dev0"""
         newconfig["requires"] = requires
 
         close = False
-        out_fd = None
+        out_fd: IO[str]
         if outfile is None:
             out_fd = open(module_obj.get_metadata_file_path(), "w", encoding="UTF-8")
             close = True
@@ -1266,9 +1267,7 @@ version: 0.0.1dev0"""
         stable_releases: list[Version] = gitprovider.get_version_tags(module_dir, only_return_stable_versions=True)
 
         path_changelog_file = os.path.join(module_dir, const.MODULE_CHANGELOG_FILE)
-        changelog: Optional[ModuleChangelog] = (
-            ModuleChangelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
-        )
+        changelog: Optional[Changelog] = Changelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
 
         requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
         if not requested_version_bump and dev:
@@ -1284,7 +1283,7 @@ version: 0.0.1dev0"""
             new_version = current_version
 
         if not changelog and changelog_message:
-            changelog = ModuleChangelog.create_changelog_file(path_changelog_file, new_version, changelog_message)
+            changelog = Changelog.create_changelog_file(path_changelog_file, new_version, changelog_message)
         elif changelog:
             if current_version.is_devrelease:
                 # Update the existing dev version to the new dev version
@@ -1327,9 +1326,9 @@ version: 0.0.1dev0"""
             self.release(dev=True, message="Bump version to next development version", patch=True)
 
 
-class ModuleChangelog:
+class Changelog:
     """
-    This class represent the changelog file in an Inmanta module.
+    This class represent a changelog file e.g. in an Inmanta module or an Inmanta python package.
 
     The expected format of the changelog is the following:
 
@@ -1353,7 +1352,7 @@ class ModuleChangelog:
         self.path_changelog_file = os.path.abspath(path_changelog_file)
 
     @classmethod
-    def create_changelog_file(cls, path: str, version: Version, changelog_message: str) -> "ModuleChangelog":
+    def create_changelog_file(cls, path: str, version: Version, changelog_message: str) -> "Changelog":
         """
         Create a new changelog file at the given path. Add a section for the given version and write the given
         changelog message to it.
@@ -1496,6 +1495,9 @@ class ModuleChangelog:
                     "Failed to add changelog entry to section for version %s.",
                     str(version.base_version),
                 )
+
+
+ModuleChangelog = Changelog  # For backwards compatibility after class rename
 
 
 class ModuleBuildFailedError(Exception):
@@ -1740,7 +1742,16 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         """
         Copy all files that have to be packaged into the Python package of the module
         """
-        python_pkg_dir = os.path.join(build_path, "inmanta_plugins", self._module.name)
+        python_pkg_dir: str = os.path.join(build_path, "inmanta_plugins", self._module.name)
+        model_dir: str = os.path.join(python_pkg_dir, "model")
+        if os.path.exists(model_dir):
+            raise ModuleBuildFailedError(
+                msg="There is already a model directory in %s. "
+                "The `inmanta_plugins.%s.model` package is reserved for bundling the inmanta model files. "
+                "Please use a different name for this Python package."
+                % (os.path.join(self._module.path, "inmanta_plugins", self._module.name), self._module.name)
+            )
+
         for dir_name in ["model", "files", "templates"]:
             fq_dir_name = os.path.join(build_path, dir_name)
             if os.path.exists(fq_dir_name):

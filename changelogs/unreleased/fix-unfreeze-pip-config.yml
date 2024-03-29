@@ -1,0 +1,3 @@
+description: Unfreeze the PipConfig class as it is no longer needed
+change-type: major
+destination-branches: [master]

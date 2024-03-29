@@ -15,7 +15,9 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
+import itertools
 import json
 import uuid
 from collections import defaultdict
@@ -30,6 +32,48 @@ from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.server.config import get_bind_port
 from inmanta.util import parse_timestamp
+
+
+class ResourceFactory:
+    """Helper to construct resources and keep track of them"""
+
+    def __init__(self, environment: UUID) -> None:
+        # Resources, as rid -> version -> resource
+        # Only tracks the default environment
+        self.resources: dict[str, dict[int, data.Resource]] = defaultdict(dict)
+        # Deploy times, as rid -> version -> datetime
+        # Only tracks the default environment
+        self.deploy_times: dict[str, dict[int, datetime.datetime]] = defaultdict(dict)
+        # Counter to make all data unique
+        self.resource_counter = itertools.count()
+        # Default environment
+        self.env = environment
+
+    async def create_resource(
+        self,
+        path: str,
+        status: ResourceState,
+        version: int,
+        attributes: dict[str, object],
+        agent: str = "internal",
+        resource_type: str = "std::File",
+        environment: UUID = None,
+    ):
+        if environment is None:
+            environment = self.env
+        key = f"{resource_type}[{agent},path={path}]"
+        res = data.Resource.new(
+            environment=environment,
+            resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
+            attributes={**attributes, **{"path": path}, "version": version},
+            status=status,
+        )
+        count = next(self.resource_counter)
+        self.deploy_times[key][version] = datetime.datetime.strptime(f"2021-07-07T11:{count}:00.0", "%Y-%m-%dT%H:%M:%S.%f")
+        if environment == self.env:
+            self.resources[key][version] = res
+        await res.insert()
+        return res
 
 
 @pytest.fixture
@@ -50,9 +94,6 @@ async def env_with_resources(server, client):
     for i in range(1, 10):
         cm_times.append(datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
     cm_time_idx = 0
-    resource_deploy_times = []
-    for i in range(40):
-        resource_deploy_times.append(datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
 
     # Add multiple versions of model, with 2 of them released
     for i in range(1, 10):
@@ -91,226 +132,176 @@ async def env_with_resources(server, client):
     )
     cm_time_idx += 1
     await cm.insert()
-    resources = defaultdict(list)
 
-    def total_number_of_resources():
-        return sum([len(resource_list) for resource_list in resources.values()])
-
-    async def create_resource(
-        path: str,
-        status: ResourceState,
-        version: int,
-        attributes: dict[str, object],
-        agent: str = "internal",
-        resource_type: str = "std::File",
-        environment: UUID = env.id,
-    ):
-        key = f"{resource_type}[{agent},path={path}]"
-        res = data.Resource.new(
-            environment=environment,
-            resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-            attributes={**attributes, **{"path": path}, "version": version},
-            status=status,
-            last_deploy=resource_deploy_times[total_number_of_resources()],
-        )
-        await res.insert()
-        return res
-
+    resource_factory = ResourceFactory(environment=env.id)
     # A resource with multiple resources in its requires list, and multiple versions where it was released,
     # and is also present in versions that were not released
-    resources["std::File[internal,path=/tmp/dir1/file1]"].append(
-        await create_resource(
-            "/tmp/dir1/file1",
-            ResourceState.undefined,
-            1,
-            {"key1": "val1", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
-        )
+    await resource_factory.create_resource(
+        "/tmp/dir1/file1",
+        ResourceState.undefined,
+        1,
+        {"key1": "val1", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
     )
-    resources["std::File[internal,path=/tmp/dir1/file1]"].append(
-        await create_resource(
-            "/tmp/dir1/file1",
-            ResourceState.skipped,
-            2,
-            {
-                "key1": "val1",
-                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
-            },
-        )
+
+    await resource_factory.create_resource(
+        "/tmp/dir1/file1",
+        ResourceState.skipped,
+        2,
+        {
+            "key1": "val1",
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+        },
     )
-    resources["std::File[internal,path=/tmp/dir1/file1]"].append(
-        await create_resource(
-            "/tmp/dir1/file1",
-            ResourceState.deploying,
-            3,
-            {
-                "key1": "modified_value",
-                "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
-            },
-        )
+
+    await resource_factory.create_resource(
+        "/tmp/dir1/file1",
+        ResourceState.deploying,
+        3,
+        {
+            "key1": "modified_value",
+            "another_key": "val",
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+        },
     )
-    resources["std::File[internal,path=/tmp/dir1/file1]"].append(
-        await create_resource(
-            "/tmp/dir1/file1",
-            ResourceState.deployed,
-            4,
-            {
-                "key1": "modified_value",
-                "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
-            },
-        )
+
+    await resource_factory.create_resource(
+        "/tmp/dir1/file1",
+        ResourceState.deployed,
+        4,
+        {
+            "key1": "modified_value",
+            "another_key": "val",
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+        },
     )
-    resources["std::File[internal,path=/tmp/dir1/file1]"].append(
-        await create_resource(
-            "/tmp/dir1/file1",
-            ResourceState.deployed,
-            5,
-            {
-                "key1": "modified_value2",
-                "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
-            },
-        )
+
+    await resource_factory.create_resource(
+        "/tmp/dir1/file1",
+        ResourceState.deployed,
+        5,
+        {
+            "key1": "modified_value2",
+            "another_key": "val",
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+        },
     )
-    resources["std::File[internal,path=/tmp/dir1/file1]"].append(
-        await create_resource(
-            "/tmp/dir1/file1",
-            ResourceState.deployed,
-            6,
-            {
-                "key1": "modified_value",
-                "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
-            },
-        )
+
+    await resource_factory.create_resource(
+        "/tmp/dir1/file1",
+        ResourceState.deployed,
+        6,
+        {
+            "key1": "modified_value",
+            "another_key": "val",
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+        },
     )
-    resources["std::File[internal,path=/tmp/dir1/file1]"].append(
-        await create_resource(
-            "/tmp/dir1/file1",
-            ResourceState.deployed,
-            7,
-            {
-                "key1": "modified_value",
-                "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
-            },
-        )
+    await resource_factory.create_resource(
+        "/tmp/dir1/file1",
+        ResourceState.deployed,
+        7,
+        {
+            "key1": "modified_value",
+            "another_key": "val",
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+        },
     )
-    resources["std::File[internal,path=/tmp/dir1/file1]"].append(
-        await create_resource(
-            "/tmp/dir1/file1",
-            ResourceState.deployed,
-            8,
-            {
-                "key1": "different_value",
-                "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
-            },
-        )
+    await resource_factory.create_resource(
+        "/tmp/dir1/file1",
+        ResourceState.deployed,
+        8,
+        {
+            "key1": "different_value",
+            "another_key": "val",
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+        },
     )
-    resources["std::File[internal,path=/tmp/dir1/file1]"].append(
-        await create_resource(
-            "/tmp/dir1/file1",
-            ResourceState.deployed,
-            9,
-            {
-                "key1": "different_value_2",
-                "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
-            },
-        )
+
+    await resource_factory.create_resource(
+        "/tmp/dir1/file1",
+        ResourceState.deployed,
+        9,
+        {
+            "key1": "different_value_2",
+            "another_key": "val",
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+        },
     )
 
     # A resource that didn't change its attributes, but was only released with the second version and has no requirements
     for i in range(1, 9):
-        resources["std::Directory[internal,path=/tmp/dir1]"].append(
-            await create_resource(
-                "/tmp/dir1",
-                ResourceState.undefined,
-                i,
-                {"key2": "val2", "requires": []},
-                resource_type="std::Directory",
-            )
+        await resource_factory.create_resource(
+            "/tmp/dir1",
+            ResourceState.undefined,
+            i,
+            {"key2": "val2", "requires": []},
+            resource_type="std::Directory",
         )
 
     # A resource that changed the attributes in the last released version,
     # And it also has a single requirement
-    resources["std::File[internal,path=/tmp/dir1/file2]"].append(
-        await create_resource("/tmp/dir1/file2", ResourceState.undefined, 1, {"key3": "val3", "requires": []})
+    await resource_factory.create_resource("/tmp/dir1/file2", ResourceState.undefined, 1, {"key3": "val3", "requires": []})
+
+    await resource_factory.create_resource(
+        "/tmp/dir1/file2",
+        ResourceState.deployed,
+        2,
+        {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
     )
-    resources["std::File[internal,path=/tmp/dir1/file2]"].append(
-        await create_resource(
-            "/tmp/dir1/file2",
-            ResourceState.deployed,
-            2,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
-        )
+    await resource_factory.create_resource(
+        "/tmp/dir1/file2",
+        ResourceState.deployed,
+        3,
+        {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
     )
-    resources["std::File[internal,path=/tmp/dir1/file2]"].append(
-        await create_resource(
-            "/tmp/dir1/file2",
-            ResourceState.deployed,
-            3,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
-        )
-    )
-    resources["std::File[internal,path=/tmp/dir1/file2]"].append(
-        await create_resource(
-            "/tmp/dir1/file2",
-            ResourceState.deploying,
-            8,
-            {"key3": "val3updated", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
-        )
+
+    await resource_factory.create_resource(
+        "/tmp/dir1/file2",
+        ResourceState.deploying,
+        8,
+        {"key3": "val3updated", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
     )
 
     # Add an unreleased resource
-    resources["std::File[internal,path=/etc/filexyz]"].append(
-        await create_resource(
-            "/etc/filexyz",
-            ResourceState.undefined,
-            9,
-            {"key4": "val4", "requires": []},
-        )
+    await resource_factory.create_resource(
+        "/etc/filexyz",
+        ResourceState.undefined,
+        9,
+        {"key4": "val4", "requires": []},
     )
 
     # Add the same resources the first one requires in another environment
-    resources["std::File[internal,path=/tmp/dir1/file2]"].append(
-        await create_resource(
-            "/tmp/dir1/file2",
-            ResourceState.unavailable,
-            8,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
-            resource_type="std::Directory",
-            environment=env2.id,
-        )
+    await resource_factory.create_resource(
+        "/tmp/dir1/file2",
+        ResourceState.unavailable,
+        8,
+        {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
+        resource_type="std::Directory",
+        environment=env2.id,
     )
 
-    resources["std::Directory[internal,path=/tmp/dir1]"].append(
-        await create_resource(
-            "/tmp/dir1",
-            ResourceState.available,
-            8,
-            {"key2": "val2", "requires": []},
-            resource_type="std::Directory",
-            environment=env2.id,
-        )
+    await resource_factory.create_resource(
+        "/tmp/dir1",
+        ResourceState.available,
+        8,
+        {"key2": "val2", "requires": []},
+        resource_type="std::Directory",
+        environment=env2.id,
     )
 
     # Add the same main resource to another environment with higher version
-    resources["std::File[internal,path=/tmp/dir1/file1]"].append(
-        await create_resource(
-            "/tmp/dir1/file1",
-            ResourceState.deploying,
-            8,
-            {
-                "key1": "modified_value",
-                "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
-            },
-            environment=env3.id,
-        )
+    await resource_factory.create_resource(
+        "/tmp/dir1/file1",
+        ResourceState.deploying,
+        8,
+        {
+            "key1": "modified_value",
+            "another_key": "val",
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+        },
+        environment=env3.id,
     )
+
     ids = {
         "long_history": "std::File[internal,path=/tmp/dir1/file1]",
         "single_entry": "std::Directory[internal,path=/tmp/dir1]",
@@ -318,7 +309,7 @@ async def env_with_resources(server, client):
         "unreleased": "std::File[internal,path=/etc/filexyz]",
     }
 
-    yield env, cm_times, ids, resources
+    yield env, cm_times, ids, resource_factory.resources
 
 
 async def test_resource_history(client, server, env_with_resources):
@@ -338,23 +329,23 @@ async def test_resource_history(client, server, env_with_resources):
     expected = [
         {
             "date": cm_times[1].astimezone(datetime.timezone.utc),
-            "attributes": resources[resource_with_long_history][1].attributes,
-        },
-        {
-            "date": cm_times[2].astimezone(datetime.timezone.utc),
             "attributes": resources[resource_with_long_history][2].attributes,
         },
         {
-            "date": cm_times[4].astimezone(datetime.timezone.utc),
-            "attributes": resources[resource_with_long_history][4].attributes,
+            "date": cm_times[2].astimezone(datetime.timezone.utc),
+            "attributes": resources[resource_with_long_history][3].attributes,
         },
         {
-            "date": cm_times[5].astimezone(datetime.timezone.utc),
+            "date": cm_times[4].astimezone(datetime.timezone.utc),
             "attributes": resources[resource_with_long_history][5].attributes,
         },
         {
+            "date": cm_times[5].astimezone(datetime.timezone.utc),
+            "attributes": resources[resource_with_long_history][6].attributes,
+        },
+        {
             "date": cm_times[7].astimezone(datetime.timezone.utc),
-            "attributes": resources[resource_with_long_history][7].attributes,
+            "attributes": resources[resource_with_long_history][8].attributes,
         },
     ]
     assert actual == expected
@@ -485,24 +476,7 @@ async def test_history_not_continuous_versions(server, client, environment):
     for i in range(1, 10):
         cm_times.append(datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
 
-    async def create_resource(
-        path: str,
-        status: ResourceState,
-        version: int,
-        attributes: dict[str, object],
-        agent: str = "internal",
-        resource_type: str = "std::File",
-    ):
-        key = f"{resource_type}[{agent},path={path}]"
-        res = data.Resource.new(
-            environment=environment,
-            resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-            attributes={**attributes, **{"path": path}, "version": version},
-            status=status,
-            last_deploy=datetime.datetime.now(),
-        )
-        await res.insert()
-        return res
+    factory = ResourceFactory(environment=environment)
 
     # No version 3 and 5
     versions = [1, 2, 4, 6]
@@ -516,7 +490,7 @@ async def test_history_not_continuous_versions(server, client, environment):
             version_info={},
             is_suitable_for_partial_compiles=False,
         ).insert()
-        await create_resource(
+        await factory.create_resource(
             "/tmp/dir1/file1",
             ResourceState.deployed,
             version,

@@ -15,11 +15,12 @@
 
     Contact: code@inmanta.com
 """
+
 import inspect
 import json
 import logging
 import uuid
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast  # noqa: F401
 
 import pydantic
@@ -28,7 +29,7 @@ from tornado import escape
 
 from inmanta import const, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import auth, common, exceptions
 from inmanta.protocol.common import ReturnValue
 from inmanta.types import Apireturn, JsonType
 
@@ -47,7 +48,7 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 
 
 def authorize_request(
-    auth_data: Optional[MutableMapping[str, str]], metadata: dict[str, str], message: JsonType, config: common.UrlMethod
+    auth_data: Optional[auth.claim_type], metadata: dict[str, str], message: JsonType, config: common.UrlMethod
 ) -> None:
     """
     Authorize a request based on the given data
@@ -59,10 +60,10 @@ def authorize_request(
     env_key: str = const.INMANTA_URN + "env"
     if env_key in auth_data:
         if env_key not in metadata:
-            raise exceptions.UnauthorizedException("The authorization token is scoped to a specific environment.")
+            raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
 
         if metadata[env_key] != "all" and auth_data[env_key] != metadata[env_key]:
-            raise exceptions.UnauthorizedException("The authorization token is not valid for the requested environment.")
+            raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
 
     # Enforce client_types restrictions
     ok: bool = False
@@ -72,7 +73,7 @@ def authorize_request(
             ok = True
 
     if not ok:
-        raise exceptions.UnauthorizedException(
+        raise exceptions.Forbidden(
             "The authorization token does not have a valid client type for this call."
             + f" ({auth_data[ct_key]} provided, {config.properties.client_types} expected"
         )
@@ -189,6 +190,40 @@ class CallArguments:
             LOGGER.exception("Failed to use getter for arg %s", arg)
             raise e
 
+    @staticmethod
+    def _ensure_list_if_list_type(arg_type: Optional[Type[object]], arg_value: object) -> object:
+        """
+        Handles processing of arguments for GET requests, especially for list types encoded as URL query parameters.
+        If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the specific request
+        provides a list with one element, urllib doesn't parse it as a list. Map it here explicitly to a list.
+        """
+        if typing_inspect.is_optional_type(arg_type):
+            non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
+            if len(non_none_arg_types) == 1:
+                arg_type = non_none_arg_types[0]
+
+        is_generic_list = arg_type and typing_inspect.is_generic_type(arg_type) and typing_inspect.get_origin(arg_type) is list
+        is_single_type_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
+        arg_value_is_not_list = not isinstance(arg_value, list)
+
+        if is_generic_list and is_single_type_list and arg_value_is_not_list:
+            return [arg_value]
+        return arg_value
+
+    def _validate_argument_consistency(self, args):
+        """
+        Validates the consistency of arguments, ensuring they are not passed both as a header and a non-header value.
+        """
+        for arg in args:
+            if arg in self._message and self._is_header_param(arg) and self._is_header_param_provided(arg):
+                message_value = self._message[arg]
+                header_value = self._get_header_value_for(arg)
+                if message_value != header_value:
+                    raise exceptions.BadRequest(
+                        f"Value for argument {arg} was provided via a header and a non-header argument, but both values"
+                        f" don't match (header={header_value}; non-header={message_value})"
+                    )
+
     async def process(self) -> None:
         """
         Process the message
@@ -203,16 +238,7 @@ class CallArguments:
         if self._argspec.defaults is not None:
             defaults_start = len(args) - len(self._argspec.defaults)
 
-        # Make sure that an argument is not passed both using the header and a non-header value with a different value
-        for arg in args:
-            if arg in self._message and self._is_header_param(arg) and self._is_header_param_provided(arg):
-                message_value = self._message[arg]
-                header_value = self._get_header_value_for(arg)
-                if message_value != header_value:
-                    raise exceptions.BadRequest(
-                        f"Value for argument {arg} was provided via a header and a non-header argument, but both values"
-                        f" don't match (header={header_value}; non-header={message_value})"
-                    )
+        self._validate_argument_consistency(args)
 
         call_args = {}
 
@@ -220,22 +246,13 @@ class CallArguments:
             arg_type: Optional[type[object]] = self._argspec.annotations.get(arg)
             if arg in self._message:
                 # Argument is parameter in body of path of HTTP request
-                if (
-                    arg_type
-                    and self._properties.operation == "GET"
-                    and typing_inspect.is_generic_type(arg_type)
-                    and issubclass(typing_inspect.get_origin(arg_type), list)
-                    and not isinstance(self._message[arg], list)
-                    and len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
-                    and isinstance(self._message[arg], typing_inspect.get_args(arg_type)[0])
-                ):
-                    # If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the
-                    # specific request provides a list with one element, urllib doesn't parse it as a list.
-                    # Map it here explicitly to a list.
-                    value = [self._message[arg]]
-                else:
-                    value = self._message[arg]
+                value = self._message[arg]
+
+                if arg_type and self._properties.operation == "GET":
+                    value = self._ensure_list_if_list_type(arg_type, value)
+
                 all_fields.remove(arg)
+
             elif arg_type and self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
                 # Argument is dictionary-based expression in query parameters of GET operation
                 dict_prefix = f"{arg}."
@@ -469,7 +486,7 @@ class CallArguments:
 
 
 # Shared
-class RESTBase(util.TaskHandler):
+class RESTBase(util.TaskHandler[None]):
     """
     Base class for REST based client and servers
     """
@@ -500,7 +517,7 @@ class RESTBase(util.TaskHandler):
         config: common.UrlMethod,
         message: dict[str, object],
         request_headers: Mapping[str, str],
-        auth: Optional[MutableMapping[str, str]] = None,
+        auth: Optional[auth.claim_type] = None,
     ) -> common.Response:
         try:
             if kwargs is None or config is None:
@@ -510,10 +527,10 @@ class RESTBase(util.TaskHandler):
             message.update(kwargs)
 
             if config.properties.validate_sid:
-                if "sid" not in message:
+                if "sid" not in message or not isinstance(message["sid"], str):
                     raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
 
-                sid = uuid.UUID(message["sid"])
+                sid = uuid.UUID(str(message["sid"]))
                 if not isinstance(sid, uuid.UUID) or not self.validate_sid(sid):
                     raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 

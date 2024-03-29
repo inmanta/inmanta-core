@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import abc
 import asyncio
 import datetime
@@ -40,11 +41,10 @@ from asyncpg import Connection
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
-from inmanta.config import Config
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
 from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvCreationFailedError, VirtualEnv
-from inmanta.protocol import encode_token, methods, methods_v2
+from inmanta.protocol import Result, encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
@@ -234,7 +234,11 @@ class CompileRun:
 
             env = await data.Environment.get_by_id(environment_id)
 
-            env_string = ", ".join([f"{k}='{v}'" for k, v in self.request.environment_variables.items()])
+            env_string = (
+                ", ".join([f"{k}='{v}'" for k, v in self.request.used_environment_variables.items()])
+                if self.request.used_environment_variables
+                else ""
+            )
             assert self.stage
             await self.stage.update_streams(out=f"Using extra environment variables during compile {env_string}\n")
 
@@ -398,6 +402,9 @@ class CompileRun:
                     cmd.append("--delete-resource-set")
                     cmd.append(resource_set)
 
+            if self.request.soft_delete:
+                cmd.append("--soft-delete")
+
             if not self.request.do_export:
                 f = NamedTemporaryFile()
                 cmd.append("-j")
@@ -413,14 +420,15 @@ class CompileRun:
             else:
                 cmd.append("--no-ssl")
 
-            if opt.server_ssl_ca_cert.get() is not None:
+            ssl_ca_cert = opt.server_ssl_ca_cert.get()
+            if ssl_ca_cert is not None:
                 cmd.append("--ssl-ca-cert")
-                cmd.append(opt.server_ssl_ca_cert.get())
+                cmd.append(ssl_ca_cert)
 
             self.tail_stdout = ""
 
             env_vars_compile: dict[str, str] = os.environ.copy()
-            env_vars_compile.update(self.request.environment_variables)
+            env_vars_compile.update(self.request.used_environment_variables)
 
             result: data.Report = await run_compile_stage_in_venv(
                 "Recompiling configuration model", cmd, cwd=project_dir, env=env_vars_compile
@@ -499,7 +507,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)
-        self._recompiles: dict[uuid.UUID, Task] = {}
+        self._recompiles: dict[uuid.UUID, Task[None | Result]] = {}
         self._global_lock = asyncio.locks.Lock()
         self.listeners: list[CompileStateListener] = []
         self._scheduled_full_compiles: dict[uuid.UUID, tuple[TaskMethod, str]] = {}
@@ -522,7 +530,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     async def prestart(self, server: server.protocol.Server) -> None:
         await super().prestart(server)
-        state_dir: str = opt.state_dir.get()
+        state_dir: str = config.state_dir.get()
         server_state_dir = ensure_directory_exist(state_dir, "server")
         self._env_folder = ensure_directory_exist(server_state_dir, "environments")
 
@@ -598,6 +606,8 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         failed_compile_message: Optional[str] = None,
         in_db_transaction: bool = False,
         connection: Optional[Connection] = None,
+        soft_delete: bool = False,
+        mergeable_env_vars: Optional[Mapping[str, str]] = None,
     ) -> tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -611,6 +621,10 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         :param in_db_transaction: If set to True, the connection must be provided and the connection must be part of an ongoing
                                   database transaction. If this parameter is set to True, is required to call
                                   `CompileService.notify_compile_request_committed()` right after the transaction commits.
+        :param soft_delete: Silently ignore deletion of resource sets in removed_resource_sets if they contain
+            resources that are being exported.
+        :param mergeable_env_vars: a set of env vars that can be compacted over multiple compiles.
+            If multiple values are compacted, they will be joined using spaces
         :return: the compile id of the requested compile and any warnings produced during the request
         """
         if in_db_transaction and not connection:
@@ -623,13 +637,18 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             metadata = {}
         if env_vars is None:
             env_vars = {}
+        if mergeable_env_vars is None:
+            mergeable_env_vars = {}
 
-        server_compile: bool = await env.get(data.SERVER_COMPILE)
+        server_compile: bool = bool(await env.get(data.SERVER_COMPILE))
         if not server_compile:
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
             return None, ["Skipping compile because server compile not enabled for this environment."]
 
         requested = datetime.datetime.now().astimezone()
+
+        shared_keys = mergeable_env_vars.keys() & env_vars.keys()
+        assert not shared_keys, f"An env var can not be both mergeable and normal: {shared_keys}"
 
         compile = data.Compile(
             environment=env.id,
@@ -638,12 +657,15 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             do_export=do_export,
             force_update=force_update,
             metadata=metadata,
-            environment_variables=env_vars,
+            requested_environment_variables=env_vars,
+            used_environment_variables=env_vars,
+            mergeable_environment_variables=mergeable_env_vars,
             partial=partial,
             removed_resource_sets=removed_resource_sets,
             exporter_plugin=exporter_plugin,
             notify_failed_compile=notify_failed_compile,
             failed_compile_message=failed_compile_message,
+            soft_delete=soft_delete,
         )
         if not in_db_transaction:
             async with self._queue_count_cache_lock:
@@ -764,7 +786,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         compile_requested: datetime.datetime,
         last_compile_completed: datetime.datetime,
         now: datetime.datetime,
-    ) -> int:
+    ) -> float:
         if wait_time == 0:
             wait: float = 0
         else:
@@ -775,7 +797,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         return wait
 
     async def _auto_recompile_wait(self, compile: data.Compile) -> None:
-        if Config.is_set("server", "auto-recompile-wait"):
+        if config.Config.is_set("server", "auto-recompile-wait"):
             wait_time = opt.server_autrecompile_wait.get()
             LOGGER.warning(
                 "The server-auto-recompile-wait is enabled and set to %s seconds. "
@@ -784,6 +806,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             )
         else:
             env = await data.Environment.get_by_id(compile.environment)
+            if env is None:
+                LOGGER.error("Unable to find environment %s in the database.", compile.environment)
+                return
             wait_time = await env.get(data.RECOMPILE_BACKOFF)
             if wait_time:
                 LOGGER.info("The recompile_backoff environment setting is enabled and set to %s seconds.", wait_time)
@@ -794,6 +819,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             wait: float = 0
         else:
             assert last_run.completed is not None
+            assert compile.requested is not None
             wait = self._calculate_recompile_wait(
                 wait_time, compile.requested, last_run.completed, datetime.datetime.now().astimezone()
             )
@@ -823,9 +849,20 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
         runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
 
+        merged_env_vars = dict(compile.mergeable_environment_variables)
+        for merge_candidate in merge_candidates:
+            for key, to_add in merge_candidate.mergeable_environment_variables.items():
+                existing = merged_env_vars.get(key, None)
+                if existing:
+                    merged_env_vars[key] = existing + " " + to_add
+                else:
+                    merged_env_vars[key] = to_add
+
+        merged_env_vars.update(compile.requested_environment_variables)
+
         started = datetime.datetime.now().astimezone()
         async with self._queue_count_cache_lock:
-            await compile.update_fields(started=started)
+            await compile.update_fields(started=started, used_environment_variables=merged_env_vars)
             self._queue_count_cache -= 1
 
         # set force_update == True iff any compile request has force_update == True
@@ -835,13 +872,14 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         version = runner.version
 
         end = datetime.datetime.now().astimezone()
-        compile_data_json: Optional[dict] = None if compile_data is None else compile_data.model_dump()
+        compile_data_json: Optional[dict[str, object]] = None if compile_data is None else compile_data.model_dump()
         await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
         awaitables = [
             merge_candidate.update_fields(
                 started=compile.started,
                 completed=end,
                 success=success,
+                used_environment_variables=merged_env_vars,
                 version=version,
                 substitute_compile_id=compile.id,
                 compile_data=compile_data_json,

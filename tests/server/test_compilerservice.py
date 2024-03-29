@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import datetime
 import logging
@@ -42,9 +43,7 @@ from inmanta.data.model import PipConfig
 from inmanta.env import PythonEnvironment
 from inmanta.export import cfg_env
 from inmanta.protocol import Result
-from inmanta.server import SLICE_COMPILER, SLICE_SERVER
-from inmanta.server import config as server_config
-from inmanta.server import protocol
+from inmanta.server import SLICE_COMPILER, SLICE_SERVER, protocol
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
@@ -94,7 +93,8 @@ async def compile_and_assert(
         environment=env.id,
         do_export=export,
         metadata=meta,
-        environment_variables=env_vars,
+        requested_environment_variables=env_vars,
+        used_environment_variables=env_vars,
         force_update=update,
         exporter_plugin=exporter_plugin,
     )
@@ -402,7 +402,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     # env vars
     marker = str(uuid.uuid4())
     compile, stages = await _compile_and_assert(env=env, export=False, env_vars={testmarker_env: marker})
-    assert len(compile.request.environment_variables) == 1
+    assert len(compile.request.requested_environment_variables) == 1
     assert stages["Init"]["returncode"] == 0
     assert f"Using extra environment variables during compile TESTMARKER='{marker}'" in stages["Init"]["outstream"]
     assert stages["Recompiling configuration model"]["returncode"] == 0
@@ -790,7 +790,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert result.result["count"] == 5
 
     # clear the environment
-    state_dir = server_config.state_dir.get()
+    state_dir = config.state_dir.get()
     project_dir = os.path.join(state_dir, "server", "environments", environment)
     assert os.path.exists(project_dir)
 
@@ -800,13 +800,111 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert not os.path.exists(project_dir)
 
 
+@pytest.mark.slowtest
+async def test_server_recompile_param_fact_v2(server, client, environment):
+    """
+    Test recompile triggers when setting params and facts with the v2 endpoint
+    """
+
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
+
+    shutil.copytree(project_source, project_dir)
+
+    # add main.cf
+    with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
+        fd.write(
+            """
+    host = std::Host(name="test", os=std::linux)
+        std::ConfigFile(host=host, path="/etc/motd", content="1234")
+"""
+        )
+
+    logger.info("request a compile")
+    result = await client.notify_change(environment)
+    assert result.code == 200
+
+    versions = await wait_for_version(client, environment, cnt=1, compile_timeout=40)
+    assert versions["versions"][0]["total"] == 1
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
+
+    # get an existing resource
+    resources = await data.Resource.get_resources_for_version(environment, 1)
+    resource_id = resources[0].resource_id
+
+    # set a parameter without requesting a recompile
+    result = await client.set_parameter(environment, name="param1", value="test", source=ParameterSource.plugin)
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, cnt=1)
+    assert versions["count"] == 1
+
+    logger.info("request second compile")
+    # set a new parameter and request a recompile
+    result = await client.set_parameter(environment, name="param2", value="test", source=ParameterSource.plugin, recompile=True)
+    assert result.code == 200
+    logger.info("wait for 2")
+    versions = await wait_for_version(client, environment, cnt=2)
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
+    assert versions["count"] == 2
+
+    # update the parameter to the same value -> no compile
+    result = await client.set_parameter(environment, name="param2", value="test", source=ParameterSource.plugin, recompile=True)
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, cnt=2)
+    assert versions["count"] == 2
+
+    # update the parameter to a new value
+    result = await client.set_parameter(
+        environment, name="param2", value="test2", source=ParameterSource.plugin, recompile=True
+    )
+    assert result.code == 200
+    logger.info("wait for 3")
+    versions = await wait_for_version(client, environment, cnt=3)
+    assert versions["count"] == 3
+
+    # set a fact without requesting a recompile
+    result = await client.set_fact(
+        environment, name="fact1", value="test", source=ParameterSource.fact, resource_id=resource_id
+    )
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, cnt=3)
+    assert versions["count"] == 3
+
+    # set a new fact and request a recompile
+    result = await client.set_fact(
+        environment, name="fact2", value="test", source=ParameterSource.fact, resource_id=resource_id, recompile=True
+    )
+    assert result.code == 200
+    logger.info("wait for 4")
+    versions = await wait_for_version(client, environment, cnt=4)
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "fact"
+    assert versions["count"] == 4
+
+    # update the fact to the same value -> no compile
+    result = await client.set_fact(
+        environment, name="fact2", value="test", source=ParameterSource.fact, resource_id=resource_id, recompile=True
+    )
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, cnt=4)
+    assert versions["count"] == 4
+
+    # update the fact to a new value
+    result = await client.set_fact(
+        environment, name="fact2", value="test2", source=ParameterSource.fact, resource_id=resource_id, recompile=True
+    )
+    assert result.code == 200
+    logger.info("wait for 5")
+    versions = await wait_for_version(client, environment, cnt=5)
+    assert versions["count"] == 5
+
+
 async def run_compile_and_wait_until_compile_is_done(
     compiler_service: CompilerService,
     compiler_queue: queue.Queue["CompileRunnerMock"],
     env_id: uuid.UUID,
     fail: Optional[bool] = None,
     fail_on_pull=False,
-) -> None:
+) -> "CompileRunnerMock":
     """
     Unblock the first compile in the compiler queue and wait until the compile finishes.
     """
@@ -828,6 +926,7 @@ async def run_compile_and_wait_until_compile_is_done(
         return False
 
     await retry_limited(_is_compile_finished, timeout=10)
+    return run
 
 
 async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, server, client, environment):
@@ -896,13 +995,20 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id6 = uuid.uuid4()
     compile_id6, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id6)
 
+    # request with partial, will not be merged
+    remote_id7 = uuid.uuid4()
+    compile_id7, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=remote_id7, partial=True
+    )
+
     result = await client.get_compile_queue(environment)
-    assert len(result.result["queue"]) == 6
+    assert len(result.result["queue"]) == 7
     assert result.result["queue"][4]["remote_id"] == str(remote_id5)
     assert result.result["queue"][5]["remote_id"] == str(remote_id6)
+    assert result.result["queue"][6]["remote_id"] == str(remote_id7)
     assert result.code == 200
-    # 5 in the queue, 1 running
-    await retry_limited(lambda: compilerslice._queue_count_cache == 5, 10)
+    # 6 in the queue, 1 running
+    await retry_limited(lambda: compilerslice._queue_count_cache == 6, 10)
 
     async def has_matching_compile_report(first_compile_id: uuid.UUID, second_compile_id: uuid.UUID) -> bool:
         return await compilerslice.get_report(first_compile_id) == await compilerslice.get_report(second_compile_id)
@@ -910,13 +1016,13 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # finish a compile and wait for service to take on next
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
-    # api should return five when ready
+    # api should return 6 when ready
     result = await client.get_compile_queue(environment)
-    assert len(result.result["queue"]) == 5
+    assert len(result.result["queue"]) == 6
     assert result.result["queue"][0]["remote_id"] == str(remote_id2)
     assert result.code == 200
     # 4 in the queue, 1 running
-    await retry_limited(lambda: compilerslice._queue_count_cache == 4, 10)
+    await retry_limited(lambda: compilerslice._queue_count_cache == 5, 10)
 
     # finish second compile
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
@@ -925,23 +1031,22 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # Use try_limited to prevent a race condition.
     await retry_limited(lambda: has_matching_compile_report(compile_id2, compile_id4), timeout=10)
     # 2 in the queue, 1 running
-    await retry_limited(lambda: compilerslice._queue_count_cache == 2, 10)
+    await retry_limited(lambda: compilerslice._queue_count_cache == 3, 10)
 
     # finish third compile
-    # prevent race conditions where compile is not yet in queue
-    await retry_limited(lambda: not mocked_compiler_service_block.empty(), timeout=10)
-    run = mocked_compiler_service_block.get(block=True)
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
+    await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id5), timeout=10)
+    await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id6), timeout=10)
+
+    # One left
     result = await client.get_compile_queue(environment)
-    assert len(result.result["queue"]) == 3
-    assert result.result["queue"][0]["remote_id"] == str(remote_id3)
-    assert result.code == 200
-    run.block = False
+    assert len(result.result["queue"]) == 1
+
+    # finish 7th compile
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
     while env.id in compilerslice._recompiles:
         await asyncio.sleep(0.2)
-
-    await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id5), timeout=10)
-    await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id6), timeout=10)
 
     # 0 in the queue, 0 running
     await retry_limited(lambda: compilerslice._queue_count_cache == 0, 10)
@@ -950,6 +1055,69 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 0
     assert result.code == 200
+
+
+async def test_compileservice_queue_with_env_var_merging(
+    mocked_compiler_service_block: queue.Queue, server, client, environment
+):
+    """
+    Test the compile queue (as above), but with mergeable env vars
+    """
+    env = await data.Environment.get_by_id(environment)
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 0
+    assert result.code == 200
+
+    # request a compile, all by itself
+    remote_id1 = uuid.uuid4()
+    compile_id1, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=remote_id1, env_vars={"my_var": "1"}, partial=False
+    )
+
+    # Then one to compact on top of
+    remote_id2 = uuid.uuid4()
+    compile_id2, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=remote_id2, env_vars={"my_var": "1"}, partial=True
+    )
+
+    # Then add one
+    remote_id3 = uuid.uuid4()
+    compile_id3, _ = await compilerslice.request_recompile(
+        env=env,
+        force_update=False,
+        do_export=True,
+        remote_id=remote_id3,
+        env_vars={"my_var": "1"},
+        partial=True,
+        mergeable_env_vars={"v1": "a", "v2": "b"},
+    )
+
+    # Then another one
+    remote_id4 = uuid.uuid4()
+    compile_id4, _ = await compilerslice.request_recompile(
+        env=env,
+        force_update=False,
+        do_export=True,
+        remote_id=remote_id4,
+        env_vars={"my_var": "1"},
+        partial=True,
+        mergeable_env_vars={"v1": "C"},
+    )
+
+    # finish first compile
+    t1 = await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
+    # finish all other compiles at once
+    t2 = await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
+
+    # api should return none
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 0
+    assert result.code == 200
+
+    assert t1.request.used_environment_variables == {"my_var": "1"}
+    assert t2.request.used_environment_variables == {"my_var": "1", "v1": "a C", "v2": "b"}
 
 
 async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
@@ -1065,7 +1233,7 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
         "do_export": True,
         "force_update": True,
         "metadata": {"type": "api", "message": "Recompile trigger through API call"},
-        "environment_variables": {},
+        "requested_environment_variables": {},
         "success": True,
         "handled": True,
         "version": 1,
@@ -1162,7 +1330,8 @@ async def test_compileservice_cleanup_halted(server, client, environment, halted
         "do_export": True,
         "force_update": True,
         "metadata": {"type": "api", "message": "Recompile trigger through API call"},
-        "environment_variables": {},
+        "requested_environment_variables": {},
+        "used_environment_variables": {},
         "success": True,
         "handled": True,
         "version": 1,
@@ -1204,7 +1373,8 @@ async def test_issue_2361(environment_factory: EnvironmentFactory, server, clien
         environment=env.id,
         do_export=True,
         metadata={},
-        environment_variables={},
+        requested_environment_variables={},
+        used_environment_variables={},
         force_update=True,
     )
     await compile.insert()
@@ -1234,7 +1404,8 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
         environment=env.id,
         do_export=True,
         metadata={},
-        environment_variables={},
+        requested_environment_variables={},
+        used_environment_variables={},
         force_update=True,
     )
     await compile.insert()
@@ -1273,7 +1444,7 @@ async def test_compileservice_auto_recompile_wait(
     """
     with caplog.at_level(logging.DEBUG):
         if auto_recompile_wait == "0":
-            config.Config._get_instance().remove_option("server", "auto-recompile-wait")
+            config.Config.get_instance().remove_option("server", "auto-recompile-wait")
         else:
             config.Config.set("server", "auto-recompile-wait", auto_recompile_wait)
 
@@ -1344,7 +1515,7 @@ async def test_compileservice_api(client, environment):
     # Exceed max value for limit
     result = await client.get_reports(environment, limit=APILIMIT + 1)
     assert result.code == 400
-    assert result.result["message"] == f"Invalid request: limit parameter can not exceed {APILIMIT}, got {APILIMIT+1}."
+    assert result.result["message"] == f"Invalid request: limit parameter can not exceed {APILIMIT}, got {APILIMIT + 1}."
 
     result = await client.get_reports(environment, limit=APILIMIT)
     assert result.code == 200

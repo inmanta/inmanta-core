@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 import pytest
 
 import inmanta.compiler as compiler

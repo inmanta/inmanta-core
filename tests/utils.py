@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import configparser
 import datetime
@@ -273,6 +274,21 @@ async def report_db_index_usage(min_precent=100):
         print(row)
 
 
+async def wait_until_version_is_released(client, environment: uuid.UUID, version: int) -> None:
+    """
+    Wait until the configurationmodel with the given version and environment is released.
+    """
+
+    async def _is_version_released() -> bool:
+        result = await client.get_version(tid=environment, id=version)
+        if result.code == 404:
+            return False
+        assert result.code == 200
+        return result.result["model"]["released"]
+
+    await retry_limited(_is_version_released, timeout=10)
+
+
 async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     """
     :param compile_timeout: Raise an AssertionError if the compilation didn't finish after this amount of seconds.
@@ -336,7 +352,7 @@ class ClientHelper:
         assert res.code == 200
         return res.result["data"]
 
-    async def put_version_simple(self, resources: dict[str, Any], version: int) -> None:
+    async def put_version_simple(self, resources: list[dict[str, Any]], version: int, wait_for_released: bool = False) -> None:
         res = await self.client.put_version(
             tid=self.environment,
             version=version,
@@ -346,6 +362,17 @@ class ClientHelper:
             compiler_version=get_compiler_version(),
         )
         assert res.code == 200, res.result
+        if wait_for_released:
+            await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
+
+    async def is_released(self, version: int) -> bool:
+        versions = await self.client.list_versions(tid=self.environment)
+        assert versions.code == 200
+        lookup = {v["version"]: v["released"] for v in versions.result["versions"]}
+        return lookup[version]
+
+    async def wait_for_deployed(self, version: int) -> None:
+        await _wait_until_deployment_finishes(client=self.client, environment=self.environment, version=version)
 
 
 def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> dict[str, Any]:

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import typing
 import uuid
@@ -30,6 +31,7 @@ from pydantic import ConfigDict, Field, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
+import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
@@ -127,6 +129,14 @@ class CompileData(BaseModel):
 
 
 class CompileRunBase(BaseModel):
+    """
+    :param requested_environment_variables: environment variables requested to be passed to the compiler
+    :param mergeable_environment_variables: environment variables to be passed to the compiler.
+            These env vars can be compacted over multiple compiles.
+            If multiple values are compacted, they will be joined using spaces.
+    :param environment_variables: environment variables passed to the compiler
+    """
+
     id: uuid.UUID
     remote_id: Optional[uuid.UUID] = None
     environment: uuid.UUID
@@ -136,6 +146,8 @@ class CompileRunBase(BaseModel):
     do_export: bool
     force_update: bool
     metadata: JsonType
+    mergeable_environment_variables: dict[str, str]
+    requested_environment_variables: dict[str, str]
     environment_variables: dict[str, str]
 
     partial: bool
@@ -145,6 +157,22 @@ class CompileRunBase(BaseModel):
 
     notify_failed_compile: Optional[bool] = None
     failed_compile_message: Optional[str] = None
+
+    @pydantic.field_validator("environment_variables", mode="before")
+    @classmethod
+    def validate_environment_variables(cls, v: typing.Any, info: pydantic_core.core_schema.ValidationInfo) -> typing.Any:
+        """
+        Default the environment_variables to requested_environment_variables + mergeable_environment_variables
+
+        This relies on the fact that fields are validated in the order they are declared!
+        """
+        if v is None:
+            out = {}
+            out.update(info.data["requested_environment_variables"])
+            out.update(info.data["mergeable_environment_variables"])
+            return out
+        else:
+            return v
 
 
 class CompileRun(CompileRunBase):
@@ -232,6 +260,7 @@ class Environment(BaseModel):
     repo_branch: str
     settings: dict[str, EnvSettingType]
     halted: bool
+    is_marked_for_deletion: bool = False
     description: Optional[str] = None
     icon: Optional[str] = None
 
@@ -310,7 +339,6 @@ class Resource(BaseModel):
     resource_version_id: ResourceVersionIdStr
     resource_id_value: str
     agent: str
-    last_deploy: Optional[datetime.datetime] = None
     attributes: JsonType
     status: const.ResourceState
     resource_set: Optional[str] = None
@@ -556,6 +584,7 @@ class Parameter(BaseModel):
 
 class Fact(Parameter):
     resource_id: ResourceIdStr
+    expires: bool = True
 
 
 class Agent(BaseModel):
@@ -647,7 +676,7 @@ class Notification(BaseModel):
     title: str
     message: str
     severity: const.NotificationSeverity
-    uri: str
+    uri: Optional[str] = None
     read: bool
     cleared: bool
 

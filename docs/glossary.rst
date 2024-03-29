@@ -121,7 +121,7 @@ Glossary
         A resource in an infrastructure may have multiple properties that are not managed by Inmanta
         but their value is required as input in the configuration or for reporting purposes.
         :term:`handlers<handler>` take care of extracting these facts and reporting them back to the
-        server.
+        server. More information in the :ref:`using facts<Using facts>` section.
 
     infrastructure
         This is what Inmanta manages. This could be virtual machines with resources in these virtual

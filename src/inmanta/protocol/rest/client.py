@@ -22,6 +22,7 @@ from asyncio import CancelledError
 from typing import TYPE_CHECKING, Any, AnyStr, Optional
 from urllib.parse import unquote
 
+import tornado.simple_httpclient
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
 from inmanta import config as inmanta_config
@@ -130,6 +131,14 @@ class RESTClient(RESTBase):
             )
             response = await self.client.fetch(request)
         except HTTPError as e:
+            if isinstance(e, tornado.simple_httpclient.HTTPStreamClosedError):
+                # Improve error on too long header
+                length = len(request.url) + len(str(request.headers))
+                if length > 65000:
+                    LOGGER.exception("Failed to send request, header is too long (estimated size %d)", length)
+                    return common.Result(
+                        code=e.code, result={"message": f"{e.message} header is too long (estimated size {length})"}
+                    )
             if e.response is not None and e.response.body is not None and len(e.response.body) > 0:
                 try:
                     result = self._decode(e.response.body)
