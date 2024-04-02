@@ -345,8 +345,17 @@ to
   # IPv6 local connections:
   host    all             all             ::1/128                 md5
 
+Make sure JIT is disabled for the PostgreSQL database as it might result in poor query performance.
+To disable JIT, set
 
-Restart the PostgreSQL server to apply the changes made in the ``pg_hba.conf`` file:
+.. code-block:: text
+
+  # disable JIT
+  jit = off
+
+in ``/var/lib/pgsql/13/data/postgresql.conf``.
+
+Restart the PostgreSQL server to apply the changes made in the ``pg_hba.conf`` and  ``postgresql.conf`` files:
 
 .. only:: oss
 
