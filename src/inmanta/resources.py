@@ -344,8 +344,7 @@ class Resource(metaclass=ResourceMeta):
 
         force_fields = False
         if cls_resource is None:
-            cls_resource = cls
-            force_fields = True
+            raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
 
         obj = cls_resource(obj_id)
         obj.populate(obj_map, force_fields)
