@@ -1,3 +1,5 @@
+.. _Releasing and distributing modules:
+
 Releasing and distributing modules
 ==================================
 
@@ -18,9 +20,9 @@ V1 modules
 ##########
 
 Inmanta V1 modules are versioned based on git tags. The current version is reflected in the ``module.yml`` file.
-The commit should be tagged with the version in the git repository as well. To
-ease the use inmanta provides a command (``inmanta modules commit``) to modify module versions, commit to git and place the
-correct tag.
+The commit should be tagged with the version in the git repository as well. To release a module, use the
+`release <https://docs.inmanta.com/community/latest/reference/commands.html#release>`_ command
+as outlined below.
 
 Development Versions
 --------------------
@@ -36,42 +38,37 @@ When done, first use git to add files:
 
     git add *
 
-To commit, use the module tool. This will create a new dev release.
+Create a new dev version:
 
 .. code-block:: bash
 
-    inmanta module commit --patch -m "Fixed small bug"
+    inmanta module release --dev --patch -m "Fixed small bug"
 
-This command will set the version to the next dev version (`+0.0.1dev`) and add a timestamp.
+This command will set the version to the next dev version, e.g. ``+0.0.1dev`` for a patch increment.
 
 The module tool supports semantic versioning.
-Use one of ``--major``, ``--minor`` or ``--patch`` to update version numbers: <major>.<minor>.<patch>
+Use one of ``--major``, ``--minor`` or ``--patch`` to update version numbers: ``<major>.<minor>.<patch>``
 
 For the dev releases, no tags are created.
+Once the dev version is ready for release, perform a proper release by following
+the steps in the `Release Versions`_ section below.
 
 Release Versions
 ----------------
 
-To make an actual release (without `.dev` at the end):
+To perform an actual stable release, checkout the main development branch
+and use the ``inmanta module release`` command:
 
 .. code-block:: bash
 
-    inmanta module commit -r -m "First Release"
+    inmanta module release
+    git push
+    git push origin {tag}
 
-This will remove the `.dev` version and automatically set the right tags on the module.
+This will create a stable version corresponding to the current dev version without the ``.dev`` and tag it.
+This will also setup the main development branch for further development by creating a new dev version
+that is a patch ahead of the latest released version.
 
-To automatically freeze all dependencies of this module to the currently checked out versions
-
-.. code-block:: bash
-
-	inmanta module freeze --recursive --operator ==
-
-
-Or for the current project
-
-.. code-block:: bash
-
-	inmanta project freeze --recursive --operator ==
 
 Distributing V1 modules
 -----------------------

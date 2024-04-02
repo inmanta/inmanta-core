@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import os
 import subprocess
 from subprocess import CalledProcessError

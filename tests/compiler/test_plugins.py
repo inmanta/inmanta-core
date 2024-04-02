@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import os
 import re
@@ -173,7 +174,7 @@ import test_674
 
 test_674::test_not_nullable(null)
         """,
-        "Invalid value 'null', expected String (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))",
+        "Invalid value 'null', expected string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))",
     )
 
 

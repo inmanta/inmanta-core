@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import re
 import typing

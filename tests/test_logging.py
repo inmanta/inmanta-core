@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import sys
 from io import StringIO
@@ -22,6 +23,11 @@ from io import StringIO
 import pytest
 
 from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter, Options
+
+
+@pytest.fixture(autouse=True)
+def cleanup_logger():
+    InmantaLoggerConfig.clean_instance()
 
 
 def test_setup_instance():

@@ -11,6 +11,7 @@
     limitations under the License.
     Contact: code@inmanta.com
 """
+
 from asyncpg import Connection
 
 

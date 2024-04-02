@@ -15,13 +15,15 @@
 
     Contact: code@inmanta.com
 """
+
 import enum
 import inspect
 import json
 from datetime import datetime
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 from uuid import UUID
 
+import pydantic
 import pytest
 from openapi_spec_validator import openapi_v30_spec_validator
 from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
@@ -259,10 +261,39 @@ def test_openapi_types_base_model():
     assert environment_type.required == ["id", "name", "project_id", "repo_url", "repo_branch", "settings", "halted"]
 
 
-def test_openapi_types_union():
+def test_openapi_types_union() -> None:
+    # Test union type
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(Union[str, bytes])
-    assert openapi_type == Schema(anyOf=[Schema(type="string"), Schema(type="string", format="binary")])
+    openapi_type = type_converter.get_openapi_type(Union[str, bytes, Literal["test"]])
+    assert openapi_type == Schema(
+        anyOf=[
+            Schema(type="string"),
+            Schema(type="string", format="binary"),
+            Schema(type="string", enum=["test"]),
+        ]
+    )
+
+    # Test union type wrapped into an object
+    class Test(pydantic.BaseModel):
+        val: Union[str, bytes, Literal["test"]]
+
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Test)
+    schema_ref = f"{type_converter.openapi_ref_prefix}{Test.__name__}"
+    assert openapi_type.ref == schema_ref
+    schema_test_obj = type_converter.components.schemas[Test.__name__]
+    assert schema_test_obj.title == Test.__name__
+    assert schema_test_obj.required == ["val"]
+    assert len(schema_test_obj.properties) == 1
+    schema_val_property = schema_test_obj.properties["val"]
+    assert schema_val_property == Schema(
+        title="Val",
+        anyOf=[
+            Schema(type="string"),
+            Schema(type="string", format="binary"),
+            Schema(type="string", enum=["test"]),
+        ],
+    )
 
 
 def test_openapi_types_optional():
@@ -272,10 +303,44 @@ def test_openapi_types_optional():
 
 
 def test_openapi_types_list():
+    # Test list type
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(list[Union[int, UUID]])
+    openapi_type = type_converter.get_openapi_type(list[Union[int, UUID, Literal["test"]]])
     assert openapi_type == Schema(
-        type="array", items=Schema(anyOf=[Schema(type="integer"), Schema(type="string", format="uuid")])
+        type="array",
+        items=Schema(
+            anyOf=[
+                Schema(type="integer"),
+                Schema(type="string", format="uuid"),
+                Schema(type="string", enum=["test"]),
+            ]
+        ),
+    )
+
+    # Test list type wrapped into an object
+    class Test(pydantic.BaseModel):
+        val: list[Union[int, UUID, Literal["test"]]]
+
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Test)
+    schema_ref = f"{type_converter.openapi_ref_prefix}{Test.__name__}"
+    assert openapi_type.ref == schema_ref
+    schema_test_obj = type_converter.components.schemas[Test.__name__]
+    assert schema_test_obj.title == Test.__name__
+    assert schema_test_obj.required == ["val"]
+    assert schema_test_obj.type == "object"
+    assert len(schema_test_obj.properties) == 1
+    schema_array = schema_test_obj.properties["val"]
+    assert schema_array == Schema(
+        title="Val",
+        type="array",
+        items=Schema(
+            anyOf=[
+                Schema(type="integer"),
+                Schema(type="string", format="uuid"),
+                Schema(type="string", enum=["test"]),
+            ]
+        ),
     )
 
 
@@ -314,11 +379,12 @@ def test_openapi_types_list_of_list_of_optional_model():
 
 def test_openapi_types_dict_of_union():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(dict[str, Union[model.Project, model.Environment]])
+    openapi_type = type_converter.get_openapi_type(dict[str, Union[model.Project, model.Environment, Literal["test"]]])
     assert openapi_type.type == "object"
-    assert len(openapi_type.additionalProperties.anyOf) == 2
+    assert len(openapi_type.additionalProperties.anyOf) == 3
     assert openapi_type.additionalProperties.anyOf[0].ref == type_converter.openapi_ref_prefix + "Project"
     assert openapi_type.additionalProperties.anyOf[1].ref == type_converter.openapi_ref_prefix + "Environment"
+    assert openapi_type.additionalProperties.anyOf[2] == Schema(type="string", enum=["test"])
 
 
 def test_openapi_types_optional_union():
@@ -381,6 +447,28 @@ def test_openapi_types_uuid():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(UUID)
     assert openapi_type == Schema(type="string", format="uuid")
+
+
+def test_openapi_types_literal() -> None:
+    # Test literal type
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Literal["test"])
+    assert openapi_type == Schema(type="string", enum=["test"])
+
+    # Test literal type wrapped into an object
+    class Test(pydantic.BaseModel):
+        val: Literal["test"]
+
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Test)
+    schema_ref = f"{type_converter.openapi_ref_prefix}{Test.__name__}"
+    assert openapi_type.ref == schema_ref
+    schema_test_obj = type_converter.components.schemas[Test.__name__]
+    assert schema_test_obj.title == Test.__name__
+    assert schema_test_obj.required == ["val"]
+    assert len(schema_test_obj.properties) == 1
+    schema_val_property = schema_test_obj.properties["val"]
+    assert schema_val_property == Schema(title="Val", type="string", enum=["test"])
 
 
 def test_openapi_types_anyurl():

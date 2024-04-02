@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-import asyncio
+
 import json
 import logging
 import uuid
@@ -134,9 +134,11 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(environment, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 10)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(environment, dry_run_id)
@@ -229,9 +231,11 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(env_id, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 10)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(env_id, dry_run_id)
@@ -261,7 +265,7 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     log_entry = result["logs"][0]
     assert log_entry["action"] == "dryrun"
     assert log_entry["status"] == "unavailable"
-    assert "Failed to load" in log_entry["messages"][0]["msg"]
+    assert "Unable to deserialize" in log_entry["messages"][0]["msg"]
 
     await agent.stop()
 
@@ -299,9 +303,11 @@ async def test_dryrun_scale(resource_container, server, client, environment, age
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(env_id, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 10)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(env_id, dry_run_id)

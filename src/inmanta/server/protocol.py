@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import socket
@@ -30,7 +31,7 @@ from tornado import gen, queues, routing, web
 
 import inmanta.protocol.endpoints
 from inmanta.data.model import ExtensionStatus
-from inmanta.protocol import Client, common, endpoints, handle, methods
+from inmanta.protocol import Client, Result, common, endpoints, handle, methods
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
@@ -212,7 +213,7 @@ class Server(endpoints.Endpoint):
             await endpoint.stop()
 
 
-class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
+class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | None]):
     """
     Base class for server extensions offering zero or more api endpoints
 

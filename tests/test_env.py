@@ -15,6 +15,7 @@
 
     Contact: bart@inmanta.com
 """
+
 import glob
 import importlib
 import logging
@@ -26,7 +27,7 @@ import tempfile
 from importlib.abc import Loader
 from re import Pattern
 from subprocess import CalledProcessError
-from typing import LiteralString, Optional
+from typing import Callable, LiteralString, Optional
 from unittest.mock import patch
 
 import pkg_resources
@@ -227,19 +228,90 @@ def test_process_env_install_from_index(
 
 
 @pytest.mark.slowtest
-def test_process_env_install_from_index_not_found(
-    tmpvenv_active: tuple[py.path.local, py.path.local], local_module_package_index: str
+@pytest.mark.parametrize_any("use_extra_indexes_env", [False, True])
+@pytest.mark.parametrize_any("use_extra_indexes", [False, True])
+@pytest.mark.parametrize_any("use_system_config", [False, True])
+def test_process_env_install_from_index_not_found_env_var(
+    tmpvenv_active: tuple[py.path.local, py.path.local],
+    monkeypatch,
+    create_empty_local_package_index_factory: Callable[[str], str],
+    use_extra_indexes: bool,
+    use_extra_indexes_env: bool,
+    use_system_config: bool,
 ) -> None:
     """
-    Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
+    Attempt to install a package that does not exist from the pip indexes defined in the env vars, in the pip config or in both.
+    This if the system config are used or not.
+    Assert the appropriate error is raised.
     """
-    with pytest.raises(env.PackageNotFound, match="Packages this-package-does-not-exist were not found in the given indexes."):
-        # pass use_system_config=False for security reasons (anyone could publish this package to PyPi)
+    index_urls = [create_empty_local_package_index_factory()]
+
+    if use_extra_indexes_env:
+        extra_env_indexes = [
+            create_empty_local_package_index_factory("extra_env1"),
+            create_empty_local_package_index_factory("extra_env2"),
+        ]
+        # Convert list to a space-separated string for the environment variable
+        monkeypatch.setenv("PIP_EXTRA_INDEX_URL", " ".join(extra_env_indexes))
+        if use_system_config:
+            # Include environment extra indexes in the main list for assertion
+            index_urls.extend(extra_env_indexes)
+
+    if use_extra_indexes:
+        index_urls.extend(
+            [
+                create_empty_local_package_index_factory("extra1"),
+                create_empty_local_package_index_factory("extra2"),
+            ]
+        )
+
+    expected = (
+        "Packages this-package-does-not-exist were not "
+        "found in the given indexes. (Looking in indexes: %s)" % ", ".join(index_urls)
+    )
+
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
         env.process_env.install_for_config(
             [Requirement.parse("this-package-does-not-exist")],
             config=PipConfig(
-                index_url=local_module_package_index,
+                index_url=index_urls[0],
+                # The first element should only be passed to the index_url. If there are indexes in the environment
+                # they should not be passed in the extra_index_url as they are already present in PIP_EXTRA_INDEX_URL
+                # (second and third element of index_urls).
+                extra_index_url=index_urls[3:] if (use_system_config and use_extra_indexes_env) else index_urls[1:],
+                use_system_config=use_system_config,
             ),
+        )
+
+
+@pytest.mark.parametrize_any("use_system_config", [True, False])
+def test_process_env_install_no_index(tmpdir: py.path.local, monkeypatch, use_system_config: bool) -> None:
+    """
+    Attempt to install a package that does not exist with --no-index.
+    To have --no-index set in the pip cmd, the config should not contain an index_url,
+    we should not be using the system config and a path needs to be specified.
+    it can also be set in the env_vars
+    Assert the appropriate error is raised.
+    """
+    if use_system_config:
+        monkeypatch.setenv("PIP_NO_INDEX", "true")
+
+    setup_py_content = """
+from setuptools import setup
+setup(name="test")
+"""
+    # Write the minimal setup.py content to the temporary directory
+    setup_py_path = os.path.join(tmpdir, "setup.py")
+    with open(setup_py_path, "w") as setup_file:
+        setup_file.write(setup_py_content)
+
+    expected = "Packages this-package-does-not-exist were not found. No indexes were used."
+
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
+        env.process_env.install_for_config(
+            requirements=[Requirement.parse("this-package-does-not-exist")],
+            paths=[env.LocalPackagePath(path=str(tmpdir))],
+            config=PipConfig(use_system_config=use_system_config),
         )
 
 
@@ -604,7 +676,7 @@ def test_basic_logging(tmpdir, caplog):
 
         log_sequence = LogSequence(caplog)
         log_sequence.assert_not("inmanta.env", logging.INFO, f"Creating new virtual environment in {env_dir1}")
-        log_sequence.contains("inmanta.env", logging.INFO, f"Using virtual environment at {env_dir1}")
+        log_sequence.contains("inmanta.env", logging.INFO, f"Initializing virtual environment at {env_dir1}")
 
 
 @pytest.mark.slowtest

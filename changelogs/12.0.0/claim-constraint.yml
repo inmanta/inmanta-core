@@ -1,0 +1,5 @@
+description: "Implement constraints on jwt claims"
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  feature: "{{description}}"

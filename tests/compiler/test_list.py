@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import textwrap
 
 import pytest
@@ -554,5 +555,73 @@ def test_relation_list_duplicate_assignment(snippetcompiler):
                 "\n"
             )
         )
+    )
+    compiler.do_compile()
+
+
+def test_error_list_validation(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+        std::print(std::count("hello"))
+        """
+    )
+    with pytest.raises(RuntimeException, match="Invalid value 'hello', expected list"):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_error_dict_validation(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+        std::print(std::dict_get("hello1", "hello2"))
+        """
+    )
+    with pytest.raises(RuntimeException, match="Invalid value 'hello1', expected dict"):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_list_duplicates(snippetcompiler):
+    """Primitive lists retain duplicates"""
+    snippetcompiler.setup_for_snippet(
+        """
+        a = ['a', 'a']
+        len_var = 2
+        len_var = std::count(a)
+        """
+    )
+    compiler.do_compile()
+
+
+def test_nested_list_on_as_constant(snippetcompiler):
+    """Constant lists are flattened in typedefs"""
+    snippetcompiler.setup_for_snippet(
+        """
+        typedef thestring as string matching self in [["a","b"],"c", ["d"]]
+
+        entity It:
+            thestring a = "a"
+        end
+
+        It(a="a")
+
+        implement It using std::none
+        """
+    )
+    compiler.do_compile()
+
+
+def test_nested_list_on_execute_direct(snippetcompiler):
+    """Conditional lists are flattened in typedefs"""
+    snippetcompiler.setup_for_snippet(
+        """
+        typedef thestring as string matching self in [1==1?["a","b"]:[],"c", ["d"]]
+
+        entity It:
+            thestring a = "a"
+        end
+
+        It(a="a")
+
+        implement It using std::none
+        """
     )
     compiler.do_compile()

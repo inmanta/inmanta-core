@@ -1,0 +1,6 @@
+---
+description: "Fix incompatibility with pytest-postgresql when using pytest8. Due to a bugfix in pytest8, the postgresql_proc_with_log fixture now returns None instead of an empty string."
+issue-nr: 372
+issue-repo: inmanta-dev-dependencies
+change-type: patch
+destination-branches: [master, iso7, iso6]

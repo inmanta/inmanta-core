@@ -29,6 +29,7 @@
     ------------
     @command annotation to register new command
 """
+
 import argparse
 import asyncio
 import contextlib
@@ -38,26 +39,19 @@ import json
 import logging
 import os
 import shutil
-import signal
 import socket
 import sys
-import threading
 import time
 import traceback
 from argparse import ArgumentParser
 from asyncio import ensure_future
 from collections import abc
-from collections.abc import Coroutine
 from configparser import ConfigParser
-from threading import Timer
-from types import FrameType
-from typing import Any, Callable, Optional
+from typing import Optional
 
 import click
-from tornado import gen
 from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
-from tornado.util import TimeoutError
 
 import inmanta.compiler as compiler
 from inmanta import const, module, moduletool, protocol, util
@@ -70,24 +64,33 @@ from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env
 from inmanta.logging import InmantaLoggerConfig, LoggerMode, _is_on_tty
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
-
-try:
-    import rpdb
-except ImportError:
-    rpdb = None
 
 LOGGER = logging.getLogger("inmanta")
 
 
-@command("server", help_msg="Start the inmanta server")
+def server_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[argparse.ArgumentParser]) -> None:
+    parser.add_argument(
+        "--db-wait-time",
+        type=int,
+        dest="db_wait_time",
+        help="Maximum time in seconds the server will wait for the database to be up before starting. "
+        "A value of 0 means the server will not wait. If set to a negative value, the server will wait indefinitely.",
+    )
+
+
+@command("server", help_msg="Start the inmanta server", parser_config=server_parser_config)
 def start_server(options: argparse.Namespace) -> None:
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
     if options.config_dir and not os.path.isdir(options.config_dir):
         LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
+
+    if options.db_wait_time is not None:
+        Config.set("database", "wait_time", str(options.db_wait_time))
 
     util.ensure_event_loop()
 
@@ -135,97 +138,6 @@ def start_agent(options: argparse.Namespace) -> None:
     IOLoop.current().add_callback(a.start)
     IOLoop.current().start()
     LOGGER.info("Agent Shutdown complete")
-
-
-def dump_threads() -> None:
-    print("----- Thread Dump ----")
-    for th in threading.enumerate():
-        print("---", th)
-        if th.ident:
-            traceback.print_stack(sys._current_frames()[th.ident], file=sys.stdout)
-        print()
-    sys.stdout.flush()
-
-
-async def dump_ioloop_running() -> None:
-    # dump async IO
-    print("----- Async IO tasks ----")
-    for task in asyncio.all_tasks():
-        print(task)
-    print()
-    sys.stdout.flush()
-
-
-def context_dump(ioloop: IOLoop) -> None:
-    dump_threads()
-    if hasattr(asyncio, "all_tasks"):
-        ioloop.add_callback_from_signal(dump_ioloop_running)
-
-
-def setup_signal_handlers(shutdown_function: Callable[[], Coroutine[Any, Any, None]]) -> None:
-    """
-    Make sure that shutdown_function is called when a SIGTERM or a SIGINT interrupt occurs.
-
-    :param shutdown_function: The function that contains the shutdown logic.
-    """
-    # ensure correct ioloop
-    ioloop = IOLoop.current()
-
-    def hard_exit() -> None:
-        context_dump(ioloop)
-        sys.stdout.flush()
-        # Hard exit, not sys.exit
-        # ensure shutdown when the ioloop is stuck
-        os._exit(const.EXIT_HARD)
-
-    def handle_signal(signum: signal.Signals, frame: Optional[FrameType]) -> None:
-        # force shutdown, even when the ioloop is stuck
-        # schedule off the loop
-        t = Timer(const.SHUTDOWN_GRACE_HARD, hard_exit)
-        t.daemon = True
-        t.start()
-        ioloop.add_callback_from_signal(safe_shutdown_wrapper, shutdown_function)
-
-    def handle_signal_dump(signum: signal.Signals, frame: Optional[FrameType]) -> None:
-        context_dump(ioloop)
-
-    signal.signal(signal.SIGTERM, handle_signal)
-    signal.signal(signal.SIGINT, handle_signal)
-    signal.signal(signal.SIGUSR1, handle_signal_dump)
-    if rpdb:
-        rpdb.handle_trap()
-
-
-def safe_shutdown(ioloop: IOLoop, shutdown_function: Callable[[], None]) -> None:
-    def hard_exit() -> None:
-        context_dump(ioloop)
-        sys.stdout.flush()
-        # Hard exit, not sys.exit
-        # ensure shutdown when the ioloop is stuck
-        os._exit(const.EXIT_HARD)
-
-    # force shutdown, even when the ioloop is stuck
-    # schedule off the loop
-    t = Timer(const.SHUTDOWN_GRACE_HARD, hard_exit)
-    t.daemon = True
-    t.start()
-    ioloop.add_callback(safe_shutdown_wrapper, shutdown_function)
-
-
-async def safe_shutdown_wrapper(shutdown_function: Callable[[], Coroutine[Any, Any, None]]) -> None:
-    """
-    Wait 10 seconds to gracefully shutdown the instance.
-    Afterwards stop the IOLoop
-    Wait for 3 seconds to force stop
-    """
-    future = shutdown_function()
-    try:
-        timeout = IOLoop.current().time() + const.SHUTDOWN_GRACE_IOLOOP
-        await gen.with_timeout(timeout, future)
-    except TimeoutError:
-        pass
-    finally:
-        IOLoop.current().stop()
 
 
 class ExperimentalFeatureFlags:
@@ -542,6 +454,13 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
         "be used together with the --partial option.",
         action="append",
+    )
+    parser.add_argument(
+        "--soft-delete",
+        dest="soft_delete",
+        help="Use in combination with --delete-resource-set to delete these resource sets only if they are not being exported",
+        action="store_true",
+        default=False,
     )
     moduletool.add_deps_check_arguments(parser)
 

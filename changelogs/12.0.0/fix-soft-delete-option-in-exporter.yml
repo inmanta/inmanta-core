@@ -1,0 +1,5 @@
+description: Fix soft-delete option cli check.
+change-type: patch
+destination-branches: [master, iso7, iso6]
+
+

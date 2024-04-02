@@ -33,7 +33,7 @@ extensions = [
     'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.graphviz', 'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode', 'sphinxarg.ext', 'sphinxcontrib.contentui', 'sphinxcontrib.inmanta.config',
     'sphinxcontrib.inmanta.dsl', 'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'sphinx_design',
-    'myst_parser', 'sphinx_substitution_extensions',
+    'myst_parser', 'sphinx_substitution_extensions', 'sphinxcontrib.datatemplates',
 ]
 
 myst_enable_extensions = ["colon_fence"]
@@ -134,10 +134,11 @@ except NameError:
 
 
 version_major = int(version.split(".")[0])
-rst_prolog = f"""
-    .. |version_major| replace:: {version_major}
-    .. |iso_gpg_key| replace:: {iso_gpg_key}
-    .. |oss_gpg_key| replace:: {oss_gpg_key}
+rst_prolog = f"""\
+.. |version_major| replace:: {version_major}
+.. |iso_gpg_key| replace:: {iso_gpg_key}
+.. |oss_gpg_key| replace:: {oss_gpg_key}
+.. |release| replace:: {release}
 """
 
 
@@ -365,7 +366,8 @@ linkcheck_ignore = [
     '../_specs/openapi.json',
     'extensions/inmanta-ui/index.html',
     '../extensions/inmanta-ui/index.html',
-    '../../../reference/modules/std.html#std.validate_type',
+    '../../reference/modules/std.html#std.validate_type',
+    '../reference/modules/std.html#std.getfact',
     r'https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#user-content-sr-linux-topology',
 ]
 

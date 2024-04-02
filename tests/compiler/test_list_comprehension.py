@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import textwrap
 
 import pytest
@@ -848,7 +849,7 @@ def test_list_comprehension_type_error_direct_execute_guard(snippetcompiler) -> 
     snippetcompiler.setup_for_error(
         textwrap.dedent(
             """
-            typedef mytype as int matching self in [x for x in [1, 2] if 42]
+            typedef mytype as int matching self in [x for x in [1,2] if 42]
             entity A:
                 mytype n = 0
             end
@@ -858,6 +859,38 @@ def test_list_comprehension_type_error_direct_execute_guard(snippetcompiler) -> 
         ),
         (
             "Invalid value `42`: the guard condition for a list comprehension must be a boolean expression"
-            " (reported in [x for x in [1,2] if 42] ({dir}/main.cf:1))"
+            " (reported in [x for x in [1, 2] if 42] ({dir}/main.cf:1))"
+        ),
+    )
+
+
+def test_list_comprehension_direct_error(snippetcompiler) -> None:
+    """
+    Verify that an incorrect conditional expression in execute context raises the right error.
+    """
+    model_def: str = textwrap.dedent(
+        """
+        import tests
+
+        typedef testdef as int matching self in ["test" ? 42 : 43]
+
+        entity A:
+            testdef n
+        end
+        implement A using std::none
+        """.strip(
+            "\n"
+        )
+    )
+    snippetcompiler.setup_for_error(
+        textwrap.dedent(f"{model_def}\nA(n={1})"),
+        (
+            "Could not set attribute `n` on instance `__config__::A (instantiated at "
+            "{dir}/main.cf:10)` (reported in Construct(A) "
+            "({dir}/main.cf:10))\n"
+            "caused by:\n"
+            "  Invalid value `test`: the condition for a conditional expression must be a "
+            "boolean expression (reported in 'test' ? 42 : 43 "
+            "({dir}/main.cf:3))"
         ),
     )

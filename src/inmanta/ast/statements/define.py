@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 # pylint: disable-msg=R0923,W0613
 
 import logging

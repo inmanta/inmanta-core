@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import inspect
 import logging
@@ -103,7 +104,7 @@ class CallTarget:
         return url_map
 
 
-class Endpoint(TaskHandler):
+class Endpoint(TaskHandler[None]):
     """
     An end-point in the rpc framework
     """
@@ -208,7 +209,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         Connect to the server and use a heartbeat and long-poll for two-way communication
         """
         assert self._env_id is not None
-        LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
+        LOGGER.info("Starting agent for %s", str(self.sessionid))
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
         self._heartbeat_client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout, force_instance=True)
         await self.start_connected()

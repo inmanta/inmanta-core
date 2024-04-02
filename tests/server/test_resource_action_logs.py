@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import json
 import logging
@@ -63,7 +64,6 @@ async def env_with_logs(client, server, environment: str):
             environment=uuid.UUID(environment),
             resource_version_id=f"{resource_id_a},v={i}",
             status=const.ResourceState.deployed,
-            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
             attributes={"path": "/etc/file2"},
         )
         await res1.insert()
@@ -72,7 +72,6 @@ async def env_with_logs(client, server, environment: str):
             environment=uuid.UUID(environment),
             resource_version_id=f"std::Directory[agent1,path=/tmp/dir2],v={i}",
             status=const.ResourceState.deployed,
-            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
             attributes={"path": "/etc/dir2"},
         )
         await res2.insert()
@@ -314,7 +313,6 @@ async def test_log_without_kwargs(server, client, environment: str):
         environment=uuid.UUID(environment),
         resource_version_id=f"{resource_id_a},v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res1.insert()
@@ -323,7 +321,6 @@ async def test_log_without_kwargs(server, client, environment: str):
         environment=uuid.UUID(environment),
         resource_version_id="std::Directory[agent1,path=/tmp/dir2],v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res2.insert()
@@ -371,7 +368,6 @@ async def test_log_nested_kwargs(server, client, environment: str):
         environment=uuid.UUID(environment),
         resource_version_id=f"{resource_id_a},v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res1.insert()
@@ -380,7 +376,6 @@ async def test_log_nested_kwargs(server, client, environment: str):
         environment=uuid.UUID(environment),
         resource_version_id="std::Directory[agent1,path=/tmp/dir2],v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res2.insert()

@@ -1,0 +1,4 @@
+description: Fix error when adding a v1 module that doesn't require other modules.
+issue-nr: 6743
+change-type: patch
+destination-branches: [master, iso7, iso6]

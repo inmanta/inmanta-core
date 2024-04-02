@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import base64
 import inspect
 import logging
@@ -70,7 +71,7 @@ class provider:  # noqa: N801
         self._resource_type = resource_type
         self._name = name
 
-    def __call__(self, function):
+    def __call__(self, function: type["ResourceHandler[TResource]"]) -> "type[ResourceHandler[TResource]]":
         """
         The wrapping
         """
@@ -133,15 +134,15 @@ def cache(
             with the value as argument.
     """
 
-    def actual(f: Callable) -> T_FUNC:
+    def actual(f: Callable[..., object]) -> T_FUNC:
         myignore = set(ignore)
         sig = inspect.signature(f)
         myargs = list(sig.parameters.keys())[1:]
 
-        def wrapper(self, *args: object, **kwds: object) -> object:
+        def wrapper(self: HandlerAPI[TResource], *args: object, **kwds: object) -> object:
             kwds.update(dict(zip(myargs, args)))
 
-            def bound(**kwds):
+            def bound(**kwds: object) -> object:
                 return f(self, **kwds)
 
             return self.cache.get_or_else(
@@ -241,12 +242,13 @@ class HandlerContext(LoggerABC):
 
         self._facts: list[dict[str, Any]] = []
 
-    def set_fact(self, fact_id: str, value: str) -> None:
+    def set_fact(self, fact_id: str, value: str, expires: bool = True) -> None:
         """
         Send a fact to the Inmanta server.
 
         :param fact_id: The name of the fact.
         :param value: The actual value of the fact.
+        :param expires: Whether this fact expires or not.
         """
         resource_id = self._resource.id.resource_str()
         fact = {
@@ -254,6 +256,7 @@ class HandlerContext(LoggerABC):
             "source": ParameterSource.fact.value,
             "value": value,
             "resource_id": resource_id,
+            "expires": expires,
         }
         self._facts.append(fact)
 

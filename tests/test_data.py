@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import datetime
 import enum
@@ -23,7 +24,7 @@ import logging
 import time
 import uuid
 from collections import abc
-from datetime import timezone
+from datetime import UTC
 from typing import Optional, cast
 
 import asyncpg
@@ -957,7 +958,6 @@ async def test_model_get_list(init_dataclasses_and_load_schema):
                         status=const.ResourceState.deployed,
                         resource_version_id=f"std::File[agent1,path=/etc/file{r}],v={i}",
                         attributes={"purge_on_delete": False},
-                        last_deploy=datetime.datetime.now(),
                     )
                 else:
                     res = data.Resource.new(
@@ -1635,79 +1635,6 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
     assert res1.attribute_hash != res3.attribute_hash
 
 
-async def test_resource_copy_last_success(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    marker_date = datetime.datetime(1987, 12, 3, 15, 23, 36, 0, tzinfo=timezone.utc)
-
-    for version in range(1, 5):
-        cm1 = data.ConfigurationModel(
-            environment=env.id,
-            version=version,
-            date=datetime.datetime.now(),
-            total=1,
-            version_info={},
-            released=(version == 2),
-            deployed=True,
-            is_suitable_for_partial_compiles=False,
-        )
-        await cm1.insert()
-
-    res1 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=1",
-        status=const.ResourceState.deployed,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
-    )
-    res2 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=2",
-        status=const.ResourceState.deployed,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
-        last_success=marker_date,
-    )
-    res3 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=3",
-        status=const.ResourceState.available,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True},
-    )
-    res4 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=4",
-        status=const.ResourceState.available,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True},
-    )
-
-    side_res = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file2],v=3",
-        status=const.ResourceState.available,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True},
-    )
-
-    await res1.insert()
-    await res2.insert()
-    await res3.insert()
-    await res4.insert()
-    await side_res.insert()
-
-    await data.Resource.copy_last_success(env.id, 2, 3)
-
-    readres = await data.Resource.get(env.id, res3.resource_version_id)
-    assert readres.last_success == marker_date
-
-    readres = await data.Resource.get(env.id, res4.resource_version_id)
-    assert readres.last_success is None
-
-    readres = await data.Resource.get(env.id, side_res.resource_version_id)
-    assert readres.last_success is None
-
-
 async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_load_schema):
     """
     Test for the get_resource_type_count_for_latest_version query
@@ -1741,7 +1668,6 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
         environment=env.id,
         resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file1"},
     )
     await res1_1.insert()
@@ -1752,7 +1678,6 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
         environment=env.id,
         resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res2_1.insert()
@@ -1776,7 +1701,6 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
         environment=env.id,
         resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res2_2.insert()
@@ -1787,7 +1711,6 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
         environment=env.id,
         resource_version_id="std::Dummy[agent1,path=/etc/file3],v=%s" % version,
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
     )
     await res3_2.insert()
 
@@ -1819,18 +1742,22 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         environment=env.id,
         resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
         attributes={"path": "/etc/file1"},
     )
     await res11.insert()
+    await res11.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 12, 30))
+
     res12 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
         attributes={"path": "/etc/file2"},
     )
     await res12.insert()
+    await res12.update_persistent_state(
+        last_deployed_version=version,
+        last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
+    )
 
     # model 2
     version += 1
@@ -1852,6 +1779,7 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         attributes={"path": "/etc/file1"},
     )
     await res21.insert()
+
     res22 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::File[agent1,path=/etc/file3],v=%s" % version,
@@ -1878,10 +1806,10 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         environment=env.id,
         resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res31.insert()
+    await res31.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 14, 30))
 
     report = await data.Resource.get_resources_report(env.id)
     assert len(report) == 3
@@ -1940,7 +1868,6 @@ async def test_resource_action(init_dataclasses_and_load_schema):
         environment=env.id,
         resource_version_id="std::File[agent1,path=/etc/file1],v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res1.insert()
@@ -1949,7 +1876,6 @@ async def test_resource_action(init_dataclasses_and_load_schema):
         environment=env.id,
         resource_version_id="std::File[agent1,path=/etc/file2],v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res2.insert()
@@ -2025,7 +1951,6 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
         environment=env.id,
         resource_version_id=rv_id,
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res1.insert()
@@ -2118,7 +2043,6 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
         environment=env.id,
         resource_version_id="std::File[agent1,path=/etc/file1],v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res1.insert()
@@ -2235,7 +2159,7 @@ async def test_code(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.parametrize("halted", [True, False])
-async def test_parameter(init_dataclasses_and_load_schema, halted):
+async def test_get_updated_before_active_env(init_dataclasses_and_load_schema, halted):
     # verify the call to "get_updated_before". If the env is halted it shouldn't return any result
     project = data.Project(name="test")
     await project.insert()
@@ -2254,7 +2178,13 @@ async def test_parameter(init_dataclasses_and_load_schema, halted):
     for current_time in [time1, time2, time3]:
         t = current_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
         parameter = data.Parameter(
-            name="param_" + t, value="test_val_" + t, environment=env.id, source="test", updated=current_time
+            name="param_" + t,
+            value="test_val_" + t,
+            environment=env.id,
+            source="test",
+            updated=current_time,
+            resource_id="test::SetExpiringFact[agent1,key=key1]",
+            expires=True,
         )
         parameters.append(parameter)
         await parameter.insert()
@@ -2281,11 +2211,15 @@ async def test_parameter_list_parameters(init_dataclasses_and_load_schema):
     await env.insert()
 
     metadata_param1 = {"test1": "testval1", "test2": "testval2"}
-    parameter1 = data.Parameter(name="param1", value="val", environment=env.id, source="test", metadata=metadata_param1)
+    parameter1 = data.Parameter(
+        name="param1", value="val", environment=env.id, source="test", metadata=metadata_param1, expires=False
+    )
     await parameter1.insert()
 
     metadata_param2 = {"test3": "testval3"}
-    parameter2 = data.Parameter(name="param2", value="val", environment=env.id, source="test", metadata=metadata_param2)
+    parameter2 = data.Parameter(
+        name="param2", value="val", environment=env.id, source="test", metadata=metadata_param2, expires=False
+    )
     await parameter2.insert()
 
     results = await data.Parameter.list_parameters(env.id, **{"test1": "testval1"})
@@ -2513,7 +2447,7 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
         "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public'"
     )
     table_names_in_database = [x["table_name"] for x in table_names]
-    table_names_in_classes_list = [x.__name__.lower() for x in data._classes]
+    table_names_in_classes_list = [x.table_name() for x in data._classes]
     # Schema management table is not in classes list
     # Join tables on resource and resource action is not in the classes list
     assert len(table_names_in_classes_list) + 2 == len(table_names_in_database)
@@ -2557,7 +2491,6 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
             environment=env.id,
             resource_version_id="std::File[agent1,path=/etc/file1],v=1",
             status=const.ResourceState.deployed,
-            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
             attributes={"path": "/etc/file2"},
         )
         await res1.insert()
@@ -2582,7 +2515,6 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
             environment=env.id,
             resource_version_id="std::File[agent1,path=/etc/file2],v=1",
             status=const.ResourceState.deployed,
-            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
             attributes={"path": "/etc/file2"},
         )
         await res2.insert()
@@ -2659,7 +2591,6 @@ async def test_resources_json(init_dataclasses_and_load_schema):
         environment=env.id,
         resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime.now(),
         attributes={"attr": [{"a": 1, "b": "c"}]},
     )
     await res1.insert()
@@ -2729,7 +2660,6 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
             environment=env.id,
             resource_version_id=f"std::File[agent1,path={path}],v={version}",
             status=const.ResourceState.deployed,
-            last_deploy=motd_first_start_time + datetime.timedelta(minutes=offset),
             attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
         )
         await res1.insert()
@@ -2919,7 +2849,6 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
             environment=env.id,
             resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
             status=const.ResourceState.deployed,
-            last_deploy=datetime.datetime.now() + datetime.timedelta(minutes=i),
             attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
         )
         await res1.insert()
@@ -3068,34 +2997,47 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     rvid_r3_v1 = rid_r3_v1 + ",v=1"
     rvid_r4_v1 = rid_r4_v1 + ",v=1"
 
-    await data.Resource.new(
-        environment=env.id,
+    async def make_resource_with_last_non_deploying_status(
+        status: const.ResourceState,
+        last_non_deploying_status: const.NonDeployingResourceState,
+        resource_version_id: str,
+        attributes: dict[str, object],
+    ) -> data.Resource:
+        r1 = data.Resource.new(
+            environment=env.id,
+            status=status,
+            resource_version_id=resource_version_id,
+            attributes=attributes,
+        )
+        await r1.insert()
+        await r1.update_persistent_state(
+            last_deploy=datetime.datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status
+        )
+
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.available,
         last_non_deploying_status=const.NonDeployingResourceState.available,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rid_r2_v1, rid_r3_v1, rid_r4_v1]},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.available,
         last_non_deploying_status=const.NonDeployingResourceState.available,
         resource_version_id=rvid_r4_v1,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
+    )
 
     expected_states = {
         rvid_r2_v1: const.ResourceState.deployed,
@@ -3120,41 +3062,36 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     rvid_r4_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file4],v=2")
     rvid_r5_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file5],v=2")
 
-    await data.Resource.new(
-        environment=env.id,
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.skipped,
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v2,
         attributes={"purge_on_delete": False, "requires": [rid_r2_v2, rid_r3_v2]},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r2_v2,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r3_v2,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r4_v2,
         attributes={"purge_on_delete": False, "requires": [rid_r3_v2]},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r5_v2,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
+    )
 
     expected_states = {
         rvid_r2_v2: const.ResourceState.failed,

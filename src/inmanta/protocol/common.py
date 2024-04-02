@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import enum
 import gzip
 import importlib
@@ -35,22 +36,18 @@ from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, TypeVar, Uni
 from urllib import parse
 
 import docstring_parser
-import jwt
 import pydantic
 import typing_inspect
 from pydantic import ValidationError
 from pydantic.main import create_model
 from tornado import web
 
-from inmanta import config as inmanta_config
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
-
-from . import exceptions
 
 if TYPE_CHECKING:
     from .endpoints import CallTarget
@@ -153,10 +150,10 @@ class Request:
         return req
 
 
-T = TypeVar("T", bound=Union[None, ArgumentTypes])
+T_co = TypeVar("T_co", bound=Union[None, ArgumentTypes], covariant=True)
 
 
-class ReturnValue(Generic[T]):
+class ReturnValue(Generic[T_co]):
     """
     An object that handlers can return to provide a response to a method call.
     """
@@ -165,7 +162,7 @@ class ReturnValue(Generic[T]):
         self,
         status_code: int = 200,
         headers: MutableMapping[str, str] = {},
-        response: Optional[T] = None,
+        response: Optional[T_co] = None,
         content_type: str = JSON_CONTENT,
         links: Optional[dict[str, str]] = None,
     ) -> None:
@@ -599,11 +596,7 @@ class MethodProperties:
                 self._validate_type_arg(arg, sub_arg, strict=strict, allow_none_type=allow_none_type, in_url=in_url)
 
                 if typing_inspect.is_generic_type(sub_arg):
-                    # there is a difference between python 3.6 and >=3.7
-                    if hasattr(sub_arg, "__name__"):
-                        cnt[sub_arg.__name__] += 1
-                    else:
-                        cnt[sub_arg._name] += 1
+                    cnt[sub_arg.__name__] += 1
 
             for name, n in cnt.items():
                 if n > 1:
@@ -986,77 +979,6 @@ def shorten(msg: str, max_len: int = 10) -> str:
     if len(msg) < max_len:
         return msg
     return msg[0 : max_len - 3] + "..."
-
-
-def encode_token(
-    client_types: list[str], environment: Optional[str] = None, idempotent: bool = False, expire: Optional[float] = None
-) -> str:
-    cfg = inmanta_config.AuthJWTConfig.get_sign_config()
-    if cfg is None:
-        raise Exception("No JWT signing configuration available.")
-
-    for ct in client_types:
-        if ct not in cfg.client_types:
-            raise Exception(
-                f"The signing config does not support the requested client type {ct}. Only {cfg.client_types} are allowed."
-            )
-
-    payload: dict[str, Any] = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
-
-    if not idempotent:
-        payload["iat"] = int(time.time())
-
-        if cfg.expire > 0:
-            payload["exp"] = int(time.time() + cfg.expire)
-        elif expire is not None:
-            payload["exp"] = int(time.time() + expire)
-
-    if environment is not None:
-        payload[const.INMANTA_URN + "env"] = environment
-
-    return jwt.encode(payload, cfg.key, cfg.algo)
-
-
-def decode_token(token: str) -> dict[str, str]:
-    try:
-        # First decode the token without verification
-        header = jwt.get_unverified_header(token)
-        payload = jwt.decode(token, options={"verify_signature": False})
-    except Exception:
-        raise exceptions.Forbidden("Unable to decode provided JWT bearer token.")
-
-    if "iss" not in payload:
-        raise exceptions.Forbidden("Issuer is required in token to validate.")
-
-    cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
-    if cfg is None:
-        raise exceptions.Forbidden("Unknown issuer for token")
-
-    alg = header["alg"].lower()
-    if alg == "hs256":
-        key = cfg.key
-    elif alg == "rs256":
-        if "kid" not in header:
-            raise exceptions.Forbidden("A kid is required for RS256")
-        kid = header["kid"]
-        if kid not in cfg.keys:
-            raise exceptions.Forbidden(
-                "The kid provided in the token does not match a known key. Check the jwks_uri or try "
-                "restarting the server to load any new keys."
-            )
-
-        key = cfg.keys[kid]
-    else:
-        raise exceptions.Forbidden("Algorithm %s is not supported." % alg)
-
-    try:
-        payload = dict(jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]))
-        ct_key = const.INMANTA_URN + "ct"
-        payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
-    except Exception as e:
-        raise exceptions.Forbidden(*e.args)
-
-    return payload
 
 
 @stable_api

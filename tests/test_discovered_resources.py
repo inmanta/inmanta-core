@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import json
 
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest

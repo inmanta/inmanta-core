@@ -1,0 +1,4 @@
+---
+description: Bump version to v11.0.2
+change-type: patch
+destination-branches: [master, iso7]

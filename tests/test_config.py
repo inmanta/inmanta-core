@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import os
 import random
@@ -55,9 +56,12 @@ def test_environment_deprecated_options(caplog):
         assert f"Config option {deprecated_option.name} is deprecated. Use {new_option.name} instead." not in caplog.text
 
 
-def test_options():
+def test_options(monkeypatch):
     configa = Option("test", "a", "markerA", "test a docs")
     configb = Option("test", "B", option_as_default(configa), "test b docs")
+    configc = Option("test", "c", "defaultc", "docstringc")
+
+    monkeypatch.setenv("INMANTA_TEST_C", "environ_c")
 
     assert "test.a" in configb.get_default_desc()
 
@@ -68,6 +72,7 @@ def test_options():
     assert configb.get() == "MA2"
     configb.set("MB2")
     assert configb.get() == "MB2"
+    assert configc.get() == "environ_c"
 
 
 def test_configfile_hierarchy(monkeypatch, tmpdir):

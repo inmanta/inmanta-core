@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import time
@@ -108,7 +109,7 @@ ResourceContainer = namedtuple(
 
 
 @fixture(scope="function")
-def resource_container():
+def resource_container(clean_reset):
     @resource("test::Resource", agent="agent", id_attribute="key")
     class MyResource(Resource):
         """
@@ -127,6 +128,14 @@ def resource_container():
 
     @resource("test::SetFact", agent="agent", id_attribute="key")
     class SetFactResource(PurgeableResource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
+
+    @resource("test::SetNonExpiringFact", agent="agent", id_attribute="key")
+    class SetNonExpiringFactResource(PurgeableResource):
         """
         A file on a filesystem
         """
@@ -425,6 +434,28 @@ def resource_container():
         def _do_set_fact(self, ctx: HandlerContext, resource: SetFactResource) -> None:
             ctx.set_fact(fact_id=resource.key, value=resource.value)
 
+    @provider("test::SetNonExpiringFact", name="test_set_non_expiring_fact")
+    class SetNonExpiringFact(CRUDHandler[SetNonExpiringFactResource]):
+        def read_resource(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
+            self._do_set_fact(ctx, resource)
+
+        def create_resource(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
+            pass
+
+        def delete_resource(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
+            pass
+
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: SetNonExpiringFactResource) -> None:
+            pass
+
+        def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
+            self._do_set_fact(ctx, resource)
+            return {}
+
+        def _do_set_fact(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
+            expires = resource.key == "expiring"
+            ctx.set_fact(fact_id=resource.key, value=resource.value, expires=expires)
+
     @provider("test::BadPost", name="test_bad_posts")
     class BadPost(Provider):
         def post(self, ctx: HandlerContext, resource: Resource) -> None:
@@ -509,11 +540,18 @@ def resource_container():
     waiter = Condition()
 
     async def wait_for_done_with_waiters(client, env_id, version, wait_for_this_amount_of_resources_in_done=None, timeout=10):
+        def log_progress(done: int, total: int) -> None:
+            logger.info(
+                "waiting with waiters, %s/%s resources done",
+                done,
+                (wait_for_this_amount_of_resources_in_done if wait_for_this_amount_of_resources_in_done else total),
+            )
+
         # unhang waiters
         result = await client.get_version(env_id, version)
         assert result.code == 200
         now = time.time()
-        logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
+        log_progress(result.result["model"]["done"], result.result["model"]["total"])
         while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
             if now + timeout < time.time():
                 raise Exception("Timeout")
@@ -523,7 +561,7 @@ def resource_container():
             ):
                 break
             result = await client.get_version(env_id, version)
-            logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
+            log_progress(result.result["model"]["done"], result.result["model"]["total"])
             waiter.acquire()
             waiter.notify_all()
             waiter.release()
