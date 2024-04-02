@@ -335,7 +335,7 @@ class Resource(metaclass=ResourceMeta):
         return obj
 
     @classmethod
-    def deserialize(cls, obj_map: JsonType, use_generic: bool = False) -> "Resource":
+    def deserialize(cls, obj_map: JsonType) -> "Resource":
         """
         Deserialize the resource from the given dictionary
         """
@@ -344,11 +344,8 @@ class Resource(metaclass=ResourceMeta):
 
         force_fields = False
         if cls_resource is None:
-            if not use_generic:
-                raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
-            else:
-                cls_resource = cls
-                force_fields = True
+            cls_resource = cls
+            force_fields = True
 
         obj = cls_resource(obj_id)
         obj.populate(obj_map, force_fields)
