@@ -73,12 +73,10 @@
     install
     architecture
     language
-    moduleguides
     model_developers
     platform_developers
     lsm/index
     administrators
-    extensions
     faq
     glossary
     reference/index
