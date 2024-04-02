@@ -658,7 +658,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             force_update=force_update,
             metadata=metadata,
             requested_environment_variables=env_vars,
-            used_environment_variables=env_vars,
+            used_environment_variables=None,
             mergeable_environment_variables=mergeable_env_vars,
             partial=partial,
             removed_resource_sets=removed_resource_sets,
@@ -705,7 +705,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         _compile_merge_key(c1) == _compile_merge_key(c2).
         """
         return c.to_dto().model_dump_json(
-            include={"environment", "started", "do_export", "environment_variables", "partial", "removed_resource_sets"}
+            include={
+                "environment", "started", "do_export", "requested_environment_variables", "partial", "removed_resource_sets"
+            },
         )
 
     async def _queue(self, compile: data.Compile) -> None:
