@@ -706,7 +706,12 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         """
         return c.to_dto().model_dump_json(
             include={
-                "environment", "started", "do_export", "requested_environment_variables", "partial", "removed_resource_sets"
+                "environment",
+                "started",
+                "do_export",
+                "requested_environment_variables",
+                "partial",
+                "removed_resource_sets",
             },
         )
 
