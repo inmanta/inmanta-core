@@ -1,5 +1,5 @@
 ---
-description: Display a banner that notifies the user when the build belongs to an old major iso version.
+description: Display a banner in the docs that notifies the user when the build belongs to an old major iso version.
 issue-nr: 201
 issue-repo: infra-tickets
 change-type: patch
