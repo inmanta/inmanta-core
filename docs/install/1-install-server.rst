@@ -357,7 +357,7 @@ to
   # IPv6 local connections:
   host    all             all             ::1/128                 md5
 
-Make sur JIT is disabled for the psql database as it will impact performances.
+Make sur JIT is disabled for the PostgreSQL database as it will impact performances.
 To disable JIT, set
 
 .. code-block:: text
