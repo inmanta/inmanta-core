@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import sys
 from typing import Union
 
 import pytest
@@ -243,7 +244,10 @@ def test_fstring_expected_error(snippetcompiler, capsys):
         world = "myworld"
         f"hello {world:invalid_specifier}"
         """,
-        "Invalid f-string: Invalid format specifier (reported in 'hello {{world:invalid_specifier}}' ({dir}/main.cf:3:9))",
+        "Invalid f-string: Invalid format specifier%s (reported in 'hello {{world:invalid_specifier}}' ({dir}/main.cf:3:9))"
+        % (
+            " 'invalid_specifier' for object of type 'str'" if (sys.version_info.major, sys.version_info.minor) > (3, 9) else ""
+        ),
     )
 
 
