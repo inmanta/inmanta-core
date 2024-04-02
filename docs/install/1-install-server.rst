@@ -365,7 +365,7 @@ To disable JIT, set
   # disable JIT
   jit = off
 
-in ``/etc/postgresql/13/main/postgresql.conf``.
+in ``/var/lib/pgsql/13/data/postgresql.conf``.
 
 Restart the PostgreSQL server to apply the changes made in the ``pg_hba.conf`` and  ``postgresql.conf`` files:
 
