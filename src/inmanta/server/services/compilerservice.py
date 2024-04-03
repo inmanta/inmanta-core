@@ -427,6 +427,8 @@ class CompileRun:
 
             self.tail_stdout = ""
 
+            # Make mypy happy
+            assert self.request.used_environment_variables is not None
             env_vars_compile: dict[str, str] = os.environ.copy()
             env_vars_compile.update(self.request.used_environment_variables)
 
