@@ -1,0 +1,5 @@
+description: Remove the version_tag from the metadata of the .cfg files.
+change-type: patch
+destination-branches: [master, iso7, iso6]
+sections:
+  minor-improvement: "{{description}}"
