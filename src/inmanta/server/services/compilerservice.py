@@ -650,7 +650,11 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         requested = datetime.datetime.now().astimezone()
 
         shared_keys = mergeable_env_vars.keys() & env_vars.keys()
-        assert not shared_keys, f"An env var can not be both mergeable and normal: {shared_keys}"
+        if shared_keys:
+            raise Exception(
+                "Invalid compile request: The same environment variable cannot be present in the "
+                f"env_vars and mergeable_env_vars dictionary simultaneously: {shared_keys}."
+            )
 
         compile = data.Compile(
             environment=env.id,

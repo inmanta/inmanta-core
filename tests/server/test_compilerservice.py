@@ -1847,3 +1847,26 @@ async def test_environment_delete_removes_env_directories_on_server(
     assert result.code == 200
 
     assert not os.path.exists(os.path.join(env_dir, env_id))
+
+
+async def test_overlapping_env_vars(mocked_compiler_service, server, client, environment) -> None:
+    """
+    Ensure that the compiler service raises an exception if a compile is requested where the same
+    environment variable is present in the env_vars and the mergeable_env_vars dictionary.
+    """
+    env = await data.Environment.get_by_id(environment)
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+    with pytest.raises(Exception) as exc:
+        await compilerslice.request_recompile(
+            env=env,
+            force_update=False,
+            do_export=False,
+            remote_id=uuid.uuid4(),
+            env_vars={"var": "val", "test": "123"},
+            mergeable_env_vars={"var": "otherval", "somekey": "someval"},
+        )
+    assert (
+        "Invalid compile request: The same environment variable cannot be present in the "
+        "env_vars and mergeable_env_vars dictionary simultaneously: {'var'}." in str(exc.value)
+    )
