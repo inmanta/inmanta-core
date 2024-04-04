@@ -1,0 +1,12 @@
+{
+    "component_requirements": {
+        "inmanta-core": "~=11.0.dev",
+        "inmanta-license": "~=4.0.dev",
+        "inmanta-lsm": "~=4.0.dev",
+        "inmanta-support": "~=3.2.dev",
+        "inmanta-ui": "~=5.1.dev"
+    },
+    "system_requirements": {
+        "python": "3.11"
+    }
+}

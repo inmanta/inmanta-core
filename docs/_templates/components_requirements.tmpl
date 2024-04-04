@@ -5,15 +5,20 @@ Inmanta core and extensions versions
 
 
 {% if data['component_requirements']%}
+
+The following table shows the range of compatible versions for Inmanta python components. This
+table is only meant as a reference for extension developers. This information is not relevant to
+you if you install the orchestrator via rpm.
+
 .. list-table:: Inmanta core and extensions versions
    :header-rows: 1
 
-   * - Component
-     - Required version
+   * - .. centered:: Component
+     - .. centered:: Required version
 
    {% for key, value in data["component_requirements"] | dictsort %}
-   * - {{ key }}
-     - {{ value }}
+   * - .. centered:: {{ key }}
+     - .. centered:: {{ value }}
    {% endfor %}
 
 .. note::
