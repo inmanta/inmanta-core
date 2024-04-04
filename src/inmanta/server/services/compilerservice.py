@@ -651,7 +651,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
         shared_keys = mergeable_env_vars.keys() & env_vars.keys()
         if shared_keys:
-            raise Exception(
+            raise ValueError(
                 "Invalid compile request: The same environment variable cannot be present in the "
                 f"env_vars and mergeable_env_vars dictionary simultaneously: {shared_keys}."
             )

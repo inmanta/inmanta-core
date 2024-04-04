@@ -21,6 +21,7 @@ import datetime
 import logging
 import os
 import queue
+import re
 import shutil
 import subprocess
 import uuid
@@ -1857,7 +1858,11 @@ async def test_overlapping_env_vars(mocked_compiler_service, server, client, env
     env = await data.Environment.get_by_id(environment)
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
-    with pytest.raises(Exception) as exc:
+    expected_exception_message = (
+        "Invalid compile request: The same environment variable cannot be present in the "
+        "env_vars and mergeable_env_vars dictionary simultaneously: {'var'}."
+    )
+    with pytest.raises(ValueError, match=re.escape(expected_exception_message)):
         await compilerslice.request_recompile(
             env=env,
             force_update=False,
@@ -1866,7 +1871,3 @@ async def test_overlapping_env_vars(mocked_compiler_service, server, client, env
             env_vars={"var": "val", "test": "123"},
             mergeable_env_vars={"var": "otherval", "somekey": "someval"},
         )
-    assert (
-        "Invalid compile request: The same environment variable cannot be present in the "
-        "env_vars and mergeable_env_vars dictionary simultaneously: {'var'}." in str(exc.value)
-    )
