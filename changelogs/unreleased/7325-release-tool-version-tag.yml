@@ -1,0 +1,5 @@
+description: "Module release tool: do not write internal field `version_tag` to `setup.cfg`."
+change-type: patch
+destination-branches: [master, iso7, iso6]
+sections:
+  minor-improvement: "{{description}}"
