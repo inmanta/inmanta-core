@@ -1476,7 +1476,7 @@ class ModuleV2Metadata(ModuleMetadata):
 
         if not out.has_section("metadata"):
             out.add_section("metadata")
-        for k, v in self.dict(exclude_none=True, exclude={"install_requires"}).items():
+        for k, v in self.dict(exclude_none=True, exclude={"install_requires", "version_tag"}).items():
             out.set("metadata", k, str(v))
 
         if self.version_tag:
