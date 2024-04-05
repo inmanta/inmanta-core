@@ -35,17 +35,17 @@ async def update(connection: Connection) -> None:
             ADD COLUMN resource_id_value varchar
             ;
         UPDATE public.resource_persistent_state AS rps
-            SET (resource_type, resource_id_value, agent) = (
-                SELECT r.resource_type, resource_id_value, agent
+            SET (resource_type, agent, resource_id_value) = (
+                SELECT r.resource_type, r.agent, r.resource_id_value
                 FROM public.resource AS r
-                WHERE rps.resource_id = r.resource_id AND rps.environment = r.environment
+                WHERE rps.environment = r.environment AND rps.resource_id = r.resource_id
             )
             ;
         ALTER TABLE public.resource_persistent_state
             ALTER COLUMN resource_type SET NOT NULL,
             ALTER COLUMN agent SET NOT NULL,
             ALTER COLUMN resource_id_value SET NOT NULL,
-            ADD CONSTRAINT derived_id UNIQUE (resource_type, agent, resource_id)
+            ADD CONSTRAINT resource_persistent_state_derived_id UNIQUE (environment, resource_type, agent, resource_id_value)
             ;
         """
     )

@@ -239,9 +239,10 @@ class PagingOrder(str, enum.Enum):
 
     @property
     def db_form(self) -> OrderStr:
+        # follow Postgres' default order for NULLS: matches default index order
         if self == PagingOrder.ASC:
-            return OrderStr("ASC NULLS FIRST")
-        return OrderStr("DESC NULLS LAST")
+            return OrderStr("ASC NULLS LAST")
+        return OrderStr("DESC NULLS FIRST")
 
 
 class InvalidSort(Exception):
