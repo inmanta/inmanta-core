@@ -3,16 +3,11 @@ Compatibility
 
 .. only:: iso
 
-    This page shows the compatibility for version |version_major| of the Inmanta Service Orchestrator with other
-    components on the host system running the orchestrator.
-    It also shows advanced information for Inmanta extension developers regarding the compatible version ranges
-    for the python packages that compose this version of the Inmanta Service Orchestrator.
-
+    The table below shows the system requirements of version |version_major| of the Inmanta Service Orchestrator.
 
 .. only:: oss
 
-    This page shows the compatibility of Inmanta version |release| with other
-    components on the host system running the orchestrator.
+    The table below shows the system requirements of Inmanta version |release|.
 
 
 .. datatemplate:json:: /reference/compatibility.json
