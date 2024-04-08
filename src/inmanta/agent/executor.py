@@ -180,9 +180,6 @@ class ExecutorBlueprint(EnvBlueprint):
             sorted(other.sources),
         )
 
-    def __hash__(self) -> int:
-        return int(self.blueprint_hash(), 16)
-
 
 @dataclasses.dataclass
 class ExecutorId:
