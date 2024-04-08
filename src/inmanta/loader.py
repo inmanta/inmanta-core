@@ -217,7 +217,12 @@ class ModuleSource:
     def __lt__(self, other):
         if not isinstance(other, ModuleSource):
             return NotImplemented
-        return (self.name, self.hash_value) < (other.name, other.hash_value)
+        return (self.name, self.hash_value, self.is_byte_code) < (other.name, other.hash_value, other.is_byte_code)
+
+    def __eq__(self, other):
+        if not isinstance(other, ModuleSource):
+            return False
+        return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
 
     def get_source_code(self) -> bytes:
         """Load the source code"""
