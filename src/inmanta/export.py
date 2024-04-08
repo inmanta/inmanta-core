@@ -130,6 +130,13 @@ class Exporter:
     __dep_manager: list[Callable[[ModelDict, ResourceDict], None]] = []
 
     @classmethod
+    def clear(cls) -> None:
+        cls.types = None
+        cls.scopes = None
+        cls.__export_functions = {}
+        cls.__dep_manager = []
+
+    @classmethod
     def add(cls, name: str, types: list[str], function: Callable[["Exporter", ProxiedType], None]) -> None:
         """
         Add a new export function
@@ -148,7 +155,7 @@ class Exporter:
 
         self._resources: ResourceDict = {}
         self._resource_sets: dict[str, Optional[str]] = {}
-        self._empty_resource_sets: list[str] = []
+        self._removed_resource_sets: set[str] = set()
         self._resource_state: dict[str, ResourceState] = {}
         self._unknown_objects: set[str] = set()
         # Actual version (placeholder for partial export) is set as soon as export starts.
@@ -175,7 +182,7 @@ class Exporter:
         """
         resource.validate()
         entities = resource.get_entity_resources()
-        resource_mapping = {}
+        resource_mapping: dict[Instance, Resource] = {}
         ignored_set = set()
 
         for entity in entities:
@@ -240,7 +247,13 @@ class Exporter:
                         str(resource_set_instance.get_attribute("name").get_value()),
                     )
             if empty_set:
-                self._empty_resource_sets.append(name)
+                # Implicit deletion of empty sets
+                self._removed_resource_sets.add(name)
+            else:
+                # When soft_delete option is set, un-mark resource sets with exporting resources from deletion
+                if self.options and self.options.soft_delete:
+                    self._removed_resource_sets.discard(name)
+
         self._resource_sets = resource_sets
 
     def _run_export_plugins_specified_in_config_file(self) -> None:
@@ -380,7 +393,7 @@ class Exporter:
         start = time.time()
         if not partial_compile and resource_sets_to_remove:
             raise Exception("Cannot remove resource sets when a full compile was done")
-        resource_sets_to_remove_all: list[str] = list(resource_sets_to_remove) if resource_sets_to_remove is not None else []
+        self._removed_resource_sets = set(resource_sets_to_remove) if resource_sets_to_remove is not None else set()
 
         self.types = types
         self.scopes = scopes
@@ -391,7 +404,6 @@ class Exporter:
             # then process the configuration model to submit it to the mgmt server
             # This is the actual export : convert entities to resources.
             self._load_resources(types)
-            resource_sets_to_remove_all += self._empty_resource_sets
             # call dependency managers
             self._call_dep_manager(types)
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success
@@ -424,7 +436,12 @@ class Exporter:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
         elif (not self.failed or len(self._resources) > 0 or len(unknown_parameters) > 0) and not no_commit:
             self._version = self.commit_resources(
-                self._version, resources, metadata, partial_compile, resource_sets_to_remove_all, Project.get().metadata.pip
+                self._version,
+                resources,
+                metadata,
+                partial_compile,
+                list(self._removed_resource_sets),
+                Project.get().metadata.pip,
             )
             LOGGER.info("Committed resources with version %d" % self._version)
 
@@ -470,7 +487,9 @@ class Exporter:
         self._resources[resource.id] = resource
 
     def resources_to_list(self) -> list[dict[str, Any]]:
-        """Convert the resource list to a json representation"""
+        """
+        Convert the resource list to a json representation
+        """
         resources = []
 
         for res in self._resources.values():

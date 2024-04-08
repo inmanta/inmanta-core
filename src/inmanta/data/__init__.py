@@ -257,9 +257,11 @@ class ColumnType:
     This implementation supports the PRIMITIVE_SQL_TYPES types, for more specific behavior, make a subclass.
     """
 
-    def __init__(self, base_type: type[PRIMITIVE_SQL_TYPES], nullable: bool):
+    def __init__(self, base_type: type[PRIMITIVE_SQL_TYPES], nullable: bool, table_prefix: Optional[str] = None) -> None:
         self.base_type = base_type
         self.nullable = nullable
+        self.table_prefix = table_prefix
+        self.table_prefix_dot = "" if table_prefix is None else f"{table_prefix}."
 
     def as_basic_filter_elements(self, name: str, value: object) -> Sequence[tuple[str, "ColumnType", object]]:
         """
@@ -306,7 +308,7 @@ class ColumnType:
         """
         return the sql statement to get this column, as used in filter and other statements
         """
-        table_prefix_value = "" if table_prefix is None else table_prefix + "."
+        table_prefix_value = self.table_prefix_dot if table_prefix is None else table_prefix + "."
         return table_prefix_value + column_name
 
     def coalesce_to_min(self, value_reference: str) -> str:
@@ -331,26 +333,19 @@ class ColumnType:
 
         return value_reference
 
+    def with_prefix(self, table_prefix: Optional[str]) -> "ColumnType":
+        return ColumnType(self.base_type, self.nullable, table_prefix)
 
-class TablePrefixWrapper(ColumnType):
-    def __init__(self, table_name: str, child: ColumnType) -> None:
-        self.table_name = table_name
-        self.child = child
 
-    @property
-    def nullable(self) -> bool:
-        return self.child.nullable
+def TablePrefixWrapper(table_name: Optional[str], child: ColumnType) -> ColumnType:
+    """
+    This method is named like a class, because it replaces a former class.
 
-    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
-        return self.child.get_value(value)
-
-    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
-        if not table_prefix:
-            table_prefix = self.table_name
-        return self.child.get_accessor(column_name, table_prefix)
-
-    def coalesce_to_min(self, value_reference: str) -> str:
-        return self.child.coalesce_to_min(value_reference)
+    The functionality is not part ColumnType itself.
+    """
+    if table_name is None:
+        return child
+    return child.with_prefix(table_prefix=table_name)
 
 
 class ForcedStringColumn(ColumnType):
@@ -368,8 +363,8 @@ class ForcedStringColumn(ColumnType):
 
 
 class ResourceVersionIdColumnType(ColumnType):
-    def __init__(self) -> None:
-        self.nullable = False
+    def __init__(self, table_prefix: Optional[str] = None) -> None:
+        super().__init__(base_type=None, nullable=False, table_prefix=table_prefix)
 
     def as_basic_filter_elements(self, name: str, value: object) -> Sequence[tuple[str, "ColumnType", object]]:
         """
@@ -382,8 +377,16 @@ class ResourceVersionIdColumnType(ColumnType):
         assert isinstance(value, str)
         id = resources.Id.parse_resource_version_id(value)
         return [
-            ("resource_id", StringColumn, StringColumn.get_value(id.resource_str())),
-            ("model", PositiveIntColumn, PositiveIntColumn.get_value(id.version)),
+            (
+                "resource_id",
+                StringColumn.with_prefix(self.table_prefix),
+                StringColumn.get_value(id.resource_str()),
+            ),
+            (
+                "model",
+                PositiveIntColumn.with_prefix(self.table_prefix),
+                PositiveIntColumn.get_value(id.version),
+            ),
         ]
 
     def as_basic_order_elements(self, name: str, order: PagingOrder) -> Sequence[tuple[str, "ColumnType", PagingOrder]]:
@@ -393,7 +396,10 @@ class ResourceVersionIdColumnType(ColumnType):
         :param name: column name, intended to be passed through get_accessor
         :return: a list of (name, type, order) items
         """
-        return [("resource_id", StringColumn, order), ("model", PositiveIntColumn, order)]
+        return [
+            ("resource_id", StringColumn.with_prefix(self.table_prefix), order),
+            ("model", PositiveIntColumn.with_prefix(self.table_prefix), order),
+        ]
 
     def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
         """
@@ -509,6 +515,7 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
 
     # Configuration methods
     @classmethod
+    # TODO: cache this!
     def get_valid_sort_columns(cls) -> dict[ColumnNameStr, ColumnType]:
         """Return all valid columns for lookup and their type"""
         raise NotImplementedError()
@@ -745,7 +752,7 @@ class ResourceOrder(VersionedResourceOrder):
         return {
             ColumnNameStr("resource_type"): StringColumn,
             ColumnNameStr("agent"): StringColumn,
-            ColumnNameStr("resource_id"): StringColumn,
+            ColumnNameStr("resource_id"): TablePrefixWrapper("rps", StringColumn),
             ColumnNameStr("resource_id_value"): StringColumn,
             ColumnNameStr("status"): TextColumn,
         }
@@ -753,7 +760,7 @@ class ResourceOrder(VersionedResourceOrder):
     @property
     def id_column(self) -> tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
-        return ColumnNameStr("resource_version_id"), ResourceVersionIdColumn
+        return ColumnNameStr("resource_version_id"), ResourceVersionIdColumnType(table_prefix="r")
 
     def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
         if self.get_order() == PagingOrder.ASC:
@@ -2540,6 +2547,7 @@ class Environment(BaseDocument):
     halted: bool = False
     description: str = ""
     icon: str = ""
+    is_marked_for_deletion: bool = False
 
     def to_dto(self) -> m.Environment:
         return m.Environment(
@@ -2550,6 +2558,7 @@ class Environment(BaseDocument):
             repo_branch=self.repo_branch,
             settings=self.settings,
             halted=self.halted,
+            is_marked_for_deletion=self.is_marked_for_deletion,
             description=self.description,
             icon=self.icon,
         )
@@ -2676,7 +2685,7 @@ class Environment(BaseDocument):
             default=100,
             typ="int",
             validator=convert_int,
-            doc="The number of versions to keep stored in the database",
+            doc="The number of versions to keep stored in the database, excluding the latest released version.",
         ),
         PROTECTED_ENVIRONMENT: Setting(
             name=PROTECTED_ENVIRONMENT,
@@ -2796,6 +2805,10 @@ class Environment(BaseDocument):
             del self.settings[key]
         else:
             await self.set(key, self._settings[key].default)
+
+    async def mark_for_deletion(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """Mark an environment as being in the process of deletion."""
+        await self.update_fields(is_marked_for_deletion=True, connection=connection)
 
     async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
@@ -3642,7 +3655,11 @@ class Compile(BaseDocument):
     :param do_export: should this compiler perform an export
     :param force_update: should this compile definitely update
     :param metadata: exporter metadata to be passed to the compiler
-    :param environment_variables: environment variables to be passed to the compiler
+    :param requested_environment_variables: environment variables requested to be passed to the compiler
+    :param mergeable_environment_variables: environment variables to be passed to the compiler.
+            These env vars can be compacted over multiple compiles.
+            If multiple values are compacted, they will be joined using spaces.
+    :param used_environment_variables: environment variables passed to the compiler, None before the compile is started
     :param success: was the compile successful
     :param handled: were all registered handlers executed?
     :param version: version exported by this compile
@@ -3656,6 +3673,7 @@ class Compile(BaseDocument):
     :param notify_failed_compile: if true use the notification service to notify that a compile has failed.
         By default, notifications are enabled only for exporting compiles.
     :param failed_compile_message: Optional message to use when a notification for a failed compile is created
+    :param soft_delete: Prevents deletion of resources in removed_resource_sets if they are being exported.
     """
 
     __primary_key__ = ("id",)
@@ -3670,7 +3688,9 @@ class Compile(BaseDocument):
     do_export: bool = False
     force_update: bool = False
     metadata: JsonType = {}
-    environment_variables: Optional[dict[str, str]] = {}
+    requested_environment_variables: dict[str, str] = {}
+    mergeable_environment_variables: dict[str, str] = {}
+    used_environment_variables: Optional[dict[str, str]] = None
 
     success: Optional[bool]
     handled: bool = False
@@ -3689,6 +3709,8 @@ class Compile(BaseDocument):
 
     notify_failed_compile: Optional[bool] = None
     failed_compile_message: Optional[str] = None
+
+    soft_delete: bool = False
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:
@@ -3827,7 +3849,9 @@ class Compile(BaseDocument):
                 c.do_export,
                 c.force_update,
                 c.metadata,
-                c.environment_variables,
+                c.requested_environment_variables ,
+                c.mergeable_environment_variables,
+                c.used_environment_variables,
                 c.compile_data,
                 c.substitute_compile_id,
                 c.partial,
@@ -3860,7 +3884,9 @@ class Compile(BaseDocument):
                     comp.do_export,
                     comp.force_update,
                     comp.metadata,
-                    comp.environment_variables,
+                    comp.requested_environment_variables,
+                    comp.mergeable_environment_variables,
+                    comp.used_environment_variables,
                     comp.compile_data,
                     comp.substitute_compile_id,
                     comp.partial,
@@ -3914,7 +3940,6 @@ class Compile(BaseDocument):
             for report in result
             if report.get("report_id")
         ]
-
         return m.CompileDetails(
             id=requested_compile["id"],
             remote_id=requested_compile["remote_id"],
@@ -3928,8 +3953,12 @@ class Compile(BaseDocument):
             force_update=requested_compile["force_update"],
             metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
             environment_variables=(
-                json.loads(requested_compile["environment_variables"]) if requested_compile["environment_variables"] else {}
+                json.loads(requested_compile["used_environment_variables"])
+                if requested_compile["used_environment_variables"] is not None
+                else None
             ),
+            requested_environment_variables=(json.loads(requested_compile["requested_environment_variables"])),
+            mergeable_environment_variables=(json.loads(requested_compile["mergeable_environment_variables"])),
             partial=requested_compile["partial"],
             removed_resource_sets=requested_compile["removed_resource_sets"],
             exporter_plugin=requested_compile["exporter_plugin"],
@@ -3949,7 +3978,9 @@ class Compile(BaseDocument):
             do_export=self.do_export,
             force_update=self.force_update,
             metadata=self.metadata,
-            environment_variables=self.environment_variables,
+            environment_variables=self.used_environment_variables,
+            requested_environment_variables=self.requested_environment_variables,
+            mergeable_environment_variables=self.mergeable_environment_variables,
             compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
             partial=self.partial,
             removed_resource_sets=self.removed_resource_sets,
@@ -3957,6 +3988,20 @@ class Compile(BaseDocument):
             notify_failed_compile=self.notify_failed_compile,
             failed_compile_message=self.failed_compile_message,
         )
+
+    def to_dict(self) -> JsonType:
+        """produce dict directly, for untyped endpoints"""
+        # mangle the output for backward compatibility
+        # we have to do it because we have no DTO here
+        environment_variables = self.used_environment_variables
+        if environment_variables is None:
+            environment_variables = {}
+            environment_variables.update(self.requested_environment_variables)
+            environment_variables.update(self.mergeable_environment_variables)
+
+        out = super().to_dict()
+        out["environment_variables"] = environment_variables
+        return out
 
 
 class LogLine(DataDocument):
@@ -5066,13 +5111,28 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
-        query = f"""
-            SELECT COUNT(r.resource_id) as count, status
-            FROM {cls.table_name()} as r
+        inner_query = f"""
+        SELECT r.resource_id as resource_id,
+        (
+            CASE WHEN (r.status = 'deploying')
+                THEN
+                    r.status::text
+                ELSE
+                    rps.last_non_deploying_status::text
+            END
+        ) as status
+        FROM {cls.table_name()} as r
+            JOIN resource_persistent_state rps ON r.resource_id = rps.resource_id and r.environment = rps.environment
                 WHERE r.environment=$1 AND r.model=(SELECT MAX(cm.version)
-                                                  FROM public.configurationmodel AS cm
-                                                  WHERE cm.environment=$1 AND cm.released=TRUE)
-            GROUP BY r.status
+                                                    FROM public.configurationmodel AS cm
+                                                    WHERE cm.environment=$1 AND cm.released=TRUE)
+        """
+
+        query = f"""
+            SELECT COUNT(ro.resource_id) as count,
+                   ro.status
+            FROM ({inner_query}) as ro
+            GROUP BY ro.status
         """
         raw_results = await cls._fetch_query(query, cls._get_value(environment))
         results = {}
@@ -5340,8 +5400,9 @@ class ConfigurationModel(BaseDocument):
         undeployable: abc.Sequence[ResourceIdStr],
         skipped_for_undeployable: abc.Sequence[ResourceIdStr],
         partial_base: int,
-        rids_in_partial_compile: abc.Set[ResourceIdStr],
         pip_config: Optional[PipConfig],
+        updated_resource_sets: abc.Set[str],
+        deleted_resource_sets: abc.Set[str],
         connection: Optional[Connection] = None,
     ) -> "ConfigurationModel":
         """
@@ -5358,14 +5419,42 @@ class ConfigurationModel(BaseDocument):
                 ) AS base_version_found
             ),
             rids_undeployable_base_version AS (
-                SELECT DISTINCT unnest(c2.undeployable) AS rid
-                FROM {cls.table_name()} AS c2
-                WHERE c2.environment=$1 AND c2.version=$8
+                SELECT t.rid
+                FROM (
+                    SELECT DISTINCT unnest(c2.undeployable) AS rid
+                    FROM {cls.table_name()} AS c2
+                    WHERE c2.environment=$1 AND c2.version=$8
+                ) AS t(rid)
+                WHERE (
+                    EXISTS (
+                        SELECT 1
+                        FROM {Resource.table_name()} AS r
+                        WHERE r.environment=$1
+                            AND r.model=$8
+                            AND r.resource_id=t.rid
+                            -- Keep only resources that belong to the shared resource set or a resource set that was not updated
+                            AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($9))
+                    )
+                )
             ),
             rids_skipped_for_undeployable_base_version AS (
-                SELECT DISTINCT unnest(c3.skipped_for_undeployable) AS rid
-                FROM {cls.table_name()} AS c3
-                WHERE c3.environment=$1 AND c3.version=$8
+                SELECT t.rid
+                FROM(
+                    SELECT DISTINCT unnest(c3.skipped_for_undeployable) AS rid
+                    FROM {cls.table_name()} AS c3
+                    WHERE c3.environment=$1 AND c3.version=$8
+                ) AS t(rid)
+                WHERE (
+                    EXISTS (
+                        SELECT 1
+                        FROM {Resource.table_name()} AS r
+                        WHERE r.environment=$1
+                            AND r.model=$8
+                            AND r.resource_id=t.rid
+                            -- Keep resources that belong to the shared resource set or a resource set that was not updated
+                            AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($9))
+                    )
+                )
             )
             INSERT INTO {cls.table_name()}(
                 environment,
@@ -5389,9 +5478,7 @@ class ConfigurationModel(BaseDocument):
                     FROM (
                         -- Undeployables in previous version of the model that are not part of the partial compile.
                         (
-                            SELECT rid
-                            FROM rids_undeployable_base_version AS undepl
-                            WHERE NOT undepl.rid=ANY($9)
+                            SELECT rid FROM rids_undeployable_base_version AS undepl
                         )
                         UNION
                         -- Undeployables part of the partial compile.
@@ -5406,9 +5493,7 @@ class ConfigurationModel(BaseDocument):
                         -- skipped_for_undeployables in previous version of the model that are not part of the partial
                         -- compile.
                         (
-                            SELECT skipped.rid
-                            FROM rids_skipped_for_undeployable_base_version AS skipped
-                            WHERE NOT skipped.rid=ANY($9)
+                            SELECT skipped.rid FROM rids_skipped_for_undeployable_base_version AS skipped
                         )
                         UNION
                         -- Skipped_for_undeployables part of the partial compile.
@@ -5448,7 +5533,7 @@ class ConfigurationModel(BaseDocument):
                 undeployable,
                 skipped_for_undeployable,
                 partial_base,
-                list(rids_in_partial_compile),
+                updated_resource_sets | deleted_resource_sets,
                 cls._get_value(pip_config),
             )
             # Make mypy happy

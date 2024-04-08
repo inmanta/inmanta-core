@@ -209,6 +209,9 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     env_1_id = result.result["environment"]["id"]
     result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep)
     assert result.code == 200
+    # Make sure we don't have a released version. _purge_versions() always keeps the latest released version.
+    result = await client.set_setting(env_1_id, AUTO_DEPLOY, False)
+    assert result.code == 200
 
     # make a second environment to be sure we don't do cross env deletes
     # as it is empty, if it leaks, it will likely take everything with it on the other one
@@ -274,6 +277,68 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     assert len(prvs) == min(n_versions_to_keep, n_versions_to_create) + 1
 
 
+@pytest.mark.parametrize("has_released_versions", [True, False])
+async def test_purge_versions(server, client, environment, has_released_versions: bool) -> None:
+    """
+    Verify that the `OrchestrationService._purge_versions()` method works correctly and that it doesn't cleanup
+    the latest released version.
+    """
+    result = await client.set_setting(tid=environment, id=data.AUTO_DEPLOY, value="false")
+    assert result.code == 200
+
+    versions = []
+    for _ in range(5):
+        version = (await client.reserve_version(environment)).result["data"]
+        versions.append(version)
+        res = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=[
+                {
+                    "id": f"unittest::Resource[internal,name=ok],v={version}",
+                    "name": "root",
+                    "desired_value": "ok",
+                    "send_event": "false",
+                    "purged": False,
+                    "requires": [],
+                }
+            ],
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
+
+    if has_released_versions:
+        for v in versions[0:2]:
+            result = await client.release_version(environment, id=v)
+            assert result.code == 200
+
+    result = await client.set_setting(tid=environment, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=3)
+    assert result.code == 200
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    result = await client.list_versions(environment)
+    assert result.code == 200
+    assert result.result["count"] == (4 if has_released_versions else 3)
+    if has_released_versions:
+        assert {v["version"] for v in result.result["versions"]} == {versions[1], *versions[2:]}
+    else:
+        assert {v["version"] for v in result.result["versions"]} == {*versions[2:]}
+
+    result = await client.set_setting(tid=environment, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=1)
+    assert result.code == 200
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    result = await client.list_versions(environment)
+    assert result.code == 200
+    assert result.result["count"] == (2 if has_released_versions else 1)
+    if has_released_versions:
+        assert {v["version"] for v in result.result["versions"]} == {versions[1], *versions[4:]}
+    else:
+        assert {v["version"] for v in result.result["versions"]} == {*versions[4:]}
+
+
 async def test_n_versions_env_setting_scope(client, server):
     """
     The AVAILABLE_VERSIONS_TO_KEEP environment setting used to be a global config option.
@@ -295,10 +360,16 @@ async def test_n_versions_env_setting_scope(client, server):
     env_1_id = result.result["environment"]["id"]
     result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep_env1)
     assert result.code == 200
+    # Make sure we don't have a released version. _purge_versions() always keeps the latest released version.
+    result = await client.set_setting(env_1_id, AUTO_DEPLOY, False)
+    assert result.code == 200
 
     result = await client.create_environment(project_id=project_id, name="env_2")
     env_2_id = result.result["environment"]["id"]
     result = await client.set_setting(tid=env_2_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep_env2)
+    assert result.code == 200
+    # Make sure we don't have a released version. _purge_versions() always keeps the latest released version.
+    result = await client.set_setting(env_2_id, AUTO_DEPLOY, False)
     assert result.code == 200
 
     # Create a lot of versions in both environments
@@ -2027,3 +2098,29 @@ async def test_set_param_v2(server, client, environment):
     assert res.code == 200
     parameters = res.result["parameters"]
     assert len(parameters) == 2
+
+
+async def test_delete_active_version(client, clienthelper, server, environment):
+    """
+    Test that the active version cannot be deleted
+    """
+    version = await clienthelper.get_version()
+    assert version == 1
+    res1 = "test::Resource[agent1,key=key1]"
+    res2 = "test::Resource[agent1,key=key2]"
+    resources = [
+        {"key": "key1", "value": "value", "id": f"{res1},v={version}", "requires": [], "purged": False, "send_event": False},
+        {"key": "key2", "value": "value", "id": f"{res2},v={version}", "requires": [], "purged": False, "send_event": False},
+    ]
+
+    await clienthelper.put_version_simple(resources, version)
+
+    result = await client.release_version(
+        environment, version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
+    assert result.code == 200
+
+    # Remove version 1
+    result = await client.delete_version(tid=environment, id=version)
+    assert result.code == 400
+    assert result.result["message"] == "Invalid request: Cannot delete the active version"

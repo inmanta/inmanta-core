@@ -35,7 +35,7 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 
 import pkg_resources
 
-from inmanta import const, data, env, loader, module, protocol
+from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
@@ -499,7 +499,7 @@ class AgentInstance:
     _get_resource_timeout: float
     _get_resource_duration: float
 
-    def __init__(self, process: "Agent", name: str, uri: str) -> None:
+    def __init__(self, process: "Agent", name: str, uri: str, *, ensure_deploy_on_start: bool = False) -> None:
         self.process = process
         self.name = name
         self._uri = uri
@@ -538,6 +538,11 @@ class AgentInstance:
 
         self._getting_resources = False
         self._get_resource_timeout = 0
+
+        # If this instance has no deploy timer set, deploy anyway
+        # This is used for agents that are started via the agentmap
+        # To give smooth deploy experience, we want these agents to start immediately.
+        self.ensure_deploy_on_start = ensure_deploy_on_start
 
         self.executor_manager = process.executor_manager
 
@@ -628,7 +633,7 @@ class AgentInstance:
             interval: Union[int, str],
             splay_value: int,
             initial_time: datetime.datetime,
-        ) -> None:
+        ) -> bool:
             if isinstance(interval, int) and interval > 0:
                 self.logger.info(
                     "Scheduling periodic %s with interval %d and splay %d (first run at %s)",
@@ -641,13 +646,27 @@ class AgentInstance:
                     interval=float(interval), initial_delay=float(splay_value)
                 )
                 self._enable_time_trigger(action, interval_schedule)
+                return True
 
             if isinstance(interval, str):
                 self.logger.info("Scheduling periodic %s with cron expression '%s'", kind, interval)
                 cron_schedule = CronSchedule(cron=interval)
                 self._enable_time_trigger(action, cron_schedule)
+                return True
+            return False
 
         now = datetime.datetime.now().astimezone()
+        if self.ensure_deploy_on_start:
+            self.process.add_background_task(
+                self.get_latest_version_for_agent(
+                    DeployRequest(
+                        reason="Initial deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
+                        is_full_deploy=False,
+                        is_periodic=False,
+                    )
+                )
+            )
+            self.ensure_deploy_on_start = False
         periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
         periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value, now)
 
@@ -892,7 +911,7 @@ class Agent(SessionEndpoint):
         if code_loader:
             self._env = env.VirtualEnv(self._storage["env"])
             self._env.use_virtual_env()
-            self._loader = CodeLoader(self._storage["code"])
+            self._loader = CodeLoader(self._storage["code"], clean=True)
             # Lock to ensure only one actual install runs at a time
             self._loader_lock = Lock()
             # Keep track for each resource type of the last loaded version
@@ -976,7 +995,7 @@ class Agent(SessionEndpoint):
         async with self._instances_lock:
             await self._add_end_point_name(name)
 
-    async def _add_end_point_name(self, name: str) -> None:
+    async def _add_end_point_name(self, name: str, *, ensure_deploy_on_start: bool = False) -> None:
         """
         Note: always call under _instances_lock
         """
@@ -990,7 +1009,7 @@ class Agent(SessionEndpoint):
         if name in self.agent_map:
             hostname = self.agent_map[name]
 
-        self._instances[name] = AgentInstance(self, name, hostname)
+        self._instances[name] = AgentInstance(self, name, hostname, ensure_deploy_on_start=ensure_deploy_on_start)
 
     async def remove_end_point_name(self, name: str) -> None:
         async with self._instances_lock:
@@ -1039,11 +1058,13 @@ class Agent(SessionEndpoint):
                 agent_name for agent_name in update_uri_agents if self._instances[agent_name].is_enabled()
             ]
 
-            to_be_gathered = [self._add_end_point_name(agent_name) for agent_name in agents_to_add]
+            to_be_gathered = [self._add_end_point_name(agent_name, ensure_deploy_on_start=True) for agent_name in agents_to_add]
             to_be_gathered += [self._remove_end_point_name(agent_name) for agent_name in agents_to_remove + update_uri_agents]
             await asyncio.gather(*to_be_gathered)
             # Re-add agents with updated URI
-            await asyncio.gather(*[self._add_end_point_name(agent_name) for agent_name in update_uri_agents])
+            await asyncio.gather(
+                *[self._add_end_point_name(agent_name, ensure_deploy_on_start=True) for agent_name in update_uri_agents]
+            )
             # Enable agents with updated URI that were enabled before
             for agent_to_enable in updated_uri_agents_to_enable:
                 self.unpause(agent_to_enable)
@@ -1168,11 +1189,6 @@ class Agent(SessionEndpoint):
         if self._loader is None:
             return failed_to_load
 
-        # The names of the modules that are included in the requirements list of a module source.
-        all_required_modules: set[str] = set()
-        # The names of the modules for which the source code was installed.
-        all_installed_modules: set[str] = set()
-
         for resource_install_spec in code:
             # only one logical thread can load a particular resource type at any time
             async with self._resource_loader_lock.get(resource_install_spec.resource_type):
@@ -1209,45 +1225,6 @@ class Agent(SessionEndpoint):
                     )
                     failed_to_load.add(resource_install_spec.resource_type)
                     self._last_loaded_version[resource_install_spec.resource_type] = None
-
-                for source in resource_install_spec.blueprint.sources:
-                    module_name: str = loader.get_inmanta_module_name(source.name)
-                    all_installed_modules.add(module_name)
-
-                all_required_modules.update(
-                    {
-                        module.ModuleV2Source.get_inmanta_module_name(r)
-                        for r in resource_install_spec.blueprint.requirements
-                        if r.startswith("inmanta-module-")
-                    }
-                )
-
-        # If a certain module A depends on the plugin code of another module B, then the source of B must either:
-        #  * Be exported to the server (because module B has resources or providers)
-        #  * Or, not be exported and never been exported in any previous version.
-        # Otherwise there is the possibility that stale code in the code directory of the agent gets picket up,
-        # instead of the code from the Python package (V2 module) installed in the venv of the agent.
-        modules_not_expected_in_code_directory: set[str] = all_required_modules - all_installed_modules
-        modules_present_in_code_dir: set[str] = {d for d in os.listdir(self._loader.mod_dir)}
-        modules_with_stale_python_code: set[str] = modules_present_in_code_dir & modules_not_expected_in_code_directory
-        if modules_with_stale_python_code:
-            warning_message = f"""
-The source code for the modules {', '.join(modules_with_stale_python_code)} is present in the modules directory of the agent \
-({self._loader.mod_dir}), but these modules were not exported to the server in the latest version. This is likely \
-caused by the fact that the above-mentioned modules contained resources or providers in a previous version, but not \
-anymore in the current version, while there exists an inter-module dependency from another module to the above-mentioned \
-modules. If this is the case, the agent might pick up stale Python code for any of the above-mentioned modules. If this \
-problem occurs, a manual cleanup of the agent's code directory is required to resolve this problem.
-""".strip()
-            LOGGER.warning(warning_message)
-            result = await self._client.send_notification(
-                tid=self.environment,
-                title="Stale code in agent's code directory",
-                message=warning_message,
-                severity=const.NotificationSeverity.warning,
-            )
-            if result.code != 200:
-                LOGGER.error("Failed to send notification message regarding stale Python code in the agent code directory.")
 
         return failed_to_load
 

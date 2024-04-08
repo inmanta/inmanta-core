@@ -329,6 +329,15 @@ included in:
     # Output when displayed:
     # Welcome to serv1.example.org
 
+String concatenation
+####################
+
+Strings can be concatenated with the ``+`` operator.
+
+.. code-block:: inmanta
+
+    hello_world = "hello " + "world"
+
 
 .. _lang-conditions:
 

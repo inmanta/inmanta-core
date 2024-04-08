@@ -541,11 +541,18 @@ def resource_container(clean_reset):
     waiter = Condition()
 
     async def wait_for_done_with_waiters(client, env_id, version, wait_for_this_amount_of_resources_in_done=None, timeout=10):
+        def log_progress(done: int, total: int) -> None:
+            logger.info(
+                "waiting with waiters, %s/%s resources done",
+                done,
+                (wait_for_this_amount_of_resources_in_done if wait_for_this_amount_of_resources_in_done else total),
+            )
+
         # unhang waiters
         result = await client.get_version(env_id, version)
         assert result.code == 200
         now = time.time()
-        logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
+        log_progress(result.result["model"]["done"], result.result["model"]["total"])
         while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
             if now + timeout < time.time():
                 raise Exception("Timeout")
@@ -555,7 +562,7 @@ def resource_container(clean_reset):
             ):
                 break
             result = await client.get_version(env_id, version)
-            logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
+            log_progress(result.result["model"]["done"], result.result["model"]["total"])
             waiter.acquire()
             waiter.notify_all()
             waiter.release()

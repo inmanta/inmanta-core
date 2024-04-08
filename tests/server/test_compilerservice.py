@@ -21,6 +21,7 @@ import datetime
 import logging
 import os
 import queue
+import re
 import shutil
 import subprocess
 import uuid
@@ -93,7 +94,8 @@ async def compile_and_assert(
         environment=env.id,
         do_export=export,
         metadata=meta,
-        environment_variables=env_vars,
+        requested_environment_variables=env_vars,
+        used_environment_variables=env_vars,
         force_update=update,
         exporter_plugin=exporter_plugin,
     )
@@ -401,7 +403,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     # env vars
     marker = str(uuid.uuid4())
     compile, stages = await _compile_and_assert(env=env, export=False, env_vars={testmarker_env: marker})
-    assert len(compile.request.environment_variables) == 1
+    assert len(compile.request.requested_environment_variables) == 1
     assert stages["Init"]["returncode"] == 0
     assert f"Using extra environment variables during compile TESTMARKER='{marker}'" in stages["Init"]["outstream"]
     assert stages["Recompiling configuration model"]["returncode"] == 0
@@ -903,7 +905,7 @@ async def run_compile_and_wait_until_compile_is_done(
     env_id: uuid.UUID,
     fail: Optional[bool] = None,
     fail_on_pull=False,
-) -> None:
+) -> "CompileRunnerMock":
     """
     Unblock the first compile in the compiler queue and wait until the compile finishes.
     """
@@ -925,6 +927,7 @@ async def run_compile_and_wait_until_compile_is_done(
         return False
 
     await retry_limited(_is_compile_finished, timeout=10)
+    return run
 
 
 async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, server, client, environment):
@@ -993,13 +996,20 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id6 = uuid.uuid4()
     compile_id6, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id6)
 
+    # request with partial, will not be merged
+    remote_id7 = uuid.uuid4()
+    compile_id7, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=remote_id7, partial=True
+    )
+
     result = await client.get_compile_queue(environment)
-    assert len(result.result["queue"]) == 6
+    assert len(result.result["queue"]) == 7
     assert result.result["queue"][4]["remote_id"] == str(remote_id5)
     assert result.result["queue"][5]["remote_id"] == str(remote_id6)
+    assert result.result["queue"][6]["remote_id"] == str(remote_id7)
     assert result.code == 200
-    # 5 in the queue, 1 running
-    await retry_limited(lambda: compilerslice._queue_count_cache == 5, 10)
+    # 6 in the queue, 1 running
+    await retry_limited(lambda: compilerslice._queue_count_cache == 6, 10)
 
     async def has_matching_compile_report(first_compile_id: uuid.UUID, second_compile_id: uuid.UUID) -> bool:
         return await compilerslice.get_report(first_compile_id) == await compilerslice.get_report(second_compile_id)
@@ -1007,13 +1017,13 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # finish a compile and wait for service to take on next
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
-    # api should return five when ready
+    # api should return 6 when ready
     result = await client.get_compile_queue(environment)
-    assert len(result.result["queue"]) == 5
+    assert len(result.result["queue"]) == 6
     assert result.result["queue"][0]["remote_id"] == str(remote_id2)
     assert result.code == 200
     # 4 in the queue, 1 running
-    await retry_limited(lambda: compilerslice._queue_count_cache == 4, 10)
+    await retry_limited(lambda: compilerslice._queue_count_cache == 5, 10)
 
     # finish second compile
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
@@ -1022,23 +1032,22 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # Use try_limited to prevent a race condition.
     await retry_limited(lambda: has_matching_compile_report(compile_id2, compile_id4), timeout=10)
     # 2 in the queue, 1 running
-    await retry_limited(lambda: compilerslice._queue_count_cache == 2, 10)
+    await retry_limited(lambda: compilerslice._queue_count_cache == 3, 10)
 
     # finish third compile
-    # prevent race conditions where compile is not yet in queue
-    await retry_limited(lambda: not mocked_compiler_service_block.empty(), timeout=10)
-    run = mocked_compiler_service_block.get(block=True)
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
+    await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id5), timeout=10)
+    await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id6), timeout=10)
+
+    # One left
     result = await client.get_compile_queue(environment)
-    assert len(result.result["queue"]) == 3
-    assert result.result["queue"][0]["remote_id"] == str(remote_id3)
-    assert result.code == 200
-    run.block = False
+    assert len(result.result["queue"]) == 1
+
+    # finish 7th compile
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
     while env.id in compilerslice._recompiles:
         await asyncio.sleep(0.2)
-
-    await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id5), timeout=10)
-    await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id6), timeout=10)
 
     # 0 in the queue, 0 running
     await retry_limited(lambda: compilerslice._queue_count_cache == 0, 10)
@@ -1047,6 +1056,69 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 0
     assert result.code == 200
+
+
+async def test_compileservice_queue_with_env_var_merging(
+    mocked_compiler_service_block: queue.Queue, server, client, environment
+):
+    """
+    Test the compile queue (as above), but with mergeable env vars
+    """
+    env = await data.Environment.get_by_id(environment)
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 0
+    assert result.code == 200
+
+    # request a compile, all by itself
+    remote_id1 = uuid.uuid4()
+    compile_id1, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=remote_id1, env_vars={"my_var": "1"}, partial=False
+    )
+
+    # Then one to compact on top of
+    remote_id2 = uuid.uuid4()
+    compile_id2, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=remote_id2, env_vars={"my_var": "1"}, partial=True
+    )
+
+    # Then add one
+    remote_id3 = uuid.uuid4()
+    compile_id3, _ = await compilerslice.request_recompile(
+        env=env,
+        force_update=False,
+        do_export=True,
+        remote_id=remote_id3,
+        env_vars={"my_var": "1"},
+        partial=True,
+        mergeable_env_vars={"v1": "a", "v2": "b"},
+    )
+
+    # Then another one
+    remote_id4 = uuid.uuid4()
+    compile_id4, _ = await compilerslice.request_recompile(
+        env=env,
+        force_update=False,
+        do_export=True,
+        remote_id=remote_id4,
+        env_vars={"my_var": "1"},
+        partial=True,
+        mergeable_env_vars={"v1": "C"},
+    )
+
+    # finish first compile
+    t1 = await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
+    # finish all other compiles at once
+    t2 = await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
+
+    # api should return none
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 0
+    assert result.code == 200
+
+    assert t1.request.used_environment_variables == {"my_var": "1"}
+    assert t2.request.used_environment_variables == {"my_var": "1", "v1": "a C", "v2": "b"}
 
 
 async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
@@ -1162,7 +1234,7 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
         "do_export": True,
         "force_update": True,
         "metadata": {"type": "api", "message": "Recompile trigger through API call"},
-        "environment_variables": {},
+        "requested_environment_variables": {},
         "success": True,
         "handled": True,
         "version": 1,
@@ -1259,7 +1331,8 @@ async def test_compileservice_cleanup_halted(server, client, environment, halted
         "do_export": True,
         "force_update": True,
         "metadata": {"type": "api", "message": "Recompile trigger through API call"},
-        "environment_variables": {},
+        "requested_environment_variables": {},
+        "used_environment_variables": {},
         "success": True,
         "handled": True,
         "version": 1,
@@ -1301,7 +1374,8 @@ async def test_issue_2361(environment_factory: EnvironmentFactory, server, clien
         environment=env.id,
         do_export=True,
         metadata={},
-        environment_variables={},
+        requested_environment_variables={},
+        used_environment_variables={},
         force_update=True,
     )
     await compile.insert()
@@ -1331,7 +1405,8 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
         environment=env.id,
         do_export=True,
         metadata={},
-        environment_variables={},
+        requested_environment_variables={},
+        used_environment_variables={},
         force_update=True,
     )
     await compile.insert()
@@ -1773,3 +1848,26 @@ async def test_environment_delete_removes_env_directories_on_server(
     assert result.code == 200
 
     assert not os.path.exists(os.path.join(env_dir, env_id))
+
+
+async def test_overlapping_env_vars(mocked_compiler_service, server, client, environment) -> None:
+    """
+    Ensure that the compiler service raises an exception if a compile is requested where the same
+    environment variable is present in the env_vars and the mergeable_env_vars dictionary.
+    """
+    env = await data.Environment.get_by_id(environment)
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+    expected_exception_message = (
+        "Invalid compile request: The same environment variable cannot be present in the "
+        "env_vars and mergeable_env_vars dictionary simultaneously: {'var'}."
+    )
+    with pytest.raises(ValueError, match=re.escape(expected_exception_message)):
+        await compilerslice.request_recompile(
+            env=env,
+            force_update=False,
+            do_export=False,
+            remote_id=uuid.uuid4(),
+            env_vars={"var": "val", "test": "123"},
+            mergeable_env_vars={"var": "otherval", "somekey": "someval"},
+        )

@@ -33,7 +33,7 @@ extensions = [
     'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.graphviz', 'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode', 'sphinxarg.ext', 'sphinxcontrib.contentui', 'sphinxcontrib.inmanta.config',
     'sphinxcontrib.inmanta.dsl', 'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'sphinx_design',
-    'myst_parser', 'sphinx_substitution_extensions',
+    'myst_parser', 'sphinx_substitution_extensions', 'sphinxcontrib.datatemplates',
 ]
 
 myst_enable_extensions = ["colon_fence"]
@@ -138,6 +138,7 @@ rst_prolog = f"""\
 .. |version_major| replace:: {version_major}
 .. |iso_gpg_key| replace:: {iso_gpg_key}
 .. |oss_gpg_key| replace:: {oss_gpg_key}
+.. |release| replace:: {release}
 """
 
 
@@ -205,7 +206,14 @@ html_theme_options = {
             "class": "fa-brands fa-github",
         },
     ],
+    "light_css_variables": {
+        "color-announcement-background": "#f0ab00",
+        "color-announcement-text": "#000000",
+    }
 }
+
+if tags.has("iso") and "INMANTA_ADD_OLD_VERSION_BANNER" in os.environ:
+    html_theme_options["announcement"] = "This is the documentation for an old ISO version. You may want to consult the documentation for the <a href='https://docs.inmanta.com/inmanta-service-orchestrator/latest/'>latest ISO release</a>."
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
