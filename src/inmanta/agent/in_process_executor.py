@@ -39,6 +39,10 @@ if typing.TYPE_CHECKING:
 
 
 class InProcessExecutor(executor.Executor, executor.AgentInstance):
+    """
+    This is an executor that executes in the process it is started in
+    """
+
     def __init__(
         self,
         agent_name: str,
@@ -48,7 +52,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         eventloop: asyncio.AbstractEventLoop,
         parent_logger: logging.Logger,
     ):
-
         self.name = agent_name
         self.client = client
         self.uri = agent_uri
@@ -428,6 +431,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
     """
     This is the executor that provides the backward compatible behavior, confirming to the agent in ISO7.
+
+    It spawns an InProcessExecutor and makes sure all code is installed and loadable locally.
     """
 
     def __init__(

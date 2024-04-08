@@ -49,7 +49,6 @@ FailedResourcesSet: typing.TypeAlias = set[str]
 
 
 class AgentInstance(abc.ABC):
-
     eventloop: asyncio.AbstractEventLoop
     sessionid: uuid.UUID
     environment: uuid.UUID
@@ -116,7 +115,7 @@ class EnvBlueprint:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EnvBlueprint):
             return False
-        return self.blueprint_hash() == other.blueprint_hash()
+        return (self.pip_config, set(self.requirements)) == (other.pip_config, set(other.requirements))
 
     def __hash__(self) -> int:
         return int(self.blueprint_hash(), 16)
@@ -175,7 +174,11 @@ class ExecutorBlueprint(EnvBlueprint):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return self.blueprint_hash() == other.blueprint_hash()
+        return (self.pip_config, set(self.requirements), sorted(self.sources)) == (
+            other.pip_config,
+            set(other.requirements),
+            sorted(other.sources),
+        )
 
     def __hash__(self) -> int:
         return int(self.blueprint_hash(), 16)
@@ -214,9 +217,7 @@ class ResourceInstallSpec:
 
     :ivar resource_type: fully qualified name for this resource type e.g. std::File
     :ivar model_version: the version of the model to use
-    :ivar pip_config: the pip config to use during requirements installation
-    :ivar requirements: python packages that must be installed prior to executing the module sources
-    :ivar sources: list of ModuleSource containing the code for deployment of this resource
+    :ivar blueprint: the associate install blueprint
 
     """
 
@@ -431,10 +432,10 @@ class Executor(abc.ABC):
         pass
 
 
-MyExecutor = typing.TypeVar("MyExecutor", bound=Executor)
+E = typing.TypeVar("E", bound=Executor)
 
 
-class ExecutorManager(abc.ABC, typing.Generic[MyExecutor]):
+class ExecutorManager(abc.ABC, typing.Generic[E]):
     """
     Manages Executors by ensuring that Executors are created and reused efficiently based on their configurations.
 
@@ -443,7 +444,7 @@ class ExecutorManager(abc.ABC, typing.Generic[MyExecutor]):
     """
 
     @abc.abstractmethod
-    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]) -> MyExecutor:
+    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]) -> E:
         """
         Retrieves an Executor based on the agent name and blueprint.
         If an Executor does not exist for the given configuration, a new one is created.
