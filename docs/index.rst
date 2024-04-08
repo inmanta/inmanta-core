@@ -67,7 +67,7 @@
 
 
 .. toctree::
-    :maxdepth: 3
+    :maxdepth: 1
 
     quickstart
     install
@@ -83,12 +83,6 @@
     troubleshooting
     changelogs
 
-Additional resources
---------------------
-
-* `Inmanta User Mailinglist <https://groups.google.com/forum/#!forum/inmanta-users>`_
-* `Inmanta Developer Mailinglist <https://groups.google.com/forum/#!forum/inmanta-devel>`_
-* `Inmanta Twitter <https://twitter.com/inmanta_com>`_
 
 PDF version
 -----------
