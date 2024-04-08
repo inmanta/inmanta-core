@@ -3,6 +3,8 @@
 Inmanta core and extensions versions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+The orchestrator is constituted of several components (python packages and npm packages).
+The python packages are of two types: one core package and several extension packages.
 
 {% if data['component_requirements']%}
 
@@ -28,6 +30,6 @@ you if you install the orchestrator via rpm.
 
 
 {% else %}
-Components are not pinned for major version |version_major| because it is not released yet.
+Python components are not pinned for major version |version_major| because it is not released yet.
 {% endif %}
 
