@@ -237,12 +237,22 @@ class PagingOrder(str, enum.Enum):
             return PagingOrder.DESC
         return PagingOrder.ASC
 
-    @property
-    def db_form(self) -> OrderStr:
-        # follow Postgres' default order for NULLS: matches default index order
-        if self == PagingOrder.ASC:
-            return OrderStr("ASC NULLS LAST")
-        return OrderStr("DESC NULLS FIRST")
+    def db_form(self, *, nullable: bool = True) -> OrderStr:
+        # The current filtering and sorting framework has the built-in assumption that nulls are considered the lowest values,
+        # hence we must deviate from postgres' default order. As a result, we may the opportunity to use indexes, which
+        # use the same order.
+        # The framework can not easily be refactored because
+        #   1. Not all column types have a sane MAX value to coalesce to
+        #   2. The alternative approach to use a window function `row_number() OVER (ORDER BY ...)`, selecting on the ids of
+        #       the first and last elements in the page, is more accurate, and does hit the indexes, but it also builds the
+        #       row number for each row, which ends up costing even more.
+        if nullable:
+            if self == PagingOrder.ASC:
+                return OrderStr("ASC NULLS FIRST")
+            return OrderStr("DESC NULLS LAST")
+        # Luckily, for NOT NULL columns we will never encounter the COALESCE issue, so we can safely use the default order.
+        else:
+            return OrderStr(self.value)
 
 
 class InvalidSort(Exception):
@@ -535,7 +545,10 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
     def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
         """Return the actual order by statement, as derived from get_order_elements"""
         order_by_part = ", ".join(
-            (f"{type.get_accessor(col, table)} {order.db_form}" for col, type, order in self.get_order_elements(invert))
+            (
+                f"{type.get_accessor(col, table)} {order.db_form(nullable=type.nullable)}"
+                for col, type, order in self.get_order_elements(invert)
+            )
         )
         return f" ORDER BY {order_by_part}"
 
@@ -689,6 +702,7 @@ class ResourceStatusOrder(VersionedResourceOrder):
     """
     Resources with a status field
     """
+
     @classmethod
     def get_valid_sort_columns(cls) -> dict[ColumnNameStr, ColumnType]:
         return {

@@ -168,6 +168,17 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         end: Optional[PRIMITIVE_SQL_TYPES] = None,
         filter: Optional[dict[str, list[str]]] = None,
     ) -> None:
+        """
+        All boundary values for paging are exclusive, i.e. the returned page will contain only values strictly larger/smaller
+        than the boundary value. "start", "first", "end" and "last" are poorly named: they imply to be ordering-aware, while
+        they're actually only about the requested page containing "larger" or "smaller" values respectively, regardless of
+        the requested order.
+
+        :param first_id: secondary boundary value for min bound. If not None, boundary is `> (start, first_id)`.
+        :param last_id: secondary boundary value for max bound. If not None, boundary is `< (end, last_id)`.
+        :param start: primary boundary value for min bound. If first_id is None, boundary is `> start`.
+        :param end: primary boundary value for max bound. If last_id is None, boundary is `< end`.
+        """
         self.limit = self.validate_limit(limit)
         self.raw_filter = filter or {}
         self.filter: dict[str, QueryFilter] = self.process_filters(filter)
