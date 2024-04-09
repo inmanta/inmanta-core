@@ -9,11 +9,12 @@ The python packages are of two types: one core package and several extension pac
 {% if data['component_requirements']%}
 
 The following table shows the ranges of the Inmanta Python components, this product version is compatible with.
-These compatible versions are defined for the whole lifetime of this major version i.e.
-they are not pinned to a specific three-digit version. Upper bounds may be added when a new major version is released.
+The lower bound of these version constraints will remain the same for the whole lifetime of this major version. Upper bounds may be added when a new major version is released.
 
-This table is only meant as a reference for developers of Inmanta extensions. This information is not relevant
-when installing the orchestrator via RPM as is recommended in the :ref:`install-server` section.
+This table is only meant as a reference for developers of Inmanta extensions and is meant to be used as input to a
+dependency resolver e.g. pip to ensure the resulting versions are compatible.
+This information is not relevant when installing the orchestrator via RPM as is recommended
+in the :ref:`install-server` section.
 
 .. list-table:: Inmanta core and extensions versions
    :header-rows: 1
