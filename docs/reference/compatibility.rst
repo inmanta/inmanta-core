@@ -7,7 +7,7 @@ Compatibility
 
 .. only:: oss
 
-    The table below shows the system requirements of Inmanta version |release|.
+    The table below shows the system requirements of Inmanta OSS version |release|.
 
 
 .. datatemplate:json:: /reference/compatibility.json
