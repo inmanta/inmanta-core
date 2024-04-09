@@ -993,7 +993,7 @@ class AutostartedAgentManager(ServerSlice):
         """
         Return the state dir to be used by the auto-started agent in the given environment.
         """
-        state_dir: str = Config.get("config", "state-dir", "/var/lib/inmanta")
+        state_dir: str = cast(str, Config.get("config", "state-dir", "/var/lib/inmanta"))
         return os.path.join(state_dir, str(env_id))
 
     def _remove_venv_for_agent_in_env(self, env_id: uuid.UUID) -> None:
