@@ -47,5 +47,8 @@ async def update(connection: Connection) -> None:
             ALTER COLUMN resource_id_value SET NOT NULL,
             ADD CONSTRAINT resource_persistent_state_derived_id UNIQUE (environment, resource_type, agent, resource_id_value)
             ;
+
+        -- force Postgres to analyze resource table to allow it to pick efficient query plans
+        ANALYZE public.resource;
         """
     )
