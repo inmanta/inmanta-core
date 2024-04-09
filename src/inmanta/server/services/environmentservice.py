@@ -505,7 +505,10 @@ class EnvironmentService(protocol.ServerSlice):
 
                 await env.mark_for_deletion(connection=connection)
                 self._disable_schedules(env)
-                await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade(connection=connection))
+                await asyncio.gather(
+                    self.autostarted_agent_manager.stop_agents(env, delete_venv=True),
+                    env.delete_cascade(connection=connection),
+                )
 
             self.resource_service.close_resource_action_logger(environment_id)
             await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
@@ -521,7 +524,7 @@ class EnvironmentService(protocol.ServerSlice):
         if is_protected_environment:
             raise Forbidden(f"Environment {env.id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
 
-        await self.autostarted_agent_manager.stop_agents(env)
+        await self.autostarted_agent_manager.stop_agents(env, delete_venv=True)
         await env.clear()
 
         await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
