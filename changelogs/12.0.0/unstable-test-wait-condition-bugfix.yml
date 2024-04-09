@@ -1,0 +1,6 @@
+description: Bugfix in wait condition for unstable test
+change-type: patch
+destination-branches:
+  - master
+  - iso7
+  - iso6
