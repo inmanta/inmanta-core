@@ -2,4 +2,4 @@ description: Integrate local executor completely
 change-type: major
 destination-branches: [master]
 sections:
- - upgrade-note: "Handler can now access the agent via 'inmanta.agent.executor.AgentInstance' instead of `inmanta.agent.agent.AgentInstance`"
+ - upgrade-note: "Handlers can now access the agent via 'inmanta.agent.executor.AgentInstance' instead of `inmanta.agent.agent.AgentInstance`. If you have developed a handler using `self._agent` to access agent internals, it may break."
