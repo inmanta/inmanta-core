@@ -54,6 +54,10 @@ async def update(connection: Connection) -> None:
             -- fields
             ;
 
+        CREATE INDEX ON public.resource_persistent_state (environment, resource_type, resource_id);
+        CREATE INDEX ON public.resource_persistent_state (environment, resource_id_value, resource_id);
+        CREATE INDEX ON public.resource_persistent_state (environment, agent, resource_id);
+
         -- force Postgres to analyze resource table to allow it to pick efficient query plans
         ANALYZE public.resource;
         """
