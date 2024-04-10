@@ -18,3 +18,4 @@ Inmanta, please check out the :doc:`../quickstart` guide.
     json
     modules
     openapi
+    compatibility
