@@ -3,17 +3,28 @@
 Inmanta core and extensions versions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+The orchestrator is constituted of several components (python packages and npm packages).
+The python packages are of two types: one core package and several extension packages.
 
 {% if data['component_requirements']%}
+
+The following table shows the ranges of the Inmanta Python components, this product version is compatible with.
+The lower bound of these version constraints will remain the same for the whole lifetime of this major version. Upper bounds may be added when a new major version is released.
+
+This table is only meant as a reference for developers of Inmanta extensions and is meant to be used as input to a
+dependency resolver e.g. pip to ensure the resulting versions are compatible.
+This information is not relevant when installing the orchestrator via RPM as is recommended
+in the :ref:`install-server` section.
+
 .. list-table:: Inmanta core and extensions versions
    :header-rows: 1
 
-   * - Component
-     - Required version
+   * - .. centered:: Component
+     - .. centered:: Required version
 
    {% for key, value in data["component_requirements"] | dictsort %}
-   * - {{ key }}
-     - {{ value }}
+   * - .. centered:: {{ key }}
+     - .. centered:: {{ value }}
    {% endfor %}
 
 .. note::
@@ -23,6 +34,6 @@ Inmanta core and extensions versions
 
 
 {% else %}
-Components are not pinned for major version |version_major| because it is not released yet.
+Python components are not pinned for major version |version_major| because it is not released yet.
 {% endif %}
 
