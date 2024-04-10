@@ -23,6 +23,8 @@ from collections.abc import Awaitable, Callable
 import asyncpg
 import pytest
 
+import inmanta.resources
+
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
@@ -46,32 +48,16 @@ async def test_replace_index(
     # execute migration
     await migrate_db_from()
 
-    # Verify that each resource in the resource table has exactly one corresponding entry in the persistent state table,
-    # with which it shares all id-derived values.
-    # Exactly one because:
-    #   - join condition includes primary key on both tables => right side of join is at most 1
-    #   - given that right side of join is at most 1, the total number of joined rows equals the number of resources with
-    #       exactly one match
-    records = await postgresql_client.fetch(
-        """
-        WITH resources_with_matching_rps AS (
-            SELECT COUNT(*)
-            FROM public.resource AS r
-            JOIN public.resource_persistent_state AS rps
-            ON
-                r.environment = rps.environment
-                AND r.resource_id = rps.resource_id
-                AND r.resource_type = rps.resource_type
-                AND r.agent = rps.agent
-                AND r.resource_id_value = rps.resource_id_value
-        )
-        SELECT
-            resources_with_matching_rps.count AS nb_matching,
-            all_resources.count AS nb_total
-        FROM resources_with_matching_rps
-        CROSS JOIN (SELECT COUNT(*) FROM public.resource) AS all_resources
-        """
-    )
+    # Verify that each distinct resource in the resource table has exactly one corresponding entry in the persistent state
+    # table, with which it shares all id-derived values.
+    rps_records = await postgresql_client.fetch("SELECT * FROM public.resource_persistent_state")
+    resource_count_records = await postgresql_client.fetch("SELECT COUNT(DISTINCT resource_id) FROM public.resource")
 
-    assert len(records) == 1
-    assert records[0]["nb_matching"] == records[0]["nb_total"]
+    def verify_rps(rid: str, resource_type: str, agent: str, resource_id_value: str) -> None:
+        parsed: inmanta.resources.Id = inmanta.resources.Id.parse_id(rid)
+        assert (parsed.entity_type, parsed.agent_name, parsed.attribute_value) == (resource_type, agent, resource_id_value)
+
+    assert len(resource_count_records) == 1
+    assert len(rps_records) == resource_count_records[0]["count"]
+    for record in rps_records:
+        verify_rps(record["resource_id"], record["resource_type"], record["agent"], record["resource_id_value"])

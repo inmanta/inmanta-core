@@ -41,11 +41,17 @@ async def update(connection: Connection) -> None:
                 LIMIT 1
             )
             ;
+        DELETE
+            FROM public.resource_persistent_state
+            WHERE resource_type IS NULL
+            ;
         ALTER TABLE public.resource_persistent_state
             ALTER COLUMN resource_type SET NOT NULL,
             ALTER COLUMN agent SET NOT NULL,
-            ALTER COLUMN resource_id_value SET NOT NULL,
-            ADD CONSTRAINT resource_persistent_state_derived_id UNIQUE (environment, resource_type, agent, resource_id_value)
+            ALTER COLUMN resource_id_value SET NOT NULL
+            -- do not add UNIQUE constraint on (environment, resource_type, agent, resource_id_value) because resource_id_name
+            -- might change, which could result in a different resource_id, while still having the same value for all derived
+            -- fields
             ;
 
         -- force Postgres to analyze resource table to allow it to pick efficient query plans
