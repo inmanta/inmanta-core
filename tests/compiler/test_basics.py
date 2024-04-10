@@ -668,7 +668,7 @@ end
 implement Test using test
 Test()
 """,
-        r"variable n not found (reported in Format(This is test {{{{n}}}}) ({dir}/main.cf:5))",
+        r"variable n not found (reported in Format('This is test {{{{n}}}}') ({dir}/main.cf:5))",
     )
 
 

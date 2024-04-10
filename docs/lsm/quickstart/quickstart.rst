@@ -125,92 +125,92 @@ Orchestration model
 The full orchestration model to assign an IP-address to an interface of a SR Linux router, is shown below.
 
 .. code-block:: inmanta
-   :linenos:
+    :linenos:
 
-        import srlinux
-        import srlinux::interface as srinterface
-        import srlinux::interface::subinterface as srsubinterface
-        import srlinux::interface::subinterface::ipv4 as sripv4
-        import yang
-        import lsm
-        import lsm::fsm
+    import srlinux
+    import srlinux::interface as srinterface
+    import srlinux::interface::subinterface as srsubinterface
+    import srlinux::interface::subinterface::ipv4 as sripv4
+    import yang
+    import lsm
+    import lsm::fsm
 
-        entity InterfaceIPAssignment extends lsm::ServiceEntity:
-            """
-                Interface details.
+    entity InterfaceIPAssignment extends lsm::ServiceEntity:
+        """
+            Interface details.
 
-                :attr router_ip: The IP address of the SR linux router that should be configured.
-                :attr router_name: The name of the SR linux router that should be configured.
-                :attr interface_name: The name of the interface of the router that should be configured.
-                :attr address: The IP-address to assign to the given interface.
-            """
+            :attr router_ip: The IP address of the SR linux router that should be configured.
+            :attr router_name: The name of the SR linux router that should be configured.
+            :attr interface_name: The name of the interface of the router that should be configured.
+            :attr address: The IP-address to assign to the given interface.
+        """
 
-            std::ipv_any_address router_ip
-            string router_name
-            string interface_name
+        std::ipv_any_address router_ip
+        string router_name
+        string interface_name
 
-            std::ipv_any_interface address
-            lsm::attribute_modifier address__modifier="rw+"
+        std::ipv_any_interface address
+        lsm::attribute_modifier address__modifier="rw+"
 
-        end
+    end
 
-        implement InterfaceIPAssignment using parents, interfaceIPAssignment
+    implement InterfaceIPAssignment using parents, interfaceIPAssignment
 
-        implementation interfaceIPAssignment for InterfaceIPAssignment:
+    implementation interfaceIPAssignment for InterfaceIPAssignment:
 
-            device = srlinux::GnmiDevice(
-                    auto_agent = true,
-                    name = self.router_name,
-                    mgmt_ip = self.router_ip,
-                    yang_credentials = yang::Credentials(
-                        username = "admin",
-                        password = "NokiaSrl1!",
-                    )
+        device = srlinux::GnmiDevice(
+                auto_agent = true,
+                name = self.router_name,
+                mgmt_ip = self.router_ip,
+                yang_credentials = yang::Credentials(
+                    username = "admin",
+                    password = "NokiaSrl1!",
                 )
-
-            resource = srlinux::Resource(
-                device=device,
-                identifier = self.instance_id
             )
 
-            self.resources += resource.yang_resource
-
-            interface = srlinux::Interface(
-                device = device,
-                name = self.interface_name,
-                resource = resource,
-                mtu = 9000,
-                subinterface = srinterface::Subinterface(
-                    x_index = 0,
-                    ipv4=srsubinterface::Ipv4(
-                        address = sripv4::Address(
-                            ip_prefix = self.address
-                        ),
-                    ),
-                ),
-                comanaged = false
-            )
-
-        end
-
-
-        binding = lsm::ServiceEntityBinding(
-            service_entity="__config__::InterfaceIPAssignment",
-            lifecycle=lsm::fsm::simple,
-            service_entity_name="interface-ip-assignment",
+        resource = srlinux::Resource(
+            device=device,
+            identifier = self.instance_id
         )
 
+        self.resources += resource.yang_resource
 
-        for assignment in lsm::all(binding):
-            InterfaceIPAssignment(
-                instance_id=assignment["id"],
-                router_ip=assignment["attributes"]["router_ip"],
-                router_name=assignment["attributes"]["router_name"],
-                interface_name=assignment["attributes"]["interface_name"],
-                address=assignment["attributes"]["address"],
-                entity_binding=binding,
-            )
-        end
+        interface = srlinux::Interface(
+            device = device,
+            name = self.interface_name,
+            resource = resource,
+            mtu = 9000,
+            subinterface = srinterface::Subinterface(
+                x_index = 0,
+                ipv4=srsubinterface::Ipv4(
+                    address = sripv4::Address(
+                        ip_prefix = self.address
+                    ),
+                ),
+            ),
+            comanaged = false
+        )
+
+    end
+
+
+    binding = lsm::ServiceEntityBinding(
+        service_entity="__config__::InterfaceIPAssignment",
+        lifecycle=lsm::fsm::simple,
+        service_entity_name="interface-ip-assignment",
+    )
+
+
+    for assignment in lsm::all(binding):
+        InterfaceIPAssignment(
+            instance_id=assignment["id"],
+            router_ip=assignment["attributes"]["router_ip"],
+            router_name=assignment["attributes"]["router_name"],
+            interface_name=assignment["attributes"]["interface_name"],
+            address=assignment["attributes"]["address"],
+            entity_binding=binding,
+        )
+    end
 
 
 * Lines 1 to 7 import several modules required by this configuration model.
