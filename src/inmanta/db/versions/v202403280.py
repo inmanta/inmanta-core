@@ -25,7 +25,6 @@ async def update(connection: Connection) -> None:
     sorting. These tables are derived from the resource id and are therefore part of the identity of a resource. They will not
     change for the lifetime of a resource (with a given resource id).
     """
-    # TODO: migration test
 
     await connection.execute(
         """
@@ -39,6 +38,7 @@ async def update(connection: Connection) -> None:
                 SELECT r.resource_type, r.agent, r.resource_id_value
                 FROM public.resource AS r
                 WHERE rps.environment = r.environment AND rps.resource_id = r.resource_id
+                LIMIT 1
             )
             ;
         ALTER TABLE public.resource_persistent_state
