@@ -1171,11 +1171,9 @@ class Agent(SessionEndpoint):
                     resource_type, version, executor.ExecutorBlueprint(pip_config, list(requirements), sources)
                 )
                 resource_install_specs.append(resource_install_spec)
-
-                # TODO: cache is running ahead?
-
-                # Update the ``_previously_loaded`` cache to indicate that the given resource type's code
-                # was loaded successfully at the specified version.
+                # Update the ``_previously_loaded`` cache to indicate that the given resource type's ResourceInstallSpec
+                # was constructed successfully at the specified version.
+                # TODO: this cache is a slight memory leak
                 self._previously_loaded[(resource_type, version)] = resource_install_spec
             else:
                 invalid_resource_types.add(resource_type)
