@@ -32,6 +32,7 @@ from uuid import UUID
 
 import asyncpg.connection
 
+import inmanta.config
 from inmanta import const, data
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
@@ -993,7 +994,7 @@ class AutostartedAgentManager(ServerSlice):
         """
         Return the state dir to be used by the auto-started agent in the given environment.
         """
-        state_dir: str = cast(str, Config.get("config", "state-dir", "/var/lib/inmanta"))
+        state_dir: str = inmanta.config.state_dir.get()
         return os.path.join(state_dir, str(env_id))
 
     def _remove_venv_for_agent_in_env(self, env_id: uuid.UUID) -> None:
