@@ -41,6 +41,8 @@ async def update(connection: Connection) -> None:
                 LIMIT 1
             )
             ;
+        -- Delete long-orphaned resources that don't exist in the resource column anymore but still linger in the persistent
+        -- state one. Required for the `NOT NULL` constraint.
         DELETE
             FROM public.resource_persistent_state
             WHERE resource_type IS NULL
