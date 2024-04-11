@@ -53,7 +53,7 @@ version = "8.7.5"
 
 setup(
     version=version,
-    python_requires=">=3.9",  # also update classifiers
+    python_requires=">=3.11",  # also update classifiers
     # Meta data
     name="inmanta-core",
     description="Inmanta deployment tool",
