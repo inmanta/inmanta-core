@@ -1,0 +1,26 @@
+.. -*- mode: rst -*-
+
+
+Module set
+~~~~~~~~~~
+
+The following table shows the set of Inmanta modules available with this version of Inmanta
+and their respective version:
+
+{% if data['module_set_constraints']%}
+.. list-table:: Modules
+   :header-rows: 1
+
+   * - .. centered:: Module
+     - .. centered:: Version
+
+   {% for key, value in data["module_set_constraints"] | dictsort %}
+   * - .. centered:: {{ key }}
+     - .. centered:: {{ value }}
+   {% endfor %}
+{% endif %}
+
+.. note::
+
+    This information is also available in a machine-consumable format in the `compatibility.json <./compatibility.json>`_ file.
+
