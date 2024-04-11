@@ -101,7 +101,7 @@ class EnvBlueprint:
         if self._hash_cache is None:
             blueprint_dict: Dict[str, Any] = {
                 "pip_config": self.pip_config.dict(),
-                "requirements": self.requirements,
+                "requirements": sorted(self.requirements),
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -115,7 +115,7 @@ class EnvBlueprint:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EnvBlueprint):
             return False
-        return (self.pip_config, self.requirements) == (other.pip_config, other.requirements)
+        return (self.pip_config, set(self.requirements)) == (other.pip_config, set(other.requirements))
 
     def __hash__(self) -> int:
         return int(self.blueprint_hash(), 16)
