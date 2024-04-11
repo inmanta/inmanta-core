@@ -239,7 +239,7 @@ class PagingOrder(str, enum.Enum):
 
     def db_form(self, *, nullable: bool = True) -> OrderStr:
         # The current filtering and sorting framework has the built-in assumption that nulls are considered the lowest values,
-        # hence we must deviate from postgres' default order. As a result, we may the opportunity to use indexes, which
+        # hence we must deviate from postgres' default order. As a result, we may lose the opportunity to use indexes, which
         # use the same order.
         # The framework can not easily be refactored because
         #   1. Not all column types have a sane MAX value to coalesce to
