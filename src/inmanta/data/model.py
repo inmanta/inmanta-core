@@ -454,8 +454,15 @@ class LatestReleasedResource(VersionedResource):
 
 
 class PagingBoundaries:
-    """Represents the lower and upper bounds that should be used for the next and previous pages
-    when listing domain entities"""
+    """
+    Represents the lower and upper bounds that should be used for the next and previous pages
+    when listing domain entities.
+
+    :param start: largest value of the page for the primary sort column.
+    :param end: smallest value of the page for the primary sort column.
+    :param first_id: largest value of the page for the secondary sort column, if there is one.
+    :param last_id: smallest value of the page for the secondary sort column, if there is one.
+    """
 
     def __init__(
         self,
