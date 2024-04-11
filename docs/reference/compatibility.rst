@@ -37,12 +37,12 @@ Module set
 .. only:: iso
 
     The table below shows the set of Inmanta modules that come along with version |version_major| of the
-    Inmanta Service Orchestrator and their respective version.
+    Inmanta Service Orchestrator and constraints on their respective version (if any).
 
 .. only:: oss
 
     The table below shows the set of Inmanta modules that come along with this Inmanta OSS version |release|
-    and their respective version.
+    and constraints on their respective version (if any).
 
 .. datatemplate:json:: /reference/compatibility.json
    :template: module_sets.tmpl
