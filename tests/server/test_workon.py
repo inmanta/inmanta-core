@@ -193,7 +193,8 @@ async def compiled_environments(client: protocol.Client) -> abc.AsyncIterator[ab
 
         async def all_compiles_done() -> bool:
             return all(
-                result.code == 204 for result in await asyncio.gather(*(client.is_compiling(env.id) for env in environments))
+                result.result["queue"] == []
+                for result in await asyncio.gather(*(client.get_compile_queue(env.id) for env in environments))
             )
 
         await utils.retry_limited(all_compiles_done, 15)
