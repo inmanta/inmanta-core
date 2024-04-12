@@ -1,0 +1,21 @@
+.. -*- mode: rst -*-
+
+{% if data['compiler_version']%}
+
+Compiler version
+~~~~~~~~~~~~~~~~
+
+.. only:: iso
+
+    Version |version| of the Inmanta Service Orchestrator relies on compiler version {{ data['compiler_version'] }}.
+
+.. only:: oss
+
+    Inmanta version |version| relies on compiler version {{ data['compiler_version'] }}.
+
+
+.. note::
+
+    This information is also available in a machine-consumable format in the `compatibility.json <./compatibility.json>`_ file.
+
+{% endif %}

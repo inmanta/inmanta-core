@@ -1,38 +1,84 @@
 .. -*- mode: rst -*-
 
 
+.. only:: iso
 
-The orchestrator is constituted of several components (python packages and npm packages).
-The python packages are of two types: one core package and several extension packages.
+    {% if data['component_requirements']%}
 
-{% if data['component_requirements']%}
+    Inmanta core and extension versions
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The following table shows the ranges of the Inmanta Python components, this product version is compatible with.
-The lower bound of these version constraints will remain the same for the whole lifetime of this major version. Upper bounds may be added when a new major version is released.
+    The orchestrator is constituted of several components (python packages and npm packages).
+    The python packages are of two types: one core package and several extension packages.
 
-This table is only meant as a reference for developers of Inmanta extensions and is meant to be used as input to a
-dependency resolver e.g. pip to ensure the resulting versions are compatible.
-This information is not relevant when installing the orchestrator via RPM as is recommended
-in the :ref:`install-server` section.
 
-.. list-table:: Inmanta core and extensions versions
-   :header-rows: 1
+    The following table shows the ranges of the Inmanta Python components, this product version is compatible with.
+    The lower bound of these version constraints will remain the same for the whole lifetime of this major version. Upper bounds may be added when a new major version is released.
 
-   * - .. centered:: Component
-     - .. centered:: Required version
+    This table is only meant as a reference for developers of Inmanta extensions and is meant to be used as input to a
+    dependency resolver e.g. pip to ensure the resulting versions are compatible.
+    This information is not relevant when installing the orchestrator via RPM as is recommended
+    in the :ref:`install-server` section.
 
-   {% for key, value in data["component_requirements"] | dictsort %}
-   * - .. centered:: {{ key }}
-     - .. centered:: {{ value }}
-   {% endfor %}
+    .. list-table:: Inmanta core and extensions versions
+       :header-rows: 1
 
-.. note::
+       * - .. centered:: Component
+         - .. centered:: Required version
+
+       {% for key, value in data["component_requirements"] | dictsort %}
+       * - .. centered:: {{ key }}
+         - .. centered:: {{ value }}
+       {% endfor %}
+
+    .. note::
 
     This information is also available as a constraints file in `requirements.components.txt <./requirements.components.txt>`_
     and in json format in the `compatibility.json <./compatibility.json>`_ file.
 
+    {% else %}
+    Python components are not pinned for major version |version_major| because it is not released yet.
+    {% endif %}
 
-{% else %}
-Python components are not pinned for major version |version_major| because it is not released yet.
+
+{% if data['module_set_constraints']%}
+
+
+Module set
+~~~~~~~~~~
+
+.. only:: iso
+
+    The table below shows the set of Inmanta modules that come along with version |version_major| of the
+    Inmanta Service Orchestrator and constraints on their respective version (if any).
+
+    .. list-table:: Modules
+       :header-rows: 1
+
+       * - .. centered:: Module
+         - .. centered:: Version constraint
+
+       {% for key, value in data["module_set_constraints"] | dictsort %}
+       * - .. centered:: {{ key }}
+         - .. centered:: {{ value }}
+       {% endfor %}
+
+.. only:: oss
+
+    The table below shows the set of Inmanta modules that come along with this Inmanta OSS version |release|.
+
+    .. list-table:: Modules
+       :header-rows: 1
+
+       * - .. centered:: Module
+
+       {% for key, value in data["module_set_constraints"] | dictsort %}
+       * - .. centered:: {{ key }}
+       {% endfor %}
+
+.. note::
+
+    This information is also available in a machine-consumable format in the `compatibility.json <./compatibility.json>`_ file.
+
 {% endif %}
 

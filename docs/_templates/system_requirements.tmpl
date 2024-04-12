@@ -1,6 +1,21 @@
 .. -*- mode: rst -*-
 
 {% if data['system_requirements']%}
+
+System requirements
+~~~~~~~~~~~~~~~~~~~
+
+
+.. only:: iso
+
+    The table below shows the system requirements of version |version_major| of the Inmanta Service Orchestrator.
+
+
+.. only:: oss
+
+    The table below shows the system requirements of Inmanta OSS version |release|.
+
+
 .. list-table:: System requirements
    :header-rows: 1
 
@@ -11,9 +26,9 @@
    * - .. centered:: {{ key }}
      - .. centered:: {{ value }}
    {% endfor %}
-{% endif %}
 
 .. note::
 
     This information is also available in a machine-consumable format in the `compatibility.json <./compatibility.json>`_ file.
 
+{% endif %}
