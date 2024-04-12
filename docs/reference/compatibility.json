@@ -10,13 +10,13 @@
     "system_requirements": {
         "python_version": "3.11",
         "rhel_versions": [
-            9,
-            8
+            8,
+            9
         ],
         "postgres_version": 13
     },
     "module_set_constraints": {
-        "lsm": "~=2.27",
+        "lsm": null,
         "std": null
     }
 }
