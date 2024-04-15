@@ -28,7 +28,7 @@ from inmanta.resources import Resource
 from inmanta.stable_api import stable_api
 
 if TYPE_CHECKING:
-    from inmanta.agent.agent import AgentInstance
+    from inmanta.agent.executor import AgentInstance
 
 LOGGER = logging.getLogger()
 
