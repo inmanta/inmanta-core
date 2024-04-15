@@ -43,6 +43,7 @@ from inmanta.util import hash_file
 
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent
+    import inmanta.agent.executor
     from inmanta.agent.io.local import IOBase
 
 
@@ -439,7 +440,7 @@ class HandlerAPI(ABC, Generic[TResource]):
     operations.
     """
 
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
+    def __init__(self, agent: "inmanta.agent.executor.AgentInstance", io: Optional["IOBase"] = None) -> None:
         """
         :param agent: The agent that is executing this handler.
         :param io: The io object to use.
@@ -451,7 +452,7 @@ class HandlerAPI(ABC, Generic[TResource]):
             self._io = io
         self._client: Optional[protocol.SessionClient] = None
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
-        self._ioloop = agent.process._io_loop
+        self._ioloop = agent.eventloop
 
     # Interface
 
@@ -1073,14 +1074,14 @@ class Commander:
 
     @classmethod
     def _get_instance(
-        cls, handler_class: type[ResourceHandler[Any]], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
+        cls, handler_class: type[ResourceHandler[Any]], agent: "inmanta.agent.executor.AgentInstance", io: "IOBase"
     ) -> ResourceHandler[Any]:
         new_instance = handler_class(agent, io)
         return new_instance
 
     @classmethod
     def get_provider(
-        cls, cache: AgentCache, agent: "inmanta.agent.agent.AgentInstance", resource: resources.Resource
+        cls, cache: AgentCache, agent: "inmanta.agent.executor.AgentInstance", resource: resources.Resource
     ) -> HandlerAPI[Any]:
         """
         Return a provider to handle the given resource
