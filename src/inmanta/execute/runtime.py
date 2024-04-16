@@ -17,8 +17,8 @@
 """
 
 from abc import abstractmethod
-from collections.abc import Hashable, Sequence
-from typing import TYPE_CHECKING, Deque, Generic, List, Literal, Optional, TypeVar, Union, cast
+from collections.abc import Hashable, Sequence, Set
+from typing import TYPE_CHECKING, Deque, Generic, List, Literal, NewType, Optional, TypeVar, Union, cast
 
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
 from inmanta import ast
@@ -854,6 +854,14 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
 
 
+OrderedWaiterSet = NewType("OrderedWaiterSet", Set["Waiter"])
+"""
+Set-like object with deterministic iteration order (maintains insert order).
+
+Declared as NewType rather than an implementation of MutableSet for performance reasons (one order of magnitude).
+"""
+
+
 class QueueScheduler:
     """
     Object representing the compiler to the AST nodes. It provides access to the queueing mechanism and the type system.
@@ -861,7 +869,7 @@ class QueueScheduler:
     MUTABLE!
     """
 
-    __slots__ = ("compiler", "runqueue", "waitqueue", "types", "allwaiters")
+    __slots__ = ("compiler", "runqueue", "waitqueue", "types", "_allwaiters")
 
     def __init__(
         self,
@@ -869,13 +877,16 @@ class QueueScheduler:
         runqueue: "Deque[Waiter]",
         waitqueue: "PrioritisedDelayedResultVariableQueue",
         types: dict[str, Type],
-        allwaiters: "set[Waiter]",
     ) -> None:
         self.compiler = compiler
         self.runqueue = runqueue
         self.waitqueue = waitqueue
         self.types = types
-        self.allwaiters = allwaiters
+        self._allwaiters: dict[Waiter, None] = {}
+
+    @property
+    def allwaiters(self) -> OrderedWaiterSet:
+        return OrderedWaiterSet(self._allwaiters.keys())
 
     def add_running(self, item: "Waiter") -> None:
         self.runqueue.append(item)
@@ -890,10 +901,10 @@ class QueueScheduler:
         return self.types
 
     def add_to_all(self, item: "Waiter") -> None:
-        self.allwaiters.add(item)
+        self._allwaiters[item] = None
 
     def remove_from_all(self, item: "Waiter") -> None:
-        self.allwaiters.remove(item)
+        del self._allwaiters[item]
 
     def get_tracker(self) -> Optional[Tracker]:
         return None
