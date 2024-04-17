@@ -1323,7 +1323,7 @@ version: 0.0.1dev0"""
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
             print(f"Tag created successfully: {release_tag}")
             # bump to the next dev version
-            if hasattr(module.metadata, "use_four_digit") and module.metadata.use_four_digit:
+            if hasattr(module.metadata, "use_four_digits") and module.metadata.use_four_digits:
                 self.release(dev=True, message="Bump version to next development version", revision=True)
             else:
                 self.release(dev=True, message="Bump version to next development version", patch=True)
