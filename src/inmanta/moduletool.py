@@ -1273,7 +1273,6 @@ version: 0.0.1dev0"""
         if not requested_version_bump and dev:
             # Dev always bumps
             requested_version_bump = ChangeType.PATCH
-
         if requested_version_bump:
             new_version: Version = self._get_dev_version_with_minimal_distance_to_previous_stable_release(
                 current_version, stable_releases, requested_version_bump
@@ -1323,6 +1322,8 @@ version: 0.0.1dev0"""
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
             print(f"Tag created successfully: {release_tag}")
             # bump to the next dev version
+            if module.metadata.use_four_digit_version:
+                self.release(dev=True, message="Bump version to next development version", revision=True)
             self.release(dev=True, message="Bump version to next development version", patch=True)
 
 
