@@ -19,11 +19,11 @@ System requirements
 .. list-table:: System requirements
    :header-rows: 1
 
-   * - .. centered:: Component
-     - .. centered:: Required version
+   * - Component
+     - Required version
 
    {% for key, value in data["system_requirements"] | dictsort %}
-   * - .. centered:: {{ key }}
+   * - {{ key }}
      - .. centered:: {{ value }}
    {% endfor %}
 

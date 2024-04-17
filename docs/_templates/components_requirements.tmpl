@@ -23,11 +23,11 @@
     .. list-table:: Inmanta core and extensions versions
        :header-rows: 1
 
-       * - .. centered:: Component
-         - .. centered:: Required version
+       * - Component
+         - Required version
 
        {% for key, value in data["component_requirements"] | dictsort %}
-       * - .. centered:: {{ key }}
+       * - {{ key }}
          - .. centered:: {{ value }}
        {% endfor %}
 
@@ -49,18 +49,16 @@ Module set
 
 .. only:: iso
 
-    The table below shows the set of Inmanta modules that come along with version |version_major| of the
-    Inmanta Service Orchestrator and constraints on their respective version (if any).
+    The table below shows the set of Inmanta modules that come pre-installed with version |version_major| of the
+    Inmanta Service Orchestrator.
 
     .. list-table:: Modules
        :header-rows: 1
 
-       * - .. centered:: Module
-         - .. centered:: Version constraint
+       * - Module
 
        {% for key, value in data["module_set_constraints"] | dictsort %}
-       * - .. centered:: {{ key }}
-         - .. centered:: {{ value }}
+       * - {{ key }}
        {% endfor %}
 
 .. only:: oss
@@ -73,7 +71,7 @@ Module set
        * - .. centered:: Module
 
        {% for key, value in data["module_set_constraints"] | dictsort %}
-       * - .. centered:: {{ key }}
+       * - {{ key }}
        {% endfor %}
 
 .. note::
