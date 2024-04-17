@@ -1071,7 +1071,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     async def cancel_compile(self, env_id: uuid.UUID) -> None:
         """
-        Cancel the ongoing compile for the given environment (if any) and don't start any new compiles.
+        Cancel the ongoing compile for the given environment (if any). After the cancellation, this method
+        will not start the execution of a new compile, if a compile request would be present in the compile
+        queue for the given environment.
 
         :param env_id: The id of the environment for which the compile should be cancelled.
         """

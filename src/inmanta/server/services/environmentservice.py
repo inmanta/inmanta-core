@@ -269,6 +269,8 @@ class EnvironmentService(protocol.ServerSlice):
         Halts the specified environment without acquiring the environment_state_operation_lock.
         This method is designed to be an internal helper that allows for halting an environment
         as part of a larger operation (e.g., deletion), where the lock is managed by the caller and prevent double locking.
+
+        :param delete_agent_venv: True iff also delete the venv of the agent after stopping it.
         """
         async with data.Environment.get_connection(connection=connection) as con:
             async with con.transaction():
