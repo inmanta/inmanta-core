@@ -1068,3 +1068,18 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     async def recalculate_queue_count_cache(self) -> None:
         async with self._queue_count_cache_lock:
             self._queue_count_cache = await data.Compile.get_total_length_of_all_compile_queues()
+
+    async def cancel_compile(self, env_id: uuid.UUID) -> None:
+        """
+        Cancel the ongoing compile for the given environment (if any) and don't start any new compiles.
+
+        :param env_id: The id of the environment for which the compile should be cancelled.
+        """
+        compile_task: Optional[Task[None | Result]] = self._recompiles.pop(env_id, None)
+        if compile_task:
+            compile_task.cancel()
+            try:
+                # Wait until cancellation has finished
+                await compile_task
+            except asyncio.CancelledError:
+                pass

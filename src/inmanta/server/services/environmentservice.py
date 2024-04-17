@@ -140,6 +140,7 @@ class EnvironmentService(protocol.ServerSlice):
             SLICE_AUTOSTARTED_AGENT_MANAGER,
             SLICE_ORCHESTRATION,
             SLICE_RESOURCE,
+            SLICE_AGENT_MANAGER,
         ]
 
     def get_depended_by(self) -> list[str]:
@@ -498,22 +499,27 @@ class EnvironmentService(protocol.ServerSlice):
                         f"Environment {environment_id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}"
                     )
 
+                await env.mark_for_deletion(connection=connection)
+
                 # Check if the environment is halted; if not, halt it
                 if not env.halted:
                     LOGGER.info("Halting Environment %s", str(environment_id))
                     await self._halt(env, connection=connection)
 
-                await env.mark_for_deletion(connection=connection)
                 self._disable_schedules(env)
                 await asyncio.gather(
                     self.autostarted_agent_manager.stop_agents(env, delete_venv=True),
-                    env.delete_cascade(connection=connection),
+                    self.compiler_service.cancel_compile(env.id),
                 )
+                # Delete the environment directory before deleting the database records. This ensures that
+                # this operation can be retried if the deletion of the environment directory fails. Otherwise,
+                # the environment directory would be left in an inconsistent state. This can cause problems if
+                # the user later on recreates an environment with the same environment id.
+                self._delete_environment_dir(environment_id)
+                await env.delete_cascade(connection=connection)
 
             self.resource_service.close_resource_action_logger(environment_id)
             await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
-
-            self._delete_environment_dir(environment_id)
 
     @handle(methods_v2.environment_clear, env="id")
     async def environment_clear(self, env: data.Environment) -> None:
@@ -524,11 +530,18 @@ class EnvironmentService(protocol.ServerSlice):
         if is_protected_environment:
             raise Forbidden(f"Environment {env.id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
 
-        await self.autostarted_agent_manager.stop_agents(env, delete_venv=True)
+        await asyncio.gather(
+            self.autostarted_agent_manager.stop_agents(env, delete_venv=True),
+            self.compiler_service.cancel_compile(env.id),
+        )
+        # Delete the environment directory before deleting the database records. This ensures that
+        # this operation can be retried if the deletion of the environment directory fails. Otherwise,
+        # the environment directory would be left in an inconsistent state. This can cause problems if
+        # the user later on recreates an environment with the same environment id.
+        self._delete_environment_dir(env.id)
         await env.clear()
 
         await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
-        self._delete_environment_dir(env.id)
 
     @handle(methods_v2.environment_create_token, env="tid")
     async def environment_create_token(self, env: data.Environment, client_types: list[str], idempotent: bool) -> str:
