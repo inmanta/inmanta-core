@@ -183,6 +183,9 @@ class SessionEndpoint(Endpoint, CallTarget):
         self.reconnect_delay = reconnect_delay
         self.add_call_target(self)
 
+        self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
+        self._heartbeat_client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout, force_instance=True)
+
     def get_environment(self) -> Optional[uuid.UUID]:
         return self._env_id
 
@@ -210,8 +213,6 @@ class SessionEndpoint(Endpoint, CallTarget):
         """
         assert self._env_id is not None
         LOGGER.info("Starting agent for %s", str(self.sessionid))
-        self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
-        self._heartbeat_client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout, force_instance=True)
         await self.start_connected()
         self.add_background_task(self.perform_heartbeat())
 

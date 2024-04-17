@@ -18,25 +18,22 @@
 
 import asyncio
 import base64
-import concurrent.futures.thread
 import logging
-import typing
 
 import pytest
 
 import inmanta.agent
-import inmanta.agent.executor
 import inmanta.config
 import inmanta.data
 import inmanta.loader
 import inmanta.protocol.ipc_light
 import inmanta.util
+from inmanta.agent import executor
 from inmanta.agent.forking_executor import MPManager
 from inmanta.protocol.ipc_light import ConnectionLost
 
 
 class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
-
     def __init__(self, args: list[str]) -> None:
         self.args = args
 
@@ -46,7 +43,6 @@ class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
 
 
 class GetConfig(inmanta.protocol.ipc_light.IPCMethod[str, None]):
-
     def __init__(self, section: str, name: str) -> None:
         self.section = section
         self.name = name
@@ -75,26 +71,6 @@ class TestLoader(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
         return [inmanta_plugins.test.testA.test(), inmanta_plugins.test.testB.test()]
 
 
-@pytest.fixture
-async def mpmanager(tmp_path, agent: inmanta.agent.Agent) -> typing.Iterator[MPManager]:
-    log_folder = tmp_path / "logs"
-    storage_folder = tmp_path / "executors"
-    venvs = tmp_path / "venvs"
-
-    threadpool = concurrent.futures.thread.ThreadPoolExecutor()
-    venv_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venvs))
-    manager = MPManager(
-        threadpool, venv_manager, agent.sessionid, log_folder=str(log_folder), storage_folder=str(storage_folder), cli_log=True
-    )
-    manager.init_once()
-
-    yield manager
-
-    threadpool.shutdown(wait=False)
-    await manager.stop()
-    await manager.join(10)
-
-
 async def test_executor_server(mpmanager: MPManager, client):
     """
     Test the MPManager, this includes
@@ -113,10 +89,8 @@ async def test_executor_server(mpmanager: MPManager, client):
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
     # Simple empty venv
-    simplest = inmanta.agent.executor.ExecutorBlueprint(
-        pip_config=inmanta.data.PipConfig(), requirements=[], sources=[]  # No pip
-    )
-    simplest = await manager.get_executor("agent1", simplest)
+    simplest = executor.ExecutorBlueprint(pip_config=inmanta.data.PipConfig(), requirements=[], sources=[])  # No pip
+    simplest = await manager.get_executor("agent1", "test", [executor.ResourceInstallSpec("test::Test", 5, simplest)])
 
     # check communications
     result = await simplest.connection.call(Echo(["aaaa"]))
@@ -150,10 +124,10 @@ def test():
     assert res.code == 200
 
     # Full config: 2 source files, one python dependency
-    full = inmanta.agent.executor.ExecutorBlueprint(
+    full = executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct, via_server]
     )
-    full_runner = await manager.get_executor("agent2", full)
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
 
     # assert loaded
     result2 = await full_runner.connection.call(TestLoader())
@@ -173,10 +147,10 @@ def test():
         import lorem  # noqa: F401, F811
 
 
-async def test_executor_server_dirty_shutdown(mpmanager):
+async def test_executor_server_dirty_shutdown(mpmanager: MPManager):
     manager = mpmanager
 
-    child1 = await manager.make_child_and_connect("Testchild")
+    child1 = await manager.make_child_and_connect(executor.ExecutorId("test", "Test", None), None)
 
     result = await child1.connection.call(Echo(["aaaa"]))
     assert ["aaaa"] == result

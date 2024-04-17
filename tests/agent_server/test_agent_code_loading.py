@@ -28,7 +28,7 @@ import pytest
 
 import inmanta
 from inmanta.agent import Agent
-from inmanta.agent.agent import ResourceInstallSpec
+from inmanta.agent.executor import ResourceInstallSpec
 from inmanta.data import PipConfig
 from inmanta.protocol import Client
 from inmanta.util import get_compiler_version
@@ -211,12 +211,11 @@ inmanta.test_agent_code_loading = 15
         .assert_not("inmanta", DEBUG, "test::Test ")
     )
 
-    # Test 2 is deployed twice, as seen by the agent
-    # But loaded only once
+    # Test 2 is deployed one, as seen by the agent
+    # and loaded only once
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test2 version={version_1}").contains(
-        "inmanta.agent.agent", DEBUG, f"Installing handler test::Test2 version={version_2}"
-    ).contains("inmanta.loader", DEBUG, f"Not deploying code (hv={hv1}, module=inmanta_plugins.test) because of cache hit")
-
+        "inmanta.agent.agent", DEBUG, f"Handler code already installed for test::Test2 version={version_2}"
+    )
     # Loader only loads source1 once
     LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv1}, module=inmanta_plugins.test)").assert_not(
         "inmanta.loader", INFO, f"Deploying code (hv={hv1}, module=inmanta_plugins.test)"
