@@ -1288,8 +1288,7 @@ class ModuleMetadata(ABC, Metadata):
 
         try:
             new_metadata = cls.parse(result)
-        except Exception as e:
-            print(e)
+        except Exception:
             raise Exception("Unable to rewrite module definition.")
 
         # Validate whether the version and version_tag field was updated correctly in metadata file
