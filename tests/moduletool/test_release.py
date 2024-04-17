@@ -46,10 +46,10 @@ def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> 
     return subprocess.check_output(["git", "log", "-1", f"--skip={nb_previous_commit}", "--pretty=%B"], cwd=path).decode()
 
 
-@pytest.mark.parametrize_any("v1_module", [False])
+@pytest.mark.parametrize_any("v1_module", [True, False])
 @pytest.mark.parametrize_any("changelog_file_exists", [True, False])
 @pytest.mark.parametrize_any("previous_stable_version_exists", [True, False])
-@pytest.mark.parametrize_any("use_four_digit_version", [True, False])
+@pytest.mark.parametrize_any("use_four_digit", [True, False])
 def test_release_stable_version(
     tmpdir,
     modules_dir: str,
@@ -58,10 +58,11 @@ def test_release_stable_version(
     v1_module: bool,
     changelog_file_exists: bool,
     previous_stable_version_exists: bool,
-    use_four_digit_version: bool,
+    use_four_digit: bool,
 ) -> None:
     """
     Test normal scenario where `inmanta module release` is used to release a stable version of a module.
+    use_four_digit only works for v2 modules
     """
 
     def get_changelog_content(after_release: bool) -> str:
@@ -69,7 +70,7 @@ def test_release_stable_version(
             return f"""
 # Changelog
 
-## v1.2.4 - ?
+## {"v1.2.3.1" if use_four_digit and not v1_module else "v1.2.4"} - ?
 
 
 ## v1.2.3 - {datetime.date.today().isoformat()}
@@ -108,7 +109,7 @@ def test_release_stable_version(
             dest_dir=path_module,
             new_version=Version("1.2.3.dev0"),
             new_name=module_name,
-            use_four_digit_version=use_four_digit_version,
+            use_four_digit=use_four_digit,
         )
     gitprovider.git_init(repo=path_module)
     path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
@@ -143,7 +144,7 @@ def test_release_stable_version(
     assert gitprovider.get_version_tags(repo=path_module) == expected_tags
     # Verify version
     mod = Module.from_path(path_module)
-    assert mod.version == Version("1.2.4.dev0")
+    assert mod.version == Version("1.2.3.1dev0") if use_four_digit and not v1_module else Version("1.2.4.dev0")
     # Verify changelog file
     if changelog_file_exists:
         with open(path_changelog_file, encoding="utf-8") as fh:

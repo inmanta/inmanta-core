@@ -1390,13 +1390,13 @@ class ModuleV2Metadata(ModuleMetadata):
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
       Valid values are [==, ~=, >=]. *Default is '~='*
     :param install_requires: The Python packages this module depends on.
-    :param use_four_digit_version: Whether to use a four-digit version format (e.g. 23.4.1.0) instead of the standard
+    :param use_four_digit: Whether to use a four-digit version format (e.g. 23.4.1.0) instead of the standard
         three-digit format (e.g. 23.4.1).
     """
 
     install_requires: list[str]
     version_tag: str = ""
-    use_four_digit_version: bool = False
+    use_four_digit: bool = False
     _raw_parser: typing.ClassVar[type[CfgParser]] = CfgParser
 
     @field_validator("version")
