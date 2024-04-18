@@ -9,13 +9,23 @@
 Module compatibility ranges
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. only:: iso
 
-When an Inmanta module integrates tightly with the Inmanta Service Orchestrator, it's important
-to use a version of that module that is compatible with the orchestrator. This can be achieved by either:
+    The continuous integration can be configured to run tests against multiple ISO versions. Each version might require
+    a different set of Inmanta modules and different versions of these modules.
 
-- Using a specific index (or git repo) per ISO version and making sure it contains the compatible versions of the modules.
-- Using a generic index (or git repo) possibly containing multiple versions for a given module and adding a
-  project constraint file for each ISO version in which the compatible module ranges are specified.
+.. only:: oss
+
+    The continuous integration can be configured to run tests against multiple OSS versions. Each version might require
+    a different set of Inmanta modules and different versions of these modules.
+
+
+This configuration can be done by either:
+
+- Using a specific pip index (or git repos) per ISO version and making sure it only contains the compatible versions of the modules.
+- Using a generic pip index (or git repos) containing module versions for different ISO versions and adding a
+  constraint file for each ISO version in which the compatible module ranges are specified.
+
 
 {% set list_only = ["lsm", "std"] %}
 
@@ -61,11 +71,11 @@ to use a version of that module that is compatible with the orchestrator. This c
 
 .. only:: iso
 
-    {% if data['component_requirements'] %}
+    {% if data['python_package_constraints'] %}
 
     .. note::
 
-        To transparently install the latest compatible versions for all the python components that make up the
+        To conveniently install the latest compatible versions for all the python components that make up the
         ``inmanta-service-orchestrator`` package for version |version_major| of the Inmanta Service Orchestrator,
         install it via the following command:
 
@@ -73,6 +83,29 @@ to use a version of that module that is compatible with the orchestrator. This c
             :substitutions:
 
             pip install inmanta-service-orchestrator~=|version_major|.0
+
+        If for some reason (e.g. when developing an Inmanta extension) you need to rely on the version of one or more of
+        these python components specifically, make sure you take into account the following constraints:
+        `requirements.components.txt <./requirements.components.txt>`_. These constraints are also available in json format in the
+        `compatibility.json <./compatibility.json>`_ file.
+
+
+    {% endif %}
+
+.. only:: oss
+
+    {% if data['python_package_constraints'] %}
+
+    .. note::
+
+        To conveniently install the latest compatible versions for all the python components that make up the
+        ``inmanta`` package for Inmanta OSS version |release|,
+        install it via the following command:
+
+        .. code-block:: sh
+            :substitutions:
+
+            pip install inmanta~=|release|
 
         If for some reason (e.g. when developing an Inmanta extension) you need to rely on the version of one or more of
         these python components specifically, make sure you take into account the following constraints:
