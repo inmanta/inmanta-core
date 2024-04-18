@@ -1,77 +1,56 @@
 .. -*- mode: rst -*-
 
 
-.. only:: iso
-
-    {% if data['component_requirements']%}
-
-    Inmanta core and extension versions
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    The orchestrator is constituted of several components (python packages and npm packages).
-    The python packages are of two types: one core package and several extension packages.
 
 
-    The following table shows the ranges of the Inmanta Python components, this product version is compatible with.
-    The lower bound of these version constraints will remain the same for the whole lifetime of this major version. Upper bounds may be added when a new major version is released.
-
-    This table is only meant as a reference for developers of Inmanta extensions and is meant to be used as input to a
-    dependency resolver e.g. pip to ensure the resulting versions are compatible.
-    This information is not relevant when installing the orchestrator via RPM as is recommended
-    in the :ref:`install-server` section.
-
-    .. list-table:: Inmanta core and extensions versions
-       :header-rows: 1
-
-       * - Component
-         - Required version
-
-       {% for key, value in data["component_requirements"] | dictsort %}
-       * - {{ key }}
-         - .. centered:: {{ value }}
-       {% endfor %}
-
-    .. note::
-
-        This information is also available as a constraints file in `requirements.components.txt <./requirements.components.txt>`_
-        and in json format in the `compatibility.json <./compatibility.json>`_ file.
-
-    {% else %}
-    Python components are not pinned for major version |version_major| because it is not released yet.
-    {% endif %}
+{% if data['module_compatibility_ranges']%}
 
 
-{% if data['module_set_constraints']%}
+Module compatibility ranges
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-Module set
-~~~~~~~~~~
+During module development, when the version of the module integrates tightly with a specific ISO version,
+we need a way to tell the CI which version of the module should be used per ISO line. This can be achieved by either:
+
+- Using a specific index per ISO version
+- Adding a project constraint file with the compatible module ranges for each ISO version.
+
+{% set list_only = ["lsm", "std"] %}
 
 .. only:: iso
 
-    The table below shows the set of Inmanta modules that come pre-installed with version |version_major| of the
-    Inmanta Service Orchestrator.
+
+    The table below shows the set of Inmanta modules that integrate tightly with version |version_major| of the
+    Inmanta Service Orchestrator and the constraints on their version.
 
     .. list-table:: Modules
        :header-rows: 1
 
        * - Module
+         - Version constraint
 
-       {% for key, value in data["module_set_constraints"] | dictsort %}
+       {% for key, value in data["module_compatibility_ranges"]  | dictsort %}
+       {% if key in list_only %}
        * - {{ key }}
+         - {{ value }}
+       {% endif %}
        {% endfor %}
 
 .. only:: oss
 
-    The table below shows the set of Inmanta modules that come along with this Inmanta OSS version |release|.
+    The table below shows the set of Inmanta modules that integrate tightly with this Inmanta OSS version |release|
+    and the constraints on their version.
 
     .. list-table:: Modules
        :header-rows: 1
 
        * - .. centered:: Module
 
-       {% for key, value in data["module_set_constraints"] | dictsort %}
+       {% for key, value in data["module_compatibility_ranges"] | dictsort %}
+       {% if key in list_only %}
        * - {{ key }}
+       {% endif %}
        {% endfor %}
 
 .. note::
@@ -80,3 +59,18 @@ Module set
 
 {% endif %}
 
+
+.. only:: iso
+
+    {% if data['component_requirements'] %}
+
+    .. note::
+
+        If for some reason you need to install any of the components that make up the inmanta-service-orchestrator
+        package separately e.g. when developing an Inmanta extension, the ranges of the Inmanta Python components this
+        product version is compatible with are available as a constraints file in
+        `requirements.components.txt <./requirements.components.txt>`_ and in json format in the
+        `compatibility.json <./compatibility.json>`_ file.
+
+
+    {% endif %}
