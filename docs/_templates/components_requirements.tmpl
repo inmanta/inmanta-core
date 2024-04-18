@@ -10,10 +10,10 @@ Module compatibility ranges
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-During module development, when the version of the module integrates tightly with a specific ISO version,
-we need a way to tell the CI which version of the module should be used per ISO line. This can be achieved by either:
+When an Inmanta module integrates tightly with the Inmanta Service Orchestrator, it's important
+to use a version of that module that is compatible with the orchestrator. This can be achieved by either:
 
-- Using a specific index per ISO version
+- Using a specific index (or git repo) per ISO version and making sure it contains the compatible versions of the modules.
 - Adding a project constraint file with the compatible module ranges for each ISO version.
 
 {% set list_only = ["lsm", "std"] %}
