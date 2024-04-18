@@ -109,7 +109,7 @@ def test_release_stable_version(
             dest_dir=path_module,
             new_version=Version("1.2.3.dev0"),
             new_name=module_name,
-            use_four_digit=use_four_digits,
+            use_four_digits=use_four_digits,
         )
     gitprovider.git_init(repo=path_module)
     path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
