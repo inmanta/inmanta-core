@@ -144,7 +144,7 @@ def test_release_stable_version(
     assert gitprovider.get_version_tags(repo=path_module) == expected_tags
     # Verify version
     mod = Module.from_path(path_module)
-    assert mod.version == Version("1.2.3.1dev0") if use_four_digits and not v1_module else Version("1.2.4.dev0")
+    assert mod.version == Version("1.2.3.1.dev0") if use_four_digits and not v1_module else Version("1.2.4.dev0")
     # Verify changelog file
     if changelog_file_exists:
         with open(path_changelog_file, encoding="utf-8") as fh:
