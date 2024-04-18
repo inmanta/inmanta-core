@@ -21,6 +21,7 @@ import collections
 import concurrent.futures.thread
 import functools
 import logging
+import logging.config
 import multiprocessing
 import os
 import socket
@@ -36,8 +37,8 @@ import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
+from inmanta import logging as logging_core
 from inmanta.agent import executor
-from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer
 
 LOGGER = logging.getLogger(__name__)
@@ -151,10 +152,11 @@ def mp_worker_entrypoint(
     config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
 ) -> None:
     """Entry point for child processes"""
-    log_config = InmantaLoggerConfig.get_instance()
-    log_config.configure_file_logger(logfile, inmanta_log_level)
-    if cli_log:
-        log_config.add_cli_logger(inmanta_log_level)
+    config_builder = logging_core.LoggingConfigBuilder()
+    logger_config: logging_core.LoggingConfigCore = config_builder.get_logging_config_for_agent(
+        logfile, inmanta_log_level, cli_log
+    )
+    logger_config.apply_config()
     logging.captureWarnings(True)
     logger = logging.getLogger(f"agent.executor.{name}")
     logger.info(f"Started with PID: {os.getpid()}")

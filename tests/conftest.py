@@ -21,7 +21,7 @@ import warnings
 from tornado.httpclient import AsyncHTTPClient
 
 import toml
-from inmanta.logging import InmantaLoggerConfig
+from inmanta.logging import InmantaLoggerConfig, Options
 from inmanta.protocol import auth
 
 """
@@ -800,6 +800,10 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
+    # Setup default logging
+    inmanta_logger_config = InmantaLoggerConfig.get_instance()
+    inmanta_logger_config.apply_options(Options())
+
     ibl = InmantaBootloader()
 
     try:
@@ -886,6 +890,10 @@ async def server_multi(
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
+
+        # Setup default logging
+        inmanta_logger_config = InmantaLoggerConfig.get_instance()
+        inmanta_logger_config.apply_options(Options())
 
         ibl = InmantaBootloader()
 

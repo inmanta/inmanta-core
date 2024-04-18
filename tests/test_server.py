@@ -42,7 +42,6 @@ from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_ORCHESTRATION,
-    SLICE_RESOURCE,
     SLICE_SERVER,
     SLICE_SESSION_MANAGER,
 )
@@ -852,7 +851,7 @@ async def test_resource_action_log(server, client, environment):
     )
     assert res.code == 200
 
-    resource_action_log = server.get_slice(SLICE_RESOURCE).get_resource_action_log_file(environment)
+    resource_action_log = os.path.join(config.log_dir.get(), f"{opt.server_resource_action_log_prefix.get()}{environment}.log")
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
     with open(resource_action_log) as f:

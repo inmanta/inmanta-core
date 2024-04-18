@@ -510,7 +510,6 @@ class EnvironmentService(protocol.ServerSlice):
                     env.delete_cascade(connection=connection),
                 )
 
-            self.resource_service.close_resource_action_logger(environment_id)
             await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
 
             self._delete_environment_dir(environment_id)
