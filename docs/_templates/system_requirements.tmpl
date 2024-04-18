@@ -16,6 +16,8 @@ System requirements
     The table below shows the system requirements of Inmanta OSS version |release|.
 
 
+{% set display_key = ({"python_version":"Python","rhel_versions": "RHEL","postgres_version":"PostgreSQL"}) %}
+
 .. list-table:: System requirements
    :header-rows: 1
 
@@ -23,7 +25,7 @@ System requirements
      - Required version
 
    {% for key, value in data["system_requirements"] | dictsort %}
-   * - {{ key }}
+   * - {{ display_key[key] }}
      - .. centered:: {{ value }}
    {% endfor %}
 

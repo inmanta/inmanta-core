@@ -33,7 +33,7 @@ we need a way to tell the CI which version of the module should be used per ISO 
        {% for key, value in data["module_compatibility_ranges"]  | dictsort %}
        {% if key in list_only %}
        * - {{ key }}
-         - {{ value }}
+         - .. centered:: {{ value }}
        {% endif %}
        {% endfor %}
 
