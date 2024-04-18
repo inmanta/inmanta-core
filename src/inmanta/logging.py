@@ -237,8 +237,8 @@ class LoggingConfigBuilder:
         :param options: The config options passed on the CLI.
         :param logging_config_extensions: The logging config required by the extensions.
         """
-        handlers = {}
-        formatters = {}
+        handlers: dict[str, object] = {}
+        formatters: dict[str, object] = {}
         handler_root_logger: str
         log_level: int
         if options.log_file:
@@ -742,7 +742,7 @@ class MultiFileHandler(logging.Handler):
         for child in self.child_handlers.values():
             child.flush()
 
-    def setFormatter(self, fmt: logging.Formatter) -> None:
+    def setFormatter(self, fmt: Optional[logging.Formatter]) -> None:
         super().setFormatter(fmt)
         for child in self.child_handlers.values():
             child.setFormatter(fmt)
