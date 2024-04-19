@@ -425,6 +425,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         """
         Close a version on the cache
         """
+        # May need to run on threadpool due to finalizers?
         self._cache.close_version(version)
 
 

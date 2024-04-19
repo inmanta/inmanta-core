@@ -35,9 +35,10 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 
 import pkg_resources
 
-from inmanta import const, data, env, protocol
+import inmanta.agent.executor
+from inmanta import const, data, env, protocol, config
 from inmanta.agent import config as cfg
-from inmanta.agent import executor, in_process_executor
+from inmanta.agent import executor, in_process_executor, forking_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ResourceState
@@ -739,13 +740,13 @@ class AgentInstance:
                 self.logger.warning("Got an error while pulling resources for %s. %s", deploy_request.reason, result.result)
 
             else:
-                undeployable, resources, executor = await self.setup_executor(
-                    result.result["version"], const.ResourceAction.deploy, result.result["resources"]
-                )
-                self.logger.debug("Pulled %d resources because %s", len(resources), deploy_request.reason)
-
-                if len(resources) > 0:
-                    self._nq.reload(resources, undeployable, deploy_request, executor)
+                self.logger.debug("Pulled %d resources because %s", len(result.result["resources"]), deploy_request.reason)
+                if len(result.result["resources"]) > 0:
+                    undeployable, resources, executor = await self.setup_executor(
+                        result.result["version"], const.ResourceAction.deploy, result.result["resources"]
+                    )
+                    if len(resources) > 0:
+                        self._nq.reload(resources, undeployable, deploy_request, executor)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> Apireturn:
         self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
@@ -908,6 +909,7 @@ class Agent(SessionEndpoint):
         self._loader: Optional[CodeLoader] = None
         self._env: Optional[env.VirtualEnv] = None
         if code_loader:
+            # all of this should go into the executor manager
             self._env = env.VirtualEnv(self._storage["env"])
             self._env.use_virtual_env()
             self._loader = CodeLoader(self._storage["code"], clean=True)
@@ -922,13 +924,32 @@ class Agent(SessionEndpoint):
 
         self.agent_map: Optional[dict[str, str]] = agent_map
 
-        self.executor_manager = in_process_executor.InProcessExecutorManager(
-            environment,
-            self._client,
-            asyncio.get_event_loop(),
-            LOGGER,
-            self,
-        )
+        remote_executor = True
+        can_have_remote_executor = code_loader
+
+        if remote_executor and can_have_remote_executor:
+            env_manager = inmanta.agent.executor.VirtualEnvironmentManager(
+                self._storage["executor"]
+            )
+            self.executor_manager = forking_executor.MPManager(
+                self.thread_pool,
+                env_manager,
+                self.sessionid,
+                self.environment,
+                config.log_dir.get(),
+                self._storage["executor"],
+                LOGGER.level,
+                True
+            )
+        else:
+            self.executor_manager = in_process_executor.InProcessExecutorManager(
+                environment,
+                self._client,
+                asyncio.get_event_loop(),
+                LOGGER,
+                self,
+            )
+
 
     async def _init_agent_map(self) -> None:
         if cfg.use_autostart_agent_map.get():
@@ -1128,6 +1149,7 @@ class Agent(SessionEndpoint):
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
         if self._loader is None:
+            # TODO
             return [], set()
 
         # store it outside the loop, but only load when required
@@ -1358,6 +1380,11 @@ class Agent(SessionEndpoint):
         dir_map["env"] = env_dir
         if not os.path.exists(env_dir):
             os.mkdir(env_dir)
+
+        executor_dir = os.path.join(agent_state_dir, "executor")
+        dir_map["executor"] = executor_dir
+        if not os.path.exists(executor_dir):
+            os.mkdir(executor_dir)
 
         return dir_map
 

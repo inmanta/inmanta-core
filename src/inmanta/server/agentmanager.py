@@ -33,7 +33,7 @@ from uuid import UUID
 import asyncpg.connection
 
 import inmanta.config
-from inmanta import const, data
+from inmanta import const, data, config as global_config
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
@@ -1213,8 +1213,9 @@ class AutostartedAgentManager(ServerSlice):
             agent_names.append("internal")
 
         # generate config file
-        config = """[config]
+        config = f"""[config]
 state-dir=%(statedir)s
+log-dir={global_config.log_dir.get()}
 
 use_autostart_agent_map=true
 agent-names = %(agents)s

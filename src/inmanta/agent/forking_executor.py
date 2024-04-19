@@ -27,7 +27,9 @@ import socket
 import typing
 import uuid
 
+import inmanta.agent.cache
 import inmanta.agent.executor
+import inmanta.agent.in_process_executor
 import inmanta.config
 import inmanta.const
 import inmanta.env
@@ -49,6 +51,7 @@ class ExecutorContext:
     client: typing.Optional[inmanta.protocol.SessionClient]
     venv: typing.Optional[inmanta.env.VirtualEnv]
     name: str
+    executor: typing.Optional["inmanta.agent.in_process_executor.InProcessExecutor"]
 
     def __init__(self, server: "ExecutorServer") -> None:
         self.server = server
@@ -57,7 +60,13 @@ class ExecutorContext:
 
     async def stop(self) -> None:
         """Request the executor to stop"""
+        if self.executor:
+            self.executor.stop()
         await self.server.stop()
+        if self.executor:
+            # threadpool finalizer is not used, we expect threadpools to be terminated with the process
+            # TODO: is this enough?
+            self.executor.join([])
 
 
 class ExecutorServer(IPCServer[ExecutorContext]):
@@ -119,15 +128,37 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
     3. load additional source files
     """
 
-    def __init__(self, venv_path: str, storage_folder: str, session_gid: uuid.UUID, sources: list[inmanta.loader.ModuleSource]):
+    def __init__(
+        self,
+        venv_path: str,
+        storage_folder: str,
+        session_gid: uuid.UUID,
+        sources: list[inmanta.loader.ModuleSource],
+        environment: uuid.UUID,
+        uri: str,
+    ):
         self.venv_path = venv_path
         self.storage_folder = storage_folder
         self.gid = session_gid
         self.sources = sources
+        self.environment = environment
+        self.uri = uri
 
     async def call(self, context: ExecutorContext) -> None:
+        loop = asyncio.get_running_loop()
+
         # setup client
         context.client = inmanta.protocol.SessionClient("agent", self.gid)
+
+        # Setup agent instance
+        context.executor = inmanta.agent.in_process_executor.InProcessExecutor(
+            agent_name=context.name,
+            agent_uri=self.uri,
+            environment=self.environment,
+            client=context.client,
+            eventloop=loop,
+            parent_logger=logging.getLogger("agent.executor"),
+        )
 
         # activate venv
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
@@ -135,11 +166,70 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
-        loop = asyncio.get_running_loop()
+
         sync_client = inmanta.protocol.SyncClient(client=context.client, ioloop=loop)
         sources = [s.with_client(sync_client) for s in self.sources]
+
         for module_source in sources:
             await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
+            await loop.run_in_executor(context.threadpool, functools.partial(loader._load_module, module_source.name, module_source.hash_value))
+
+class OpenVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+
+    def __init__(self, version: int) -> None:
+        self.version = version
+
+    async def call(self, context: ExecutorContext) -> None:
+        await context.executor.open_version(self.version)
+
+
+class CloseVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+
+    def __init__(self, version: int) -> None:
+        self.version = version
+
+    async def call(self, context: ExecutorContext) -> None:
+        # May need to be on threadpool because it can call finalizers
+        await context.executor.close_version(self.version)
+
+
+class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+
+    def __init__(
+        self,
+        resources: typing.Sequence["inmanta.agent.executor.ResourceDetails"],
+        dry_run_id: uuid.UUID,
+    ) -> None:
+        self.resources = resources
+        self.dry_run_id = dry_run_id
+
+    async def call(self, context: ExecutorContext) -> None:
+        await context.executor.dry_run(self.resources, self.dry_run_id)
+
+
+class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+
+    def __init__(
+        self,
+        gid: uuid.UUID,
+        resource_details: "inmanta.agent.executor.ResourceDetails",
+        reason: str,
+    ) -> None:
+        self.gid = gid
+        self.resource_details = resource_details
+        self.reason = reason
+
+    async def call(self, context: ExecutorContext) -> None:
+        await context.executor.execute(self.gid, self.resource_details, self.reason)
+
+
+class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+
+    def __init__(self, resource: "inmanta.agent.executor.ResourceDetails") -> None:
+        self.resource = resource
+
+    async def call(self, context: ExecutorContext) -> inmanta.types.Apireturn:
+        return await context.executor.get_facts(self.resource)
 
 
 def mp_worker_entrypoint(
@@ -192,6 +282,8 @@ class MPExecutor(executor.Executor):
         # Pure for debugging purpose
         self.executor_id = executor_id
         self.executor_virtual_env = venv
+        # TODO!!!
+        self.failed_resource_types = set()
 
     async def stop(self) -> None:
         """Stop by shutdown"""
@@ -241,28 +333,28 @@ class MPExecutor(executor.Executor):
                 raise
 
     async def close_version(self, version: int) -> None:
-        pass
+        await self.connection.call(CloseVersionCommand(version))
 
     async def open_version(self, version: int) -> None:
-        pass
+        await self.connection.call(OpenVersionCommand(version))
 
     async def dry_run(
         self,
-        resources: typing.Sequence[inmanta.agent.executor.ResourceDetails],
+        resources: typing.Sequence["inmanta.agent.executor.ResourceDetails"],
         dry_run_id: uuid.UUID,
     ) -> None:
-        pass
+        await self.connection.call(DryRunCommand(resources, dry_run_id))
 
     async def execute(
         self,
         gid: uuid.UUID,
-        resource_details: inmanta.agent.executor.ResourceDetails,
+        resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
     ) -> None:
-        pass
+        await self.connection.call(ExecuteCommand(gid, resource_details, reason))
 
-    async def get_facts(self, resource: inmanta.agent.executor.ResourceDetails) -> inmanta.types.Apireturn:
-        pass
+    async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> inmanta.types.Apireturn:
+        return await self.connection.call(FactsCommand(resource))
 
 
 class MPManager(executor.ExecutorManager[MPExecutor]):
@@ -276,6 +368,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         thread_pool: concurrent.futures.thread.ThreadPoolExecutor,
         environment_manager: executor.VirtualEnvironmentManager,
         session_gid: uuid.UUID,
+        environment: uuid.UUID,
         log_folder: str,
         storage_folder: str,
         inmanta_log_level: str = "DEBUG",
@@ -291,6 +384,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         :param cli_log: do we also want to echo the log to std_err
 
         """
+        self.environment = environment
         self.thread_pool = thread_pool
         self.environment_manager = environment_manager
         self.children: list[MPExecutor] = []
@@ -362,6 +456,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                 storage_for_blueprint,
                 self.session_gid,
                 [x.for_transport() for x in executor_id.blueprint.sources],
+                self.environment,
+                executor_id.agent_uri,
             )
         )
         return executor
@@ -403,7 +499,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         parent_conn, child_conn = socket.socketpair()
         p = multiprocessing.Process(
             target=mp_worker_entrypoint,
-            args=(child_conn, name, log_file, log_level, cli_log, inmanta.config.Config.config_as_dict()),
+            args=(child_conn, name, log_file, str(log_level), cli_log, inmanta.config.Config.config_as_dict()),
             name=f"agent.executor.{name}",
         )
         p.start()
