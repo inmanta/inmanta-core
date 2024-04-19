@@ -516,9 +516,11 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)
-        self._recompiles: dict[uuid.UUID, Task[None | Result]] = {}
+        # Keep track of running compiles per environment. Invariant: will only contain environments that are compiling.
+        self._compile_run_tasks: dict[uuid.UUID, Task[None | Result]] = {}
 
-        self._global_lock = asyncio.locks.Lock()
+        # write lock only, writers take care to uphold consistency so that readers don't need the lock
+        self._write_lock_compile_run_tasks = asyncio.locks.Lock()
         # boolean indicating when everything is up and compile execution can start
         self.fully_ready = False
 
@@ -647,8 +649,12 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         """
         if in_db_transaction and not connection:
             raise Exception("A connection should be provided when in_db_transaction is True.")
-        if in_db_transaction and connection and not connection.is_in_transaction():
-            raise Exception("in_db_transaction is True, but the given connection is not executing a transaction.")
+        if in_db_transaction != (connection is not None and connection.is_in_transaction()):
+            raise Exception(
+                f"in_db_transaction is {in_db_transaction},"
+                f" but the given connection is{'' if in_db_transaction else ' not'} executing in a transaction."
+            )
+
         if removed_resource_sets is None:
             removed_resource_sets = []
         if metadata is None:
@@ -693,7 +699,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             async with self._queue_count_cache_lock:
                 await compile.insert(connection)
                 self._queue_count_cache += 1
-            await self._queue(compile)
+            await self._process_next_compile_in_queue(environment=compile.environment, connection=connection)
         else:
             # We are running inside a transaction. The changes will only be applied after the transaction commits.
             # We cannot increment the queue count yet or schedule the requested compile for execution. This will be
@@ -716,9 +722,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             raise Exception(f"Compile with id {compile_id} not found.")
         async with self._queue_count_cache_lock:
             self._queue_count_cache += 1
-        async with self._global_lock:
-            if compile_obj.environment not in self._recompiles:
-                await self.process_next_compile_in_queue(compile_obj.environment)
+        await self._process_next_compile_in_queue(environment=compile_obj.environment)
 
     @staticmethod
     def _compile_merge_key(c: data.Compile) -> Hashable:
@@ -737,39 +741,75 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             },
         )
 
-    async def _queue(self, compile: data.Compile) -> None:
-        async with self._global_lock:
-            if self.is_stopping():
-                return
-            if not self.fully_ready:
-                return
-            env: Optional[data.Environment] = await data.Environment.get_by_id(compile.environment)
-            if env is None:
-                raise Exception("Can't queue compile: environment %s does not exist" % compile.environment)
-            assert env is not None
-            # don't execute any compiles in a halted environment
-            if env.halted:
-                return
-            if compile.environment not in self._recompiles or self._recompiles[compile.environment].done():
-                task = self.add_background_task(self._run(compile))
-                self._recompiles[compile.environment] = task
+    # TODO: class-level docstring
+    # TODO: document and name 'dequeue'
+    async def _process_next_compile_in_queue(
+        self,
+        *,
+        environment: Optional[uuid.UUID] = None,
+        dequeue: bool = False,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        """
+        Process the next compile in the queue, for a single environment or for all of them. If the (explicitly) requested
+        environment's queue runs empty, deletes it from from the compile state dict. Returns without effect if the service
+        is still coming up or if it is shutting down.
 
-    async def _dequeue(self, environment: uuid.UUID) -> None:
-        async with self._global_lock:
-            await self.process_next_compile_in_queue(environment)
+        Acquires the global compiler service lock.
 
-    async def process_next_compile_in_queue(self, environment: uuid.UUID) -> None:
-        if self.is_stopping():
-            return
-        env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
-        if env is None:
-            raise Exception("Can't dequeue compile: environment %s does not exist" % environment)
-        nextrun = await data.Compile.get_next_run(environment)
-        if nextrun and not env.halted:
-            task = self.add_background_task(self._run(nextrun))
-            self._recompiles[environment] = task
-        elif environment in self._recompiles:
-            del self._recompiles[environment]
+        :param environment: If set, only process this environment. Otherwise process all environments.
+        """
+        if dequeue and environment is None:
+            raise ValueError("The dequeue argument is only supported in single environment mode")
+        if connection is not None and connection.is_in_transaction():
+            raise ValueError("The _process_next_compile_in_queue method should not be called in a transaction context")
+
+        # TODO: docstring: explain that it will keep lock in consistent state, i.e. no transient "nothing queued" state
+        # TODO: review implementation for cleanup opportunities
+        # acquire connection before lock to ensure lock contention remains short lived
+        async with data.Environment.get_connection(connection) as con:
+            async with self._write_lock_compile_run_tasks:
+                to_dequeue: Optional[tuple[uuid.UUID, Task]] = (
+                    (environment, self._compile_run_tasks[environment])
+                    if dequeue and environment is not None and environment in self._compile_run_tasks
+                    else None
+                )
+
+                try:
+                    # only inspect state and fetch compile details under the global lock to protect against race conditions
+                    if not self.fully_ready or self.is_stopping():
+                        return
+
+                    compiles: Sequence[data.Compile]
+                    if environment is None:
+                        compiles = await data.Compile.get_next_run_all(connection=con)
+                    else:
+                        c: Optional[data.Compile] = await data.Compile.get_next_run(environment, connection=con)
+                        compiles = [c] if c is not None else []
+
+                    compile: data.Compile
+                    for compile in compiles:
+                        env: Optional[data.Environment] = await data.Environment.get_by_id(compile.environment, connection=con)
+                        if env is None:
+                            raise Exception("Can't queue compile: environment %s does not exist" % compile.environment)
+
+                        # don't execute any compiles in a halted environment
+                        if env.halted:
+                            continue
+
+                        if (
+                            compile.environment not in self._compile_run_tasks
+                            or to_dequeue is not None and to_dequeue[0] == compile.environment
+                        ):
+                            # Run the compile. self._run will call back into this method when done
+                            task: Task[None] = self.add_background_task(self._run(compile))
+                            self._compile_run_tasks[compile.environment] = task
+                finally:
+                    if to_dequeue is not None:
+                        env_to_dequeue, task_to_dequeue = to_dequeue
+                        if self._compile_run_tasks.get(env_to_dequeue, None) is task_to_dequeue:
+                            # no new task has been started => dequeue the old one
+                            del self._compile_run_tasks[env_to_dequeue]
 
     async def _notify_listeners(self, compile: data.Compile) -> None:
         async def notify(listener: CompileStateListener) -> None:
@@ -803,47 +843,23 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             unhandled = await data.Compile.get_unhandled_compiles()
             for u in unhandled:
                 await self._notify_listeners(u)
-            # one run per env max to get started
-            runs = await data.Compile.get_next_run_all()
 
-            # prevent races by holding global lock
-            async with self._global_lock:
-                # We are ready to start!
-                self.fully_ready = True
-                for run in runs:
-                    await self.__queue_no_lock(run.environment, run)
+            # We are ready to start!
+            self.fully_ready = True
+            # start a waiting compile in each environment
+            await self._process_next_compile_in_queue()
 
         self.add_background_task(sub_recovery())
-
-    async def __queue_no_lock(self, environment: uuid.UUID, compile: data.Compile) -> None:
-        """
-        Internal helper that starts the next task if required
-
-
-
-            Must be called under the _global_lock
-        """
-        if self.is_stopping():
-            return
-        env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
-        if env is None:
-            LOGGER.warning("Can't dequeue compile: environment %s does not exist", environment)
-            return
-        if not env.halted and (compile.environment not in self._recompiles or self._recompiles[compile.environment].done()):
-            task = self.add_background_task(self._run(compile))
-            self._recompiles[environment] = task
 
     async def resume_environment(self, environment: uuid.UUID) -> None:
         """
         Resume compiler service after halt.
         """
-        compile: Optional[data.Compile] = await data.Compile.get_next_run(environment)
-        if compile is not None:
-            await self._queue(compile)
+        await self._process_next_compile_in_queue(environment=environment)
 
     @protocol.handle(methods.is_compiling, environment_id="id")
     async def is_compiling(self, environment_id: uuid.UUID) -> Apireturn:
-        if environment_id in self._recompiles and not self._recompiles[environment_id].done():
+        if environment_id in self._compile_run_tasks:
             return 200
         return 204
 
@@ -962,7 +978,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         await asyncio.gather(
             self._notify_listeners(compile), *(self._notify_listeners(merge_candidate) for merge_candidate in merge_candidates)
         )
-        await self._dequeue(compile.environment)
+        await self._process_next_compile_in_queue(environment=compile.environment, dequeue=True)
 
     def _get_compile_runner(self, compile: data.Compile, project_dir: str) -> CompileRun:
         return CompileRun(compile, project_dir)
