@@ -2,7 +2,7 @@ Configuration
 ===================
 
 .. note::
-    The documentation of the configuration options themselves can be found in the :ref:`inmanta config reference<config_reference>`.
+    The documentation of the configuration options themselves can be found in the :ref:`Inmanta configuration reference<config_reference>`.
 
 Inmanta server and Inmanta agent
 --------------------------------
