@@ -501,14 +501,16 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     General design of compile scheduling:
 
     1. all compile request are stored in the database.
-    2. when a task starts, _queue is called, if no job is executing for that environment, it is started
-    3. when a task ends, it is marked as completed in the database and _dequeue is called and _notify_listeners is scheduled
-    as a background task
-    4. _dequeue checks the database for a runnable job and starts it (if present)
-    5. _notify_listeners runs all listeners in parallel, afterwards the task is marked as handled
+    2. when compile is queued, _process_next_compile_in_queue is called, if no job is executing for that environment, it is started
+    3. when a compile run ends:
+        a. it is marked as completed in the database
+        b. _notify_listeners notifies blocking listeners and schedules notification of async listeners as a background task.
+            When the background task finishes, the compile is marked as handled
+        c. _process_next_compile_in_queue is called again to start the next queued compile, if any
 
     Upon restart
-    1. find a runnable(incomplete) job for every environment (if any) and call _queue on it
+    1. call _process_next_compile_in_queue in all-environments mode to find a runnable (incomplete) request for every environment
+        and start it.
     2. find all unhandled but complete jobs and run _notify_listeners on them
     """
 
@@ -516,11 +518,11 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)
-        # Keep track of running compiles per environment. Invariant: will only contain environments that are compiling.
-        self._compile_run_tasks: dict[uuid.UUID, Task[None | Result]] = {}
 
+        self._compiling_envs: set[uuid.UUID] = set()
         # write lock only, writers take care to uphold consistency so that readers don't need the lock
-        self._write_lock_compile_run_tasks = asyncio.locks.Lock()
+        self._write_lock_compiling_envs = asyncio.locks.Lock()
+
         # boolean indicating when everything is up and compile execution can start
         self.fully_ready = False
 
@@ -741,39 +743,37 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             },
         )
 
-    # TODO: class-level docstring
-    # TODO: document and name 'dequeue'
     async def _process_next_compile_in_queue(
         self,
         *,
         environment: Optional[uuid.UUID] = None,
-        dequeue: bool = False,
+        finish_current_compile: bool = False,
         connection: Optional[Connection] = None,
     ) -> None:
         """
-        Process the next compile in the queue, for a single environment or for all of them. If the (explicitly) requested
-        environment's queue runs empty, deletes it from from the compile state dict. Returns without effect if the service
-        is still coming up or if it is shutting down.
+        Process the next compile in the queue, for a single environment or for all of them. Does not start any compiles
+        if the service is still coming up or if it is shutting down.
 
-        Acquires the global compiler service lock.
+        Acquires the compiler service's write lock for the compiling environments and ensures consistency of that set.
+        i.e. no transient state will exist between the end of one compile and the start of the next one, if one is queued.
+        This way pure readers of the compiling envs do not need to acquire the lock to read consistent data.
 
         :param environment: If set, only process this environment. Otherwise process all environments.
+        :param finish_current_compile: Signal completion of the currently running compile for this environment. If True,
+            the environment will be considered free to start a new compile run, and if no new run is started, it removed from
+            the compiling environments set. Requires environment to be set.
+        :param connection: The database connection to execute queries in, if any. Must not be in a transaction context.
+            Its main purpose is to be able to share the connection resource for contention reasons.
         """
-        if dequeue and environment is None:
-            raise ValueError("The dequeue argument is only supported in single environment mode")
+        if finish_current_compile and environment is None:
+            raise ValueError("The finish_current_compile argument is only supported in single environment mode")
         if connection is not None and connection.is_in_transaction():
             raise ValueError("The _process_next_compile_in_queue method should not be called in a transaction context")
 
-        # TODO: docstring: explain that it will keep lock in consistent state, i.e. no transient "nothing queued" state
-        # TODO: review implementation for cleanup opportunities
         # acquire connection before lock to ensure lock contention remains short lived
         async with data.Environment.get_connection(connection) as con:
-            async with self._write_lock_compile_run_tasks:
-                to_dequeue: Optional[tuple[uuid.UUID, Task]] = (
-                    (environment, self._compile_run_tasks[environment])
-                    if dequeue and environment is not None and environment in self._compile_run_tasks
-                    else None
-                )
+            async with self._write_lock_compiling_envs:
+                started_new_compile_run: bool = False
 
                 try:
                     # only inspect state and fetch compile details under the global lock to protect against race conditions
@@ -798,18 +798,19 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                             continue
 
                         if (
-                            compile.environment not in self._compile_run_tasks
-                            or to_dequeue is not None and to_dequeue[0] == compile.environment
+                            # no compile is running for this environment
+                            compile.environment not in self._compiling_envs
+                            # the previously running compile is finished
+                            or (finish_current_compile and compile.environment == environment)
                         ):
+                            self._compiling_envs.add(compile.environment)
                             # Run the compile. self._run will call back into this method when done
-                            task: Task[None] = self.add_background_task(self._run(compile))
-                            self._compile_run_tasks[compile.environment] = task
+                            self.add_background_task(self._run(compile))
+                            started_new_compile_run = True
                 finally:
-                    if to_dequeue is not None:
-                        env_to_dequeue, task_to_dequeue = to_dequeue
-                        if self._compile_run_tasks.get(env_to_dequeue, None) is task_to_dequeue:
-                            # no new task has been started => dequeue the old one
-                            del self._compile_run_tasks[env_to_dequeue]
+                    if finish_current_compile and not started_new_compile_run:
+                        assert environment is not None
+                        self._compiling_envs.discard(environment)
 
     async def _notify_listeners(self, compile: data.Compile) -> None:
         async def notify(listener: CompileStateListener) -> None:
@@ -859,7 +860,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     @protocol.handle(methods.is_compiling, environment_id="id")
     async def is_compiling(self, environment_id: uuid.UUID) -> Apireturn:
-        if environment_id in self._compile_run_tasks:
+        if environment_id in self._compiling_envs:
             return 200
         return 204
 
@@ -978,7 +979,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         await asyncio.gather(
             self._notify_listeners(compile), *(self._notify_listeners(merge_candidate) for merge_candidate in merge_candidates)
         )
-        await self._process_next_compile_in_queue(environment=compile.environment, dequeue=True)
+        await self._process_next_compile_in_queue(environment=compile.environment, finish_current_compile=True)
 
     def _get_compile_runner(self, compile: data.Compile, project_dir: str) -> CompileRun:
         return CompileRun(compile, project_dir)
