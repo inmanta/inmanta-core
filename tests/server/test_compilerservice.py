@@ -381,7 +381,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     e2.append(extra_compile)
 
     # We haven't started, because we hang on a handler,
-    assert [rc for rc in cs._recompiles.values() if rc is not None] == []
+    assert len(cs._compiling_envs) == 0
 
     # Continue
     hanging_collector.release()
@@ -963,7 +963,7 @@ async def run_compile_and_wait_until_compile_is_done(
     """
     Unblock the first compile in the compiler queue and wait until the compile finishes.
     """
-    current_task = compiler_service._recompiles[env_id]
+    current_compile = compiler_service._running_compiles[env_id]
 
     # prevent race conditions where compile request is not yet in queue
     await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
@@ -974,9 +974,9 @@ async def run_compile_and_wait_until_compile_is_done(
     run.block = False
 
     def _is_compile_finished() -> bool:
-        if env_id not in compiler_service._recompiles:
+        if env_id not in compiler_service._running_compiles:
             return True
-        if current_task is not compiler_service._recompiles[env_id]:
+        if current_compile is not compiler_service._running_compiles[env_id]:
             return True
         return False
 
@@ -1100,7 +1100,7 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # finish 7th compile
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
-    while env.id in compilerslice._recompiles:
+    while env.id in compilerslice._compiling_envs:
         await asyncio.sleep(0.2)
 
     # 0 in the queue, 0 running
@@ -1223,14 +1223,14 @@ async def test_compileservice_queue_count_on_trx_based_api(mocked_compiler_servi
             )
             assert compile_id is not None, warnings
             assert compiler_service._queue_count_cache == 0
-            assert len(compiler_service._recompiles) == 0
+            assert len(compiler_service._compiling_envs) == 0
     # Transaction committed
     await compiler_service.notify_compile_request_committed(compile_id)
     assert compiler_service._queue_count_cache == 1
-    assert len(compiler_service._recompiles) == 1
+    assert len(compiler_service._compiling_envs) == 1
 
     await run_compile_and_wait_until_compile_is_done(compiler_service, mocked_compiler_service_block, env.id)
-    assert len(compiler_service._recompiles) == 0
+    assert len(compiler_service._compiling_envs) == 0
 
 
 @pytest.fixture(scope="function")
