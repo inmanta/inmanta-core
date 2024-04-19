@@ -26,7 +26,7 @@ import re
 import subprocess
 import traceback
 import uuid
-from asyncio import CancelledError, Task
+from asyncio import CancelledError
 from asyncio.subprocess import Process
 from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequence
 from itertools import chain
@@ -44,7 +44,7 @@ from inmanta import config, const, data, protocol, server
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
 from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvCreationFailedError, VirtualEnv
-from inmanta.protocol import Result, encode_token, methods, methods_v2
+from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
@@ -501,7 +501,8 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     General design of compile scheduling:
 
     1. all compile request are stored in the database.
-    2. when compile is queued, _process_next_compile_in_queue is called, if no job is executing for that environment, it is started
+    2. when compile is queued, _process_next_compile_in_queue is called: if no job is executing for that environment, it is
+        started
     3. when a compile run ends:
         a. it is marked as completed in the database
         b. _notify_listeners notifies blocking listeners and schedules notification of async listeners as a background task.
@@ -509,8 +510,8 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         c. _process_next_compile_in_queue is called again to start the next queued compile, if any
 
     Upon restart
-    1. call _process_next_compile_in_queue in all-environments mode to find a runnable (incomplete) request for every environment
-        and start it.
+    1. call _process_next_compile_in_queue in all-environments mode to find a runnable (incomplete) request for every
+        environment and start it.
     2. find all unhandled but complete jobs and run _notify_listeners on them
     """
 

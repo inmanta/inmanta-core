@@ -3686,7 +3686,9 @@ class Compile(BaseDocument):
         return results[0]
 
     @classmethod
-    async def get_next_run(cls, environment_id: uuid.UUID, *, connection: Optional[asyncpg.Connection] = None) -> Optional["Compile"]:
+    async def get_next_run(
+        cls, environment_id: uuid.UUID, *, connection: Optional[asyncpg.Connection] = None
+    ) -> Optional["Compile"]:
         """Get the next compile in the queue for the given environment"""
         async with cls.get_connection(connection) as con:
             results = await cls.select_query(
