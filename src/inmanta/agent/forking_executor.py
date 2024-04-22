@@ -153,7 +153,7 @@ def mp_worker_entrypoint(
 ) -> None:
     """Entry point for child processes"""
     config_builder = inmanta.logging.LoggingConfigBuilder()
-    logger_config: inmanta.logging.FullLoggerConfig = config_builder.get_logging_config_for_agent(
+    logger_config: inmanta.logging.FullLoggingConfig = config_builder.get_logging_config_for_agent(
         logfile, inmanta_log_level, cli_log
     )
     logger_config.apply_config()
