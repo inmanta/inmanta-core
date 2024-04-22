@@ -259,7 +259,7 @@ class FinalizingIPCClient(IPCClient[ServerContext]):
 
 class LogReceiver(IPCFrameProtocol[ServerContext]):
     """
-    IPC frame feature to receive log message
+    IPC feature to receive log message
     """
 
     def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
