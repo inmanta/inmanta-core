@@ -488,9 +488,9 @@ class IndexLookup(ReferenceStatement, Resumer):
 class ShortIndexLookup(IndexLookup):
     """lookup of the form
     vm = ip::Host(...)
-    file = std::File(host=vm, path="/etc/motd", ...)
+    host = std::Host(host=vm, path="/etc/motd", ...)
 
-    vm.files[path="/etc/motd"]
+    vm.hosts[path="/etc/motd"]
     """
 
     __slots__ = ("rootobject", "relation", "querypart", "wrapped_querypart")

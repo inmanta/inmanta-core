@@ -228,7 +228,7 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
         resources = [
             # First one is fixed
             {
-                "id": f"std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v={version}",
+                "id": f"std::Host[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v={version}",
                 "owner": "root",
                 "path": "/etc/sysconfig/network",
                 "permissions": 644,
@@ -237,7 +237,7 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
             },
             # This one changes ID every version
             {
-                "id": f"std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network{version}],v={version}",
+                "id": f"std::Host[vm1.dev.inmanta.com,path=/etc/sysconfig/network{version}],v={version}",
                 "owner": "root",
                 "path": "/etc/sysconfig/network",
                 "permissions": 644,
