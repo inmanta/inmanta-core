@@ -116,9 +116,6 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     - True: Activate filtering and keep only discovered resources that are managed.
     - False: Activate filtering and keep only discovered resources that are NOT managed.
     - None: Disable filtering: return all discovered resources regardless of whether they're managed.
-
-
-
     """
     discovered_resources = [
         {
