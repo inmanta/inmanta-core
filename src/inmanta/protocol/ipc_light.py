@@ -18,6 +18,7 @@
 
 import abc
 import asyncio
+import functools
 import logging
 import pickle
 import struct
@@ -61,6 +62,14 @@ class IPCReplyFrame:
     id: uuid.UUID
     returnvalue: object
     is_exception: bool
+
+
+@dataclass
+class IPCLogRecord:
+
+    name: str
+    levelno: int
+    msg: str
 
 
 class IPCFrameProtocol(Protocol, typing.Generic[ServerContext]):
@@ -246,3 +255,41 @@ class FinalizingIPCClient(IPCClient[ServerContext]):
         super().connection_lost(exc)
         for fin in self.finalizers:
             asyncio.get_running_loop().create_task(fin())
+
+
+class LogReceiver(IPCFrameProtocol[ServerContext]):
+    """
+    IPC frame feature to receive log message
+    """
+
+    def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
+        if isinstance(frame, IPCLogRecord):
+            # calling log here is safe because if there are nu arguments, formatter is never called
+            logging.getLogger(frame.name).log(frame.levelno, frame.msg)
+        else:
+            super().frame_received(frame)
+
+
+class LogShipper(logging.Handler):
+    """
+    Log sender associated with the log receiver
+
+    This sender is threadsafe
+    """
+
+    def __init__(self, channel: IPCFrameProtocol[object], eventloop: asyncio.BaseEventLoop) -> None:
+        self.channel = channel
+        self.eventloop = eventloop
+        super().__init__()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.eventloop.call_soon_threadsafe(
+            functools.partial(
+                self.channel.send_frame,
+                IPCLogRecord(
+                    record.name,
+                    record.levelno,
+                    self.format(record),
+                ),
+            )
+        )

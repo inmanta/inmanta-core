@@ -17,13 +17,18 @@
 """
 
 import asyncio
+import functools
+import logging
 import socket
 import struct
+import threading
 
 import pytest
 
 import inmanta.config
 import inmanta.protocol.ipc_light
+import inmanta.util
+import utils
 from inmanta.protocol.ipc_light import IPCClient, IPCServer
 
 
@@ -102,3 +107,38 @@ async def test_normal_flow(request):
     args = [1, 2, 3, 4]
     result = await client_protocol.call(Echo(args))
     assert args == result
+
+
+async def test_log_transport(caplog):
+
+    loop = asyncio.get_running_loop()
+    parent_conn, child_conn = socket.socketpair()
+
+    server_transport, server_protocol = await loop.connect_accepted_socket(
+        lambda: inmanta.protocol.ipc_light.LogReceiver("logs"), parent_conn
+    )
+    client_transport, client_protocol = await loop.connect_accepted_socket(lambda: IPCClient("Client"), child_conn)
+
+    log_drainer = inmanta.protocol.ipc_light.LogShipper(client_protocol)
+
+    with caplog.at_level(logging.INFO):
+        log_drainer.handle(logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("a",), exc_info=False))
+
+        def has_log(msg: str) -> bool:
+            try:
+                utils.log_contains(caplog, "deep.in.test", logging.INFO, f"Test {msg}")
+                return True
+            except AssertionError:
+                return False
+
+        await inmanta.util.retry_limited(functools.partial(has_log, "a"), 1)
+
+        # mess with threads
+        thread = threading.Thread(
+            target=lambda: log_drainer.handle(
+                logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("b",), exc_info=False)
+            )
+        )
+
+        thread.start()
+        await inmanta.util.retry_limited(functools.partial(has_log, "b"), 1)
