@@ -105,9 +105,9 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """Actual shutdown, not async"""
         if not self.stopping:
             self.logger.info("Stopping")
+            self.stopping = True
             assert self.transport is not None  # Mypy
             self.transport.close()
-            self.stopping = True
 
     def connection_lost(self, exc: Exception | None) -> None:
         """We lost connection to the controler, bail out"""
@@ -422,7 +422,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self.agent_map[theid.agent_name].add(theid)
 
     def __remove_executor(self, theid: executor.ExecutorId) -> None:
-        self.executor_map.pop(theid)
+        if theid in self.executor_map:
+            self.executor_map.pop(theid)
         self.agent_map[theid.agent_name].discard(theid)
 
     @classmethod
