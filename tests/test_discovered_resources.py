@@ -17,11 +17,14 @@
 """
 
 import json
+import uuid
+from datetime import datetime
 from typing import Optional
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
+from inmanta import data
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.server.config import get_bind_port
 
@@ -95,7 +98,14 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
         assert result.result["data"]["values"] == res["values"]
 
 
-@pytest.mark.parametrize("apply_filter", [True, False, None])
+@pytest.mark.parametrize(
+    "apply_filter",
+    [
+        True,
+        False,
+        None,
+    ],
+)
 async def test_discovered_resource_get_paging(server, client, agent, environment, clienthelper, apply_filter: Optional[bool]):
     """
     Test that discovered resources can be retrieved with paging. The test creates multiple resources, retrieves them
@@ -106,21 +116,62 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     - True: Activate filtering and keep only discovered resources that are managed.
     - False: Activate filtering and keep only discovered resources that are NOT managed.
     - None: Disable filtering: return all discovered resources regardless of whether they're managed.
+
+
+
     """
     discovered_resources = [
-        {"discovered_resource_id": "test::Resource[agent1,key1=key1]", "values": {"value1": "test1", "value2": "test2"}},
-        {"discovered_resource_id": "test::Resource[agent1,key2=key2]", "values": {"value1": "test3", "value2": "test4"}},
-        {"discovered_resource_id": "test::Resource[agent1,key3=key3]", "values": {"value1": "test5", "value2": "test6"}},
-        {"discovered_resource_id": "test::Resource[agent1,key4=key4]", "values": {"value1": "test7", "value2": "test8"}},
-        {"discovered_resource_id": "test::Resource[agent1,key5=key5]", "values": {"value1": "test9", "value2": "test10"}},
-        {"discovered_resource_id": "test::Resource[agent1,key6=key6]", "values": {"value1": "test11", "value2": "test12"}},
+        {
+            "discovered_resource_id": f"test::Resource[agent1,key{i}=key{i}]",
+            "values": {"value1": f"test{i}", "value2": f"test{i+1}"},
+        }
+        for i in range(1, 7)
     ]
 
     result = await agent._client.discovered_resource_create_batch(environment, discovered_resources)
     assert result.code == 200
 
+    result = await client.resource_list(environment, sort="status.asc")
+    assert result.code == 200
+
+    # Create 2 versions of the model
+    for i in range(1, 3):
+        cm = data.ConfigurationModel(
+            environment=uuid.UUID(environment),
+            version=i,
+            date=datetime.now(),
+            total=1,
+            released=True,
+            version_info={},
+            is_suitable_for_partial_compiles=False,
+        )
+        await cm.insert()
+
+    # Create some orphans for version 1
+    version = 1
+
+    orphaned_resources = [
+        {
+            "id": ResourceVersionIdStr(f"{res['discovered_resource_id']},v={version}"),
+            "values": res["values"],
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+        }
+        for res in discovered_resources[2:-2]
+    ]
+
+    for resource in orphaned_resources:
+        resource = data.Resource.new(
+            environment=uuid.UUID(environment), resource_version_id=resource["id"], attributes=resource["values"]
+        )
+        await resource.insert()
+
+    result = await client.resource_list(environment, sort="status.asc")
+    assert result.code == 200
+
     # Create some Resources that are already managed:
-    version = await clienthelper.get_version()
+    version = 2
 
     managed_resources = [
         {
@@ -132,7 +183,24 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         }
         for res in discovered_resources[:2]
     ]
-    await clienthelper.put_version_simple(managed_resources, version)
+    for resource in managed_resources:
+        resource = data.Resource.new(
+            environment=uuid.UUID(environment), resource_version_id=resource["id"], attributes=resource["values"]
+        )
+        await resource.insert()
+
+    result = await client.resource_list(environment, sort="status.asc")
+    assert result.code == 200
+
+    #                                        |              FILTER
+    # discovered    managed   orphaned       |  TRUE        FALSE          NONE
+    # ---------------------------------------+-------------------------------------
+    #     R1            y                    |   x                           x
+    #     R2            y                    |   x                           x
+    #     R3                      y          |   x                           x
+    #     R4                      y          |   x                           x
+    #     R5                                 |                x              x
+    #     R6                                 |                x              x
 
     if apply_filter is None:
         filter = None
@@ -140,9 +208,9 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     else:
         filter = {"resource_id": apply_filter}
         if apply_filter:
-            expected_result = discovered_resources[:2]
+            expected_result = discovered_resources[:-2]
         else:
-            expected_result = discovered_resources[2:]
+            expected_result = discovered_resources[-2:]
 
     result = await client.discovered_resources_get_batch(
         environment,
