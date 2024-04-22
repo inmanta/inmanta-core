@@ -33,7 +33,8 @@ from uuid import UUID
 import asyncpg.connection
 
 import inmanta.config
-from inmanta import const, data, config as global_config
+from inmanta import config as global_config
+from inmanta import const, data
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus

@@ -40,7 +40,7 @@ import inmanta.signals
 import inmanta.util
 from inmanta.agent import executor
 from inmanta.logging import InmantaLoggerConfig
-from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer
+from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
 
 LOGGER = logging.getLogger(__name__)
 
@@ -114,6 +114,8 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self._sync_stop()
         self.stopped.set()
 
+class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver[ExecutorContext]):
+    pass
 
 class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
     async def call(self, context: ExecutorContext) -> None:
@@ -172,7 +174,12 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
         for module_source in sources:
             await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
-            await loop.run_in_executor(context.threadpool, functools.partial(loader._load_module, module_source.name, module_source.hash_value))
+            await loop.run_in_executor(
+                context.threadpool, functools.partial(loader._load_module, module_source.name, module_source.hash_value)
+            )
+
+        print("XXX", os.getpid())
+
 
 class OpenVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
@@ -255,6 +262,7 @@ def mp_worker_entrypoint(
         loop = asyncio.get_running_loop()
         # Start serving
         transport, protocol = await loop.connect_accepted_socket(functools.partial(ExecutorServer, name), socket)
+        logging.getLogger().addHandler(LogShipper(protocol, loop))
         #    inmanta.signals.setup_signal_handlers(protocol.stop)
         await protocol.stopped.wait()
 
@@ -476,7 +484,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         )
         # Hook up the connection
         transport, protocol = await loop.connect_accepted_socket(
-            functools.partial(FinalizingIPCClient, f"executor.{name}"), parent_conn
+            functools.partial(ExecutorClient, f"executor.{name}"), parent_conn
         )
 
         child_handle = MPExecutor(self, process, protocol, executor_id, venv)

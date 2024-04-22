@@ -36,9 +36,9 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 import pkg_resources
 
 import inmanta.agent.executor
-from inmanta import const, data, env, protocol, config
+from inmanta import config, const, data, env, protocol
 from inmanta.agent import config as cfg
-from inmanta.agent import executor, in_process_executor, forking_executor
+from inmanta.agent import executor, forking_executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ResourceState
@@ -928,9 +928,7 @@ class Agent(SessionEndpoint):
         can_have_remote_executor = code_loader
 
         if remote_executor and can_have_remote_executor:
-            env_manager = inmanta.agent.executor.VirtualEnvironmentManager(
-                self._storage["executor"]
-            )
+            env_manager = inmanta.agent.executor.VirtualEnvironmentManager(self._storage["executor"])
             self.executor_manager = forking_executor.MPManager(
                 self.thread_pool,
                 env_manager,
@@ -939,7 +937,7 @@ class Agent(SessionEndpoint):
                 config.log_dir.get(),
                 self._storage["executor"],
                 LOGGER.level,
-                True
+                True,
             )
         else:
             self.executor_manager = in_process_executor.InProcessExecutorManager(
@@ -949,7 +947,6 @@ class Agent(SessionEndpoint):
                 LOGGER,
                 self,
             )
-
 
     async def _init_agent_map(self) -> None:
         if cfg.use_autostart_agent_map.get():

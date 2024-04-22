@@ -49,24 +49,11 @@ LFMT_NEWLINE=%c'\\012'
 
 # compare mypy output with baseline file, show newly introduced and resolved type errors
 mypy-diff:
-	@ # run mypy and temporarily save result
-	@ $(RUN_MYPY) > $(MYPY_TMP_FILE) || true
-	@ # prepare baseline for diff and temporarily save result
-	@ cat $(MYPY_BASELINE_FILE) | $(MYPY_DIFF_PREPARE) > $(MYPY_BASELINE_FILE_NO_LN_NB) || true
-	@ # prepare most recent mypy output and run diff, returing +n for new lines and -n for old lines, where n is the line number
-	@ cat $(MYPY_TMP_FILE) | $(MYPY_DIFF_PREPARE) | diff $(MYPY_BASELINE_FILE_NO_LN_NB) - \
-		--new-line-format="+$(LFMT_LINE_NB)$(LFMT_NEWLINE)" \
-		--old-line-format="-$(LFMT_LINE_NB)$(LFMT_NEWLINE)" \
-		--unchanged-line-format='' \
-		--unidirectional-new-file \
-		| $(MYPY_DIFF_FETCH_LINES) \
-		|| true
-	@ # cleanup
-	@ rm -f $(MYPY_TMP_FILE) $(MYPY_BASELINE_FILE_NO_LN_NB)
+	$(RUN_MYPY) | mypy-baseline filter
 
 # save mypy output to baseline file
 mypy-save:
-	$(RUN_MYPY) > $(MYPY_BASELINE_FILE) || true
+	$(RUN_MYPY) | mypy-baseline sync
 
 .PHONY: test
 test:

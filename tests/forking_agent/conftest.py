@@ -52,6 +52,7 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
             threadpool,
             venv_manager,
             agent_session_id,
+            uuid.uuid4(),
             log_folder=str(log_folder),
             storage_folder=str(storage_folder),
             cli_log=True,
