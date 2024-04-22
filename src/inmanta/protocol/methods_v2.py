@@ -1603,7 +1603,10 @@ def discovered_resources_get_batch(
             The following sorting attributes are supported: 'discovered_resource_id'.
             The following orders are supported: 'asc', 'desc'
     :param filter: Filter the list of returned resources.
-        Filtering by 'name', 'process_name' and 'status' is supported.
+        Default behaviour: return all discovered resources.
+        Filtering by 'resource_id' is supported:
+            - True: only return discovered resources that we already manage.
+            - False: only return discovered resources that we don't already manage.
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
