@@ -131,9 +131,6 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     result = await agent._client.discovered_resource_create_batch(environment, discovered_resources)
     assert result.code == 200
 
-    result = await client.resource_list(environment, sort="status.asc")
-    assert result.code == 200
-
     # Create 2 versions of the model
     for i in range(1, 3):
         cm = data.ConfigurationModel(
@@ -167,9 +164,6 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         )
         await resource.insert()
 
-    result = await client.resource_list(environment, sort="status.asc")
-    assert result.code == 200
-
     # Create some Resources that are already managed:
     version = 2
 
@@ -189,16 +183,15 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         )
         await resource.insert()
 
-    result = await client.resource_list(environment, sort="status.asc")
-    assert result.code == 200
+    # Resource repartition and expected filtering results:
 
     #                                        |              FILTER
     # discovered    managed   orphaned       |  TRUE        FALSE          NONE
     # ---------------------------------------+-------------------------------------
-    #     R1            y                    |   x                           x
-    #     R2            y                    |   x                           x
-    #     R3                      y          |   x                           x
-    #     R4                      y          |   x                           x
+    #     R1            x                    |   x                           x
+    #     R2            x                    |   x                           x
+    #     R3                      x          |   x                           x
+    #     R4                      x          |   x                           x
     #     R5                                 |                x              x
     #     R6                                 |                x              x
 
