@@ -36,6 +36,7 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 import pkg_resources
 
 import inmanta.agent.executor
+import inmanta.const
 from inmanta import config, const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
@@ -545,7 +546,7 @@ class AgentInstance:
         # To give smooth deploy experience, we want these agents to start immediately.
         self.ensure_deploy_on_start = ensure_deploy_on_start
 
-        self.executor_manager = process.executor_manager
+        self.executor_manager: executor.ExecutorManager[Any] = process.executor_manager
 
     async def stop(self) -> None:
         self._stopped = True
@@ -554,14 +555,14 @@ class AgentInstance:
         self._nq.cancel()
         await self.executor_manager.stop_for_agent(self.name)
 
-    def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
+    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
         """
         Called after stop to ensure complete shutdown
 
         :param thread_pool_finalizer: all threadpools that should be joined should be added here.
         """
         assert self._stopped
-        self.executor_manager.join(thread_pool_finalizer)
+        await self.executor_manager.join(thread_pool_finalizer, inmanta.const.SHUTDOWN_GRACE_IOLOOP * 0.9)
 
     @property
     def environment(self) -> uuid.UUID:
@@ -819,7 +820,7 @@ class AgentInstance:
 
         # Resource types for which no handler code exist for the given version
         # or for which the pip config couldn't be retrieved
-        code, invalid_resource_types = await self.process.get_code(self._env_id, version, resource_types)
+        code, invalid_resource_types = await self.process.get_code(self._env_id, version, list(resource_types))
         # Resource types for which an error occurred during handler code installation
 
         try:
@@ -934,7 +935,7 @@ class Agent(SessionEndpoint):
 
         if remote_executor and can_have_remote_executor:
             env_manager = inmanta.agent.executor.VirtualEnvironmentManager(self._storage["executor"])
-            self.executor_manager = forking_executor.MPManager(
+            self.executor_manager: executor.ExecutorManager[Any] = forking_executor.MPManager(
                 self.thread_pool,
                 env_manager,
                 self.sessionid,
@@ -942,7 +943,7 @@ class Agent(SessionEndpoint):
                 config.log_dir.get(),
                 self._storage["executor"],
                 LOGGER.level,
-                True,
+                False,
             )
         else:
             self.executor_manager = in_process_executor.InProcessExecutorManager(
@@ -981,15 +982,15 @@ class Agent(SessionEndpoint):
 
     async def stop(self) -> None:
         await super().stop()
-        self.executor_manager.stop()
+        await self.executor_manager.stop()
 
         threadpools_to_join = [self.thread_pool]
 
-        self.executor_manager.join(threadpools_to_join)
+        await self.executor_manager.join(threadpools_to_join, inmanta.const.SHUTDOWN_GRACE_IOLOOP * 0.9)
         self.thread_pool.shutdown(wait=False)
         for instance in self._instances.values():
             await instance.stop()
-            instance.join(threadpools_to_join)
+            await instance.join(threadpools_to_join)
 
         await join_threadpools(threadpools_to_join)
 

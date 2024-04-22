@@ -453,7 +453,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self.executors: dict[str, InProcessExecutor] = {}
         self._creation_locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         for child in self.executors.values():
             child.stop()
 
@@ -461,7 +461,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         if agent_name in self.executors:
             self.executors[agent_name].stop()
 
-    def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
+    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
         for child in self.executors.values():
             child.join(thread_pool_finalizer)
 

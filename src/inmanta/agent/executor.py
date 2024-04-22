@@ -460,3 +460,20 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
 
         This is considered to be a hint , the manager can choose to follow or not
         """
+        pass
+
+    async def stop(self) -> None:
+        """
+        Stop all executors.
+
+        Don't wait for them to terminate
+        """
+        pass
+
+    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
+        """
+        Wait for all executors to terminate.
+
+        Any threadpools that need to be closed can be handed of to the parent via thread_pool_finalizer
+        """
+        pass

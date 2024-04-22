@@ -18,6 +18,7 @@
 
 import asyncio
 import collections
+import concurrent.futures
 import concurrent.futures.thread
 import functools
 import logging
@@ -189,6 +190,7 @@ class OpenVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, N
         self.version = version
 
     async def call(self, context: ExecutorContext) -> None:
+        assert context.executor is not None
         await context.executor.open_version(self.version)
 
 
@@ -198,6 +200,7 @@ class CloseVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, 
         self.version = version
 
     async def call(self, context: ExecutorContext) -> None:
+        assert context.executor is not None
         # May need to be on threadpool because it can call finalizers
         await context.executor.close_version(self.version)
 
@@ -213,6 +216,7 @@ class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None])
         self.dry_run_id = dry_run_id
 
     async def call(self, context: ExecutorContext) -> None:
+        assert context.executor is not None
         await context.executor.dry_run(self.resources, self.dry_run_id)
 
 
@@ -229,15 +233,17 @@ class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
         self.reason = reason
 
     async def call(self, context: ExecutorContext) -> None:
+        assert context.executor is not None
         await context.executor.execute(self.gid, self.resource_details, self.reason)
 
 
-class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta.types.Apireturn]):
 
     def __init__(self, resource: "inmanta.agent.executor.ResourceDetails") -> None:
         self.resource = resource
 
     async def call(self, context: ExecutorContext) -> inmanta.types.Apireturn:
+        assert context.executor is not None
         return await context.executor.get_facts(self.resource)
 
 
@@ -522,7 +528,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
     async def force_stop(self, grace_time: float) -> None:
         await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
 
-    async def join(self, timeout: float) -> None:
+    async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
         await asyncio.gather(*(child.join(timeout) for child in self.children))
 
     async def stop_for_agent(self, agent_name: str) -> None:
