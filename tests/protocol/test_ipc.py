@@ -109,7 +109,15 @@ async def test_normal_flow(request):
     assert args == result
 
 
-async def test_log_transport(caplog):
+async def test_log_transport(caplog, request):
+    """
+    Test for the IPC feature of shipping logs
+
+    Ensure we can send a log line over the IPC protocol
+
+    This doesn't actually connect the LogShipper to the logging framework, as this would create an infinite loop
+    (the log is re-injected in the same place it was first received)
+    """
 
     loop = asyncio.get_running_loop()
     parent_conn, child_conn = socket.socketpair()
@@ -117,12 +125,13 @@ async def test_log_transport(caplog):
     server_transport, server_protocol = await loop.connect_accepted_socket(
         lambda: inmanta.protocol.ipc_light.LogReceiver("logs"), parent_conn
     )
+    request.addfinalizer(server_transport.close)
     client_transport, client_protocol = await loop.connect_accepted_socket(lambda: IPCClient("Client"), child_conn)
-
-    log_drainer = inmanta.protocol.ipc_light.LogShipper(client_protocol)
+    request.addfinalizer(client_transport.close)
+    log_shipper = inmanta.protocol.ipc_light.LogShipper(client_protocol, loop)
 
     with caplog.at_level(logging.INFO):
-        log_drainer.handle(logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("a",), exc_info=False))
+        log_shipper.handle(logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("a",), exc_info=False))
 
         def has_log(msg: str) -> bool:
             try:
@@ -133,9 +142,9 @@ async def test_log_transport(caplog):
 
         await inmanta.util.retry_limited(functools.partial(has_log, "a"), 1)
 
-        # mess with threads
+        # mess with threads, shows that we get at least no assertion errors
         thread = threading.Thread(
-            target=lambda: log_drainer.handle(
+            target=lambda: log_shipper.handle(
                 logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("b",), exc_info=False)
             )
         )
