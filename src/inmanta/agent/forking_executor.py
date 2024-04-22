@@ -37,7 +37,7 @@ import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
-from inmanta import logging as logging_core
+import inmanta.logging
 from inmanta.agent import executor
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer
 
@@ -152,8 +152,8 @@ def mp_worker_entrypoint(
     config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
 ) -> None:
     """Entry point for child processes"""
-    config_builder = logging_core.LoggingConfigBuilder()
-    logger_config: logging_core.LoggingConfigCore = config_builder.get_logging_config_for_agent(
+    config_builder = inmanta.logging.LoggingConfigBuilder()
+    logger_config: inmanta.logging.FullLoggerConfig = config_builder.get_logging_config_for_agent(
         logfile, inmanta_log_level, cli_log
     )
     logger_config.apply_config()

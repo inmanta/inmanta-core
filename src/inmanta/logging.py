@@ -24,6 +24,7 @@ import re
 import sys
 from argparse import Namespace
 from collections.abc import Iterator
+from collections import abc
 from contextlib import contextmanager
 from logging import handlers
 from typing import Optional, TextIO
@@ -59,18 +60,23 @@ log_levels = {
 }
 
 
+@stable_api
 class LoggingConfigExtension:
     """
-    The logging config defined by an extension
+    This class is used by an extension to declare the default logging config that should be used when
+    no dict-based logging config was provided by the user. The FullLoggingConfig class provides support
+    to merge this logging config into the main logging config of inmanta-core. This class supports only
+    version 1 of Python's dictConfig format.
     """
 
     def __init__(
         self,
-        formatters: Optional[dict[str, object]] = None,
-        handlers: Optional[dict[str, object]] = None,
-        loggers: Optional[dict[str, object]] = None,
-        root_handlers: Optional[set[str]] = None,
-        log_dirs_to_create: Optional[set[str]] = None,
+        *,
+        formatters: Optional[abc.Mapping[str, object]] = None,
+        handlers: Optional[abc.Mapping[str, object]] = None,
+        loggers: Optional[abc.Mapping[str, object]] = None,
+        root_handlers: Optional[abc.Set[str]] = None,
+        log_dirs_to_create: Optional[abc.Set[str]] = None,
     ) -> None:
         """
         :param log_dirs_to_create: The log directories that should be created before the logging config can be used.
@@ -84,33 +90,42 @@ class LoggingConfigExtension:
     def ensure_log_dirs(self) -> None:
         """
         This method makes sure that the log directories, required by this logging config, are present on disk.
-        The directories are created if it doesn't exist yet.
+        The directories are created if they don't exist yet.
         """
         for directory in self.log_dirs_to_create:
             os.makedirs(directory, exist_ok=True)
 
 
-class LoggingConfigCore(LoggingConfigExtension):
+class FullLoggingConfig(LoggingConfigExtension):
     """
-    The logging config defined by the inmanta-core component.
+    A FullLoggingConfig that can be applied on Python's logging framework.
+
+    This class supports only version 1 of Python's dictConfig format.
     """
 
     def __init__(
         self,
-        formatters: Optional[dict[str, object]] = None,
-        handlers: Optional[dict[str, object]] = None,
-        loggers: Optional[dict[str, object]] = None,
-        root_handlers: Optional[set[str]] = None,
-        log_dirs_to_create: Optional[set[str]] = None,
+        *,
+        formatters: Optional[abc.Mapping[str, object]] = None,
+        handlers: Optional[abc.Mapping[str, object]] = None,
+        loggers: Optional[abc.Mapping[str, object]] = None,
+        root_handlers: Optional[abc.Set[str]] = None,
+        log_dirs_to_create: Optional[abc.Set[str]] = None,
         root_log_level: Optional[int | str] = None,
     ):
-        super().__init__(formatters, handlers, loggers, root_handlers, log_dirs_to_create)
+        super().__init__(
+            formatters=formatters,
+            handlers=handlers,
+            loggers=loggers,
+            root_handlers=root_handlers,
+            log_dirs_to_create=log_dirs_to_create,
+        )
         self.root_log_level = root_log_level
 
-    def join(self, logging_config_extension: LoggingConfigExtension) -> "LoggingConfigCore":
+    def join(self, logging_config_extension: LoggingConfigExtension) -> "FullLoggingConfig":
         """
-        Join this LoggingConfigCore and the given LoggingConfigExtension together into a single
-        LoggingConfigCore object that contains all the logging config of both objects.
+        Join this FullLoggingConfig and the given LoggingConfigExtension together into a single
+        FullLoggingConfig object that contains all the logging config of both objects.
         """
         common_formatter_names = set(self.formatters.keys()) & set(logging_config_extension.formatters.keys())
         if common_formatter_names:
@@ -121,7 +136,7 @@ class LoggingConfigCore(LoggingConfigExtension):
         common_logger_names = set(self.loggers.keys()) & set(logging_config_extension.loggers.keys())
         if common_logger_names:
             raise Exception(f"The following logger names appear in both logger configs: {common_logger_names}")
-        return LoggingConfigCore(
+        return FullLoggingConfig(
             formatters=dict(**self.formatters, **logging_config_extension.formatters),
             handlers=dict(**self.handlers, **logging_config_extension.handlers),
             loggers=dict(**self.loggers, **logging_config_extension.loggers),
@@ -196,16 +211,16 @@ class LoggingConfigBuilder:
         self,
         stream: TextIO = sys.stdout,
         logging_config_extensions: Optional[list[LoggingConfigExtension]] = None,
-    ) -> LoggingConfigCore:
+    ) -> FullLoggingConfig:
         """
-        This method returns the logger config that should be used between the moment that the process starts,
+        This method returns the logging config that should be used between the moment that the process starts,
         and the moment that the logging-related config options are parsed and applied.
 
         :param stream: The TextIO stream where the logs will be sent to.
         :param logging_config_extensions: The logging config required by the extensions.
         """
         name_root_handler = "console_handler"
-        logging_config_core = LoggingConfigCore(
+        logging_config_core = FullLoggingConfig(
             formatters={
                 "console_formatter": self._get_multiline_formatter_config(),
             },
@@ -228,7 +243,7 @@ class LoggingConfigBuilder:
         stream: TextIO,
         options: Options,
         logging_config_extensions: Optional[list[LoggingConfigExtension]] = None,
-    ) -> LoggingConfigCore:
+    ) -> FullLoggingConfig:
         """
         Return the logging config based on the given configuration options, passed on the CLI,
         and the configuration options present in the config file.
@@ -265,7 +280,7 @@ class LoggingConfigBuilder:
             }
             formatters["console_formatter"] = self._get_multiline_formatter_config(options)
 
-        logging_config_core = LoggingConfigCore(
+        full_logging_config = FullLoggingConfig(
             formatters={
                 **formatters,
                 "resource_action_log_formatter": {
@@ -294,9 +309,9 @@ class LoggingConfigBuilder:
             root_handlers={handler_root_logger},
             root_log_level=log_level,
         )
-        return self._join_logging_configs(logging_config_core, logging_config_extensions)
+        return self._join_logging_configs(full_logging_config, logging_config_extensions)
 
-    def get_logging_config_for_agent(self, log_file: str, inmanta_log_level: str, cli_log: bool) -> LoggingConfigCore:
+    def get_logging_config_for_agent(self, log_file: str, inmanta_log_level: str, cli_log: bool) -> FullLoggingConfig:
         """
         Returns the logging config for an agent.
 
@@ -318,7 +333,7 @@ class LoggingConfigBuilder:
                 "stream": "ext://sys.stderr",
             }
         name_root_handler = "agent_log_handler"
-        return LoggingConfigCore(
+        return FullLoggingConfig(
             formatters={
                 "agent_log_formatter": {
                     "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
@@ -341,14 +356,14 @@ class LoggingConfigBuilder:
         )
 
     def _join_logging_configs(
-        self, logging_config_core: LoggingConfigCore, logging_config_extensions: Optional[list[LoggingConfigExtension]] = None
-    ) -> LoggingConfigCore:
+        self, full_logger_config: FullLoggingConfig, logging_config_extensions: Optional[list[LoggingConfigExtension]] = None
+    ) -> FullLoggingConfig:
         """
         Join the given LoggingConfigCore and the LoggingConfigExtensions together into a single LoggingConfigCore
         object that contains all the loging config.
         """
         logging_config_extensions = logging_config_extensions if logging_config_extensions else []
-        result = logging_config_core
+        result = full_logger_config
         for logging_config_ext in logging_config_extensions:
             result = result.join(logging_config_ext)
         return result
@@ -474,7 +489,7 @@ class InmantaLoggerConfig:
 
         :param stream: The TextIO stream where the logs will be sent to.
         """
-        log_config: LoggingConfigCore = LoggingConfigBuilder().get_bootstrap_logging_config(stream)
+        log_config: FullLoggingConfig = LoggingConfigBuilder().get_bootstrap_logging_config(stream)
         self._stream = stream
         self._handler: logging.Handler = self._apply_logging_config(log_config)
         self._options_applied: bool = False
@@ -534,12 +549,12 @@ class InmantaLoggerConfig:
             raise Exception("Options can only be applied once to a handler.")
         self._options_applied = True
         config_builder = LoggingConfigBuilder()
-        log_config: LoggingConfigCore = config_builder.get_logging_config_from_options(
+        logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
             self._stream, options, self._logging_configs_extensions
         )
-        self._handler = self._apply_logging_config(log_config)
+        self._handler = self._apply_logging_config(logging_config)
 
-    def _apply_logging_config(self, logging_config: LoggingConfigCore) -> logging.Handler:
+    def _apply_logging_config(self, logging_config: FullLoggingConfig) -> logging.Handler:
         """
         Apply the given logging_config as the current configuration of the logging system.
 
