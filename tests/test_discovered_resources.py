@@ -103,8 +103,8 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
 
     Also tests the linking between unmanaged and managed resources via the apply_filter parameter:
 
-    - True: Activate filtering and keep only discovered resources that are managed
-    - False: Activate filtering and keep only discovered resources that are NOT managed
+    - True: Activate filtering and keep only discovered resources that are managed.
+    - False: Activate filtering and keep only discovered resources that are NOT managed.
     - None: Disable filtering: return all discovered resources regardless of whether they're managed.
     """
     discovered_resources = [
