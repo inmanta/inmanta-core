@@ -1251,6 +1251,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         sort: str = "discovered_resource_id.asc",
         start: Optional[str] = None,
         end: Optional[str] = None,
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> None:
         super().__init__(
             order=DiscoveredResourceOrder.parse_from_string(sort),
@@ -1259,7 +1260,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
             last_id=None,
             start=start,
             end=end,
-            filter=None,
+            filter=filter,
         )
         self.environment = environment
 
@@ -1268,16 +1269,23 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         """
         Return the specification of the allowed filters, see FilterValidator
         """
-        return {}
+        return {
+            "resource_id": BooleanIsNotNullFilter,
+        }
 
     def get_base_url(self) -> str:
         return "/api/v2/discovered"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
-            select_clause="SELECT environment, discovered_resource_id, values",
-            from_clause=f" FROM {data.DiscoveredResource.table_name()}",
-            filter_statements=["environment = $1"],
+            select_clause="SELECT dr.environment, dr.discovered_resource_id, dr.values, rps.resource_id",
+            from_clause=f"""
+                FROM {data.DiscoveredResource.table_name()} as dr
+                LEFT JOIN {data.ResourcePersistentState.table_name()} rps
+                ON dr.discovered_resource_id = rps.resource_id
+
+            """,
+            filter_statements=["dr.environment = $1"],
             values=[self.environment.id],
         )
         return query_builder

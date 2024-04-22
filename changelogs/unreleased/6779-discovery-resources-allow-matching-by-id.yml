@@ -1,0 +1,6 @@
+description: >
+  Add filtering capabilities on DiscoveredResourceView. Discovered resource can now be filtered based on
+  whether they are already managed or not.
+issue-nr: 6779
+change-type: patch
+destination-branches: [master, iso7, iso6]

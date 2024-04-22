@@ -17,9 +17,12 @@
 """
 
 import json
+from typing import Optional
 
+import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
+from inmanta.data.model import ResourceVersionIdStr
 from inmanta.server.config import get_bind_port
 
 
@@ -92,12 +95,19 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
         assert result.result["data"]["values"] == res["values"]
 
 
-async def test_discovered_resource_get_paging(server, client, agent, environment):
+@pytest.mark.parametrize("apply_filter", [True, False, None])
+async def test_discovered_resource_get_paging(server, client, agent, environment, clienthelper, apply_filter: Optional[bool]):
     """
     Test that discovered resources can be retrieved with paging. The test creates multiple resources, retrieves them
     with various paging options, and verifies that the expected resources are returned.
+
+    Also tests the linking between unmanaged and managed resources via the apply_filter parameter:
+
+    - True: Activate filtering and keep only discovered resources that are managed
+    - False: Activate filtering and keep only discovered resources that are NOT managed
+    - None: Disable filtering: return all discovered resources regardless of whether they're managed.
     """
-    resources = [
+    discovered_resources = [
         {"discovered_resource_id": "test::Resource[agent1,key1=key1]", "values": {"value1": "test1", "value2": "test2"}},
         {"discovered_resource_id": "test::Resource[agent1,key2=key2]", "values": {"value1": "test3", "value2": "test4"}},
         {"discovered_resource_id": "test::Resource[agent1,key3=key3]", "values": {"value1": "test5", "value2": "test6"}},
@@ -106,19 +116,45 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         {"discovered_resource_id": "test::Resource[agent1,key6=key6]", "values": {"value1": "test11", "value2": "test12"}},
     ]
 
-    result = await agent._client.discovered_resource_create_batch(environment, resources)
+    result = await agent._client.discovered_resource_create_batch(environment, discovered_resources)
     assert result.code == 200
+
+    # Create some Resources that are already managed:
+    version = await clienthelper.get_version()
+
+    managed_resources = [
+        {
+            "id": ResourceVersionIdStr(f"{res['discovered_resource_id']},v={version}"),
+            "values": res["values"],
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+        }
+        for res in discovered_resources[:2]
+    ]
+    await clienthelper.put_version_simple(managed_resources, version)
+
+    if apply_filter is None:
+        filter = None
+        expected_result = discovered_resources
+    else:
+        filter = {"resource_id": apply_filter}
+        if apply_filter:
+            expected_result = discovered_resources[:2]
+        else:
+            expected_result = discovered_resources[2:]
 
     result = await client.discovered_resources_get_batch(
         environment,
+        filter=filter,
     )
     assert result.code == 200
-    assert len(result.result["data"]) == 6
+    assert result.result["data"] == expected_result
 
     result = await client.discovered_resources_get_batch(environment, limit=2)
     assert result.code == 200
     assert len(result.result["data"]) == 2
-    assert result.result["data"] == resources[:2]
+    assert result.result["data"] == discovered_resources[:2]
 
     assert result.result["metadata"] == {"total": 6, "before": 0, "after": 4, "page_size": 2}
     assert result.result["links"].get("next") is not None
@@ -138,7 +174,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     response = await http_client.fetch(request, raise_error=False)
     assert response.code == 200
     response = json.loads(response.body.decode("utf-8"))
-    assert response["data"] == resources[2:4]
+    assert response["data"] == discovered_resources[2:4]
     assert response["links"].get("prev") is not None
     assert response["links"].get("next") is not None
     assert response["metadata"] == {"total": 6, "before": 2, "after": 2, "page_size": 2}
@@ -153,7 +189,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     response = await http_client.fetch(request, raise_error=False)
     assert response.code == 200
     response = json.loads(response.body.decode("utf-8"))
-    assert response["data"] == resources[0:2]
+    assert response["data"] == discovered_resources[0:2]
     assert response["links"].get("prev") is None
     assert response["links"].get("next") is not None
     assert response["metadata"] == {"total": 6, "before": 0, "after": 4, "page_size": 2}
