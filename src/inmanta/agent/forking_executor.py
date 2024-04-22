@@ -33,11 +33,11 @@ import inmanta.config
 import inmanta.const
 import inmanta.env
 import inmanta.loader
+import inmanta.logging
 import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
-import inmanta.logging
 from inmanta.agent import executor
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer
 

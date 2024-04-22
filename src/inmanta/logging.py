@@ -23,8 +23,8 @@ import os
 import re
 import sys
 from argparse import Namespace
-from collections.abc import Iterator
 from collections import abc
+from collections.abc import Iterator
 from contextlib import contextmanager
 from logging import handlers
 from typing import Optional, TextIO
