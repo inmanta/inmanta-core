@@ -264,7 +264,7 @@ class LogReceiver(IPCFrameProtocol[ServerContext]):
 
     def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
         if isinstance(frame, IPCLogRecord):
-            # calling log here is safe because if there are nu arguments, formatter is never called
+            # calling log here is safe because if there are no arguments, formatter is never called
             logging.getLogger(frame.name).log(frame.levelno, frame.msg)
         else:
             super().frame_received(frame)

@@ -143,11 +143,12 @@ async def test_log_transport(caplog, request):
         await inmanta.util.retry_limited(functools.partial(has_log, "a"), 1)
 
         # mess with threads, shows that we get at least no assertion errors
+        # Also test against % injection in the format string
         thread = threading.Thread(
             target=lambda: log_shipper.handle(
-                logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("b",), exc_info=False)
+                logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("%d",), exc_info=False)
             )
         )
 
         thread.start()
-        await inmanta.util.retry_limited(functools.partial(has_log, "b"), 1)
+        await inmanta.util.retry_limited(functools.partial(has_log, "%d"), 1)
