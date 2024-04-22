@@ -106,7 +106,7 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
         None,
     ],
 )
-async def test_discovered_resource_get_paging(server, client, agent, environment, clienthelper, apply_filter: Optional[bool]):
+async def test_discovered_resource_get_paging(server, client, agent, environment, apply_filter: Optional[bool]):
     """
     Test that discovered resources can be retrieved with paging. The test creates multiple resources, retrieves them
     with various paging options, and verifies that the expected resources are returned.

@@ -1283,7 +1283,6 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
                 FROM {data.DiscoveredResource.table_name()} as dr
                 LEFT JOIN {data.ResourcePersistentState.table_name()} rps
                 ON dr.discovered_resource_id = rps.resource_id
-
             """,
             filter_statements=["dr.environment = $1"],
             values=[self.environment.id],
