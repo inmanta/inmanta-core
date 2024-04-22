@@ -52,7 +52,7 @@ class resource:  # noqa: N801
     :class:`~inmanta.resources.Resource`
 
     :param name: The name of the entity in the configuration model it creates a resources from. For example
-                 :inmanta:entity:`std::File`
+                 :inmanta:entity:`std::Host`
     :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on an agent. This attribute
                          can be mapped.
     :param agent: This string indicates how the agent of this resource is determined. This string points to an attribute,

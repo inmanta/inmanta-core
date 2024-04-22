@@ -118,7 +118,7 @@ class CodeManager:
     """This class is responsible for loading and packaging source code for types (resources, handlers, ...) that need to be
     available in a remote process (e.g. agent).
 
-    __type_file: Maps Inmanta type names (e.g., ``std::File``, ``mymodule::Mytype``) to sets of filenames containing
+    __type_file: Maps Inmanta type names (e.g.``mymodule::Mytype``) to sets of filenames containing
                  the necessary source code (all plugin files in the module).
     __file_info: Stores metadata about each individual source code file. The keys are file paths and the values
                  in this dictionary are ``SourceInfo`` objects.
