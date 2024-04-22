@@ -277,15 +277,15 @@ class LogShipper(logging.Handler):
     This sender is threadsafe
     """
 
-    def __init__(self, channel: IPCFrameProtocol[object], eventloop: asyncio.BaseEventLoop) -> None:
-        self.channel = channel
+    def __init__(self, protocol: IPCFrameProtocol[object], eventloop: asyncio.BaseEventLoop) -> None:
+        self.protocol = protocol
         self.eventloop = eventloop
         super().__init__()
 
     def emit(self, record: logging.LogRecord) -> None:
         self.eventloop.call_soon_threadsafe(
             functools.partial(
-                self.channel.send_frame,
+                self.protocol.send_frame,
                 IPCLogRecord(
                     record.name,
                     record.levelno,
