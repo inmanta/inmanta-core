@@ -114,8 +114,10 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self._sync_stop()
         self.stopped.set()
 
+
 class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver[ExecutorContext]):
     pass
+
 
 class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
     async def call(self, context: ExecutorContext) -> None:
@@ -414,7 +416,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self.agent_map[theid.agent_name].add(theid)
 
     def __remove_executor(self, theid: executor.ExecutorId) -> None:
-        del self.executor_map[theid]
+        self.executor_map.pop(theid)
         self.agent_map[theid.agent_name].discard(theid)
 
     @classmethod

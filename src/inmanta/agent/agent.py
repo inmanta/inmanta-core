@@ -814,15 +814,20 @@ class AgentInstance:
         """
         started = datetime.datetime.now().astimezone()
         code: Collection[ResourceInstallSpec]
+
+        resource_types = {res["resource_type"] for res in resources}
+
         # Resource types for which no handler code exist for the given version
         # or for which the pip config couldn't be retrieved
-        code, invalid_resource_types = await self.process.get_code(
-            self._env_id, version, [res["resource_type"] for res in resources]
-        )
+        code, invalid_resource_types = await self.process.get_code(self._env_id, version, resource_types)
         # Resource types for which an error occurred during handler code installation
 
-        executor = await self.executor_manager.get_executor(self.name, self.uri, code)
-        failed_resource_types = executor.failed_resource_types
+        try:
+            executor = await self.executor_manager.get_executor(self.name, self.uri, code)
+            failed_resource_types = executor.failed_resource_types
+        except Exception:
+            logging.warning("Could not set up executor for %s", self.name, exc_info=True)
+            failed_resource_types = resource_types
 
         loaded_resources: list[ResourceDetails] = []
         failed_resources: list[ResourceVersionIdStr] = []

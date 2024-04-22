@@ -45,8 +45,7 @@ async def test_process_manager(environment, pip_index, mpmanager_light: forking_
     code = """
 def test():
     return 10
-res1 = TestResource(Id("aa::Aa", "agent1", "aa", "aa", 1))
-res2 = TestResource(Id("aa::Aa", "agent1", "aa", "aa", 1))
+
 import inmanta
 inmanta.test_agent_code_loading = 5
     """.encode()
@@ -282,8 +281,8 @@ async def test_executor_creation_and_reuse(pip_index, mpmanager_light) -> None:
 
     # Prepare a source module and its hash
     code = """
-    def test():
-        return 10
+def test():
+    return 10
     """.encode()
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code)

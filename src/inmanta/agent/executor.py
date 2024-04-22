@@ -133,6 +133,8 @@ class ExecutorBlueprint(EnvBlueprint):
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
         pip_configs = [cd.blueprint.pip_config for cd in code]
+        if not pip_configs:
+            raise Exception("No Pip config available, aborting")
         base_pip = pip_configs[0]
         for pip_config in pip_configs:
             assert pip_config == base_pip, f"One agent is using multiple pipe configs: {base_pip} {pip_config}"
