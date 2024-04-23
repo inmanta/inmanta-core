@@ -502,7 +502,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             my_executor = await self.create_executor(executor_id)
             self.__add_executor(executor_id, my_executor)
             if my_executor.failed_resource_specs:
-                # If some code loading failed, resovle here
+                # If some code loading failed, resolve here
                 # reverse index
                 type_for_spec = collections.defaultdict(list)
                 for spec in code:
