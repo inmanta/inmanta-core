@@ -280,12 +280,26 @@ class LogShipper(logging.Handler):
     def __init__(self, protocol: IPCFrameProtocol[object], eventloop: asyncio.BaseEventLoop) -> None:
         self.protocol = protocol
         self.eventloop = eventloop
+        self.logger_name = "inmanta.ipc.logs"
+        self.logger = logging.getLogger(self.logger_name)
         super().__init__()
 
+    def _send_frame(self, record: IPCLogRecord) -> None:
+        try:
+            self.protocol.send_frame(record)
+        except:
+            # Stop excepption here
+            # Log in own logger to prevent loops
+            self.logger.info("Could not send log line", exc_info=True)
+            return
+
     def emit(self, record: logging.LogRecord) -> None:
+        if record.name == self.logger_name:
+            # avoid loops
+            return
         self.eventloop.call_soon_threadsafe(
             functools.partial(
-                self.protocol.send_frame,
+                self._send_frame,
                 IPCLogRecord(
                     record.name,
                     record.levelno,

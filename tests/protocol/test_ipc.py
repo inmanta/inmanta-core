@@ -152,3 +152,32 @@ async def test_log_transport(caplog, request):
 
         thread.start()
         await inmanta.util.retry_limited(functools.partial(has_log, "%d"), 1)
+
+        # Test we are not creating a log-loop when shut down
+        # This is a bit tricky to test, as we don't know how long to wait for a repeat log line to not appear
+
+        # This one should be ignored, as this is the loop protection
+        log_shipper.handle(
+            logging.LogRecord(log_shipper.logger_name, logging.INFO, "xxx", 5, "Test %s", ("X",), exc_info=False)
+        )
+
+        client_transport.close()
+
+        log_shipper.handle(logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("c",), exc_info=False))
+
+        def has_diverted_log() -> bool:
+            try:
+                utils.log_contains(caplog, log_shipper.logger_name, logging.INFO, "Could not send log line")
+                return True
+            except AssertionError:
+                return False
+
+        await inmanta.util.retry_limited(functools.partial(has_diverted_log), 1)
+        # Make sure we drain the buffer
+        await asyncio.sleep(0.1)
+        utils.log_doesnt_contain(caplog, log_shipper.logger_name, logging.INFO, "Test X")
+        # Log line is not repeated
+        # Not other log line after it
+        utils.LogSequence(caplog).contains(log_shipper.logger_name, logging.INFO, "Could not send log line").assert_not(
+            "", logging.INFO, "", logging.INFO
+        )
