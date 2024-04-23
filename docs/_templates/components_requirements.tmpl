@@ -11,8 +11,9 @@ Module compatibility ranges
 
 .. only:: iso
 
-    The continuous integration can be configured to run tests against multiple ISO versions. Each version might require
-    a different set of Inmanta modules and different versions of these modules.
+    We develop and distribute some core modules alongside the product. For these modules, we uphold the same compatibility guarantees as for the product itself. Therefore, some versions of a module may be developed for a specific version of the product (e.g. a breaking change in a module is intended only for the next major iso release). We achieve this by using a specific module versioning scheme, and we accompany each iso version with a compatibility range for each of these core modules. This compatibility range declares which versions of each module have been developed and tested for this product version. This does not mean that other versions will not work, only that they may not.
+    
+    For stability reasons, when you depend on these modules, we encourage you to ensure that you use the appropriate versions for the iso version you're using. This can be achieved one of two ways:
 
 .. only:: oss
 
@@ -22,7 +23,7 @@ Module compatibility ranges
 
 This configuration can be done by either:
 
-- Using a specific pip index (or git repos) per ISO version and making sure it only contains the compatible versions of the modules.
+- Using a specific pip index (or git repos) per ISO version and making sure it only contains the compatible versions of the modules. e.g. the indexes we make available for an iso version only contain compatible module versions.
 - Using a generic pip index (or git repos) containing module versions for different ISO versions and adding a
   constraint file for each ISO version in which the compatible module ranges are specified.
 
@@ -31,8 +32,7 @@ This configuration can be done by either:
 
 .. only:: iso
 
-    The table below shows the set of Inmanta modules that integrate tightly with version |version_major| of the
-    Inmanta Service Orchestrator and which versions are compatible with this ISO release.
+    The table below shows the most relevant modules. These are the most commonly used ones, and they also happen to be the ones that integrate tightly with the orchestrator (and are therefore the most sensitive to changes in the orchestrator). These are the module versions that have been developed for version |version_major| of the Inmanta Service Orchestrator:
 
     .. list-table:: Modules
        :header-rows: 1
