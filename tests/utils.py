@@ -207,7 +207,7 @@ class LogSequence:
     def _find(self, loggerpart, level, msg, after=0, min_level=1):
         for i, (logger_name, log_level, message) in enumerate(self.caplog.record_tuples[after:]):
             if msg in message:
-                if loggerpart in logger_name and (level == log_level or (level > min_level)):
+                if loggerpart in logger_name and (level == log_level or (log_level < min_level)):
                     if any(i in logger_name for i in self.ignore):
                         continue
                     return i + after
