@@ -118,7 +118,7 @@ class CodeManager:
     """This class is responsible for loading and packaging source code for types (resources, handlers, ...) that need to be
     available in a remote process (e.g. agent).
 
-    __type_file: Maps Inmanta type names (e.g., ``std::File``, ``mymodule::Mytype``) to sets of filenames containing
+    __type_file: Maps Inmanta type names (e.g., ``std::NullResource``, ``mymodule::Mytype``) to sets of filenames containing
                  the necessary source code (all plugin files in the module).
     __file_info: Stores metadata about each individual source code file. The keys are file paths and the values
                  in this dictionary are ``SourceInfo`` objects.
@@ -136,7 +136,7 @@ class CodeManager:
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
 
-        :param type_name: The inmanta type name for which the source of type_object will be registered. For example std::File
+        :param type_name: The inmanta type name for which the source of type_object will be registered. For example std::NullResource
         :param instance: An instance for which the code needs to be registered.
         """
         file_name = self.get_object_source(instance)

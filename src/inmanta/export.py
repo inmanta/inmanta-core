@@ -692,27 +692,14 @@ class export:  # noqa: N801
         return function
 
 
-@export("dump", "std::File", "std::Service", "std::Package")
+@export("dump", "std::Service")
 def export_dumpfiles(exporter: Exporter, types: ProxiedType) -> None:
     prefix = "dump"
 
     if not os.path.exists(prefix):
         os.mkdir(prefix)
 
-    for file in types["std::File"]:
-        path = os.path.join(prefix, file.host.name + file.path.replace("/", "+"))  # type: ignore
-        with open(path, "w+", encoding="utf-8") as fd:
-            if isinstance(file.content, Unknown):  # type: ignore
-                fd.write("UNKNOWN -> error")
-            else:
-                fd.write(file.content)  # type: ignore
-
     path = os.path.join(prefix, "services")
     with open(path, "w+", encoding="utf-8") as fd:
         for svc in types["std::Service"]:
             fd.write(f"{svc.host.name} -> {svc.name}\n")  # type: ignore
-
-    path = os.path.join(prefix, "packages")
-    with open(path, "w+", encoding="utf-8") as fd:
-        for pkg in types["std::Package"]:
-            fd.write(f"{pkg.host.name} -> {pkg.name}\n")  # type: ignore
