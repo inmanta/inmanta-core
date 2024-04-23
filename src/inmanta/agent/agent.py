@@ -830,8 +830,8 @@ class AgentInstance:
             executor = await self.executor_manager.get_executor(self.name, self.uri, code)
             failed_resource_types = executor.failed_resource_types
         except Exception:
-            # TODO: if we get no executor, all the follow code goes whack.
             logging.warning("Could not set up executor for %s", self.name, exc_info=True)
+            executor = None
             failed_resource_types = resource_types
 
         loaded_resources: list[ResourceDetails] = []

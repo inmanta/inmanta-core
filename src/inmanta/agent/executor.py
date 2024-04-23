@@ -482,6 +482,7 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         """
         pass
 
+    @abc.abstractmethod
     async def stop(self) -> None:
         """
         Stop all executors.
@@ -490,6 +491,7 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         """
         pass
 
+    @abc.abstractmethod
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
         """
         Wait for all executors to terminate.

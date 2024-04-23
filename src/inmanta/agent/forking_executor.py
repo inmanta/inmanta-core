@@ -67,7 +67,6 @@ class ExecutorContext:
         await self.server.stop()
         if self.executor:
             # threadpool finalizer is not used, we expect threadpools to be terminated with the process
-            # TODO: is this enough?
             self.executor.join([])
 
 
@@ -150,6 +149,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
     1. setup the client, using the session id of the agent
     2. activate the venv created for this executor
     3. load additional source files
+
+    :return: module source we could not load
     """
 
     def __init__(
@@ -168,8 +169,10 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
         self.environment = environment
         self.uri = uri
 
-    async def call(self, context: ExecutorContext) -> None:
+    async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.ModuleSource]:
         loop = asyncio.get_running_loop()
+        parent_logger = logging.getLogger("agent.executor")
+        logger = parent_logger.getChild(context.name)
 
         # setup client
         context.client = inmanta.protocol.SessionClient("agent", self.gid)
@@ -181,7 +184,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
             environment=self.environment,
             client=context.client,
             eventloop=loop,
-            parent_logger=logging.getLogger("agent.executor"),
+            parent_logger=parent_logger,
         )
 
         # activate venv
@@ -194,13 +197,18 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
         sync_client = inmanta.protocol.SyncClient(client=context.client, ioloop=loop)
         sources = [s.with_client(sync_client) for s in self.sources]
 
+        failed: list[inmanta.loader.ModuleSource] = []
         for module_source in sources:
-            await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
-            await loop.run_in_executor(
-                context.threadpool, functools.partial(loader._load_module, module_source.name, module_source.hash_value)
-            )
+            try:
+                await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
+                await loop.run_in_executor(
+                    context.threadpool, functools.partial(loader._load_module, module_source.name, module_source.hash_value)
+                )
+            except Exception:
+                logger.info("Failed to load sources: %s", module_source, exc_info=True)
+                failed.append(module_source)
 
-        print("XXX", os.getpid())
+        return failed
 
 
 class OpenVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
@@ -292,8 +300,11 @@ def mp_worker_entrypoint(
         loop = asyncio.get_running_loop()
         # Start serving
         # also performs setup of log shipper
+        # this is part of stage 2 logging setup
         transport, protocol = await loop.connect_accepted_socket(functools.partial(ExecutorServer, name), socket)
         # Add cli logger if requested
+        # the default log to std.out is removed by stage 2 setup
+        # this adds it back
         if cli_log:
             log_config.add_cli_logger(inmanta_log_level)
         inmanta.signals.setup_signal_handlers(protocol.stop)
@@ -324,8 +335,10 @@ class MPExecutor(executor.Executor):
         # Pure for debugging purpose
         self.executor_id = executor_id
         self.executor_virtual_env = venv
-        # TODO!!!
-        self.failed_resource_types = set()
+
+        # Set by init and parent class that const
+        self.failed_resource_specs: list[inmanta.agent.executor.ResourceInstallSpec] = list()
+        self.failed_resource_types: set[str] = set()
 
     async def stop(self) -> None:
         """Stop by shutdown"""
@@ -488,6 +501,19 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                 return self.executor_map[executor_id]
             my_executor = await self.create_executor(executor_id)
             self.__add_executor(executor_id, my_executor)
+            if my_executor.failed_resource_specs:
+                # If some code loading failed, resovle here
+                # reverse index
+                type_for_spec = collections.defaultdict(list)
+                for spec in code:
+                    for source in spec.blueprint.sources:
+                        type_for_spec[source].append(spec.resource_type)
+                # resolve
+                for spec in my_executor.failed_resource_specs:
+                    for rtype in type_for_spec.get(spec, []):
+                        my_executor.failed_resource_types.add(rtype)
+
+            # TODO: recovery. If loading failed, we currently never rebuild
             return my_executor
 
     async def create_executor(self, executor_id: executor.ExecutorId) -> MPExecutor:
@@ -503,7 +529,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         )
         storage_for_blueprint = os.path.join(self.storage_folder, "code", executor_id.blueprint.blueprint_hash())
         os.makedirs(storage_for_blueprint, exist_ok=True)
-        await executor.connection.call(
+        failed_types = await executor.connection.call(
             InitCommand(
                 venv.env_path,
                 storage_for_blueprint,
@@ -519,6 +545,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             executor_id.agent_name,
             executor_id.identity(),
         )
+        executor.failed_resource_specs = failed_types
         return executor
 
     async def make_child_and_connect(
