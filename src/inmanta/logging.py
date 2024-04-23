@@ -129,13 +129,13 @@ class FullLoggingConfig(LoggingConfigExtension):
         """
         common_formatter_names = set(self.formatters.keys()) & set(logging_config_extension.formatters.keys())
         if common_formatter_names:
-            raise Exception(f"The following formatter names appear in both logger configs: {common_formatter_names}")
+            raise Exception(f"The following formatter names appear in multiple logging configs: {common_formatter_names}")
         common_handler_names = set(self.handlers.keys()) & set(logging_config_extension.handlers.keys())
         if common_handler_names:
-            raise Exception(f"The following handler names appear in both logger configs: {common_handler_names}")
+            raise Exception(f"The following handler names appear in multiple logging configs: {common_handler_names}")
         common_logger_names = set(self.loggers.keys()) & set(logging_config_extension.loggers.keys())
         if common_logger_names:
-            raise Exception(f"The following logger names appear in both logger configs: {common_logger_names}")
+            raise Exception(f"The following logger names appear in multiple logging configs: {common_logger_names}")
         return FullLoggingConfig(
             formatters=dict(**self.formatters, **logging_config_extension.formatters),
             handlers=dict(**self.handlers, **logging_config_extension.handlers),
