@@ -14,7 +14,9 @@
     We develop and distribute some core modules alongside the product. For these modules, we uphold the same
     compatibility guarantees as for the product itself. Therefore, some versions of a module may be developed
     for a specific version of the product (e.g. a breaking change in a module is intended only for the next major
-    iso release). We achieve this by using a specific module versioning scheme, and we accompany each iso version
+    iso release).
+
+    We achieve this by using a specific module versioning scheme, and we accompany each iso version
     with a compatibility range for each of these core modules. This compatibility range declares which versions
     of each module have been developed and tested for this product version. This does not mean that other versions
     will not work, only that they may not.
@@ -41,7 +43,7 @@
        :header-rows: 1
 
        * - Module
-         - Version constraint
+         - Compatible range
 
        {% for key, value in data["module_compatibility_ranges"]  | dictsort %}
        {% if key in list_only %}
@@ -53,7 +55,7 @@
 
     .. note::
 
-        The compatible ranges for these modules (and other less commonly used moduels) is available in a
+        The compatible ranges for these modules (and other less commonly used modules) is available in a
         machine-consumable format in the `compatibility.json <./compatibility.json>`_ file.
 
 {% endif %}
