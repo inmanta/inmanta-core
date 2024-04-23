@@ -287,7 +287,7 @@ class LogShipper(logging.Handler):
     def _send_frame(self, record: IPCLogRecord) -> None:
         try:
             self.protocol.send_frame(record)
-        except:
+        except Exception:
             # Stop exception here
             # Log in own logger to prevent loops
             self.logger.info("Could not send log line", exc_info=True)
