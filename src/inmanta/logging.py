@@ -210,7 +210,7 @@ class LoggingConfigBuilder:
     def get_bootstrap_logging_config(
         self,
         stream: TextIO = sys.stdout,
-        logging_config_extensions: Optional[list[LoggingConfigExtension]] = None,
+        logging_config_extensions: Optional[abc.Sequence[LoggingConfigExtension]] = None,
     ) -> FullLoggingConfig:
         """
         This method returns the logging config that should be used between the moment that the process starts,
@@ -242,7 +242,7 @@ class LoggingConfigBuilder:
         self,
         stream: TextIO,
         options: Options,
-        logging_config_extensions: Optional[list[LoggingConfigExtension]] = None,
+        logging_config_extensions: Optional[abc.Sequence[LoggingConfigExtension]] = None,
     ) -> FullLoggingConfig:
         """
         Return the logging config based on the given configuration options, passed on the CLI,
@@ -611,6 +611,7 @@ class InmantaLoggerConfig:
         """
         return self._handler
 
+    @stable_api
     def register_default_logging_config(self, logging_config: LoggingConfigExtension) -> None:
         """
         Register the default logging config for a certain extension.
@@ -735,6 +736,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
             return logger_name
 
 
+@stable_api
 class MultiFileHandler(logging.Handler):
     """
     A file handler that writes to different files based on the last part of the logger name.
