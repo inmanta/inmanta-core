@@ -6,33 +6,36 @@
 {% if data['module_compatibility_ranges']%}
 
 
-Module compatibility ranges
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 .. only:: iso
 
-    We develop and distribute some core modules alongside the product. For these modules, we uphold the same compatibility guarantees as for the product itself. Therefore, some versions of a module may be developed for a specific version of the product (e.g. a breaking change in a module is intended only for the next major iso release). We achieve this by using a specific module versioning scheme, and we accompany each iso version with a compatibility range for each of these core modules. This compatibility range declares which versions of each module have been developed and tested for this product version. This does not mean that other versions will not work, only that they may not.
-    
-    For stability reasons, when you depend on these modules, we encourage you to ensure that you use the appropriate versions for the iso version you're using. This can be achieved one of two ways:
+    Module compatibility ranges
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. only:: oss
+    We develop and distribute some core modules alongside the product. For these modules, we uphold the same
+    compatibility guarantees as for the product itself. Therefore, some versions of a module may be developed
+    for a specific version of the product (e.g. a breaking change in a module is intended only for the next major
+    iso release). We achieve this by using a specific module versioning scheme, and we accompany each iso version
+    with a compatibility range for each of these core modules. This compatibility range declares which versions
+    of each module have been developed and tested for this product version. This does not mean that other versions
+    will not work, only that they may not.
 
-    The continuous integration can be configured to run tests against multiple OSS versions. Each version might require
-    a different set of Inmanta modules and different versions of these modules.
-
-
-This configuration can be done by either:
-
-- Using a specific pip index (or git repos) per ISO version and making sure it only contains the compatible versions of the modules. e.g. the indexes we make available for an iso version only contain compatible module versions.
-- Using a generic pip index (or git repos) containing module versions for different ISO versions and adding a
-  constraint file for each ISO version in which the compatible module ranges are specified.
+    For stability reasons, when you depend on these modules, we encourage you to ensure that you use the appropriate
+    versions for the iso version you're using. This can be achieved one of two ways:
 
 
-{% set list_only = ["lsm", "std"] %}
 
-.. only:: iso
+    - Using a specific pip index (or git repos) per ISO version and making sure it only contains the compatible versions of the modules. e.g. the indexes we make available for an iso version only contain compatible module versions.
+    - Using a generic pip index (or git repos) containing module versions for different ISO versions and adding a
+      constraint file for each ISO version in which the compatible module ranges are specified.
 
-    The table below shows the most relevant modules. These are the most commonly used ones, and they also happen to be the ones that integrate tightly with the orchestrator (and are therefore the most sensitive to changes in the orchestrator). These are the module versions that have been developed for version |version_major| of the Inmanta Service Orchestrator:
+
+    {% set list_only = ["lsm", "std"] %}
+
+
+    The table below shows the most relevant modules. These are the most commonly used ones, and they also happen
+    to be the ones that integrate tightly with the orchestrator (and are therefore the most sensitive to changes
+    in the orchestrator). These are the module versions that have been developed for version |version_major| of
+    the Inmanta Service Orchestrator:
 
     .. list-table:: Modules
        :header-rows: 1
@@ -47,24 +50,11 @@ This configuration can be done by either:
        {% endif %}
        {% endfor %}
 
-.. only:: oss
 
-    The table below shows the set of Inmanta modules that integrate tightly with this Inmanta OSS version |release| and which versions are compatible with this OSS release.
+    .. note::
 
-    .. list-table:: Modules
-       :header-rows: 1
-
-       * - .. centered:: Module
-
-       {% for key, value in data["module_compatibility_ranges"] | dictsort %}
-       {% if key in list_only %}
-       * - {{ key }}
-       {% endif %}
-       {% endfor %}
-
-.. note::
-
-    This information is also available in a machine-consumable format in the `compatibility.json <./compatibility.json>`_ file.
+        The compatible ranges for these modules (and other less commonly used moduels) is available in a
+        machine-consumable format in the `compatibility.json <./compatibility.json>`_ file.
 
 {% endif %}
 
