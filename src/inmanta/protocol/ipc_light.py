@@ -43,7 +43,11 @@ ServerContext = typing.TypeVar("ServerContext")
 ReturnType = typing.TypeVar("ReturnType")
 
 
-class IPCMethod(abc.ABC, typing.Generic[ServerContext, ReturnType]):
+class IPCFrame(abc.ABC):
+    """Interface marker for IPC frames"""
+    pass
+
+class IPCMethod(IPCFrame, typing.Generic[ServerContext, ReturnType]):
     """Base class for methods intended for IPC"""
 
     @abc.abstractmethod
@@ -52,20 +56,20 @@ class IPCMethod(abc.ABC, typing.Generic[ServerContext, ReturnType]):
 
 
 @dataclass
-class IPCRequestFrame(typing.Generic[ServerContext, ReturnType]):
+class IPCRequestFrame(IPCFrame, typing.Generic[ServerContext, ReturnType]):
     id: Optional[uuid.UUID]
     method: IPCMethod[ServerContext, ReturnType]
 
 
 @dataclass
-class IPCReplyFrame:
+class IPCReplyFrame(IPCFrame):
     id: uuid.UUID
     returnvalue: object
     is_exception: bool
 
 
 @dataclass
-class IPCLogRecord:
+class IPCLogRecord(IPCFrame):
 
     name: str
     levelno: int
