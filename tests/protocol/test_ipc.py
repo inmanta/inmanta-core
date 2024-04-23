@@ -179,5 +179,5 @@ async def test_log_transport(caplog, request):
         # Log line is not repeated
         # Not other log line after it
         utils.LogSequence(caplog).contains(log_shipper.logger_name, logging.INFO, "Could not send log line").assert_not(
-           loggerpart="", level=logging.INFO, msg="", min_level=logging.INFO
+            loggerpart="", level=-1, msg="", min_level=logging.DEBUG
         )

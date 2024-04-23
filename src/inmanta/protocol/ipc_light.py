@@ -66,6 +66,13 @@ class IPCReplyFrame:
 
 @dataclass
 class IPCLogRecord:
+    """
+    Derived from logging.LogRecord, but simplified
+
+    :param name: the logger name, as on logging.LogRecord
+    :param levelno: the log level, in numeric form, as on logging.LogRecord
+    :param msg: the message, as produced by record.getMessage() i.e. this record has all arguments already formatted in
+    """
 
     name: str
     levelno: int
@@ -296,6 +303,7 @@ class LogShipper(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         if record.name == self.logger_name:
             # avoid loops
+            # When we fail to send, we produce a log line on this logger
             return
         self.eventloop.call_soon_threadsafe(
             functools.partial(
@@ -303,7 +311,7 @@ class LogShipper(logging.Handler):
                 IPCLogRecord(
                     record.name,
                     record.levelno,
-                    self.format(record),
+                    record.getMessage(),
                 ),
             )
         )

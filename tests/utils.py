@@ -204,16 +204,32 @@ class LogSequence:
         self.allow_errors = allow_errors
         self.ignore = ignore
 
-    def _find(self, loggerpart, level, msg, after=0, min_level=1):
+    def _find(self, loggerpart, level, msg, after=0, min_level: int = 0):
+        """
+
+        :param loggerpart: part of the logger name to match
+        :param level: exact log level to match
+        :param min_level: minimal level to match (works as normal loglevel settings that take all higher levels)
+        :param msg: part of the message to match on
+        :param after: starting point in th capture buffer to search
+
+        :return: matched index in the capture buffer, -1 for no match
+        """
         for i, (logger_name, log_level, message) in enumerate(self.caplog.record_tuples[after:]):
             if msg in message:
-                if loggerpart in logger_name and (level == log_level or (log_level < min_level)):
+                if loggerpart in logger_name and (level == log_level or (log_level >= min_level)):
                     if any(i in logger_name for i in self.ignore):
                         continue
                     return i + after
         return -1
 
-    def contains(self, loggerpart, level, msg, min_level=1):
+    def contains(self, loggerpart, level, msg, min_level: int = 1) -> "LogSequence":
+        """
+        :param loggerpart: part of the logger name to match
+        :param level: exact log level to match
+        :param min_level: minimal level to match (works as normal loglevel settings that take all higher levels)
+        :param msg: part of the message to match on
+        """
         index = self._find(loggerpart, level, msg, self.index, min_level)
         if not self.allow_errors:
             # first error is later
@@ -222,7 +238,13 @@ class LogSequence:
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
-    def assert_not(self, loggerpart, level, msg, min_level=1):
+    def assert_not(self, loggerpart, level, msg, min_level: int = 1) -> None:
+        """
+        :param loggerpart: part of the logger name to match
+        :param level: exact log level to match
+        :param min_level: minimal level to match (works as normal loglevel settings that take all higher levels)
+        :param msg: part of the message to match on
+        """
         idx = self._find(loggerpart, level, msg, self.index, min_level)
         assert idx == -1, f"{idx}, {self.caplog.record_tuples[idx]}"
 
