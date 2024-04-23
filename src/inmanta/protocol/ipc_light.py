@@ -70,6 +70,13 @@ class IPCReplyFrame(IPCFrame):
 
 @dataclass
 class IPCLogRecord(IPCFrame):
+    """
+    Derived from logging.LogRecord, but simplified
+
+    :param name: the logger name, as on logging.LogRecord
+    :param levelno: the log level, in numeric form, as on logging.LogRecord
+    :param msg: the message, as produced by record.getMessage() i.e. this record has all arguments already formatted in
+    """
 
     name: str
     levelno: int
@@ -264,6 +271,13 @@ class FinalizingIPCClient(IPCClient[ServerContext]):
 class LogReceiver(IPCFrameProtocol[ServerContext]):
     """
     IPC feature to receive log message
+
+    It re-injects the log message into the logging framework in the exact same place as it was on the sender side.
+
+    This makes the LogShipper/LogReceiver pair a (mostly) transparent bridge.
+    Log records are simplified when transported.
+
+    When installing the LogShipper and LogReceiver in the same process, this will create an infinite loop
     """
 
     def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
@@ -300,6 +314,7 @@ class LogShipper(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         if record.name == self.logger_name:
             # avoid loops
+            # When we fail to send, we produce a log line on this logger
             return
         self.eventloop.call_soon_threadsafe(
             functools.partial(
@@ -307,7 +322,7 @@ class LogShipper(logging.Handler):
                 IPCLogRecord(
                     record.name,
                     record.levelno,
-                    self.format(record),
+                    record.getMessage(),
                 ),
             )
         )
