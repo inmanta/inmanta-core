@@ -1458,9 +1458,7 @@ class ModuleV2Metadata(ModuleMetadata):
     @classmethod
     def _substitute_version(cls: type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
         result = re.sub(
-            r"(\[metadata\][^\[]*[ \t\f\v]*version[ \t\f\v]*=[ \t\f\v]*)[\S]+(\n|$)",
-            rf"\g<1>{new_version}\n",
-            source,
+            r"(\[metadata\][^\[]*?\bversion[ \t\f\v]*=[ \t\f\v]*)[\S]+(\n|$)", rf"\g<1>{new_version}\n", source, flags=re.DOTALL
         )
         if "[egg_info]" not in result:
             result = f"{result}\n[egg_info]\ntag_build = {version_tag}"

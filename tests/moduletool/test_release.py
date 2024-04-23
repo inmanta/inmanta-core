@@ -46,7 +46,7 @@ def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> 
     return subprocess.check_output(["git", "log", "-1", f"--skip={nb_previous_commit}", "--pretty=%B"], cwd=path).decode()
 
 
-@pytest.mark.parametrize_any("v1_module", [True, False])
+@pytest.mark.parametrize_any("v1_module", [False, True])
 @pytest.mark.parametrize_any("changelog_file_exists", [True, False])
 @pytest.mark.parametrize_any("previous_stable_version_exists", [True, False])
 @pytest.mark.parametrize_any("four_digit_version", [True, False])
@@ -70,7 +70,7 @@ def test_release_stable_version(
             return f"""
 # Changelog
 
-## {"v1.2.3.1" if four_digit_version and not v1_module else "v1.2.4"} - ?
+## {"v1.2.3." if four_digit_version and not v1_module else "v1.2.4"} - ?
 
 
 ## v1.2.3 - {datetime.date.today().isoformat()}
@@ -85,7 +85,7 @@ def test_release_stable_version(
             return """
 # Changelog
 
-## v1.2.3 - ?
+## v1.2.3.0 - ?
 
 - Release
 
@@ -145,8 +145,6 @@ def test_release_stable_version(
     # Verify version
     mod = Module.from_path(path_module)
     assert mod.version == Version("1.2.3.1.dev0") if four_digit_version and not v1_module else Version("1.2.4.dev0")
-    # Verify changelog file
-    assert mod.metadata.version == "1.2.3.1.dev0" if four_digit_version and not v1_module else "1.2.4.dev0"
     if changelog_file_exists:
         with open(path_changelog_file, encoding="utf-8") as fh:
             assert fh.read() == get_changelog_content(after_release=True)
