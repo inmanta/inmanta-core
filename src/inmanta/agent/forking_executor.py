@@ -250,30 +250,39 @@ class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta
 def mp_worker_entrypoint(
     socket: socket.socket,
     name: str,
-    logfile: str,
     inmanta_log_level: str,
     cli_log: bool,
     config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
 ) -> None:
     """Entry point for child processes"""
+
+    # Set up logging stage 1
+    # Basic config, starts on std.out
     log_config = InmantaLoggerConfig.get_instance()
-    log_config.configure_file_logger(logfile, inmanta_log_level)
-    if cli_log:
-        log_config.add_cli_logger(inmanta_log_level)
+    log_config.set_log_level(inmanta_log_level)
     logging.captureWarnings(True)
+
+    # Set up our own logger
     logger = logging.getLogger(f"agent.executor.{name}")
     logger.info(f"Started with PID: {os.getpid()}")
 
+    # Load config
     inmanta.config.Config.load_config_from_dict(config)
 
     async def serve() -> None:
         loop = asyncio.get_running_loop()
         # Start serving
         transport, protocol = await loop.connect_accepted_socket(functools.partial(ExecutorServer, name), socket)
+        # Second stage logging setup
+        # Take over logger to ship to remote
         logging.getLogger().addHandler(LogShipper(protocol, loop))
-        #    inmanta.signals.setup_signal_handlers(protocol.stop)
+        # Add cli logger if requested
+        if cli_log:
+            log_config.add_cli_logger(inmanta_log_level)
+        inmanta.signals.setup_signal_handlers(protocol.stop)
         await protocol.stopped.wait()
 
+    # Async init
     asyncio.run(serve())
     logger.info(f"Stopped with PID: {os.getpid()}")
     exit(0)
@@ -487,9 +496,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         name = executor_id.agent_name
 
         # Start child
-        logfile = os.path.join(self.log_folder, f"{name}.log")
         process, parent_conn = await loop.run_in_executor(
-            self.thread_pool, functools.partial(self._make_child, name, logfile, self.inmanta_log_level, self.cli_log)
+            self.thread_pool, functools.partial(self._make_child, name, self.inmanta_log_level, self.cli_log)
         )
         # Hook up the connection
         transport, protocol = await loop.connect_accepted_socket(
@@ -510,13 +518,13 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             pass
 
     def _make_child(
-        self, name: str, log_file: str, log_level: int, cli_log: bool
+        self, name: str, log_level: int, cli_log: bool
     ) -> tuple[multiprocessing.Process, socket.socket]:
         """Sync code to make a child process and share a socket with it"""
         parent_conn, child_conn = socket.socketpair()
         p = multiprocessing.Process(
             target=mp_worker_entrypoint,
-            args=(child_conn, name, log_file, str(log_level), cli_log, inmanta.config.Config.config_as_dict()),
+            args=(child_conn, name, str(log_level), cli_log, inmanta.config.Config.config_as_dict()),
             name=f"agent.executor.{name}",
         )
         p.start()

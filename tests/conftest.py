@@ -765,7 +765,6 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     reset_metrics()
 
     with tempfile.TemporaryDirectory() as state_dir:
-        state_dir = "/tmp/server"
         port = str(unused_tcp_port_factory())
 
         # Config.set() always expects a string value
