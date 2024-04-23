@@ -146,7 +146,7 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements, sources=sources)
     env_bp_hash1 = blueprint1.to_env_blueprint().blueprint_hash()
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         # First execution: create an executor and verify its creation
         executor_manager = mp_manager_factory(None)
         venv_manager = executor_manager.environment_manager
@@ -169,7 +169,7 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
         assert len(executor_manager2.executor_map) == 1
         assert len(venv_manager2._environment_map) == 1
 
-        log_contains(caplog, "inmanta.agent.executor", logging.INFO, f"Found existing virtual environment at {env_dir}")
+        log_contains(caplog, "inmanta.agent.executor", logging.DEBUG, f"Found existing venv for content {str(blueprint1)}")
 
 
 async def test_blueprint_hash_consistency(tmpdir):

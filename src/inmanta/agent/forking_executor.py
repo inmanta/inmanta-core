@@ -27,6 +27,7 @@ import os
 import socket
 import typing
 import uuid
+from asyncio import transports
 
 import inmanta.agent.cache
 import inmanta.agent.executor
@@ -93,6 +94,21 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.stopping = False
         self.stopped = asyncio.Event()
         self.ctx = ExecutorContext(self)
+        self.log_transport: typing.Optional[LogShipper] = None
+
+    def connection_made(self, transport: transports.Transport) -> None:
+        super().connection_made(transport)
+
+        # Second stage logging setup
+        # Take over logger to ship to remote
+        self.log_transport = LogShipper(self, asyncio.get_running_loop())
+        logging.getLogger().addHandler(self.log_transport)
+
+    def _detach_log_shipper(self):
+        # Once connection is lost, we want to detach asap to keep the logging clean and efficient
+        if self.log_transport:
+            logging.getLogger().removeHandler(self.log_transport)
+            self.log_transport = None
 
     def get_context(self) -> ExecutorContext:
         return self.ctx
@@ -104,6 +120,8 @@ class ExecutorServer(IPCServer[ExecutorContext]):
     def _sync_stop(self) -> None:
         """Actual shutdown, not async"""
         if not self.stopping:
+            # detach logger
+            self._detach_log_shipper()
             self.logger.info("Stopping")
             self.stopping = True
             assert self.transport is not None  # Mypy
@@ -111,6 +129,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
     def connection_lost(self, exc: Exception | None) -> None:
         """We lost connection to the controler, bail out"""
+        self._detach_log_shipper()
         self.logger.info("Connection lost", exc_info=exc)
         self._sync_stop()
         self.stopped.set()
@@ -272,10 +291,8 @@ def mp_worker_entrypoint(
     async def serve() -> None:
         loop = asyncio.get_running_loop()
         # Start serving
+        # also performs setup of log shipper
         transport, protocol = await loop.connect_accepted_socket(functools.partial(ExecutorServer, name), socket)
-        # Second stage logging setup
-        # Take over logger to ship to remote
-        logging.getLogger().addHandler(LogShipper(protocol, loop))
         # Add cli logger if requested
         if cli_log:
             log_config.add_cli_logger(inmanta_log_level)
@@ -409,6 +426,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         :param cli_log: do we also want to echo the log to std_err
 
         """
+        self.init_once()
         self.environment = environment
         self.thread_pool = thread_pool
         self.environment_manager = environment_manager
@@ -460,20 +478,29 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         blueprint = executor.ExecutorBlueprint.from_specs(code)
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
         if executor_id in self.executor_map:
+            LOGGER.debug("Found existing executor for agent %s with id %s", agent_name, executor_id.identity())
             return self.executor_map[executor_id]
         # Acquire a lock based on the blueprint's hash
         # We don't care about URI here
         async with self._locks.get(executor_id.identity()):
             if executor_id in self.executor_map:
+                LOGGER.debug("Found existing executor for agent %s with id %s", agent_name, executor_id.identity())
                 return self.executor_map[executor_id]
             my_executor = await self.create_executor(executor_id)
             self.__add_executor(executor_id, my_executor)
             return my_executor
 
     async def create_executor(self, executor_id: executor.ExecutorId) -> MPExecutor:
+        LOGGER.info("Creating executor for agent %s with id %s", executor_id.agent_name, executor_id.identity())
         env_blueprint = executor_id.blueprint.to_env_blueprint()
         venv = await self.environment_manager.get_environment(env_blueprint, self.thread_pool)
         executor = await self.make_child_and_connect(executor_id, venv)
+        LOGGER.debug(
+            "Child forked (pid: %s) for executor for agent %s with id %s",
+            executor.process.pid,
+            executor_id.agent_name,
+            executor_id.identity(),
+        )
         storage_for_blueprint = os.path.join(self.storage_folder, "code", executor_id.blueprint.blueprint_hash())
         os.makedirs(storage_for_blueprint, exist_ok=True)
         await executor.connection.call(
@@ -485,6 +512,12 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                 self.environment,
                 executor_id.agent_uri,
             )
+        )
+        LOGGER.debug(
+            "Child initialized (pid: %s) for executor for agent %s with id %s",
+            executor.process.pid,
+            executor_id.agent_name,
+            executor_id.identity(),
         )
         return executor
 
@@ -517,9 +550,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             # already gone
             pass
 
-    def _make_child(
-        self, name: str, log_level: int, cli_log: bool
-    ) -> tuple[multiprocessing.Process, socket.socket]:
+    def _make_child(self, name: str, log_level: int, cli_log: bool) -> tuple[multiprocessing.Process, socket.socket]:
         """Sync code to make a child process and share a socket with it"""
         parent_conn, child_conn = socket.socketpair()
         p = multiprocessing.Process(

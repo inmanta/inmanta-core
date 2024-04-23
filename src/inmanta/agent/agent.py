@@ -746,7 +746,7 @@ class AgentInstance:
                     undeployable, resources, executor = await self.setup_executor(
                         result.result["version"], const.ResourceAction.deploy, result.result["resources"]
                     )
-                    if len(resources) > 0:
+                    if len(resources) > 0 and executor is not None:
                         self._nq.reload(resources, undeployable, deploy_request, executor)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> Apireturn:
@@ -781,8 +781,9 @@ class AgentInstance:
                         )
                     else:
                         deployable_resources.append(resource)
-
-                await executor.dry_run(deployable_resources, dry_run_id)
+                if not deployable_resources:
+                    assert executor is not None
+                    await executor.dry_run(deployable_resources, dry_run_id)
 
     async def get_facts(self, resource: JsonType) -> Apireturn:
         async with self.ratelimiter:
@@ -796,11 +797,12 @@ class AgentInstance:
                 )
                 return 500
 
+            assert executor is not None
             return await executor.get_facts(resource_refs[0])
 
     async def setup_executor(
         self, version: int, action: const.ResourceAction, resources: list[JsonType]
-    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], executor.Executor]:
+    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], Optional[executor.Executor]]:
         # TODO refactor wiring of tuples around -> not sure how
 
         """
@@ -810,7 +812,7 @@ class AgentInstance:
 
             - undeployable: resources for which code loading failed
             - loaded_resources: ALL resources from this batch
-            - the executor: with relevant handler code loaded
+            - the executor: with relevant handler code loaded, can be None if all are undeployable
 
         """
         started = datetime.datetime.now().astimezone()
@@ -827,6 +829,7 @@ class AgentInstance:
             executor = await self.executor_manager.get_executor(self.name, self.uri, code)
             failed_resource_types = executor.failed_resource_types
         except Exception:
+            # TODO: if we get no executor, all the follow code goes whack.
             logging.warning("Could not set up executor for %s", self.name, exc_info=True)
             failed_resource_types = resource_types
 
@@ -943,7 +946,7 @@ class Agent(SessionEndpoint):
                 config.log_dir.get(),
                 self._storage["executor"],
                 LOGGER.level,
-                False,
+                True,
             )
         else:
             self.executor_manager = in_process_executor.InProcessExecutorManager(

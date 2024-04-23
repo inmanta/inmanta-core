@@ -120,6 +120,10 @@ class EnvBlueprint:
     def __hash__(self) -> int:
         return int(self.blueprint_hash(), 16)
 
+    def __str__(self):
+        req = ",".join(str(req) for req in self.requirements)
+        return f"EnvBlueprint(requirements=[{str(req)}], pip={self.pip_config}]"
+
 
 @dataclasses.dataclass
 class ExecutorBlueprint(EnvBlueprint):
@@ -299,7 +303,12 @@ class VirtualEnvironmentManager:
             os.makedirs(env_dir)
             return env_dir, True  # Returning the path and True for newly created directory
         else:
-            LOGGER.info("Found existing virtual environment at %s", env_dir)
+            LOGGER.debug(
+                "Found existing venv for content %s at %s, content hash: %s",
+                str(blueprint),
+                env_dir,
+                blueprint.blueprint_hash(),
+            )
             return env_dir, False  # Returning the path and False for existing directory
 
     async def create_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
@@ -316,6 +325,7 @@ class VirtualEnvironmentManager:
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
         if is_new:
+            LOGGER.info("Creating venv for content %s, content hash: %s", str(blueprint), blueprint.blueprint_hash())
             await process_environment.create_and_install_environment(blueprint)
         self._environment_map[blueprint] = process_environment
 
@@ -329,10 +339,20 @@ class VirtualEnvironmentManager:
         assert isinstance(blueprint, EnvBlueprint), "Only EnvBlueprint instances are accepted, subclasses are not allowed."
 
         if blueprint in self._environment_map:
+            LOGGER.debug(
+                "Found existing virtual environment for content %s, content hash: %s",
+                str(blueprint),
+                blueprint.blueprint_hash(),
+            )
             return self._environment_map[blueprint]
         # Acquire a lock based on the blueprint's hash
         async with self._locks.get(blueprint.blueprint_hash()):
             if blueprint in self._environment_map:
+                LOGGER.debug(
+                    "Found existing virtual environment for content %s, content hash: %s",
+                    str(blueprint),
+                    blueprint.blueprint_hash(),
+                )
                 return self._environment_map[blueprint]
             return await self.create_environment(blueprint, threadpool)
 
