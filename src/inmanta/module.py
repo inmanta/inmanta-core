@@ -1389,13 +1389,17 @@ class ModuleV2Metadata(ModuleMetadata):
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
       Valid values are [==, ~=, >=]. *Default is '~='*
     :param install_requires: The Python packages this module depends on.
-    :param use_four_digits: Whether to use a four-digit version format (e.g. 23.4.1.0) instead of the standard
+    :param four_digit_version: Whether to use a four-digit version format (e.g. 23.4.1.0) instead of the standard
         three-digit format (e.g. 23.4.1).
+        Even without setting this option to True, a fourth digit is allowed as a revision digit. However, the tooling
+        will not use it by default. For example, you can use the '--revision' flag with the command
+        'inmanta module release --dev --revision' even if 'four_digit_version' is set to False. But if you don't specify
+        '--revision' explicitly, the tooling will consider 'patch' to be the lowest increment.
     """
 
     install_requires: list[str]
     version_tag: str = ""
-    use_four_digits: bool = False
+    four_digit_version: bool = False
     _raw_parser: typing.ClassVar[type[CfgParser]] = CfgParser
 
     @field_validator("version")

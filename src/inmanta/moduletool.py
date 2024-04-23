@@ -1272,7 +1272,10 @@ version: 0.0.1dev0"""
         requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
         if not requested_version_bump and dev:
             # Dev always bumps
-            requested_version_bump = ChangeType.PATCH
+            if hasattr(module.metadata, "four_digit_version") and module.metadata.four_digit_version:
+                requested_version_bump = ChangeType.REVISION
+            else:
+                requested_version_bump = ChangeType.PATCH
 
         if requested_version_bump:
             new_version: Version = self._get_dev_version_with_minimal_distance_to_previous_stable_release(
@@ -1323,7 +1326,7 @@ version: 0.0.1dev0"""
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
             print(f"Tag created successfully: {release_tag}")
             # bump to the next dev version
-            if hasattr(module.metadata, "use_four_digits") and module.metadata.use_four_digits:
+            if hasattr(module.metadata, "four_digit_version") and module.metadata.four_digit_version:
                 self.release(dev=True, message="Bump version to next development version", revision=True)
             else:
                 self.release(dev=True, message="Bump version to next development version", patch=True)
