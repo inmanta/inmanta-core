@@ -156,7 +156,7 @@ async def test_log_transport(caplog, request):
         # Test we are not creating a log-loop when shut down
         # This is a bit tricky to test, as we don't know how long to wait for a repeat log line to not appear
 
-        # This one should be ignored, as this is the loop protection
+        # This logger name should be ignored, as this is the loop protection
         log_shipper.handle(
             logging.LogRecord(log_shipper.logger_name, logging.INFO, "xxx", 5, "Test %s", ("X",), exc_info=False)
         )
