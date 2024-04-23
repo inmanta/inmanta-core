@@ -16,7 +16,10 @@
     Contact: code@inmanta.com
 """
 
+import enum
 import logging
+import typing
+import uuid
 
 from inmanta.config import *
 
@@ -24,10 +27,10 @@ LOGGER = logging.getLogger(__name__)
 
 # flake8: noqa: H904
 
-agent_map = Option(
+agent_map: Option[dict[str, str]] = Option(
     "config",
     "agent-map",
-    None,
+    {},
     """By default the agent assumes that all agent names map to the host on which the process is executed. With the
 agent map it can be mapped to other hosts. This value consists of a list of key/value pairs. The key is the name of the
 agent and the format of the value is described in :inmanta:entity:`std::AgentConfig`. When the configuration option
@@ -47,12 +50,14 @@ use_autostart_agent_map = Option(
     is_bool,
 )
 
-environment = Option("config", "environment", None, "The environment this agent or compile belongs to", is_uuid_opt)
+environment: Option[typing.Optional[uuid.UUID]] = Option(
+    "config", "environment", None, "The environment this agent or compile belongs to", is_uuid_opt
+)
 
-agent_names = Option(
+agent_names: Option[list[str]] = Option(
     "config",
     "agent-names",
-    "$node-name",
+    ["$node-name"],
     """Names of the agents this instance should deploy configuration for. When the configuration option
 config.use_autostart_agent_map is set to true, this option will be ignored.""",
     is_list,
@@ -79,7 +84,7 @@ Each subsequent deploy will start agent-interval seconds after the previous one.
     is_time,
 )
 
-agent_reconnect_delay = Option(
+agent_reconnect_delay: Option[int] = Option(
     "config", "agent-reconnect-delay", 5, "Time to wait after a failed heartbeat message. DO NOT SET TO 0 ", is_int
 )
 
@@ -144,7 +149,7 @@ This option is ignored and a splay of 0 is used if 'agent_repair_interval' is a 
     is_time,
 )
 
-agent_get_resource_backoff = Option(
+agent_get_resource_backoff: Option[float] = Option(
     "config",
     "agent-get-resource-backoff",
     3,
@@ -153,6 +158,25 @@ agent_get_resource_backoff = Option(
     " from the server. Setting this option too low may result in a high load on the Inmanta server. Setting it too high"
     " may result in long deployment times.",
     is_float,
+)
+
+
+class AgentExcutorMode(str, enum.Enum):
+    threaded = "threaded"
+    forking = "forking"
+
+
+def is_executor_mode(value: str) -> AgentExcutorMode:
+    """threaded | forking"""
+    return AgentExcutorMode(value)
+
+
+agent_executor_mode = Option(
+    "agent",
+    "executor-mode",
+    AgentExcutorMode.threaded,
+    "EXPERIMENTAL: set the agent to use threads or fork subprocesses to create workers. ",
+    is_executor_mode,
 )
 
 

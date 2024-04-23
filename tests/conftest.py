@@ -788,6 +788,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
+        config.Config.set("agent", "executor-mode", "forking")
         yield config
 
 
@@ -886,6 +887,7 @@ async def server_multi(
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
+        config.Config.set("agent", "executor-mode", "forking")
 
         ibl = InmantaBootloader()
 

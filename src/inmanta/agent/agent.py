@@ -934,10 +934,11 @@ class Agent(SessionEndpoint):
 
         self.agent_map: Optional[dict[str, str]] = agent_map
 
-        remote_executor = True
+        remote_executor = cfg.agent_executor_mode == cfg.AgentExcutorMode.forking
         can_have_remote_executor = code_loader
 
         if remote_executor and can_have_remote_executor:
+            LOGGER.info("Selected forking agent executor mode")
             env_manager = inmanta.agent.executor.VirtualEnvironmentManager(self._storage["executor"])
             self.executor_manager: executor.ExecutorManager[Any] = forking_executor.MPManager(
                 self.thread_pool,
@@ -950,6 +951,7 @@ class Agent(SessionEndpoint):
                 True,
             )
         else:
+            LOGGER.info("Selected threaded agent executor mode")
             self.executor_manager = in_process_executor.InProcessExecutorManager(
                 environment,
                 self._client,
