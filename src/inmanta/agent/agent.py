@@ -776,12 +776,13 @@ class AgentInstance:
                             resource.rvid,
                             undeployable[resource.rvid],
                         )
+                        # TODO: SKIP IS NO CHANGE????
                         await self.get_client().dryrun_update(
                             tid=resource.env_id, id=dry_run_id, resource=resource.rvid, changes={}
                         )
                     else:
                         deployable_resources.append(resource)
-                if not deployable_resources:
+                if deployable_resources:
                     assert executor is not None
                     await executor.dry_run(deployable_resources, dry_run_id)
 
