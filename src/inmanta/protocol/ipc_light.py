@@ -259,12 +259,12 @@ class FinalizingIPCClient(IPCClient[ServerContext]):
 
 class LogReceiver(IPCFrameProtocol[ServerContext]):
     """
-    IPC frame feature to receive log message
+    IPC feature to receive log message
     """
 
     def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
         if isinstance(frame, IPCLogRecord):
-            # calling log here is safe because if there are nu arguments, formatter is never called
+            # calling log here is safe because if there are no arguments, formatter is never called
             logging.getLogger(frame.name).log(frame.levelno, frame.msg)
         else:
             super().frame_received(frame)
@@ -277,15 +277,29 @@ class LogShipper(logging.Handler):
     This sender is threadsafe
     """
 
-    def __init__(self, channel: IPCFrameProtocol[typing.Any], eventloop: asyncio.AbstractEventLoop) -> None:
-        self.channel = channel
+    def __init__(self, protocol: IPCFrameProtocol[typing.Any], eventloop: asyncio.BaseEventLoop) -> None:
+        self.protocol = protocol
         self.eventloop = eventloop
+        self.logger_name = "inmanta.ipc.logs"
+        self.logger = logging.getLogger(self.logger_name)
         super().__init__()
 
+    def _send_frame(self, record: IPCLogRecord) -> None:
+        try:
+            self.protocol.send_frame(record)
+        except:
+            # Stop exception here
+            # Log in own logger to prevent loops
+            self.logger.info("Could not send log line", exc_info=True)
+            return
+
     def emit(self, record: logging.LogRecord) -> None:
+        if record.name == self.logger_name:
+            # avoid loops
+            return
         self.eventloop.call_soon_threadsafe(
             functools.partial(
-                self.channel.send_frame,
+                self._send_frame,
                 IPCLogRecord(
                     record.name,
                     record.levelno,

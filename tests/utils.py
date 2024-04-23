@@ -204,26 +204,26 @@ class LogSequence:
         self.allow_errors = allow_errors
         self.ignore = ignore
 
-    def _find(self, loggerpart, level, msg, after=0):
+    def _find(self, loggerpart, level, msg, after=0, min_level=1):
         for i, (logger_name, log_level, message) in enumerate(self.caplog.record_tuples[after:]):
             if msg in message:
-                if loggerpart in logger_name and level == log_level:
+                if loggerpart in logger_name and (level == log_level or (level > min_level)):
                     if any(i in logger_name for i in self.ignore):
                         continue
                     return i + after
         return -1
 
-    def contains(self, loggerpart, level, msg):
-        index = self._find(loggerpart, level, msg, self.index)
+    def contains(self, loggerpart, level, msg, min_level=1):
+        index = self._find(loggerpart, level, msg, self.index, min_level)
         if not self.allow_errors:
             # first error is later
-            idxe = self._find("", logging.ERROR, "", self.index)
+            idxe = self._find("", logging.ERROR, "", self.index, min_level)
             assert idxe == -1 or idxe >= index
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
-    def assert_not(self, loggerpart, level, msg):
-        idx = self._find(loggerpart, level, msg, self.index)
+    def assert_not(self, loggerpart, level, msg, min_level=1):
+        idx = self._find(loggerpart, level, msg, self.index, min_level)
         assert idx == -1, f"{idx}, {self.caplog.record_tuples[idx]}"
 
     def no_more_errors(self):
