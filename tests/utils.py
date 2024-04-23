@@ -22,6 +22,7 @@ import datetime
 import functools
 import json
 import logging
+import math
 import os
 import shutil
 import uuid
@@ -204,7 +205,7 @@ class LogSequence:
         self.allow_errors = allow_errors
         self.ignore = ignore
 
-    def _find(self, loggerpart, level, msg, after=0, min_level: int = 0):
+    def _find(self, loggerpart, level, msg, after=0, min_level: int = math.inf):
         """
 
         :param loggerpart: part of the logger name to match
@@ -223,7 +224,7 @@ class LogSequence:
                     return i + after
         return -1
 
-    def contains(self, loggerpart, level, msg, min_level: int = 1) -> "LogSequence":
+    def contains(self, loggerpart, level, msg, min_level: int = math.inf) -> "LogSequence":
         """
         :param loggerpart: part of the logger name to match
         :param level: exact log level to match
@@ -238,7 +239,7 @@ class LogSequence:
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
-    def assert_not(self, loggerpart, level, msg, min_level: int = 1) -> None:
+    def assert_not(self, loggerpart, level, msg, min_level: int = math.inf) -> None:
         """
         :param loggerpart: part of the logger name to match
         :param level: exact log level to match
