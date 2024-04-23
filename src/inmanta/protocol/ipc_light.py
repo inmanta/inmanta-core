@@ -288,7 +288,7 @@ class LogShipper(logging.Handler):
         try:
             self.protocol.send_frame(record)
         except:
-            # Stop excepption here
+            # Stop exception here
             # Log in own logger to prevent loops
             self.logger.info("Could not send log line", exc_info=True)
             return
