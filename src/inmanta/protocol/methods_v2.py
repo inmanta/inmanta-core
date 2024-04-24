@@ -1606,10 +1606,9 @@ def discovered_resources_get_batch(
         Default behavior: return all discovered resources.
         Filtering by 'resource_id' is supported:
             - filter.resource_id=true: only return discovered resources that the orchestrator is already aware of i.e.
-            managed resources that make up the latest configuration model and orphaned resources (unpurged resources from
-            previous versions of the configuration model).
+            resources that are present in any configurationmodel of environment tid.
             - filter.resource_id=false: only return discovered resources that the orchestrator is unaware of i.e. resources
-            that are not part of any configuration model known to the orchestrator.
+            that are not part of any configuration model of environment tid.
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
