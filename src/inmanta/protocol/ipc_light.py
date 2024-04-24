@@ -295,7 +295,7 @@ class LogShipper(logging.Handler):
     This sender is threadsafe
     """
 
-    def __init__(self, protocol: IPCFrameProtocol[typing.Any], eventloop: asyncio.AbstractEventLoop) -> None:
+    def __init__(self, protocol: IPCFrameProtocol[typing.Any], eventloop: asyncio.BaseEventLoop) -> None:
         self.protocol = protocol
         self.eventloop = eventloop
         self.logger_name = "inmanta.ipc.logs"
