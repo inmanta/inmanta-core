@@ -134,7 +134,7 @@ class ResourceService(protocol.ServerSlice):
         ] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
-        self._parent_resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
+        self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
@@ -167,7 +167,7 @@ class ResourceService(protocol.ServerSlice):
         :param environment: The environment to get a logger for
         :return: The logger for the given environment.
         """
-        return self._parent_resource_action_logger.getChild(str(environment))
+        return self._resource_action_logger.getChild(str(environment))
 
     def log_resource_action(
         self, env: uuid.UUID, resource_ids: Sequence[str], log_level: int, ts: datetime.datetime, message: str
