@@ -95,6 +95,20 @@ class LoggingConfigExtension:
         for directory in self.log_dirs_to_create:
             os.makedirs(directory, exist_ok=True)
 
+    def validate_for_extension(self, extension_name: str) -> None:
+        """
+        Verify that the names of the formatters and handlers are prefixed with `<name-extension>_` and
+        raise an Exception in case this constraint is violated.
+        """
+        for logging_config_element in ["formatters", "handlers"]:
+            for name in getattr(self, logging_config_element):
+                if not name.startswith(f"{extension_name}_"):
+                    raise Exception(
+                        f"{logging_config_element.capitalize()} defined in the default logging config of an extension must be"
+                        f" prefixed with `<name-extension>_`. Extension {extension_name} defines a"
+                        f" {logging_config_element[0:-1]} with the invalid name {name}."
+                    )
+
 
 class FullLoggingConfig(LoggingConfigExtension):
     """
@@ -219,15 +233,15 @@ class LoggingConfigBuilder:
         :param stream: The TextIO stream where the logs will be sent to.
         :param logging_config_extensions: The logging config required by the extensions.
         """
-        name_root_handler = "console_handler"
+        name_root_handler = "core_console_handler"
         logging_config_core = FullLoggingConfig(
             formatters={
-                "console_formatter": self._get_multiline_formatter_config(),
+                "core_console_formatter": self._get_multiline_formatter_config(),
             },
             handlers={
                 name_root_handler: {
                     "class": "logging.StreamHandler",
-                    "formatter": "console_formatter",
+                    "formatter": "core_console_formatter",
                     "level": "INFO",
                     "stream": stream,
                 },
@@ -236,6 +250,7 @@ class LoggingConfigBuilder:
             root_handlers={name_root_handler},
             root_log_level="INFO",
         )
+        logging_config_core.validate_for_extension(extension_name="core")
         return self._join_logging_configs(logging_config_core, logging_config_extensions)
 
     def get_logging_config_from_options(
@@ -258,57 +273,67 @@ class LoggingConfigBuilder:
         log_level: int
         if options.log_file:
             log_level = convert_inmanta_log_level(options.log_file_level)
-            handler_root_logger = "server_log"
+            handler_root_logger = "core_server_log"
             handlers[handler_root_logger] = {
                 "class": "logging.handlers.WatchedFileHandler",
                 "level": log_level,
-                "formatter": "server_log_formatter",
+                "formatter": "core_server_log_formatter",
                 "filename": options.log_file,
                 "mode": "a+",
             }
-            formatters["server_log_formatter"] = {
+            formatters["core_server_log_formatter"] = {
                 "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
             }
         else:
             log_level = convert_inmanta_log_level(inmanta_log_level=str(options.verbose), cli=True)
-            handler_root_logger = "console"
+            handler_root_logger = "core_console"
             handlers[handler_root_logger] = {
                 "class": "logging.StreamHandler",
-                "formatter": "console_formatter",
+                "formatter": "core_console_formatter",
                 "level": log_level,
                 "stream": stream,
             }
-            formatters["console_formatter"] = self._get_multiline_formatter_config(options)
+            formatters["core_console_formatter"] = self._get_multiline_formatter_config(options)
 
         full_logging_config = FullLoggingConfig(
             formatters={
                 **formatters,
-                "resource_action_log_formatter": {
+                "core_resource_action_log_formatter": {
                     "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
                 },
             },
             handlers={
                 **handlers,
-                "resource_action_handler": {
+                "core_resource_action_handler": {
                     "class": "inmanta.logging.MultiFileHandler",
                     "level": "DEBUG",
-                    "formatter": "resource_action_log_formatter",
+                    "formatter": "core_resource_action_log_formatter",
                     "name_parent_logger": const.NAME_RESOURCE_ACTION_LOGGER,
                     "log_file_template": os.path.join(
                         config.log_dir.get(), server_config.server_resource_action_log_prefix.get() + "{child_logger_name}.log"
                     ),
                 },
+                "core_tornado_debug_log_handler": {
+                    "class": "inmanta.logging.TornadoDebugLogHandler",
+                    "level": "DEBUG",
+                }
             },
             loggers={
                 const.NAME_RESOURCE_ACTION_LOGGER: {
                     "level": "DEBUG",
                     "propagate": True,
-                    "handlers": ["resource_action_handler"],
+                    "handlers": ["core_resource_action_handler"],
                 },
+                "tornado.general": {
+                    "level": "DEBUG",
+                    "propagate": False,
+                    "handlers": ["core_tornado_debug_log_handler"],
+                }
             },
             root_handlers={handler_root_logger},
             root_log_level=log_level,
         )
+        full_logging_config.validate_for_extension(extension_name="core")
         return self._join_logging_configs(full_logging_config, logging_config_extensions)
 
     def get_logging_config_for_agent(self, log_file: str, inmanta_log_level: str, cli_log: bool) -> FullLoggingConfig:
@@ -324,18 +349,20 @@ class LoggingConfigBuilder:
         python_log_level: int = convert_inmanta_log_level(inmanta_log_level)
         cli_formatters = {}
         cli_handlers = {}
+        name_root_handler = "core_agent_log_handler"
+        root_loggers = {name_root_handler}
         if cli_log:
-            cli_formatters["console_formatter"] = self._get_multiline_formatter_config()
-            cli_handlers["console_handler"] = {
+            cli_formatters["core_console_formatter"] = self._get_multiline_formatter_config()
+            cli_handlers["core_console_handler"] = {
                 "class": "logging.StreamHandler",
-                "formatter": "console_formatter",
+                "formatter": "core_console_formatter",
                 "level": python_log_level,
                 "stream": "ext://sys.stderr",
             }
-        name_root_handler = "agent_log_handler"
-        return FullLoggingConfig(
+            root_loggers.add("core_console_handler")
+        full_logging_config = FullLoggingConfig(
             formatters={
-                "agent_log_formatter": {
+                "core_agent_log_formatter": {
                     "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
                 },
                 **cli_formatters,
@@ -344,16 +371,18 @@ class LoggingConfigBuilder:
                 name_root_handler: {
                     "class": "logging.handlers.WatchedFileHandler",
                     "level": python_log_level,
-                    "formatter": "agent_log_formatter",
+                    "formatter": "core_agent_log_formatter",
                     "filename": log_file,
                     "mode": "a+",
                 },
                 **cli_handlers,
             },
             loggers={},
-            root_handlers={name_root_handler},
+            root_handlers=root_loggers,
             root_log_level=python_log_level,
         )
+        full_logging_config.validate_for_extension(extension_name="core")
+        return full_logging_config
 
     def _join_logging_configs(
         self, full_logger_config: FullLoggingConfig, logging_config_extensions: Optional[list[LoggingConfigExtension]] = None
@@ -796,3 +825,16 @@ class MultiFileHandler(logging.Handler):
             handler.setLevel(self.level)
             self.child_handlers[path_logfile] = handler
         self.child_handlers[path_logfile].emit(record)
+
+
+class TornadoDebugLogHandler(logging.Handler):
+    """
+    A custom log handler for Tornados 'max_clients limit reached' debug logs.
+    """
+    def emit(self, record: logging.LogRecord) -> None:
+        if (
+            record.levelno == logging.DEBUG
+            and record.name.startswith("tornado.general")
+            and record.msg.startswith("max_clients limit reached")
+        ):
+            LOGGER.warning(record.msg)  # Log Tornado log as inmanta warnings
