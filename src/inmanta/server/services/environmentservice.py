@@ -27,6 +27,7 @@ import uuid
 import warnings
 from collections import defaultdict
 from collections.abc import Set
+from concurrent import futures
 from enum import Enum
 from re import Pattern
 from typing import Optional, cast
@@ -131,6 +132,7 @@ class EnvironmentService(protocol.ServerSlice):
         super().__init__(SLICE_ENVIRONMENT)
         self.listeners = defaultdict(list)
         self.environment_state_operation_lock = asyncio.Lock()
+        self.thread_pool = futures.ThreadPoolExecutor(max_workers=1)
 
     def get_dependencies(self) -> list[str]:
         return [
@@ -522,7 +524,7 @@ class EnvironmentService(protocol.ServerSlice):
                 # this operation can be retried if the deletion of the environment directory fails. Otherwise,
                 # the environment directory would be left in an inconsistent state. This can cause problems if
                 # the user later on recreates an environment with the same environment id.
-                self._delete_environment_dir(environment_id)
+                await self._delete_environment_dir(environment_id)
                 await env.delete_cascade(connection=connection)
 
             self.resource_service.close_resource_action_logger(environment_id)
@@ -551,7 +553,7 @@ class EnvironmentService(protocol.ServerSlice):
                 # this operation can be retried if the deletion of the environment directory fails. Otherwise,
                 # the environment directory would be left in an inconsistent state. This can cause problems if
                 # the user later on recreates an environment with the same environment id.
-                self._delete_environment_dir(env.id)
+                await self._delete_environment_dir(env.id)
                 await env.clear(connection=connection)
 
                 await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
@@ -637,7 +639,7 @@ class EnvironmentService(protocol.ServerSlice):
     def remove_listener(self, action: EnvironmentAction, listener: EnvironmentListener) -> None:
         self.listeners[action].remove(listener)
 
-    def _delete_environment_dir(self, environment_id: uuid.UUID) -> None:
+    async def _delete_environment_dir(self, environment_id: uuid.UUID) -> None:
         """
         Deletes an environment from the server's state_dir directory. This method should be called after
         notify_listeners() to ensure that the listeners are notified.
@@ -651,10 +653,15 @@ class EnvironmentService(protocol.ServerSlice):
         environment_dir = os.path.join(state_dir, "server", "environments", str(environment_id))
 
         if os.path.exists(environment_dir):
-            # This call might fail when someone manually creates a directory or file that is owned
-            # by another user than the user running the inmanta server.
+            loop = asyncio.get_running_loop()
             try:
-                shutil.rmtree(environment_dir)
+                # This call might fail when someone manually creates a directory or file that is owned
+                # by another user than the user running the inmanta server.
+                await loop.run_in_executor(
+                    self.thread_pool,
+                    shutil.rmtree,
+                    environment_dir,
+                )
             except PermissionError:
                 raise ServerError(
                     f"Environment {environment_id} cannot be deleted because it contains files owned"
