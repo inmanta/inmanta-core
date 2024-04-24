@@ -103,7 +103,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.log_transport = LogShipper(self, asyncio.get_running_loop())
         logging.getLogger().addHandler(self.log_transport)
 
-    def _detach_log_shipper(self):
+    def _detach_log_shipper(self) -> None:
         # Once connection is lost, we want to detach asap to keep the logging clean and efficient
         if self.log_transport:
             logging.getLogger().removeHandler(self.log_transport)

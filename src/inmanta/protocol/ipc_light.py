@@ -153,7 +153,7 @@ class IPCFrameProtocol(Protocol, typing.Generic[ServerContext]):
             # Failed to unpickle, drop connection
             self.logger.exception("Unexpected exception while handling frame", self.name)
 
-    def send_frame(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
+    def send_frame(self, frame: IPCFrame) -> None:
         """
         Helper method to construct and send frames
         """
@@ -163,7 +163,7 @@ class IPCFrameProtocol(Protocol, typing.Generic[ServerContext]):
         size = struct.pack("!L", len(buffer))
         self.transport.write(size + buffer)
 
-    def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
+    def frame_received(self, frame: IPCFrame) -> None:
         """
         Method for frame handling subclasses
 
@@ -180,7 +180,7 @@ class IPCServer(IPCFrameProtocol[ServerContext], abc.ABC, typing.Generic[ServerC
         pass
 
     # TODO: timeouts?
-    def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
+    def frame_received(self, frame: IPCFrame) -> None:
         if isinstance(frame, IPCRequestFrame):
             asyncio.get_running_loop().create_task(self.dispatch(frame))
         else:
@@ -232,7 +232,7 @@ class IPCClient(IPCFrameProtocol[ServerContext]):
         self.requests[request.id] = done  # Mypy can't do it
         return done
 
-    def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
+    def frame_received(self, frame: IPCFrame) -> None:
         """Handle replies"""
         if isinstance(frame, IPCReplyFrame):
             self.process_reply(frame)
@@ -280,7 +280,7 @@ class LogReceiver(IPCFrameProtocol[ServerContext]):
     When installing the LogShipper and LogReceiver in the same process, this will create an infinite loop
     """
 
-    def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
+    def frame_received(self, frame: IPCFrame) -> None:
         if isinstance(frame, IPCLogRecord):
             # calling log here is safe because if there are no arguments, formatter is never called
             logging.getLogger(frame.name).log(frame.levelno, frame.msg)
@@ -295,7 +295,7 @@ class LogShipper(logging.Handler):
     This sender is threadsafe
     """
 
-    def __init__(self, protocol: IPCFrameProtocol[typing.Any], eventloop: asyncio.BaseEventLoop) -> None:
+    def __init__(self, protocol: IPCFrameProtocol[typing.Any], eventloop: asyncio.AbstractEventLoop) -> None:
         self.protocol = protocol
         self.eventloop = eventloop
         self.logger_name = "inmanta.ipc.logs"
