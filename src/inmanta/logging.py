@@ -305,7 +305,7 @@ class LoggingConfigBuilder:
             handlers={
                 **handlers,
                 "core_resource_action_handler": {
-                    "class": "inmanta.logging.MultiFileHandler",
+                    "class": "inmanta.logging.ParametrizedFileHandler",
                     "level": "DEBUG",
                     "formatter": "core_resource_action_log_formatter",
                     "name_parent_logger": const.NAME_RESOURCE_ACTION_LOGGER,
@@ -761,7 +761,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
 
 
 @stable_api
-class MultiFileHandler(logging.Handler):
+class ParametrizedFileHandler(logging.Handler):
     """
     A file handler that writes to different files based on the last part of the logger name.
     """
