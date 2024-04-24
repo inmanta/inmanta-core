@@ -1230,7 +1230,7 @@ agent-repair-interval=%(agent_repair_interval)s
 agent-get-resource-backoff=%(agent_get_resource_backoff)f
 
 [agent]
-executor-mode={agent_cfg.agent_executor_mode.get()}
+executor-mode={agent_cfg.agent_executor_mode.get().name}
 
 [agent_rest_transport]
 port=%(port)s

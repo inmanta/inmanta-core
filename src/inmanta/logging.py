@@ -264,10 +264,10 @@ class InmantaLoggerConfig:
         self.set_log_formatter(formatter)
         self.set_log_level(inmanta_log_level, cli=False)
 
-    def add_cli_logger(self, inmanta_log_level: str) -> logging.Handler:
+    def add_cli_logger(self, log_level: int) -> logging.Handler:
         """Add a simple cli logger, used for debugging subprocesses"""
         handler = logging.StreamHandler()
-        handler.setLevel(self.convert_inmanta_log_level(inmanta_log_level))
+        handler.setLevel(log_level)
         handler.setFormatter(self._get_log_formatter_for_stream_handler(False))
         logging.root.addHandler(handler)
         return handler
@@ -283,8 +283,19 @@ class InmantaLoggerConfig:
         :param cli: True if the logs will be outputted to the CLI.
         """
         python_log_level = self.convert_inmanta_log_level(inmanta_log_level, cli)
-        self._handler.setLevel(python_log_level)
-        logging.root.setLevel(python_log_level)
+        self.set_python_log_level(python_log_level)
+
+    def set_python_log_level(self, log_level: int, cli: bool = True) -> None:
+        """
+        Set the logging level. A handler should have been created before.
+        The possible inmanta log levels and their associated python log level
+        are defined in the inmanta.logging.log_levels dictionary.
+
+        :param inmanta_log_level: The inmanta logging level
+        :param cli: True if the logs will be outputted to the CLI.
+        """
+        self._handler.setLevel(log_level)
+        logging.root.setLevel(log_level)
 
     def convert_inmanta_log_level(self, inmanta_log_level: str, cli: bool = False) -> int:
         """

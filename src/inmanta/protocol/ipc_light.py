@@ -45,7 +45,9 @@ ReturnType = typing.TypeVar("ReturnType")
 
 class IPCFrame(abc.ABC):
     """Interface marker for IPC frames"""
+
     pass
+
 
 class IPCMethod(IPCFrame, typing.Generic[ServerContext, ReturnType]):
     """Base class for methods intended for IPC"""
@@ -295,7 +297,7 @@ class LogShipper(logging.Handler):
     This sender is threadsafe
     """
 
-    def __init__(self, protocol: IPCFrameProtocol[typing.Any], eventloop: asyncio.BaseEventLoop) -> None:
+    def __init__(self, protocol: IPCFrameProtocol[typing.Any], eventloop: asyncio.AbstractEventLoop) -> None:
         self.protocol = protocol
         self.eventloop = eventloop
         self.logger_name = "inmanta.ipc.logs"

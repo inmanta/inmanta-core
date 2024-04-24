@@ -166,8 +166,10 @@ class AgentExcutorMode(str, enum.Enum):
     forking = "forking"
 
 
-def is_executor_mode(value: str) -> AgentExcutorMode:
+def is_executor_mode(value: str | AgentExcutorMode) -> AgentExcutorMode:
     """threaded | forking"""
+    if isinstance(value, AgentExcutorMode):
+        return value
     return AgentExcutorMode(value)
 
 

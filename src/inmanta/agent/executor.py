@@ -120,7 +120,7 @@ class EnvBlueprint:
     def __hash__(self) -> int:
         return int(self.blueprint_hash(), 16)
 
-    def __str__(self):
+    def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
         return f"EnvBlueprint(requirements=[{str(req)}], pip={self.pip_config}]"
 

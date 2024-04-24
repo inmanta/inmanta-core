@@ -143,7 +143,7 @@ class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
         await context.stop()
 
 
-class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.ModuleSource]]):
     """
     Initialize the executor:
     1. setup the client, using the session id of the agent
@@ -277,7 +277,7 @@ class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta
 def mp_worker_entrypoint(
     socket: socket.socket,
     name: str,
-    inmanta_log_level: str,
+    log_level: int,
     cli_log: bool,
     config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
 ) -> None:
@@ -286,7 +286,7 @@ def mp_worker_entrypoint(
     # Set up logging stage 1
     # Basic config, starts on std.out
     log_config = InmantaLoggerConfig.get_instance()
-    log_config.set_log_level(inmanta_log_level)
+    log_config.set_python_log_level(log_level)
     logging.captureWarnings(True)
 
     # Set up our own logger
@@ -306,7 +306,7 @@ def mp_worker_entrypoint(
         # the default log to std.out is removed by stage 2 setup
         # this adds it back
         if cli_log:
-            log_config.add_cli_logger(inmanta_log_level)
+            log_config.add_cli_logger(log_level)
         inmanta.signals.setup_signal_handlers(protocol.stop)
         await protocol.stopped.wait()
 
@@ -337,7 +337,7 @@ class MPExecutor(executor.Executor):
         self.executor_virtual_env = venv
 
         # Set by init and parent class that const
-        self.failed_resource_specs: list[inmanta.agent.executor.ResourceInstallSpec] = list()
+        self.failed_resource_sources: typing.Sequence[inmanta.loader.ModuleSource] = list()
         self.failed_resource_types: set[str] = set()
 
     async def stop(self) -> None:
@@ -426,7 +426,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         environment: uuid.UUID,
         log_folder: str,
         storage_folder: str,
-        inmanta_log_level: str = "DEBUG",
+        log_level: int = logging.INFO,
         cli_log: bool = False,
     ) -> None:
         """
@@ -435,7 +435,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param log_folder: folder to place log files for the executors
         :param storage_folder: folder to place code files
-        :param inmanta_log_level: log level for the executors
+        :param log_level: log level for the executors
         :param cli_log: do we also want to echo the log to std_err
 
         """
@@ -448,7 +448,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self.storage_folder = storage_folder
         os.makedirs(self.log_folder, exist_ok=True)
         os.makedirs(self.storage_folder, exist_ok=True)
-        self.inmanta_log_level = inmanta_log_level
+        self.log_level = log_level
         self.cli_log = cli_log
         self.session_gid = session_gid
 
@@ -501,16 +501,16 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                 return self.executor_map[executor_id]
             my_executor = await self.create_executor(executor_id)
             self.__add_executor(executor_id, my_executor)
-            if my_executor.failed_resource_specs:
+            if my_executor.failed_resource_sources:
                 # If some code loading failed, resolve here
                 # reverse index
-                type_for_spec = collections.defaultdict(list)
+                type_for_spec: dict[inmanta.loader.ModuleSource, list[str]] = collections.defaultdict(list)
                 for spec in code:
                     for source in spec.blueprint.sources:
                         type_for_spec[source].append(spec.resource_type)
                 # resolve
-                for spec in my_executor.failed_resource_specs:
-                    for rtype in type_for_spec.get(spec, []):
+                for source in my_executor.failed_resource_sources:
+                    for rtype in type_for_spec.get(source, []):
                         my_executor.failed_resource_types.add(rtype)
 
             # TODO: recovery. If loading failed, we currently never rebuild
@@ -545,7 +545,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             executor_id.agent_name,
             executor_id.identity(),
         )
-        executor.failed_resource_specs = failed_types
+        executor.failed_resource_sources = failed_types
         return executor
 
     async def make_child_and_connect(
@@ -557,7 +557,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
         # Start child
         process, parent_conn = await loop.run_in_executor(
-            self.thread_pool, functools.partial(self._make_child, name, self.inmanta_log_level, self.cli_log)
+            self.thread_pool, functools.partial(self._make_child, name, self.log_level, self.cli_log)
         )
         # Hook up the connection
         transport, protocol = await loop.connect_accepted_socket(
@@ -582,7 +582,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         parent_conn, child_conn = socket.socketpair()
         p = multiprocessing.Process(
             target=mp_worker_entrypoint,
-            args=(child_conn, name, str(log_level), cli_log, inmanta.config.Config.config_as_dict()),
+            args=(child_conn, name, log_level, cli_log, inmanta.config.Config.config_as_dict()),
             name=f"agent.executor.{name}",
         )
         p.start()
