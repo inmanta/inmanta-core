@@ -520,9 +520,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)
 
-        self._compiling_envs: set[uuid.UUID] = set()
+        self._env_to_compile_task: dict[uuid.UUID, asyncio.Task[None | protocol.Result]] = {}
         # write lock only, writers take care to uphold consistency so that readers don't need the lock
-        self._write_lock_compiling_envs = asyncio.locks.Lock()
+        self._write_lock_env_to_compile_task = asyncio.locks.Lock()
 
         # boolean indicating when everything is up and compile execution can start
         self.fully_ready = False
@@ -773,7 +773,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
         # acquire connection before lock to ensure lock contention remains short lived
         async with data.Environment.get_connection(connection) as con:
-            async with self._write_lock_compiling_envs:
+            async with self._write_lock_env_to_compile_task:
                 started_new_compile_run: bool = False
 
                 try:
@@ -800,18 +800,17 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
                         if (
                             # no compile is running for this environment
-                            compile.environment not in self._compiling_envs
+                            compile.environment not in self._env_to_compile_task
                             # the previously running compile is finished
                             or (finish_current_compile and compile.environment == environment)
                         ):
-                            self._compiling_envs.add(compile.environment)
                             # Run the compile. self._run will call back into this method when done
-                            self.add_background_task(self._run(compile))
+                            self._env_to_compile_task[compile.environment] = self.add_background_task(self._run(compile))
                             started_new_compile_run = True
                 finally:
                     if finish_current_compile and not started_new_compile_run:
                         assert environment is not None
-                        self._compiling_envs.discard(environment)
+                        del self._env_to_compile_task[environment]
 
     async def _notify_listeners(self, compile: data.Compile) -> None:
         async def notify(listener: CompileStateListener) -> None:
@@ -861,7 +860,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     @protocol.handle(methods.is_compiling, environment_id="id")
     async def is_compiling(self, environment_id: uuid.UUID) -> Apireturn:
-        if environment_id in self._compiling_envs:
+        if environment_id in self._env_to_compile_task:
             return 200
         return 204
 
@@ -1095,11 +1094,12 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
         :param env_id: The id of the environment for which the compile should be cancelled.
         """
-        compile_task: Optional[Task[None | Result]] = self._recompiles.pop(env_id, None)
+        compile_task: Optional[asyncio.Task[None | protocol.Result]] = self._env_to_compile_task.pop(env_id, None)
         if compile_task:
             compile_task.cancel()
             try:
                 # Wait until cancellation has finished
                 await compile_task
             except asyncio.CancelledError:
+                # Don't propagate CancelledError raised by invoking compile_task.cancel()
                 pass

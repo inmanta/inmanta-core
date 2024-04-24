@@ -265,7 +265,11 @@ class EnvironmentService(protocol.ServerSlice):
             await self._halt(env, connection)
 
     async def _halt(
-        self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None, delete_agent_venv: bool = False
+        self,
+        env: data.Environment,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        *,
+        delete_agent_venv: bool = False,
     ) -> None:
         """
         Halts the specified environment without acquiring the environment_state_operation_lock.
