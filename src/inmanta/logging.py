@@ -268,7 +268,6 @@ class LoggingConfigBuilder:
         :param logging_config_extensions: The logging config required by the extensions.
         """
         handlers: dict[str, object] = {}
-        formatters: dict[str, object] = {}
         handler_root_logger: str
         log_level: int
         if options.log_file:
@@ -281,9 +280,6 @@ class LoggingConfigBuilder:
                 "filename": options.log_file,
                 "mode": "a+",
             }
-            formatters["core_server_log_formatter"] = {
-                "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
-            }
         else:
             log_level = convert_inmanta_log_level(inmanta_log_level=str(options.verbose), cli=True)
             handler_root_logger = "core_console"
@@ -293,14 +289,18 @@ class LoggingConfigBuilder:
                 "level": log_level,
                 "stream": stream,
             }
-            formatters["core_console_formatter"] = self._get_multiline_formatter_config(options)
 
         full_logging_config = FullLoggingConfig(
             formatters={
-                **formatters,
+                # Always add all the formatters, even if they are not used by configuration. This way
+                # the formatters can be used if the user dumps the default logging config to file.
                 "core_resource_action_log_formatter": {
                     "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
                 },
+                "core_server_log_formatter": {
+                    "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
+                },
+                "core_console_formatter": self._get_multiline_formatter_config(options),
             },
             handlers={
                 **handlers,
@@ -347,12 +347,10 @@ class LoggingConfigBuilder:
         :param cli_log: A boolean indicating whether logs should also be sent to stderr or not.
         """
         python_log_level: int = convert_inmanta_log_level(inmanta_log_level)
-        cli_formatters = {}
         cli_handlers = {}
         name_root_handler = "core_agent_log_handler"
         root_loggers = {name_root_handler}
         if cli_log:
-            cli_formatters["core_console_formatter"] = self._get_multiline_formatter_config()
             cli_handlers["core_console_handler"] = {
                 "class": "logging.StreamHandler",
                 "formatter": "core_console_formatter",
@@ -362,10 +360,12 @@ class LoggingConfigBuilder:
             root_loggers.add("core_console_handler")
         full_logging_config = FullLoggingConfig(
             formatters={
+                # Always add all the formatters, even if they are not used by configuration. This way
+                # the formatters can be used if the user dumps the default logging config to file.
                 "core_agent_log_formatter": {
                     "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
                 },
-                **cli_formatters,
+                "core_console_formatter": self._get_multiline_formatter_config(),
             },
             handlers={
                 name_root_handler: {
