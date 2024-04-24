@@ -492,7 +492,7 @@ class LoggerModeManager:
 @stable_api
 class InmantaLoggerConfig:
     """
-    A class that provides logging functionality for Inmanta projects.
+    This class is the entry-point for configuring the Python logging framework.
 
     Usage:
     To use this class, you first need to call the `get_instance`. This method takes a `stream` argument
@@ -503,11 +503,6 @@ class InmantaLoggerConfig:
 
     The setup is not done in one step as we want logs for the cmd_parser, which will provide the options needed to configure
     the 'final' logger with `apply_options`.
-
-    for more fine-grained configuration the following functions can be used as well:
-        - `set_log_level`
-        - `set_log_formatter`
-        - `set_logfile_location`
     """
 
     _instance: Optional["InmantaLoggerConfig"] = None
@@ -776,8 +771,8 @@ class MultiFileHandler(logging.Handler):
         :param name_parent_logger: The log records created by children of this logger will be written to file by this handler.
                                    This handler will ignore log records created by any other logger.
         :param log_file_template: A template for the path to the log file. This is an f-string that holds the parameter
-                                  `child_logger_name`. This part will be replaced by the (non-fully-qualified) name of
-                                  the child logger self.name_parent_logger.
+                                  `child_logger_name`. This part will be replaced by the name of the direct child of
+                                  self.name_parent_logger that belongs to the logger that created the record.
         """
         super().__init__()
         self.name_parent_logger = name_parent_logger
@@ -807,7 +802,9 @@ class MultiFileHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         if not record.name.startswith(f"{self.name_parent_logger}."):
             return
-        path_logfile = self.log_file_template.format(child_logger_name=record.name.removeprefix(f"{self.name_parent_logger}."))
+        logger_name_without_parent_prefix = record.name.removeprefix(f"{self.name_parent_logger}.")
+        logger_name_direct_child_of_parent_logger = logger_name_without_parent_prefix.split(".")[0]
+        path_logfile = self.log_file_template.format(child_logger_name=logger_name_direct_child_of_parent_logger)
         if path_logfile not in self.child_handlers:
             try:
                 handler = logging.handlers.WatchedFileHandler(filename=path_logfile, mode="a+")
