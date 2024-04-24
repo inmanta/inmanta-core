@@ -1,0 +1,3 @@
+description: Add log shipping to the IPCLight framework
+change-type: minor
+destination-branches: [master]
