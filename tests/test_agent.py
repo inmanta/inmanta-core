@@ -50,7 +50,7 @@ async def test_agent_get_status(server, environment, agent):
 
 def test_context_changes():
     """Test registering changes in the handler context"""
-    resource = PurgeableResource(Id.parse_id("std::Host[agent,path=/test],v=1"))
+    resource = PurgeableResource(Id.parse_id("std::testing::NullResource[agent,name=test],v=1"))
     ctx = HandlerContext(resource)
 
     # use attribute change attributes

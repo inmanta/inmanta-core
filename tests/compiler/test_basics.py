@@ -31,7 +31,7 @@ from utils import module_from_template, v1_module_from_template
 def test_str_on_instance_pos(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-import std
+import std::testing
 
 entity Hg:
 end
@@ -48,19 +48,19 @@ end
 
 
 for i in hg.hosts:
-    std::ConfigFile(host=i, path="/fx", content="")
+    std::testing::NullResource(name=i.name)
 end
 """
     )
     (types, _) = compiler.do_compile()
-    files = types["std::File"].get_all_instances()
+    files = types["std::testing::NullResource"].get_all_instances()
     assert len(files) == 3
 
 
 def test_str_on_instance_neg(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-import std
+import std::testing
 
 entity Hg:
 end
@@ -77,12 +77,12 @@ end
 
 
 for i in hg.hosts:
-    std::ConfigFile(host=i, path="/fx", content="")
+    std::testing::NullResource(name=i.name)
 end
 """
     )
     (types, _) = compiler.do_compile()
-    files = types["std::File"].get_all_instances()
+    files = types["std::testing::NullResource"].get_all_instances()
     assert len(files) == 1
 
 

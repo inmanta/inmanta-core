@@ -29,7 +29,7 @@ from inmanta import const, data
 from inmanta.server.config import get_bind_port
 
 # This resource ID has some garbage characters, to make sure the queries are good
-resource_id_a = r"std::File[agent1,path=/tmp#/%%/\_file1.txt]"
+resource_id_a = r"std::testing::NullResource[agent1,name=/tmp#/%%/\_file1.txt]"
 
 
 @pytest.fixture

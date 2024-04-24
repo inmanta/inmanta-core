@@ -46,18 +46,18 @@ async def env_with_versions(environment):
 
 async def create_resource_in_multiple_versions(
     environment: uuid.UUID,
-    path: str,
+    name: str,
     version_attributes_map: dict[int, dict[str, object]],
     agent: str = "internal",
-    resource_type: str = "std::File",
+    resource_type: str = "std::testing::NullResource",
     status: ResourceState = ResourceState.deployed,
 ):
-    key = f"{resource_type}[{agent},path={path}]"
+    key = f"{resource_type}[{agent},name={name}]"
     for version, attributes in version_attributes_map.items():
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-            attributes={**attributes, **{"path": path}},
+            attributes={**attributes, **{"name": name}},
             status=status,
         )
         await res.insert()
@@ -184,7 +184,7 @@ async def test_dict_attr_diff(client, environment, env_with_versions):
     # as well as a change in the order of the requires list: this shouldn't be included in the diff
     await create_resource_in_multiple_versions(
         env_id,
-        "/tmp/dir1/file1",
+        "file1",
         {
             1: {
                 "dict_attr_removed": {"a": "b"},
@@ -278,7 +278,7 @@ async def test_resources_diff(client, environment, env_with_versions):
     # The resource is only present in version 1 and 3, the attribute values change
     await create_resource_in_multiple_versions(
         env_id,
-        "/tmp/dir1/file1",
+        "file1",
         {
             1: {
                 "dict_attr_modified": {
@@ -299,7 +299,7 @@ async def test_resources_diff(client, environment, env_with_versions):
     # The resource is only present in version 2 and 3, the attribute values don't change
     await create_resource_in_multiple_versions(
         env_id,
-        "/tmp/file2",
+        "file2",
         {
             2: {
                 "dict_attr_removed": {"a": "b"},
@@ -317,9 +317,9 @@ async def test_resources_diff(client, environment, env_with_versions):
     assert len(result.result["data"]) == 3
     assert result.result["data"][0]["resource_id"] == "std::Directory[internal,path=/tmp/dir1]"
     assert_resource_deleted(result.result["data"][0])
-    assert result.result["data"][1]["resource_id"] == "std::File[internal,path=/tmp/dir1/file1]"
+    assert result.result["data"][1]["resource_id"] == "std::testing::NullResource[internal,name=file1]"
     assert_resource_deleted(result.result["data"][1])
-    assert result.result["data"][2]["resource_id"] == "std::File[internal,path=/tmp/file2]"
+    assert result.result["data"][2]["resource_id"] == "std::testing::NullResource[internal,name=file2]"
     assert_resource_added(result.result["data"][2])
 
     # From 2 to 3, the directory and file1 are added and file2 doesn't change
@@ -328,14 +328,14 @@ async def test_resources_diff(client, environment, env_with_versions):
     assert len(result.result["data"]) == 2
     assert result.result["data"][0]["resource_id"] == "std::Directory[internal,path=/tmp/dir1]"
     assert_resource_added(result.result["data"][0])
-    assert result.result["data"][1]["resource_id"] == "std::File[internal,path=/tmp/dir1/file1]"
+    assert result.result["data"][1]["resource_id"] == "std::testing::NullResource[internal,name=file1]"
     assert_resource_added(result.result["data"][1])
 
     # From 1 to 3, the directory doesn't change, file1 changes and file2 is added
     result = await client.get_diff_of_versions(environment, 1, 3)
     assert result.code == 200
     assert len(result.result["data"]) == 2
-    assert result.result["data"][0]["resource_id"] == "std::File[internal,path=/tmp/dir1/file1]"
+    assert result.result["data"][0]["resource_id"] == "std::testing::NullResource[internal,name=file1]"
     assert result.result["data"][0]["status"] == "modified"
     assert result.result["data"][0]["attributes"]["dict_attr_modified"] == {
         "from_value": {"x": [6, 7], "y": "z"},
@@ -357,7 +357,7 @@ async def test_resources_diff(client, environment, env_with_versions):
         "from_value_compare": "False",
         "to_value_compare": "",
     }
-    assert result.result["data"][1]["resource_id"] == "std::File[internal,path=/tmp/file2]"
+    assert result.result["data"][1]["resource_id"] == "std::testing::NullResource[internal,name=file2]"
     assert_resource_added(result.result["data"][1])
 
 

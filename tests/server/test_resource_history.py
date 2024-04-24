@@ -51,21 +51,21 @@ class ResourceFactory:
 
     async def create_resource(
         self,
-        path: str,
+        name: str,
         status: ResourceState,
         version: int,
         attributes: dict[str, object],
         agent: str = "internal",
-        resource_type: str = "std::File",
+        resource_type: str = "std::testing::NullResource",
         environment: UUID = None,
     ):
         if environment is None:
             environment = self.env
-        key = f"{resource_type}[{agent},path={path}]"
+        key = f"{resource_type}[{agent},name={name}]"
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-            attributes={**attributes, **{"path": path}, "version": version},
+            attributes={**attributes, **{"name": name}, "version": version},
             status=status,
         )
         count = next(self.resource_counter)
@@ -137,94 +137,94 @@ async def env_with_resources(server, client):
     # A resource with multiple resources in its requires list, and multiple versions where it was released,
     # and is also present in versions that were not released
     await resource_factory.create_resource(
-        "/tmp/dir1/file1",
+        "file1",
         ResourceState.undefined,
         1,
         {"key1": "val1", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
     )
 
     await resource_factory.create_resource(
-        "/tmp/dir1/file1",
+        "file1",
         ResourceState.skipped,
         2,
         {
             "key1": "val1",
-            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::testing::NullResource[internal,name=file2]"],
         },
     )
 
     await resource_factory.create_resource(
-        "/tmp/dir1/file1",
+        "file1",
         ResourceState.deploying,
         3,
         {
             "key1": "modified_value",
             "another_key": "val",
-            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::testing::NullResource[internal,name=file2]"],
         },
     )
 
     await resource_factory.create_resource(
-        "/tmp/dir1/file1",
+        "file1",
         ResourceState.deployed,
         4,
         {
             "key1": "modified_value",
             "another_key": "val",
-            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::testing::NullResource[internal,name=file2]"],
         },
     )
 
     await resource_factory.create_resource(
-        "/tmp/dir1/file1",
+        "file1",
         ResourceState.deployed,
         5,
         {
             "key1": "modified_value2",
             "another_key": "val",
-            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::testing::NullResource[internal,name=file2]"],
         },
     )
 
     await resource_factory.create_resource(
-        "/tmp/dir1/file1",
+        "file1",
         ResourceState.deployed,
         6,
         {
             "key1": "modified_value",
             "another_key": "val",
-            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::testing::NullResource[internal,name=file2]"],
         },
     )
     await resource_factory.create_resource(
-        "/tmp/dir1/file1",
+        "file1",
         ResourceState.deployed,
         7,
         {
             "key1": "modified_value",
             "another_key": "val",
-            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::testing::NullResource[internal,name=file2]"],
         },
     )
     await resource_factory.create_resource(
-        "/tmp/dir1/file1",
+        "file1",
         ResourceState.deployed,
         8,
         {
             "key1": "different_value",
             "another_key": "val",
-            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::testing::NullResource[internal,name=file2]"],
         },
     )
 
     await resource_factory.create_resource(
-        "/tmp/dir1/file1",
+        "file1",
         ResourceState.deployed,
         9,
         {
             "key1": "different_value_2",
             "another_key": "val",
-            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::testing::NullResource[internal,name=file2]"],
         },
     )
 
@@ -240,23 +240,23 @@ async def env_with_resources(server, client):
 
     # A resource that changed the attributes in the last released version,
     # And it also has a single requirement
-    await resource_factory.create_resource("/tmp/dir1/file2", ResourceState.undefined, 1, {"key3": "val3", "requires": []})
+    await resource_factory.create_resource("file2", ResourceState.undefined, 1, {"key3": "val3", "requires": []})
 
     await resource_factory.create_resource(
-        "/tmp/dir1/file2",
+        "file2",
         ResourceState.deployed,
         2,
         {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
     )
     await resource_factory.create_resource(
-        "/tmp/dir1/file2",
+        "file2",
         ResourceState.deployed,
         3,
         {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
     )
 
     await resource_factory.create_resource(
-        "/tmp/dir1/file2",
+        "file2",
         ResourceState.deploying,
         8,
         {"key3": "val3updated", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
@@ -297,16 +297,16 @@ async def env_with_resources(server, client):
         {
             "key1": "modified_value",
             "another_key": "val",
-            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
+            "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::testing::NullResource[internal,name=file2]"],
         },
         environment=env3.id,
     )
 
     ids = {
-        "long_history": "std::File[internal,path=/tmp/dir1/file1]",
+        "long_history": "std::testing::NullResource[internal,name=file1]",
         "single_entry": "std::Directory[internal,path=/tmp/dir1]",
-        "short_history": "std::File[internal,path=/tmp/dir1/file2]",
-        "unreleased": "std::File[internal,path=/etc/filexyz]",
+        "short_history": "std::testing::NullResource[internal,name=file2]",
+        "unreleased": "std::testing::NullResource[internal,name=filexyz]",
     }
 
     yield env, cm_times, ids, resource_factory.resources
