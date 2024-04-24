@@ -18,6 +18,7 @@
 
 import abc
 import asyncio
+import functools
 import logging
 import pickle
 import struct
@@ -61,6 +62,21 @@ class IPCReplyFrame:
     id: uuid.UUID
     returnvalue: object
     is_exception: bool
+
+
+@dataclass
+class IPCLogRecord:
+    """
+    Derived from logging.LogRecord, but simplified
+
+    :param name: the logger name, as on logging.LogRecord
+    :param levelno: the log level, in numeric form, as on logging.LogRecord
+    :param msg: the message, as produced by record.getMessage() i.e. this record has all arguments already formatted in
+    """
+
+    name: str
+    levelno: int
+    msg: str
 
 
 class IPCFrameProtocol(Protocol, typing.Generic[ServerContext]):
@@ -246,3 +262,63 @@ class FinalizingIPCClient(IPCClient[ServerContext]):
         super().connection_lost(exc)
         for fin in self.finalizers:
             asyncio.get_running_loop().create_task(fin())
+
+
+class LogReceiver(IPCFrameProtocol[ServerContext]):
+    """
+    IPC feature to receive log message
+
+    It re-injects the log message into the logging framework in the exact same place as it was on the sender side.
+
+    This makes the LogShipper/LogReceiver pair a (mostly) transparent bridge.
+    Log records are simplified when transported.
+
+    When installing the LogShipper and LogReceiver in the same process, this will create an infinite loop
+    """
+
+    def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
+        if isinstance(frame, IPCLogRecord):
+            # calling log here is safe because if there are no arguments, formatter is never called
+            logging.getLogger(frame.name).log(frame.levelno, frame.msg)
+        else:
+            super().frame_received(frame)
+
+
+class LogShipper(logging.Handler):
+    """
+    Log sender associated with the log receiver
+
+    This sender is threadsafe
+    """
+
+    def __init__(self, protocol: IPCFrameProtocol[object], eventloop: asyncio.BaseEventLoop) -> None:
+        self.protocol = protocol
+        self.eventloop = eventloop
+        self.logger_name = "inmanta.ipc.logs"
+        self.logger = logging.getLogger(self.logger_name)
+        super().__init__()
+
+    def _send_frame(self, record: IPCLogRecord) -> None:
+        try:
+            self.protocol.send_frame(record)
+        except Exception:
+            # Stop exception here
+            # Log in own logger to prevent loops
+            self.logger.info("Could not send log line", exc_info=True)
+            return
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.name == self.logger_name:
+            # avoid loops
+            # When we fail to send, we produce a log line on this logger
+            return
+        self.eventloop.call_soon_threadsafe(
+            functools.partial(
+                self._send_frame,
+                IPCLogRecord(
+                    record.name,
+                    record.levelno,
+                    record.getMessage(),
+                ),
+            )
+        )
