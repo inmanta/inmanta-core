@@ -1094,12 +1094,13 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
         :param env_id: The id of the environment for which the compile should be cancelled.
         """
-        compile_task: Optional[asyncio.Task[None | protocol.Result]] = self._env_to_compile_task.pop(env_id, None)
-        if compile_task:
-            compile_task.cancel()
-            try:
-                # Wait until cancellation has finished
-                await compile_task
-            except asyncio.CancelledError:
-                # Don't propagate CancelledError raised by invoking compile_task.cancel()
-                pass
+        async with self._write_lock_env_to_compile_task:
+            compile_task: Optional[asyncio.Task[None | protocol.Result]] = self._env_to_compile_task.pop(env_id, None)
+            if compile_task:
+                compile_task.cancel()
+                try:
+                    # Wait until cancellation has finished
+                    await compile_task
+                except asyncio.CancelledError:
+                    # Don't propagate CancelledError raised by invoking compile_task.cancel()
+                    pass
