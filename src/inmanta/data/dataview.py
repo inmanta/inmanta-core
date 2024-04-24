@@ -1270,7 +1270,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         Return the specification of the allowed filters, see FilterValidator
         """
         return {
-            "resource_id": BooleanIsNotNullFilter,
+            "managed": BooleanIsNotNullFilter,
         }
 
     def get_base_url(self) -> str:
@@ -1278,7 +1278,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
-            select_clause="SELECT dr.environment, dr.discovered_resource_id, dr.values, rps.resource_id",
+            select_clause="SELECT dr.environment, dr.discovered_resource_id, dr.values, (CASE WHEN rps.resource_id IS NOT NULL THEN true ELSE false END) AS managed",
             from_clause=f"""
                 FROM {data.DiscoveredResource.table_name()} as dr
                 LEFT JOIN {data.ResourcePersistentState.table_name()} rps
@@ -1294,6 +1294,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
             model.DiscoveredResource(
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
+                managed=res["managed"]
             ).model_dump()
             for res in records
         ]

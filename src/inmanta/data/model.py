@@ -745,10 +745,12 @@ class DiscoveredResource(BaseModel):
     """
     :param discovered_resource_id: The name of the resource
     :param values: The actual resource
+    :param managed: A resource with the same ID is already managed by the orchestrator
     """
 
     discovered_resource_id: ResourceIdStr
     values: dict[str, object]
+    managed: bool = False
 
     @field_validator("discovered_resource_id")
     @classmethod

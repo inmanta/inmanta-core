@@ -106,7 +106,7 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
         None,
     ],
 )
-async def test_discovered_resource_get_paging(server, client, agent, environment, apply_filter: Optional[bool]):
+async def test_discovered_resource_get_paging(server, client, agent, environment, apply_filter: Optional[bool], clienthelper):
     """
     Test that discovered resources can be retrieved with paging. The test creates multiple resources, retrieves them
     with various paging options, and verifies that the expected resources are returned.
@@ -128,25 +128,10 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     result = await agent._client.discovered_resource_create_batch(environment, discovered_resources)
     assert result.code == 200
 
-    # Create 2 versions of the model
-    for i in range(1, 3):
-        cm = data.ConfigurationModel(
-            environment=uuid.UUID(environment),
-            version=i,
-            date=datetime.now(),
-            total=1,
-            released=True,
-            version_info={},
-            is_suitable_for_partial_compiles=False,
-        )
-        await cm.insert()
-
-    # Create some orphans for version 1
-    version = 1
-
+    version1 = await clienthelper.get_version()
     orphaned_resources = [
         {
-            "id": ResourceVersionIdStr(f"{res['discovered_resource_id']},v={version}"),
+            "id": ResourceVersionIdStr(f"{res['discovered_resource_id']},v={version1}"),
             "values": res["values"],
             "requires": [],
             "purged": False,
@@ -154,19 +139,37 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         }
         for res in discovered_resources[2:-2]
     ]
+    await clienthelper.put_version_simple(resources=orphaned_resources, version=version1)
 
-    for resource in orphaned_resources:
-        resource = data.Resource.new(
-            environment=uuid.UUID(environment), resource_version_id=resource["id"], attributes=resource["values"]
-        )
-        await resource.insert()
+    # # Create 2 versions of the model
+    # for i in range(1, 3):
+    #     cm = data.ConfigurationModel(
+    #         environment=uuid.UUID(environment),
+    #         version=i,
+    #         date=datetime.now(),
+    #         total=1,
+    #         released=True,
+    #         version_info={},
+    #         is_suitable_for_partial_compiles=False,
+    #     )
+    #     await cm.insert()
+    #
+    # # Create some orphans for version 1
+    # version = 1
+
+
+
+    # for resource in orphaned_resources:
+    #     resource = data.Resource.new(
+    #         environment=uuid.UUID(environment), resource_version_id=resource["id"], attributes=resource["values"]
+    #     )
+    #     await resource.insert()
 
     # Create some Resources that are already managed:
-    version = 2
-
+    version2 = await clienthelper.get_version()
     managed_resources = [
         {
-            "id": ResourceVersionIdStr(f"{res['discovered_resource_id']},v={version}"),
+            "id": ResourceVersionIdStr(f"{res['discovered_resource_id']},v={version2}"),
             "values": res["values"],
             "requires": [],
             "purged": False,
@@ -174,11 +177,13 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         }
         for res in discovered_resources[:2]
     ]
-    for resource in managed_resources:
-        resource = data.Resource.new(
-            environment=uuid.UUID(environment), resource_version_id=resource["id"], attributes=resource["values"]
-        )
-        await resource.insert()
+    await clienthelper.put_version_simple(resources=managed_resources, version=version2)
+
+    # for resource in managed_resources:
+    #     resource = data.Resource.new(
+    #         environment=uuid.UUID(environment), resource_version_id=resource["id"], attributes=resource["values"]
+    #     )
+    #     await resource.insert()
 
     # Resource repartition and expected filtering results:
 
@@ -196,7 +201,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         filter = None
         expected_result = discovered_resources
     else:
-        filter = {"resource_id": apply_filter}
+        filter = {"managed": apply_filter}
         if apply_filter:
             expected_result = discovered_resources[:-2]
         else:

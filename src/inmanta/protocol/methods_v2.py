@@ -1604,10 +1604,10 @@ def discovered_resources_get_batch(
             The following orders are supported: 'asc', 'desc'
     :param filter: Filter the list of returned resources.
         Default behavior: return all discovered resources.
-        Filtering by 'resource_id' is supported:
-            - filter.resource_id=true: only return discovered resources that the orchestrator is already aware of i.e.
-            resources that are present in any configurationmodel of environment tid.
-            - filter.resource_id=false: only return discovered resources that the orchestrator is unaware of i.e. resources
+        Filtering by 'managed' is supported:
+            - filter.managed=true: only return discovered resources that the orchestrator is already aware of i.e.
+            resources that are present in any configuration model of environment tid.
+            - filter.managed=false: only return discovered resources that the orchestrator is unaware of i.e. resources
             that are not part of any configuration model of environment tid.
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found
