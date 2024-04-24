@@ -46,7 +46,7 @@ def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> 
     return subprocess.check_output(["git", "log", "-1", f"--skip={nb_previous_commit}", "--pretty=%B"], cwd=path).decode()
 
 
-@pytest.mark.parametrize_any("v1_module", [False, True])
+@pytest.mark.parametrize_any("v1_module", [True, False])
 @pytest.mark.parametrize_any("changelog_file_exists", [True, False])
 @pytest.mark.parametrize_any("previous_stable_version_exists", [True, False])
 @pytest.mark.parametrize_any("four_digit_version", [True, False])
