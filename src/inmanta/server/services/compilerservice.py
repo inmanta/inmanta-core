@@ -640,7 +640,8 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                                       if set to false, nothing will be notified. If not set then the default notifications are
                                       sent (failed pull stage and errors during the do_export)
         :param failed_compile_message: the message used in notifications if notify_failed_compile is set to True.
-        :param connection: Perform the database changes using this database connection.
+        :param connection: Perform the database changes using this database connection. If this connection is in a transaction
+                           context, in_db_transaction must be set to True.
         :param in_db_transaction: If set to True, the connection must be provided and the connection must be part of an ongoing
                                   database transaction. If this parameter is set to True, is required to call
                                   `CompileService.notify_compile_request_committed()` right after the transaction commits.
@@ -652,10 +653,13 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         """
         if in_db_transaction and not connection:
             raise Exception("A connection should be provided when in_db_transaction is True.")
+        # TODO: can we afford this "breaking" change?
+        #   -> breaks current stable inmanta-lsm (can be worked around here), works without
+        #   -> breaks old inmanta-lsm, compiles may hang without
         if in_db_transaction != (connection is not None and connection.is_in_transaction()):
             raise Exception(
                 f"in_db_transaction is {in_db_transaction},"
-                f" but the given connection is{'' if in_db_transaction else ' not'} executing in a transaction."
+                f" but the given connection is{' not' if in_db_transaction else ''} executing in a transaction."
             )
 
         if removed_resource_sets is None:
