@@ -29,7 +29,7 @@ SVG2PDF       = inkscape
 SVG2PDF_FLAGS =
 
 # Internal variables.
-ALLSPHINXOPTS   = -t oss -d $(BUILDDIR)/doctrees $(SPHINXOPTS) .
+ALLSPHINXOPTS   = -t iso -d $(BUILDDIR)/doctrees $(SPHINXOPTS) .
 # the i18n builder cannot share the environment and doctrees with the others
 I18NSPHINXOPTS  = $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
 
@@ -67,8 +67,7 @@ clean:
 	-rm -rf $(BUILDDIR)/*
 	-rm -rf $(PNGs)
 
-html: openapi latexpdf
-	cp $(BUILDDIR)/latex/inmanta.pdf $(SOURCEDIR)
+html: openapi
 	$(SPHINXBUILD) -b html -t include_redoc $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."

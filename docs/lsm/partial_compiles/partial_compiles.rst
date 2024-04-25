@@ -36,6 +36,8 @@ Partial compiles are possible when
 
 3. Service instances and groups can depend on shared resources, that are identical for all service instances and groups.
 4. Any combination of the above
+5. For other scenarios, :ref:`custom partitioning logic is required<custom_partitioning>`
+
 
 How it works for unrelated services
 ---------------------------------------
@@ -127,6 +129,45 @@ The underlying mechanism is that when we recompile for a state change on any Ser
 Then we traverse back down the :inmanta:attribute:`lsm::ServiceEntityBinding.relation_to_owner` until we have all children.
 ``lsm::all`` will only return these children and nothing else.
 
+
+.. _custom_partitioning:
+Custom selectors
+--------------------
+
+Complex topologies (with multiple parents or cross-relations) require a custom `selector`. 
+The selector is a piece of python code that determines which instances will be returned by ``lsm::all``. 
+
+The API for the selector is :py:class:`inmanta_plugins.lsm.partial.SelectorAPI`.
+To register the selector, use :py:meth:`inmanta_plugins.lsm.global_cache.set_selector_factory<inmanta_plugins.lsm.CacheManager.set_selector_factory>`.
+
+For example, consider a case where we have a `tunnel` service that connects two `ports`. To compile the tunnel, we also need to load the ports. 
+This is also not a tree, as each tunnel has not one, but two parents. As such, we can build a custom selector.
+
+
+.. literalinclude:: custom_partial.cf
+    :linenos:
+    :language: inmanta
+    :caption: main.cf
+
+.. literalinclude:: custom_partial.py
+    :linenos:
+    :language: python
+    :caption: __init__.py
+    :lines: 9-
+
+
+
+When designing a custom selector, keep in mind the intrinsic limitation of :ref:`Partial Compiles<partial_compile>`.
+
+.. autoclass:: inmanta_plugins.lsm.partial.SelectorAPI
+   :members:
+
+The selector is expected to closely integrate with the :py:class:`inmanta_plugins.lsm.CacheManager`.
+
+.. autoclass:: inmanta_plugins.lsm.CacheManager
+   :members:
+
+
 Limitations
 -------------------
 
@@ -134,12 +175,10 @@ Limitations
     When using partial compile, conflicts between groups can not be detected, because the compiler never sees them together.
     This means that the model must be designed to be conflict free or rely on an (external) inventory to avoid conflicts.
     *This is why we always advice to run models in full compile mode until performance becomes an issue*: it gives the model time to mature and to detect subtle conflicts.
-2. Complex topologies (with multiple parents or cross-relations) are currently not supported out of the box.
-    However, complex interdependencies between service instances are often an operation risk as well.
-    Overly entangled services are hard to reason about, debug and fix.
-    While it is possible to develop more complex topologies using the guidelines set out in :ref:`Partial Compiles<partial_compile>`, it may be preferable to simplify the service design for less interdependence.
+
 
 For more details, see :ref:`limitation section in the core documentation<partial-compiles-limitations>`
+
 
 Further Reading
 -------------------
