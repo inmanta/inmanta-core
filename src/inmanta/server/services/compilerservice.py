@@ -653,9 +653,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         """
         if in_db_transaction and not connection:
             raise Exception("A connection should be provided when in_db_transaction is True.")
-        # TODO: can we afford this "breaking" change?
-        #   -> breaks current stable inmanta-lsm (can be worked around here), works without
-        #   -> breaks old inmanta-lsm, compiles may hang without
         if in_db_transaction != (connection is not None and connection.is_in_transaction()):
             raise Exception(
                 f"in_db_transaction is {in_db_transaction},"
