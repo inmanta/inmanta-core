@@ -24,10 +24,10 @@ from collections.abc import Generator
 from pkgutil import ModuleInfo
 from types import ModuleType
 from typing import Optional
-from inmanta import logging as inmanta_logging
 
 import asyncpg
 
+from inmanta import logging as inmanta_logging
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException

@@ -316,7 +316,7 @@ class LoggingConfigBuilder:
                 "core_tornado_debug_log_handler": {
                     "class": "inmanta.logging.TornadoDebugLogHandler",
                     "level": "DEBUG",
-                }
+                },
             },
             loggers={
                 const.NAME_RESOURCE_ACTION_LOGGER: {
@@ -328,7 +328,7 @@ class LoggingConfigBuilder:
                     "level": "DEBUG",
                     "propagate": False,
                     "handlers": ["core_tornado_debug_log_handler"],
-                }
+                },
             },
             root_handlers={handler_root_logger},
             root_log_level=log_level,
