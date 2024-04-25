@@ -307,6 +307,7 @@ def clear_environment(id: uuid.UUID):
     This method deletes various components associated with the specified environment from the database,
     including agents, compile data, parameters, notifications, code, resources, and configuration models.
     However, it retains the entry in the Environment table itself and settings are kept.
+    The environment will be temporarily halted during the decommissioning process.
 
     :param id: The id of the environment to be cleared.
 

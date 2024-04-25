@@ -970,3 +970,28 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     async def recalculate_queue_count_cache(self) -> None:
         async with self._queue_count_cache_lock:
             self._queue_count_cache = await data.Compile.get_total_length_of_all_compile_queues()
+
+    async def cancel_compile(self, env_id: uuid.UUID) -> None:
+        """
+        Cancel the ongoing compile for the given environment (if any). After the cancellation, this method
+        will not start the execution of a new compile, if a compile request would be present in the compile
+        queue for the given environment.
+
+        pre-condition: The given environment is halted.
+
+        :param env_id: The id of the environment for which the compile should be cancelled.
+        """
+        async with self._write_lock_env_to_compile_task:
+            compile_task: Optional[asyncio.Task[None | protocol.Result]] = self._env_to_compile_task.pop(env_id, None)
+        if compile_task:
+            # We cancel the compile_task outside of the self._write_lock_env_to_compile_task lock to prevent lock contention.
+            # This is only safe if no new compiles can be scheduled on the given environment, otherwise there is the
+            # possibility that multiple compiles run concurrently on the same environment. Hence the pre-condition that
+            # this method can only be called on halted environments.
+            compile_task.cancel()
+            try:
+                # Wait until cancellation has finished
+                await compile_task
+            except asyncio.CancelledError:
+                # Don't propagate CancelledError raised by invoking compile_task.cancel()
+                pass
