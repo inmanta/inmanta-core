@@ -764,6 +764,10 @@ def log_state_tcp_ports(request, log_file):
 async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
     reset_metrics()
 
+    # Setup default logging
+    inmanta_logger_config = InmantaLoggerConfig.get_instance()
+    inmanta_logger_config.apply_options(Options())
+
     with tempfile.TemporaryDirectory() as state_dir:
         port = str(unused_tcp_port_factory())
 
@@ -799,10 +803,6 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     """
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
-
-    # Setup default logging
-    inmanta_logger_config = InmantaLoggerConfig.get_instance()
-    inmanta_logger_config.apply_options(Options())
 
     ibl = InmantaBootloader()
 
@@ -890,10 +890,6 @@ async def server_multi(
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
-
-        # Setup default logging
-        inmanta_logger_config = InmantaLoggerConfig.get_instance()
-        inmanta_logger_config.apply_options(Options())
 
         ibl = InmantaBootloader()
 

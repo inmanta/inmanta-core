@@ -828,10 +828,15 @@ class TornadoDebugLogHandler(logging.Handler):
     """
     A custom log handler for Tornados 'max_clients limit reached' debug logs.
     """
+
+    def __init__(self, level=logging.NOTSET) -> None:
+        super().__init__(level)
+        self.logger = logging.getLogger("inmanta.protocol.endpoints")
+
     def emit(self, record: logging.LogRecord) -> None:
         if (
             record.levelno == logging.DEBUG
             and record.name.startswith("tornado.general")
             and record.msg.startswith("max_clients limit reached")
         ):
-            LOGGER.warning(record.msg)  # Log Tornado log as inmanta warnings
+            self.logger.warning(record.msg)  # Log Tornado log as inmanta warnings
