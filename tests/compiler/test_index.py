@@ -190,6 +190,7 @@ def test_index_on_subtype(snippetcompiler):
 
 
 def test_index_on_subtype2(snippetcompiler):
+    # TODO
     snippetcompiler.setup_for_snippet(
         """
         host = std::Host(name="a",os=std::linux)

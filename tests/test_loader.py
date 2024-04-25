@@ -48,6 +48,7 @@ def get_module_source(module: str, code: str) -> ModuleSource:
 
 
 def test_code_manager(tmpdir: py.path.local):
+    # TODO
     """Verify the code manager"""
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
@@ -64,7 +65,7 @@ def test_code_manager(tmpdir: py.path.local):
 
     mgr = loader.CodeManager()
     mgr.register_code("std::testing::NullResource", single.MyHandler)
-    mgr.register_code("std::Directory", multi.MyHandler)
+    mgr.register_code("std::testing::NullResource", multi.MyHandler)
 
     def assert_content(source_info: SourceInfo, handler) -> str:
         filename = inspect.getsourcefile(handler)

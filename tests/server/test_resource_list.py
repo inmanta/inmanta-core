@@ -190,8 +190,8 @@ async def env_with_resources(server, client):
     await create_resource("agent1", "file2", "std::testing::NullResource", ResourceState.deploying, [1, 2])  # Orphaned
     await create_resource("agent2", "file3", "std::testing::NullResource", ResourceState.deployed, [2])  # Orphaned
     await create_resource("agent2", "file4", "std::testing::NullResource", ResourceState.unavailable, [3])
-    await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3])
-    await create_resource("agent3", "/tmp/dir6", "std::Directory", ResourceState.deployed, [3])
+    await create_resource("agent2", "dir5", "std::testing::NullResource", ResourceState.skipped, [3])
+    await create_resource("agent3", "dir6", "std::testing::NullResource", ResourceState.deployed, [3])
 
     env2 = data.Environment(name="dev-test2", project=project.id, repo_url="", repo_branch="")
     await env2.insert()
@@ -207,7 +207,7 @@ async def env_with_resources(server, client):
     await cm.insert()
     await create_resource("agent1", "file7", "std::testing::NullResource", ResourceState.deployed, [3], environment=env2.id)
     await create_resource("agent1", "file2", "std::testing::NullResource", ResourceState.deployed, [3], environment=env2.id)
-    await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3], environment=env2.id)
+    await create_resource("agent2", "dir5", "std::testing::NullResource", ResourceState.skipped, [3], environment=env2.id)
 
     env3 = data.Environment(name="dev-test3", project=project.id, repo_url="", repo_branch="")
     await env3.insert()

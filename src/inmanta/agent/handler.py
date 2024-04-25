@@ -64,7 +64,7 @@ class provider:  # noqa: N801
     A decorator that registers a new handler.
 
     :param resource_type: The type of the resource this handler is responsible for.
-                          For example, :inmanta:entity:`std::NullResource`
+                          For example, :inmanta:entity:`std::testing::NullResource`
     :param name: A name to reference this provider.
     """
 

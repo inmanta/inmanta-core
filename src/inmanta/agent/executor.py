@@ -212,7 +212,7 @@ class ResourceInstallSpec:
     """
     This class encapsulates the requirements for a specific resource type for a specific model version.
 
-    :ivar resource_type: fully qualified name for this resource type e.g. std::NullResource
+    :ivar resource_type: fully qualified name for this resource type e.g. std::testing::NullResource
     :ivar model_version: the version of the model to use
     :ivar blueprint: the associate install blueprint
 
