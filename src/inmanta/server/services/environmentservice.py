@@ -543,8 +543,6 @@ class EnvironmentService(protocol.ServerSlice):
             self.resource_service.close_resource_action_logger(environment_id)
             await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
 
-            self._delete_environment_dir(environment_id)
-
     @handle(methods_v2.environment_decommission, env="id")
     async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
         is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)

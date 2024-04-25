@@ -31,7 +31,7 @@ from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequenc
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Optional, cast
+from typing import Optional, Union, cast
 
 import dateutil
 import dateutil.parser
@@ -982,7 +982,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         :param env_id: The id of the environment for which the compile should be cancelled.
         """
         async with self._global_lock:
-            compile_task: Optional[asyncio.Task[None | protocol.Result]] = self._recompiles.pop(env_id, None)
+            compile_task: Optional[asyncio.Task[Union[None, protocol.Result]]] = self._recompiles.pop(env_id, None)
         if compile_task:
             # We cancel the compile_task outside of the self._global_lock to prevent lock contention.
             # This is only safe if no new compiles can be scheduled on the given environment, otherwise there is the
