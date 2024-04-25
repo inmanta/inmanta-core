@@ -385,7 +385,9 @@ class LoggingConfigBuilder:
         return full_logging_config
 
     def _join_logging_configs(
-        self, full_logger_config: FullLoggingConfig, logging_config_extensions: Optional[list[LoggingConfigExtension]] = None
+        self,
+        full_logger_config: FullLoggingConfig,
+        logging_config_extensions: Optional[abc.Sequence[LoggingConfigExtension]] = None,
     ) -> FullLoggingConfig:
         """
         Join the given LoggingConfigCore and the LoggingConfigExtensions together into a single LoggingConfigCore
@@ -829,7 +831,7 @@ class TornadoDebugLogHandler(logging.Handler):
     A custom log handler for Tornados 'max_clients limit reached' debug logs.
     """
 
-    def __init__(self, level=logging.NOTSET) -> None:
+    def __init__(self, level: int = logging.NOTSET) -> None:
         super().__init__(level)
         self.logger = logging.getLogger("inmanta.protocol.endpoints")
 
