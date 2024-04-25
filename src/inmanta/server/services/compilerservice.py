@@ -981,10 +981,10 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
         :param env_id: The id of the environment for which the compile should be cancelled.
         """
-        async with self._write_lock_env_to_compile_task:
-            compile_task: Optional[asyncio.Task[None | protocol.Result]] = self._env_to_compile_task.pop(env_id, None)
+        async with self._global_lock:
+            compile_task: Optional[asyncio.Task[None | protocol.Result]] = self._recompiles.pop(env_id, None)
         if compile_task:
-            # We cancel the compile_task outside of the self._write_lock_env_to_compile_task lock to prevent lock contention.
+            # We cancel the compile_task outside of the self._global_lock to prevent lock contention.
             # This is only safe if no new compiles can be scheduled on the given environment, otherwise there is the
             # possibility that multiple compiles run concurrently on the same environment. Hence the pre-condition that
             # this method can only be called on halted environments.
