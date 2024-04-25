@@ -111,12 +111,12 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
-    result = await client.get_resources_in_version(env.id, version, filter={"resource_id_value": ["file1"]})
+    result = await client.get_resources_in_version(env.id, version, filter={"resource_id_value": ["/etc/file1"]})
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
     # Partial match
-    result = await client.get_resources_in_version(env.id, version, filter={"resource_id_value": ["file"]})
+    result = await client.get_resources_in_version(env.id, version, filter={"resource_id_value": ["/etc/file"]})
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
@@ -128,18 +128,24 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 2
 
-    result = await client.get_resources_in_version(env.id, version, filter={"resource_type": ["Directory"]})
+    result = await client.get_resources_in_version(env.id, version, filter={"resource_type": ["NullResource"]})
     assert result.code == 200
-    assert len(result.result["data"]) == 4
+    assert len(result.result["data"]) == 6
 
     result = await client.get_resources_in_version(
-        env.id, version, filter={"resource_type": ["Directory"], "resource_id_value": "1"}
+        env.id, version, filter={"resource_type": ["NullResource"], "resource_id_value": "dir1"}
     )
     assert result.code == 200
     assert len(result.result["data"]) == 0
 
     result = await client.get_resources_in_version(
-        env.id, version, filter={"resource_type": ["Directory"], "resource_id_value": "5"}
+        env.id, version, filter={"resource_type": ["NullResource"], "resource_id_value": "1"}
+    )
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+
+    result = await client.get_resources_in_version(
+        env.id, version, filter={"resource_type": ["NullResource"], "resource_id_value": "dir5"}
     )
     assert result.code == 200
     assert len(result.result["data"]) == 1
