@@ -154,7 +154,8 @@ async def test_list_attr_diff(client, environment, env_with_versions):
         "from_value": ["std::testing::NullResource[internal,name=dir1]"],
         "to_value": ["std::testing::NullResource[internal,name=dir1]", "std::testing::NullResource[internal,name=dir2]"],
         "from_value_compare": '[\n    "std::testing::NullResource[internal,name=dir1]"\n]',
-        "to_value_compare": '[\n    "std::testing::NullResource[internal,name=dir1]",\n    "std::testing::NullResource[internal,name=dir2]"\n'
+        "to_value_compare": '[\n    "std::testing::NullResource[internal,name=dir1]",\n    '
+        '"std::testing::NullResource[internal,name=dir2]"\n'
         "]",
     }
     v2_v3_diff = result.result["data"][0]["attributes"]

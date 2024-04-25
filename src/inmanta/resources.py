@@ -492,7 +492,8 @@ class Id:
 
     def __init__(self, entity_type: str, agent_name: str, attribute: str, attribute_value: str, version: int = 0) -> None:
         """
-        :attr entity_type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::testing::NullResource`.
+        :attr entity_type: The resource type, as defined in the configuration model.
+            For example :inmanta:entity:`std::testing::NullResource`.
         :attr agent_name: The agent responsible for this resource.
         :attr attribute: The key attribute that uniquely identifies this resource on the agent
         :attr attribute_value: The corresponding value for this key attribute.

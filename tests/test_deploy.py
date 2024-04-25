@@ -35,7 +35,7 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db, default_main_file: bool, c
     """
     # TODO: when agentconfig deploys no longer require an agent restart, define a new agent. Currently this makes the
     # test to slow.
-    code = f"""
+    code = """
         import std::testing
         file = std::testing::NullResource(name="test")
     """

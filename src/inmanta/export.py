@@ -19,7 +19,6 @@
 import argparse
 import base64
 import logging
-import os
 import time
 import uuid
 from collections.abc import Sequence
@@ -36,7 +35,6 @@ from inmanta.const import ResourceState
 from inmanta.data.model import PipConfig, ResourceVersionIdStr
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance
-from inmanta.execute.util import Unknown
 from inmanta.module import Project
 from inmanta.protocol import Result
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
