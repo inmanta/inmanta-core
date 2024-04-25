@@ -1582,8 +1582,8 @@ def monkey_patch_compiler_service(monkeypatch, server, make_compile_fail, runner
     async def _run(compile: data.Compile) -> None:
         compilerslice._running_compiles[compile.environment] = compile
         await original_run(compile)
-        async with compilerslice._write_lock_compiling_envs:
-            if compile.environment not in compilerslice._compiling_envs:
+        async with compilerslice._write_lock_env_to_compile_task:
+            if compile.environment not in compilerslice._env_to_compile_task:
                 # Clear self._running_compiles iff the compiler service has deleted the environment from the compiling
                 # environments set.
                 del compilerslice._running_compiles[compile.environment]
