@@ -2,11 +2,11 @@
 
 
 
-
-{% if data['module_compatibility_ranges']%}
-
-
 .. only:: iso
+
+    {% if data['module_compatibility_ranges']%}
+
+
 
     Module compatibility ranges
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -58,10 +58,9 @@
         The compatible ranges for these modules (and other less commonly used modules) is available in a
         machine-consumable format in the `compatibility.json <./compatibility.json>`_ file.
 
-{% endif %}
+    {% endif %}
 
 
-.. only:: iso
 
     {% if data['python_package_constraints'] %}
 
@@ -84,25 +83,3 @@
 
     {% endif %}
 
-.. only:: oss
-
-    {% if data['python_package_constraints'] %}
-
-    .. note::
-
-        To conveniently install the latest compatible versions for all the python components that make up the
-        ``inmanta OSS`` product version |release|,
-        install the ``inmanta`` package via the following command:
-
-        .. code-block:: sh
-            :substitutions:
-
-            pip install inmanta~=|release|
-
-        If for some reason (e.g. when developing an Inmanta extension) you need to rely on the version of one or more of
-        these python components specifically, make sure you take into account the following constraints:
-        `requirements.txt <./requirements.txt>`_. These constraints are also available in json format in the
-        `compatibility.json <./compatibility.json>`_ file.
-
-
-    {% endif %}
