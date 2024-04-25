@@ -21,7 +21,7 @@ import warnings
 from tornado.httpclient import AsyncHTTPClient
 
 import toml
-from inmanta.logging import InmantaLoggerConfig, Options
+from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 
 """
@@ -764,10 +764,6 @@ def log_state_tcp_ports(request, log_file):
 async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
     reset_metrics()
 
-    # Setup default logging
-    inmanta_logger_config = InmantaLoggerConfig.get_instance()
-    inmanta_logger_config.apply_options(Options())
-
     with tempfile.TemporaryDirectory() as state_dir:
         port = str(unused_tcp_port_factory())
 
@@ -804,7 +800,7 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
 
     try:
         await ibl.start()
@@ -891,7 +887,7 @@ async def server_multi(
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
 
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
 
         try:
             await ibl.start()
@@ -1805,7 +1801,7 @@ async def migrate_db_from(
         await PGRestore(fh.readlines(), postgresql_client).run()
         logger.debug("Restored %s", marker.args[0])
 
-    bootloader: InmantaBootloader = InmantaBootloader()
+    bootloader: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
     async def migrate() -> None:
         # start boatloader, triggering db migration

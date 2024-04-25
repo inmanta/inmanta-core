@@ -86,10 +86,14 @@ class InmantaBootloader:
     # Cache field for available extensions
     AVAILABLE_EXTENSIONS: Optional[dict[str, str]] = None
 
-    def __init__(self) -> None:
+    def __init__(self, configure_logging: bool = False) -> None:
         self.restserver = Server()
         self.started = False
         self.feature_manager: Optional[FeatureManager] = None
+
+        if configure_logging:
+            inmanta_logger_config = inmanta_logging.InmantaLoggerConfig.get_instance()
+            inmanta_logger_config.apply_options(inmanta_logging.Options())
 
     async def start(self) -> None:
         db_wait_time: int = config.db_wait_time.get()

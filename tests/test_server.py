@@ -914,7 +914,7 @@ async def test_get_param(server, client, environment, tz_aware_timestamp: bool):
 
 async def test_server_logs_address(server_config, caplog, async_finalizer):
     with caplog.at_level(logging.INFO):
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
         async_finalizer.add(partial(ibl.stop, timeout=15))
         await ibl.start()
 
@@ -967,7 +967,7 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
     monkeypatch.setattr("asyncpg.connect", mock_asyncpg_connect)
     caplog.set_level(logging.INFO)
     caplog.clear()
-    ibl: InmantaBootloader = InmantaBootloader()
+    ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
     start_task: asyncio.Task = asyncio.create_task(ibl.start())
     await start_task
 
@@ -992,7 +992,7 @@ async def test_bootlader_connect_running_db(server_config, postgres_db, caplog, 
     config.Config.set("database", "wait_time", db_wait_time)
     caplog.set_level(logging.INFO)
     caplog.clear()
-    ibl: InmantaBootloader = InmantaBootloader()
+    ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
     await ibl.start()
     await ibl.stop(timeout=15)
 
