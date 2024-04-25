@@ -314,7 +314,7 @@ async def env_with_resources(server, client):
             "/etc/deployed_only_in_earlier_version",
             ResourceState.deployed,
             3,
-            {"key7": "val7", "requires": ["std::testing::NullResource[internal,name=requirement_in_later_version]"]},
+            {"key7": "val7", "requires": ["std::testing::NullResource[internal,name=/etc/requirement_in_later_version]"]},
         )
     )
 
@@ -408,7 +408,7 @@ async def env_with_resources(server, client):
         "never_deployed": "std::testing::NullResource[internal,name=/etc/never_deployed]",
         "deployed_only_with_different_hash": "std::testing::NullResource[internal,name=/etc/deployed_only_with_different_hash]",
         "deployed_only_in_earlier_version": "std::testing::NullResource[internal,name=/etc/deployed_only_in_earlier_version]",
-        "orphaned_and_requires_orphaned": "std::testing::NullResource[internal,name=/etc/orphaned]",
+        "orphaned_and_requires_orphaned": "std::testing::NullResource[internal,name=/tmp/orphaned]",
     }
 
     yield env, cm_times, ids, resources, deploy_times
@@ -507,4 +507,6 @@ async def test_resource_details(server, client, env_with_resources):
     assert result.result["data"]["first_generated_version"] == 3
     assert result.result["data"]["status"] == "orphaned"
     await assert_matching_attributes(result.result["data"], resources[env.id][orphaned][0])
-    assert result.result["data"]["requires_status"] == {"std::testing::NullResource[internal,name=orphaned_req]": "orphaned"}
+    assert result.result["data"]["requires_status"] == {
+        "std::testing::NullResource[internal,name=/tmp/orphaned_req]": "orphaned"
+    }
