@@ -190,12 +190,15 @@ def test_index_on_subtype(snippetcompiler):
 
 
 def test_index_on_subtype2(snippetcompiler):
-    # TODO
     snippetcompiler.setup_for_snippet(
         """
-        host = std::Host(name="a",os=std::linux)
-        a=std::DefaultDirectory(host=host,path="/etc")
-        b=std::Directory(host=host,path="/etc",mode=755 ,group="root",owner="root" )
+        import std::testing
+
+        entity NullResourceBis extends std::testing::NullResource:
+        end
+
+        a=std::testing::NullResource(name="test")
+        b=NullResourceBis(name="test")
     """
     )
     with pytest.raises(DuplicateException):

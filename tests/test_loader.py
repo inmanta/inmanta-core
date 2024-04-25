@@ -48,7 +48,6 @@ def get_module_source(module: str, code: str) -> ModuleSource:
 
 
 def test_code_manager(tmpdir: py.path.local):
-    # TODO
     """Verify the code manager"""
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
@@ -65,7 +64,7 @@ def test_code_manager(tmpdir: py.path.local):
 
     mgr = loader.CodeManager()
     mgr.register_code("std::testing::NullResource", single.MyHandler)
-    mgr.register_code("std::Directory", multi.MyHandler)
+    mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
 
     def assert_content(source_info: SourceInfo, handler) -> str:
         filename = inspect.getsourcefile(handler)
@@ -80,10 +79,10 @@ def test_code_manager(tmpdir: py.path.local):
     # get types
     types = dict(mgr.get_types())
     assert "std::testing::NullResource" in types
-    assert "std::Directory" in types
+    assert "multiple_plugin_files::NullResourceBis" in types
 
     single_type_list: list[SourceInfo] = types["std::testing::NullResource"]
-    multi_type_list: list[SourceInfo] = types["std::Directory"]
+    multi_type_list: list[SourceInfo] = types["multiple_plugin_files::NullResourceBis"]
 
     assert len(single_type_list) == 1
     single_content: str = assert_content(single_type_list[0], single.MyHandler)

@@ -2065,7 +2065,6 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
 
 
 async def test_code(init_dataclasses_and_load_schema):
-    # TODO
     project = data.Project(name="test")
     await project.insert()
 
@@ -2086,7 +2085,7 @@ async def test_code(init_dataclasses_and_load_schema):
     code1 = data.Code(environment=env.id, resource="std::testing::NullResource", version=version, source_refs={"ref": "ref"})
     await code1.insert()
 
-    code2 = data.Code(environment=env.id, resource="std::Directory", version=version, source_refs={})
+    code2 = data.Code(environment=env.id, resource="std::testing::NullResourceBis", version=version, source_refs={})
     await code2.insert()
 
     version2 = version + 1
@@ -2100,7 +2099,7 @@ async def test_code(init_dataclasses_and_load_schema):
     )
     await cm2.insert()
 
-    code3 = data.Code(environment=env.id, resource="std::Directory", version=version2, source_refs={})
+    code3 = data.Code(environment=env.id, resource="std::testing::NullResourceBis", version=version2, source_refs={})
     await code3.insert()
 
     # Test behavior of copy_versions. Create second environment to verify the method is restricted to the first one
@@ -2124,7 +2123,7 @@ async def test_code(init_dataclasses_and_load_schema):
     code_file = await data.Code.get_version(env.id, version, "std::testing::NullResource")
     assert_match_code(code_file, code1)
 
-    code_directory = await data.Code.get_version(env.id, version, "std::Directory")
+    code_directory = await data.Code.get_version(env.id, version, "std::testing::NullResourceBis")
     assert_match_code(code_directory, code2)
 
     code_test = await data.Code.get_version(env.id, version, "std::Test")
