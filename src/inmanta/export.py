@@ -690,16 +690,3 @@ class export:  # noqa: N801
         """
         Exporter.add(self.name, self.types, function)
         return function
-
-
-@export("dump", "std::Service")
-def export_dumpfiles(exporter: Exporter, types: ProxiedType) -> None:
-    prefix = "dump"
-
-    if not os.path.exists(prefix):
-        os.mkdir(prefix)
-
-    path = os.path.join(prefix, "services")
-    with open(path, "w+", encoding="utf-8") as fd:
-        for svc in types["std::Service"]:
-            fd.write(f"{svc.host.name} -> {svc.name}\n")  # type: ignore
