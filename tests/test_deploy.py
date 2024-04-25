@@ -29,6 +29,7 @@ from inmanta import deploy
 
 @pytest.mark.parametrize("default_main_file", [True, False])
 def test_deploy(snippetcompiler, tmpdir, postgres_db, default_main_file: bool):
+    # TODO
     """
     Test the deploy command. The default_main_file parameter checks that the deploy command accepts
     files other than `main.cf` through its `-f` cli option.
@@ -65,6 +66,7 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db, default_main_file: bool):
 
 @pytest.mark.slowtest
 def test_deploy_with_non_default_config(snippetcompiler, tmpdir) -> None:
+    # TODO symlink
     """
     Ensure that configuration options set in one of the inmanta configuration
     files cannot make the `inmanta deploy` fail.

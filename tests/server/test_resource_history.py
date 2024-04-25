@@ -491,7 +491,7 @@ async def test_history_not_continuous_versions(server, client, environment):
             is_suitable_for_partial_compiles=False,
         ).insert()
         await factory.create_resource(
-            "/tmp/dir1/file1",
+            "file1",
             ResourceState.deployed,
             version,
             {
@@ -499,7 +499,7 @@ async def test_history_not_continuous_versions(server, client, environment):
             },
         )
 
-    result = await client.resource_history(environment, "std::File[internal,path=/tmp/dir1/file1]")
+    result = await client.resource_history(environment, "std::testing::NullResource[internal,name=file1]")
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    assert result.result["data"][0]["attributes"] == {"key1": "val1", "path": "/tmp/dir1/file1", "version": 1}
+    assert result.result["data"][0]["attributes"] == {"key1": "val1", "name": "file1", "version": 1}

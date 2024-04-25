@@ -50,7 +50,8 @@ def test_issue_121_non_matching_index(snippetcompiler):
 def test_issue_122_index_inheritance(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-entity Repository extends std::File:
+import std::testing
+entity Repository extends std::testing::NullResource:
     string name
     bool gpgcheck=false
     bool enabled=true
@@ -82,7 +83,7 @@ Repository(host=h1, name="demo", baseurl="http://example.com")
         compiler.do_compile()
         raise AssertionError("Should get exception")
     except TypingException as e:
-        assert e.location.lnr == 25
+        assert e.location.lnr == 26
 
 
 def test_issue_140_index_error(snippetcompiler):

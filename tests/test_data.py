@@ -196,13 +196,13 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
 
         resource_ids = []
         for i in range(5):
-            path = "/etc/file" + str(i)
-            key = "std::File[agent1,path=" + path + "]"
-            res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"path": path})
+            name = "file" + str(i)
+            key = "std::testing::NullResource[agent1,name=" + name + "]"
+            res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
             await res1.insert()
             resource_ids.append((res1.environment, res1.resource_version_id))
 
-        code = data.Code(version=version, resource="std::File", environment=env.id)
+        code = data.Code(version=version, resource="std::testing::NullResource", environment=env.id)
         await code.insert()
 
         unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
@@ -308,13 +308,16 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
 
     resource_ids = []
     for i in range(5):
-        path = "/etc/file" + str(i)
-        key = "std::File[agent1,path=" + path + "]"
-        res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"path": path})
+        name = "file" + str(i)
+        key = "std::testing::NullResource[agent1,name=" + name + "]"
+        res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
         await res1.insert()
         resource_ids.append((res1.environment, res1.resource_version_id))
 
-    resource_version_ids = [f"std::File[agent1,path=/etc/file0],v={version}", f"std::File[agent1,path=/etc/file1],v={version}"]
+    resource_version_ids = [
+        f"std::testing::NullResource[agent1,name=file0],v={version}",
+        f"std::testing::NullResource[agent1,name=file1],v={version}",
+    ]
     resource_action = data.ResourceAction(
         environment=env.id,
         version=version,
@@ -325,7 +328,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     )
     await resource_action.insert()
 
-    code = data.Code(version=version, resource="std::File", environment=env.id)
+    code = data.Code(version=version, resource="std::testing::NullResource", environment=env.id)
     await code.insert()
 
     unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
@@ -763,8 +766,8 @@ async def test_config_model(init_dataclasses_and_load_schema):
     await cm.insert()
 
     # create resources
-    key = "std::File[agent1,path=/etc/motd]"
-    res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"path": "/etc/motd"})
+    key = "std::testing::NullResource[agent1,name=motd]"
+    res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": "motd"})
     await res1.insert()
 
     agents = await data.ConfigurationModel.get_agents(env.id, version)
@@ -861,9 +864,9 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
 
     assert cm.done == 0
 
-    path = "/etc/file"
-    key = "std::File[agent1,path=" + path + "]"
-    resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"path": path})
+    name = "file"
+    key = "std::testing::NullResource[agent1,name=" + name + "]"
+    resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
     await resource.insert()
 
     assert cm.done == 0
@@ -906,9 +909,9 @@ async def test_model_mark_done_if_done(init_dataclasses_and_load_schema, resourc
 
     assert cm.done == 0
 
-    path = "/etc/file"
-    key = "std::File[agent1,path=" + path + "]"
-    resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"path": path})
+    name = "file"
+    key = "std::testing::NullResource[agent1,path=" + name + "]"
+    resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
     await resource.insert()
 
     assert not cm.deployed
@@ -1659,23 +1662,23 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
 
     res1_1 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/file1"},
+        attributes={"name": "file1"},
     )
     await res1_1.insert()
 
-    await assert_expected_count({"std::File": 1})  # 1 File resource in model v1
+    await assert_expected_count({"std::testing::NullResource": 1})  # 1 NullResource resource in model v1
 
     res2_1 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/file2"},
+        attributes={"name": "file2"},
     )
     await res2_1.insert()
 
-    await assert_expected_count({"std::File": 2})  # 2 File resources in model v1
+    await assert_expected_count({"std::testing::NullResource": 2})  # 2 File resources in model v1
 
     version += 1
     cm2 = data.ConfigurationModel(
@@ -1692,13 +1695,13 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
 
     res2_2 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/file2"},
+        attributes={"name": "file2"},
     )
     await res2_2.insert()
 
-    await assert_expected_count({"std::File": 1})  # 1 File resource in model v2
+    await assert_expected_count({"std::testing::NullResource": 1})  # 1 File resource in model v2
 
     res3_2 = data.Resource.new(
         environment=env.id,
@@ -1707,7 +1710,9 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     )
     await res3_2.insert()
 
-    await assert_expected_count({"std::File": 1, "std::Dummy": 1})  # 1 File resource and 1 Dummy resource in model v2
+    await assert_expected_count(
+        {"std::testing::NullResource": 1, "std::Dummy": 1}
+    )  # 1 File resource and 1 Dummy resource in model v2
 
 
 async def test_resources_report(init_dataclasses_and_load_schema):
@@ -1733,18 +1738,18 @@ async def test_resources_report(init_dataclasses_and_load_schema):
 
     res11 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/file1"},
+        attributes={"name": "file1"},
     )
     await res11.insert()
     await res11.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 12, 30))
 
     res12 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/file2"},
+        attributes={"name": "file2"},
     )
     await res12.insert()
     await res12.update_persistent_state(
@@ -1767,17 +1772,17 @@ async def test_resources_report(init_dataclasses_and_load_schema):
     await cm2.insert()
     res21 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
         status=const.ResourceState.available,
-        attributes={"path": "/etc/file1"},
+        attributes={"name": "file1"},
     )
     await res21.insert()
 
     res22 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file3],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent1,name=file3],v=%s" % version,
         status=const.ResourceState.available,
-        attributes={"path": "/etc/file3"},
+        attributes={"name": "file3"},
     )
     await res22.insert()
 
@@ -1797,9 +1802,9 @@ async def test_resources_report(init_dataclasses_and_load_schema):
 
     res31 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/file2"},
+        attributes={"name": "file2"},
     )
     await res31.insert()
     await res31.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 14, 30))
@@ -1808,29 +1813,31 @@ async def test_resources_report(init_dataclasses_and_load_schema):
     assert len(report) == 3
     report_as_map = {x["resource_id"]: x for x in report}
     for i in range(1, 4):
-        assert f"std::File[agent1,path=/etc/file{i}]" in report_as_map
+        assert f"std::testing::NullResource[agent1,name=file{i}]" in report_as_map
 
-    assert report_as_map["std::File[agent1,path=/etc/file1]"]["resource_type"] == "std::File"
-    assert report_as_map["std::File[agent1,path=/etc/file1]"]["deployed_version"] == 1
-    assert report_as_map["std::File[agent1,path=/etc/file1]"]["latest_version"] == 2
+    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["resource_type"] == "std::testing::NullResource"
+    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["deployed_version"] == 1
+    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["latest_version"] == 2
     assert (
-        report_as_map["std::File[agent1,path=/etc/file1]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 12, 30).astimezone()
+        report_as_map["std::testing::NullResource[agent1,name=file1]"]["last_deploy"]
+        == datetime.datetime(2018, 7, 14, 12, 30).astimezone()
     )
-    assert report_as_map["std::File[agent1,path=/etc/file1]"]["agent"] == "agent1"
+    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["agent"] == "agent1"
 
-    assert report_as_map["std::File[agent1,path=/etc/file2]"]["resource_type"] == "std::File"
-    assert report_as_map["std::File[agent1,path=/etc/file2]"]["deployed_version"] == 3
-    assert report_as_map["std::File[agent1,path=/etc/file2]"]["latest_version"] == 3
+    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["resource_type"] == "std::testing::NullResource"
+    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["deployed_version"] == 3
+    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["latest_version"] == 3
     assert (
-        report_as_map["std::File[agent1,path=/etc/file2]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 14, 30).astimezone()
+        report_as_map["std::testing::NullResource[agent1,name=file2]"]["last_deploy"]
+        == datetime.datetime(2018, 7, 14, 14, 30).astimezone()
     )
-    assert report_as_map["std::File[agent1,path=/etc/file2]"]["agent"] == "agent1"
+    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["agent"] == "agent1"
 
-    assert report_as_map["std::File[agent1,path=/etc/file3]"]["resource_type"] == "std::File"
-    assert report_as_map["std::File[agent1,path=/etc/file3]"]["deployed_version"] is None
-    assert report_as_map["std::File[agent1,path=/etc/file3]"]["latest_version"] == 2
-    assert report_as_map["std::File[agent1,path=/etc/file3]"]["last_deploy"] is None
-    assert report_as_map["std::File[agent1,path=/etc/file3]"]["agent"] == "agent1"
+    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["resource_type"] == "std::testing::NullResource"
+    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["deployed_version"] is None
+    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["latest_version"] == 2
+    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["last_deploy"] is None
+    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["agent"] == "agent1"
 
 
 async def test_resource_action(init_dataclasses_and_load_schema):
@@ -1859,23 +1866,26 @@ async def test_resource_action(init_dataclasses_and_load_schema):
 
     res1 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+        resource_version_id="std::testing::NullResource[agent1,name=file1],v=1",
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/file2"},
+        attributes={"name": "file2"},
     )
     await res1.insert()
 
     res2 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file2],v=1",
+        resource_version_id="std::testing::NullResource[agent1,name=file2],v=1",
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/file2"},
+        attributes={"name": "file2"},
     )
     await res2.insert()
 
     now = datetime.datetime.now().astimezone()
     action_id = uuid.uuid4()
-    resource_version_ids = ["std::File[agent1,path=/etc/file1],v=1", "std::File[agent1,path=/etc/file2],v=1"]
+    resource_version_ids = [
+        "std::testing::NullResource[agent1,name=file1],v=1",
+        "std::testing::NullResource[agent1,name=file2],v=1",
+    ]
     resource_action = data.ResourceAction(
         environment=env.id,
         version=version,
@@ -1939,12 +1949,12 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    rv_id = f"std::File[agent1,path=/etc/motd],v={version}"
+    rv_id = f"std::testing::NullResource[agent1,name=motd],v={version}"
     res1 = data.Resource.new(
         environment=env.id,
         resource_version_id=rv_id,
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/file2"},
+        attributes={"name": "file2"},
     )
     await res1.insert()
 
@@ -1999,7 +2009,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
         assert action.messages[0]["level"] == LogLevel.INFO.name
 
     # Get logs for non-existing resource_version_id
-    resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent11,path=/etc/motd],v=1")
+    resource_actions = await data.ResourceAction.get_log(env.id, "std::testing::NullResource[agent11,name=motd],v=1")
     assert len(resource_actions) == 0
 
     resource_actions = await data.ResourceAction.get_logs_for_version(env.id, version)
@@ -2034,9 +2044,9 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
 
     res1 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+        resource_version_id="std::testing::NullResource[agent1,name=file1],v=1",
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/file2"},
+        attributes={"name": "file2"},
     )
     await res1.insert()
 
@@ -2072,7 +2082,7 @@ async def test_code(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    code1 = data.Code(environment=env.id, resource="std::File", version=version, source_refs={"ref": "ref"})
+    code1 = data.Code(environment=env.id, resource="std::testing::NullResource", version=version, source_refs={"ref": "ref"})
     await code1.insert()
 
     code2 = data.Code(environment=env.id, resource="std::Directory", version=version, source_refs={})
@@ -2096,7 +2106,7 @@ async def test_code(init_dataclasses_and_load_schema):
     env2 = data.Environment(name="dev2", project=project.id, repo_url="", repo_branch="")
     await env2.insert()
     await data.ConfigurationModel(environment=env2.id, version=code3.version, is_suitable_for_partial_compiles=False).insert()
-    await data.Code(environment=env2.id, resource="std::File", version=code3.version, source_refs={}).insert()
+    await data.Code(environment=env2.id, resource="std::testing::NullResource", version=code3.version, source_refs={}).insert()
     await data.Code.copy_versions(env.id, code3.version, code3.version + 1)
 
     def assert_match_code(code1, code2):
@@ -2110,7 +2120,7 @@ async def test_code(init_dataclasses_and_load_schema):
         ]
         assert len(shared_keys_source_refs) == len(code1.source_refs.keys())
 
-    code_file = await data.Code.get_version(env.id, version, "std::File")
+    code_file = await data.Code.get_version(env.id, version, "std::testing::NullResource")
     assert_match_code(code_file, code1)
 
     code_directory = await data.Code.get_version(env.id, version, "std::Directory")
@@ -2247,7 +2257,7 @@ async def test_dryrun(init_dataclasses_and_load_schema):
 
     dryrun = await data.DryRun.create(env.id, version, 10, 5)
 
-    resource_version_id = "std::File[agent1,path=/etc/motd],v=%s" % version
+    resource_version_id = "std::testing::NullResource[agent1,name=motd],v=%s" % version
     dryrun_data = {"id": resource_version_id, "changes": {}}
     await data.DryRun.update_resource(dryrun.id, resource_version_id, dryrun_data)
 
@@ -2482,9 +2492,9 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
 
         res1 = data.Resource.new(
             environment=env.id,
-            resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+            resource_version_id="std::testing::NullResource[agent1,name=file1],v=1",
             status=const.ResourceState.deployed,
-            attributes={"path": "/etc/file2"},
+            attributes={"name": "file2"},
         )
         await res1.insert()
 
@@ -2506,9 +2516,9 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
 
         res2 = data.Resource.new(
             environment=env.id,
-            resource_version_id="std::File[agent1,path=/etc/file2],v=1",
+            resource_version_id="std::testing::NullResource[agent1,name=file2],v=1",
             status=const.ResourceState.deployed,
-            attributes={"path": "/etc/file2"},
+            attributes={"name": "file2"},
         )
         await res2.insert()
 
@@ -2582,7 +2592,7 @@ async def test_resources_json(init_dataclasses_and_load_schema):
 
     res1 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
         status=const.ResourceState.deployed,
         attributes={"attr": [{"a": 1, "b": "c"}]},
     )
@@ -2648,12 +2658,12 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     # Add resource action for motd
     motd_first_start_time = datetime.datetime.now()
 
-    async def make_file_resourceaction(version, offset=0, path="/etc/motd", log_level=logging.INFO):
+    async def make_file_resourceaction(version, offset=0, name="motd", log_level=logging.INFO):
         res1 = data.Resource.new(
             environment=env.id,
-            resource_version_id=f"std::File[agent1,path={path}],v={version}",
+            resource_version_id=f"std::testing::NullResource[agent1,name={name}],v={version}",
             status=const.ResourceState.deployed,
-            attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
+            attributes={"attr": [{"a": 1, "b": "c"}], "name": name},
         )
         await res1.insert()
         action_id = uuid.uuid4()
@@ -2677,9 +2687,9 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     # Add resource for file
     resource_ids = []
     for i in range(5):
-        path = "/etc/file" + str(i)
-        key = "std::File[agent1,path=" + path + "]"
-        res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"path": path})
+        name = "file" + str(i)
+        key = "std::testing::NullResource[agent1,name=" + name + "]"
+        res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
         await res1.insert()
         resource_ids.append((res1.environment, res1.resource_version_id))
 
@@ -2688,7 +2698,7 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
         resource_action = data.ResourceAction(
             environment=env.id,
             version=version,
-            resource_version_ids=[f"std::File[agent1,path=/etc/file{str(i)}],v={version}"],
+            resource_version_ids=[f"std::testing::NullResource[agent1,name=file{str(i)}],v={version}"],
             action_id=uuid.uuid4(),
             action=const.ResourceAction.dryrun,
             started=datetime.datetime.now() + datetime.timedelta(minutes=i),
@@ -2726,15 +2736,15 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     await resource_action.insert()
 
     # Get all versions of the "/etc/motd" file
-    resource_actions = await data.ResourceAction.query_resource_actions(env.id, attribute="path", attribute_value="/etc/motd")
+    resource_actions = await data.ResourceAction.query_resource_actions(env.id, attribute="name", attribute_value="motd")
     assert len(resource_actions) == 11
 
     # Get everything that starts with "/etc/file"
-    resource_actions = await data.ResourceAction.query_resource_actions(env.id, attribute="path", attribute_value="/etc/file")
+    resource_actions = await data.ResourceAction.query_resource_actions(env.id, attribute="name", attribute_value="file")
     assert len(resource_actions) == 5
 
     # Get all files
-    resource_actions = await data.ResourceAction.query_resource_actions(env.id, resource_type="std::File")
+    resource_actions = await data.ResourceAction.query_resource_actions(env.id, resource_type="std::testing::NullResource")
     assert len(resource_actions) == 16
 
     # Get everything from agent 2
@@ -2746,15 +2756,17 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     assert len(resource_actions) == 2
 
     # Get only the last 5 file resource actions
-    resource_actions = await data.ResourceAction.query_resource_actions(env.id, resource_type="std::File", limit=5)
+    resource_actions = await data.ResourceAction.query_resource_actions(
+        env.id, resource_type="std::testing::NullResource", limit=5
+    )
     assert len(resource_actions) == 5
 
     # Query actions older than the first
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
-        resource_type="std::File",
-        attribute="path",
-        attribute_value="/etc/motd",
+        resource_type="std::testing::NullResource",
+        attribute="name",
+        attribute_value="motd",
         limit=5,
         last_timestamp=motd_first_start_time,
     )
@@ -2763,9 +2775,9 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     # Query the latest actions
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
-        resource_type="std::File",
-        attribute="path",
-        attribute_value="/etc/motd",
+        resource_type="std::testing::NullResource",
+        attribute="name",
+        attribute_value="motd",
         limit=5,
         last_timestamp=motd_first_start_time + datetime.timedelta(minutes=12),
     )
@@ -2775,9 +2787,9 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     # Continue from the last one's timestamp
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
-        resource_type="std::File",
-        attribute="path",
-        attribute_value="/etc/motd",
+        resource_type="std::testing::NullResource",
+        attribute="name",
+        attribute_value="motd",
         limit=5,
         last_timestamp=resource_actions[-1].started,
     )
@@ -2787,9 +2799,9 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     # Query with first_timestamp
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
-        resource_type="std::File",
-        attribute="path",
-        attribute_value="/etc/motd",
+        resource_type="std::testing::NullResource",
+        attribute="name",
+        attribute_value="motd",
         limit=5,
         first_timestamp=motd_first_start_time - datetime.timedelta(milliseconds=1),
     )
@@ -2840,9 +2852,9 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     for i in range(1, 12):
         res1 = data.Resource.new(
             environment=env.id,
-            resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
+            resource_version_id="std::testing::NullResource[agent1,name=motd],v=%s" % str(i),
             status=const.ResourceState.deployed,
-            attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
+            attributes={"attr": [{"a": 1, "b": "c"}], "name": "motd"},
         )
         await res1.insert()
 
@@ -2852,7 +2864,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     resource_action = data.ResourceAction(
         environment=env.id,
         version=1,
-        resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={1}"],
+        resource_version_ids=[f"std::testing::NullResource[agent1,name=motd],v={1}"],
         action_id=earliest_action_id,
         action=const.ResourceAction.deploy,
         started=motd_first_start_time - datetime.timedelta(minutes=1),
@@ -2868,7 +2880,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         resource_action = data.ResourceAction(
             environment=env.id,
             version=i,
-            resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={i}"],
+            resource_version_ids=[f"std::testing::NullResource[agent1,name=motd],v={i}"],
             action_id=action_id,
             action=const.ResourceAction.deploy,
             started=motd_first_start_time,
@@ -2884,7 +2896,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         resource_action = data.ResourceAction(
             environment=env.id,
             version=i,
-            resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={i}"],
+            resource_version_ids=[f"std::testing::NullResource[agent1,name=motd],v={i}"],
             action_id=action_id,
             action=const.ResourceAction.deploy,
             started=motd_first_start_time + datetime.timedelta(minutes=i),
@@ -2897,9 +2909,9 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     # Query actions with pagination, going backwards in time
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
-        resource_type="std::File",
-        attribute="path",
-        attribute_value="/etc/motd",
+        resource_type="std::testing::NullResource",
+        attribute="name",
+        attribute_value="motd",
         limit=2,
         last_timestamp=motd_first_start_time + datetime.timedelta(minutes=6),
     )
@@ -2908,9 +2920,9 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     # Querying pages based on last_timestamp and action_id from the previous query
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
-        resource_type="std::File",
-        attribute="path",
-        attribute_value="/etc/motd",
+        resource_type="std::testing::NullResource",
+        attribute="name",
+        attribute_value="motd",
         limit=2,
         action_id=resource_actions[1].action_id,
         last_timestamp=resource_actions[1].started,
@@ -2919,9 +2931,9 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     assert [resource_action.action_id for resource_action in resource_actions] == action_ids_with_the_same_timestamp[2:4]
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
-        resource_type="std::File",
-        attribute="path",
-        attribute_value="/etc/motd",
+        resource_type="std::testing::NullResource",
+        attribute="name",
+        attribute_value="motd",
         limit=2,
         action_id=resource_actions[1].action_id,
         last_timestamp=resource_actions[1].started,
@@ -2935,9 +2947,9 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     # Query actions going forward in time
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
-        resource_type="std::File",
-        attribute="path",
-        attribute_value="/etc/motd",
+        resource_type="std::testing::NullResource",
+        attribute="name",
+        attribute_value="motd",
         limit=4,
         first_timestamp=motd_first_start_time - datetime.timedelta(seconds=30),
     )
@@ -2946,9 +2958,9 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     # Page forward in time
     resource_actions = await data.ResourceAction.query_resource_actions(
         env.id,
-        resource_type="std::File",
-        attribute="path",
-        attribute_value="/etc/motd",
+        resource_type="std::testing::NullResource",
+        attribute="name",
+        attribute_value="motd",
         limit=4,
         action_id=resource_actions[0].action_id,
         first_timestamp=resource_actions[0].started,
@@ -2980,10 +2992,10 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     cm = data.ConfigurationModel(version=1, environment=env.id, is_suitable_for_partial_compiles=False)
     await cm.insert()
 
-    rid_r1_v1 = "std::File[agent1,path=/etc/file1]"
-    rid_r2_v1 = "std::File[agent1,path=/etc/file2]"
-    rid_r3_v1 = "std::File[agent1,path=/etc/file3]"
-    rid_r4_v1 = "std::File[agent1,path=/etc/file4]"
+    rid_r1_v1 = "std::testing::NullResource[agent1,name=file1]"
+    rid_r2_v1 = "std::testing::NullResource[agent1,name=file2]"
+    rid_r3_v1 = "std::testing::NullResource[agent1,name=file3]"
+    rid_r4_v1 = "std::testing::NullResource[agent1,name=file4]"
 
     rvid_r1_v1 = rid_r1_v1 + ",v=1"
     rvid_r2_v1 = rid_r2_v1 + ",v=1"
@@ -3046,14 +3058,14 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     cm = data.ConfigurationModel(version=2, environment=env.id, is_suitable_for_partial_compiles=False)
     await cm.insert()
 
-    rid_r2_v2 = "std::File[agent1,path=/etc/file2]"
-    rid_r3_v2 = "std::File[agent1,path=/etc/file3]"
+    rid_r2_v2 = "std::testing::NullResource[agent1,name=file2]"
+    rid_r3_v2 = "std::testing::NullResource[agent1,name=file3]"
 
-    rvid_r1_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file1],v=2")
-    rvid_r2_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file2],v=2")
-    rvid_r3_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file3],v=2")
-    rvid_r4_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file4],v=2")
-    rvid_r5_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file5],v=2")
+    rvid_r1_v2 = cast(ResourceVersionIdStr, "std::testing::NullResource[agent1,name=file1],v=2")
+    rvid_r2_v2 = cast(ResourceVersionIdStr, "std::testing::NullResource[agent1,name=file2],v=2")
+    rvid_r3_v2 = cast(ResourceVersionIdStr, "std::testing::NullResource[agent1,name=file3],v=2")
+    rvid_r4_v2 = cast(ResourceVersionIdStr, "std::testing::NullResource[agent1,name=file4],v=2")
+    rvid_r5_v2 = cast(ResourceVersionIdStr, "std::testing::NullResource[agent1,name=file5],v=2")
 
     await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.skipped,

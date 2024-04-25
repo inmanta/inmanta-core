@@ -63,10 +63,10 @@ async def env_with_resources(server, client):
             )
             await res.insert()
 
-    await create_resource("agent1", "/etc/file1", "std::File", [1, 2, 3])
-    await create_resource("agent1", "/etc/file2", "std::File", [1, 2])
-    await create_resource("agent2", "/etc/file3", "std::File", [2])
-    await create_resource("agent2", "/tmp/file4", "std::File", [3])
+    await create_resource("agent1", "file1", "std::testing::NullResource", [1, 2, 3])
+    await create_resource("agent1", "file2", "std::testing::NullResource", [1, 2])
+    await create_resource("agent2", "file3", "std::testing::NullResource", [2])
+    await create_resource("agent2", "file4", "std::testing::NullResource", [3])
     await create_resource("agent2", "/tmp/dir5", "std::Directory", [3])
     await create_resource("agent2", "/tmp/dir6", "std::Directory", [3])
     await create_resource("agent2", "/tmp/dir7", "std::Directory", [3])
@@ -84,8 +84,8 @@ async def env_with_resources(server, client):
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
-    await create_resource("agent1", "/tmp/file7", "std::File", [3], environment=env2.id)
-    await create_resource("agent1", "/tmp/file2", "std::File", [3], environment=env2.id)
+    await create_resource("agent1", "file7", "std::testing::NullResource", [3], environment=env2.id)
+    await create_resource("agent1", "file2", "std::testing::NullResource", [3], environment=env2.id)
 
     yield env
 

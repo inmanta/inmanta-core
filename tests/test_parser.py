@@ -346,7 +346,7 @@ end
     statements = parse_code(
         """
 implementation test for Test:
-    std::File(attr="a")
+    std::testing::NullResource(attr="a")
     var = hello::func("world")
 end
 """

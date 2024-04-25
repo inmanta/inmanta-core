@@ -63,7 +63,7 @@ def test_code_manager(tmpdir: py.path.local):
     import inmanta_plugins.single_plugin_file as single
 
     mgr = loader.CodeManager()
-    mgr.register_code("std::File", single.MyHandler)
+    mgr.register_code("std::testing::NullResource", single.MyHandler)
     mgr.register_code("std::Directory", multi.MyHandler)
 
     def assert_content(source_info: SourceInfo, handler) -> str:
@@ -78,10 +78,10 @@ def test_code_manager(tmpdir: py.path.local):
 
     # get types
     types = dict(mgr.get_types())
-    assert "std::File" in types
+    assert "std::testing::NullResource" in types
     assert "std::Directory" in types
 
-    single_type_list: list[SourceInfo] = types["std::File"]
+    single_type_list: list[SourceInfo] = types["std::testing::NullResource"]
     multi_type_list: list[SourceInfo] = types["std::Directory"]
 
     assert len(single_type_list) == 1
