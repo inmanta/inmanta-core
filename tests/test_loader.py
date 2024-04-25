@@ -65,7 +65,7 @@ def test_code_manager(tmpdir: py.path.local):
 
     mgr = loader.CodeManager()
     mgr.register_code("std::testing::NullResource", single.MyHandler)
-    mgr.register_code("std::testing::NullResource", multi.MyHandler)
+    mgr.register_code("std::Directory", multi.MyHandler)
 
     def assert_content(source_info: SourceInfo, handler) -> str:
         filename = inspect.getsourcefile(handler)

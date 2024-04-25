@@ -280,10 +280,10 @@ async def test_versioned_resource_details(server, client, env_with_resources):
     resource_id = result.result["data"][0]["resource_id"]
     result = await client.versioned_resource_details(env_with_resources.id, version=2, rid=resource_id)
     assert result.code == 200
-    assert result.result["data"]["attributes"] == {"name": "file1", "v": 2, "version": 2}
+    assert result.result["data"]["attributes"] == {"name": "/etc/file1", "v": 2, "version": 2}
     result = await client.versioned_resource_details(env_with_resources.id, version=3, rid=resource_id)
     assert result.code == 200
-    assert result.result["data"]["attributes"] == {"name": "file1", "v": 3, "version": 3}
+    assert result.result["data"]["attributes"] == {"name": "/etc/file1", "v": 3, "version": 3}
     result = await client.versioned_resource_details(env_with_resources.id, version=4, rid=resource_id)
     assert result.code == 404
 
