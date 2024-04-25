@@ -1777,7 +1777,7 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     resource_id = f"std::testing::NullResource[agent4,name={name}]"
 
     await data.Resource.new(
-        environment=env1.id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"path": path}
+        environment=env1.id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"name": name}
     ).insert()
 
     # should get purged

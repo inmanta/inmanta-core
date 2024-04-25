@@ -52,25 +52,25 @@ async def env_with_resources(server, client):
         )
         await cm.insert()
 
-    async def create_resource(agent: str, path: str, resource_type: str, versions: list[int], environment: UUID = env.id):
+    async def create_resource(agent: str, name: str, resource_type: str, versions: list[int], environment: UUID = env.id):
         for version in versions:
-            key = f"{resource_type}[{agent},path={path}]"
+            key = f"{resource_type}[{agent},name={name}]"
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-                attributes={"path": path, "v": version, "version": version},
+                attributes={"name": name, "v": version, "version": version},
                 status=ResourceState.deployed,
             )
             await res.insert()
 
-    await create_resource("agent1", "file1", "std::testing::NullResource", [1, 2, 3])
-    await create_resource("agent1", "file2", "std::testing::NullResource", [1, 2])
-    await create_resource("agent2", "file3", "std::testing::NullResource", [2])
-    await create_resource("agent2", "file4", "std::testing::NullResource", [3])
-    await create_resource("agent2", "dir5", "std::testing::NullResource", [3])
-    await create_resource("agent2", "dir6", "std::testing::NullResource", [3])
-    await create_resource("agent2", "dir7", "std::testing::NullResource", [3])
-    await create_resource("agent3", "dir8", "std::testing::NullResource", [3])
+    await create_resource("agent1", "/etc/file1", "std::testing::NullResource", [1, 2, 3])
+    await create_resource("agent1", "/etc/file2", "std::testing::NullResource", [1, 2])
+    await create_resource("agent2", "/etc/file3", "std::testing::NullResource", [2])
+    await create_resource("agent2", "/tmp/file4", "std::testing::NullResource", [3])
+    await create_resource("agent2", "/tmp/dir5", "std::testing::NullResource", [3])
+    await create_resource("agent2", "/tmp/dir6", "std::testing::NullResource", [3])
+    await create_resource("agent2", "/tmp/dir7", "std::testing::NullResource", [3])
+    await create_resource("agent3", "/tmp/dir8", "std::testing::NullResource", [3])
 
     env2 = data.Environment(name="dev-test2", project=project.id, repo_url="", repo_branch="")
     await env2.insert()
@@ -84,8 +84,8 @@ async def env_with_resources(server, client):
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
-    await create_resource("agent1", "file7", "std::testing::NullResource", [3], environment=env2.id)
-    await create_resource("agent1", "file2", "std::testing::NullResource", [3], environment=env2.id)
+    await create_resource("agent1", "/tmp/file7", "std::testing::NullResource", [3], environment=env2.id)
+    await create_resource("agent1", "/tmp/file2", "std::testing::NullResource", [3], environment=env2.id)
 
     yield env
 
@@ -111,12 +111,12 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
-    result = await client.get_resources_in_version(env.id, version, filter={"resource_id_value": ["/etc/file1"]})
+    result = await client.get_resources_in_version(env.id, version, filter={"resource_id_value": ["file1"]})
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
     # Partial match
-    result = await client.get_resources_in_version(env.id, version, filter={"resource_id_value": ["/etc/file"]})
+    result = await client.get_resources_in_version(env.id, version, filter={"resource_id_value": ["file"]})
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
@@ -269,15 +269,15 @@ async def test_filter_validation(server, client, env_with_resources):
 
 
 async def test_versioned_resource_details(server, client, env_with_resources):
-    result = await client.get_resources_in_version(env_with_resources.id, version=3, sort="resource_id_value.asc")
+    result = await client.get_resources_in_version(env_with_resources.id, version=3, filter={"resource_id_value": ["file1"]})
     assert result.code == 200
     resource_id = result.result["data"][0]["resource_id"]
     result = await client.versioned_resource_details(env_with_resources.id, version=2, rid=resource_id)
     assert result.code == 200
-    assert result.result["data"]["attributes"] == {"path": "/etc/file1", "v": 2, "version": 2}
+    assert result.result["data"]["attributes"] == {"name": "file1", "v": 2, "version": 2}
     result = await client.versioned_resource_details(env_with_resources.id, version=3, rid=resource_id)
     assert result.code == 200
-    assert result.result["data"]["attributes"] == {"path": "/etc/file1", "v": 3, "version": 3}
+    assert result.result["data"]["attributes"] == {"name": "file1", "v": 3, "version": 3}
     result = await client.versioned_resource_details(env_with_resources.id, version=4, rid=resource_id)
     assert result.code == 404
 

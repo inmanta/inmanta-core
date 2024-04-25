@@ -235,12 +235,12 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 2
 
-    result = await client.resource_list(env.id, filter={"resource_id_value": ["/etc/file1"]})
+    result = await client.resource_list(env.id, filter={"resource_id_value": ["file1"]})
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
     # Partial match
-    result = await client.resource_list(env.id, filter={"resource_id_value": ["/etc/file"]})
+    result = await client.resource_list(env.id, filter={"resource_id_value": ["file"]})
     assert result.code == 200
     assert len(result.result["data"]) == 3
 
@@ -248,7 +248,7 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
-    result = await client.resource_list(env.id, filter={"resource_id_value": ["/etc/file", "/tmp/file"]})
+    result = await client.resource_list(env.id, filter={"resource_id_value": ["file", "file"]})
     assert result.code == 200
     assert len(result.result["data"]) == 4
 
