@@ -30,7 +30,7 @@
       constraint file for each ISO version in which the compatible module ranges are specified.
 
 
-    {% set list_only = ["lsm", "std"] %}
+    {% set list_only = ["inmanta-module-lsm", "inmanta-module-std"] %}
 
 
     The table below shows the most relevant modules. These are the most commonly used ones, and they also happen
@@ -46,7 +46,7 @@
 
        {% for key, value in data["module_compatibility_ranges"]  | dictsort %}
        {% if key in list_only %}
-       * - {{ key }}
+       * - {{ key.split("inmanta-module-")[1] }}
          - .. centered:: {{ value }}
        {% endif %}
        {% endfor %}
