@@ -810,7 +810,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                 finally:
                     if finish_current_compile and not started_new_compile_run:
                         assert environment is not None
-                        del self._env_to_compile_task[environment]
+                        self._env_to_compile_task.pop(environment, None)
 
     async def _notify_listeners(self, compile: data.Compile) -> None:
         async def notify(listener: CompileStateListener) -> None:
@@ -1092,15 +1092,21 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         will not start the execution of a new compile, if a compile request would be present in the compile
         queue for the given environment.
 
+        pre-condition: The given environment is halted.
+
         :param env_id: The id of the environment for which the compile should be cancelled.
         """
         async with self._write_lock_env_to_compile_task:
             compile_task: Optional[asyncio.Task[None | protocol.Result]] = self._env_to_compile_task.pop(env_id, None)
-            if compile_task:
-                compile_task.cancel()
-                try:
-                    # Wait until cancellation has finished
-                    await compile_task
-                except asyncio.CancelledError:
-                    # Don't propagate CancelledError raised by invoking compile_task.cancel()
-                    pass
+        if compile_task:
+            # We cancel the compile_task outside of the self._write_lock_env_to_compile_task lock to prevent lock contention.
+            # This is only safe if no new compiles can be scheduled on the given environment, otherwise there is the
+            # possibility that multiple compiles run concurrently on the same environment. Hence the pre-condition that
+            # this method can only be called on halted environments.
+            compile_task.cancel()
+            try:
+                # Wait until cancellation has finished
+                await compile_task
+            except asyncio.CancelledError:
+                # Don't propagate CancelledError raised by invoking compile_task.cancel()
+                pass

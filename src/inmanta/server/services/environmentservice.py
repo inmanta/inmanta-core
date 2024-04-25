@@ -552,6 +552,8 @@ class EnvironmentService(protocol.ServerSlice):
                     LOGGER.info("Halting environment %s for clear operation", str(env.id))
                     await self._halt(env, connection=connection, delete_agent_venv=True)
 
+                # Keep this method call under the self.environment_state_operation_lock lock, because cancel_compile()
+                # must be called on halted environments only.
                 await self.compiler_service.cancel_compile(env.id)
                 # Delete the environment directory before deleting the database records. This ensures that
                 # this operation can be retried if the deletion of the environment directory fails. Otherwise,
