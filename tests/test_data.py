@@ -1701,7 +1701,7 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     )
     await res2_2.insert()
 
-    await assert_expected_count({"std::testing::NullResource": 1})  # 1 File resource in model v2
+    await assert_expected_count({"std::testing::NullResource": 1})  # 1 NullResource resource in model v2
 
     res3_2 = data.Resource.new(
         environment=env.id,
