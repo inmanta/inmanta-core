@@ -1,24 +1,36 @@
 .. -*- mode: rst -*-
 
+{% if data['system_requirements']%}
 
 System requirements
 ~~~~~~~~~~~~~~~~~~~
 
 
-{% if data['system_requirements']%}
+.. only:: iso
+
+    The table below shows the system requirements of version |version_major| of the Inmanta Service Orchestrator.
+
+
+.. only:: oss
+
+    The table below shows the system requirements of Inmanta OSS version |release|.
+
+
+{% set display_key = ({"python_version":"Python","rhel_versions": "RHEL","postgres_version":"PostgreSQL"}) %}
+
 .. list-table:: System requirements
    :header-rows: 1
 
-   * - .. centered:: Component
-     - .. centered:: Required version
+   * - Component
+     - Required version
 
    {% for key, value in data["system_requirements"] | dictsort %}
-   * - .. centered:: {{ key }}
+   * - {{ display_key[key] }}
      - .. centered:: {{ value }}
    {% endfor %}
-{% endif %}
 
 .. note::
 
     This information is also available in a machine-consumable format in the `compatibility.json <./compatibility.json>`_ file.
 
+{% endif %}
