@@ -1,39 +1,84 @@
 .. -*- mode: rst -*-
 
-Inmanta core and extensions versions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The orchestrator is constituted of several components (python packages and npm packages).
-The python packages are of two types: one core package and several extension packages.
-
-{% if data['component_requirements']%}
-
-The following table shows the ranges of the Inmanta Python components, this product version is compatible with.
-The lower bound of these version constraints will remain the same for the whole lifetime of this major version. Upper bounds may be added when a new major version is released.
-
-This table is only meant as a reference for developers of Inmanta extensions and is meant to be used as input to a
-dependency resolver e.g. pip to ensure the resulting versions are compatible.
-This information is not relevant when installing the orchestrator via RPM as is recommended
-in the :ref:`install-server` section.
-
-.. list-table:: Inmanta core and extensions versions
-   :header-rows: 1
-
-   * - .. centered:: Component
-     - .. centered:: Required version
-
-   {% for key, value in data["component_requirements"] | dictsort %}
-   * - .. centered:: {{ key }}
-     - .. centered:: {{ value }}
-   {% endfor %}
-
-.. note::
-
-    This information is also available as a constraints file in `requirements.components.txt <./requirements.components.txt>`_
-    and in json format in the `compatibility.json <./compatibility.json>`_ file.
 
 
-{% else %}
-Python components are not pinned for major version |version_major| because it is not released yet.
-{% endif %}
+.. only:: iso
+
+    {% if data['module_compatibility_ranges']%}
+
+
+
+    Module compatibility ranges
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    We develop and distribute some core modules alongside the product. For these modules, we uphold the same
+    compatibility guarantees as for the product itself. Therefore, some versions of a module may be developed
+    for a specific version of the product (e.g. a breaking change in a module is intended only for the next major
+    iso release).
+
+    We achieve this by using a specific module versioning scheme, and we accompany each iso version
+    with a compatibility range for each of these core modules. This compatibility range declares which versions
+    of each module have been developed and tested for this product version. This does not mean that other versions
+    will not work, only that they may not.
+
+    For stability reasons, when you depend on these modules, make sure you use the appropriate
+    versions for the iso version you're using. This can be achieved one of two ways:
+
+
+    - Using a specific pip index (or git repos) per ISO version and making sure it only contains the compatible versions of the modules. e.g. the indexes we make available for an iso version only contain compatible module versions.
+    - Using a generic pip index (or git repos) containing module versions for different ISO versions and adding a
+      constraint file for each ISO version in which the compatible module ranges are specified.
+
+
+    {% set list_only = ["inmanta-module-lsm", "inmanta-module-std"] %}
+
+
+    The table below shows the most relevant modules. These are the most commonly used ones, and they also happen
+    to be the ones that integrate tightly with the orchestrator (and are therefore the most sensitive to changes
+    in the orchestrator). These are the module versions that are compatible with version |version_major| of
+    the Inmanta Service Orchestrator:
+
+    .. list-table:: Modules
+       :header-rows: 1
+
+       * - Module
+         - Compatible range
+
+       {% for key, value in data["module_compatibility_ranges"]  | dictsort %}
+       {% if key in list_only %}
+       * - {{ key.split("inmanta-module-")[1] }}
+         - .. centered:: {{ value }}
+       {% endif %}
+       {% endfor %}
+
+
+    .. note::
+
+        The compatible ranges for these modules (and other less commonly used modules) is available in a
+        machine-consumable format in the `compatibility.json <./compatibility.json>`_ file.
+
+    {% endif %}
+
+
+
+    {% if data['python_package_constraints'] %}
+
+    .. note::
+
+        To conveniently install the latest compatible versions for all the python components that make up the
+        ``inmanta-service-orchestrator`` product version |version_major|,
+        install the ``inmanta-service-orchestrator`` package via the following command:
+
+        .. code-block:: sh
+            :substitutions:
+
+            pip install inmanta-service-orchestrator~=|version_major|.0
+
+        If for some reason (e.g. when developing an Inmanta extension) you need to rely on the version of one or more of
+        these python components specifically, make sure you take into account the following constraints:
+        `requirements.txt <./requirements.txt>`_. These constraints are also available in json format in the
+        `compatibility.json <./compatibility.json>`_ file.
+
+
+    {% endif %}
 
