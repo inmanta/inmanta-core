@@ -1,0 +1,6 @@
+---
+description: "Fix bug that makes the endpoints to clear or delete an environment fail with the error message `(39, 'Directory not empty')`"
+change-type: patch
+destination-branches: [iso6]
+sections:
+  bugfix: "{{description}}"

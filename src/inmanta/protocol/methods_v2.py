@@ -285,7 +285,7 @@ def environment_decommission(id: uuid.UUID, metadata: Optional[model.ModelMetada
 )
 def environment_clear(id: uuid.UUID) -> None:
     """
-    Clear all data from this environment.
+    Clear all data from this environment. The environment will be temporarily halted during the decommissioning process.
 
     :param id: The uuid of the environment.
 
