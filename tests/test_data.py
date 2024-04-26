@@ -1678,7 +1678,7 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     )
     await res2_1.insert()
 
-    await assert_expected_count({"std::testing::NullResource": 2})  # 2 File resources in model v1
+    await assert_expected_count({"std::testing::NullResource": 2})  # 2 NullResource resources in model v1
 
     version += 1
     cm2 = data.ConfigurationModel(
@@ -1701,7 +1701,7 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     )
     await res2_2.insert()
 
-    await assert_expected_count({"std::testing::NullResource": 1})  # 1 File resource in model v2
+    await assert_expected_count({"std::testing::NullResource": 1})  # 1 NullResource resource in model v2
 
     res3_2 = data.Resource.new(
         environment=env.id,
@@ -1712,7 +1712,7 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
 
     await assert_expected_count(
         {"std::testing::NullResource": 1, "std::Dummy": 1}
-    )  # 1 File resource and 1 Dummy resource in model v2
+    )  # 1 NullResource resource and 1 Dummy resource in model v2
 
 
 async def test_resources_report(init_dataclasses_and_load_schema):
