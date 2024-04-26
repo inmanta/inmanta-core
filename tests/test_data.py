@@ -1712,7 +1712,7 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
 
     await assert_expected_count(
         {"std::testing::NullResource": 1, "std::Dummy": 1}
-    )  # 1 File resource and 1 Dummy resource in model v2
+    )  # 1 NullResource resource and 1 Dummy resource in model v2
 
 
 async def test_resources_report(init_dataclasses_and_load_schema):
