@@ -37,7 +37,7 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db, default_main_file: bool, c
     # test to slow.
     code = """
         import std::testing
-        file = std::testing::NullResource(name="test")
+        test_resource = std::testing::NullResource(name="test")
     """
 
     main_file = "main.cf" if default_main_file else "other.cf"
