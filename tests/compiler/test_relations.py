@@ -478,7 +478,7 @@ def test_set_wrong_relation_type(snippetcompiler):
         entity Credentials:
         end
 
-        Credentials.file [1] -- std::testing::NullResource
+        Credentials.test_resource [1] -- std::testing::NullResource
 
         implement Credentials using std::none
 
