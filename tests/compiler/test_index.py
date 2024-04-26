@@ -51,31 +51,19 @@ def test_issue_122_index_inheritance(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 import std::testing
-entity Repository extends std::testing::NullResource:
-    string name
-    bool gpgcheck=false
+entity TestResource extends std::testing::NullResource:
     bool enabled=true
-    string baseurl
-    string gpgkey=""
-    int metadata_expire=7200
-    bool send_event=true
+    string attr1
 end
 
-implementation redhatRepo for Repository:
-    self.mode = 644
-    self.owner = "root"
-    self.group = "root"
-
-    self.path = "/etc/yum.repos.d/{{ name }}.repo"
-    self.content = "{{name}}"
+implementation testRes for TestResource:
+    self.name = "test"
 end
 
-implement Repository using redhatRepo
+implement TestResource using testRes
 
-h1 = std::Host(name="test", os=std::linux)
-
-Repository(host=h1, name="demo", baseurl="http://example.com")
-Repository(host=h1, name="demo", baseurl="http://example.com")
+TestResource(agentname="agent1", attr1="hello")
+TestResource(agentname="agent1", attr1="hello")
         """
     )
 
@@ -197,8 +185,8 @@ def test_index_on_subtype2(snippetcompiler):
         entity NullResourceBis extends std::testing::NullResource:
         end
 
-        a=std::testing::NullResource(name="test")
-        b=NullResourceBis(name="test")
+        a=std::testing::NullResource(name="test", agentname="agent")
+        b=NullResourceBis(name="test", agentname="agent")
     """
     )
     with pytest.raises(DuplicateException):

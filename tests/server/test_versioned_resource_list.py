@@ -67,10 +67,10 @@ async def env_with_resources(server, client):
     await create_resource("agent1", "/etc/file2", "std::testing::NullResource", [1, 2])
     await create_resource("agent2", "/etc/file3", "std::testing::NullResource", [2])
     await create_resource("agent2", "/tmp/file4", "std::testing::NullResource", [3])
-    await create_resource("agent2", "/tmp/dir5", "std::testing::NullResource", [3])
-    await create_resource("agent2", "/tmp/dir6", "std::testing::NullResource", [3])
-    await create_resource("agent2", "/tmp/dir7", "std::testing::NullResource", [3])
-    await create_resource("agent3", "/tmp/dir8", "std::testing::NullResource", [3])
+    await create_resource("agent2", "/tmp/dir5", "std::testing::NullResourceBis", [3])
+    await create_resource("agent2", "/tmp/dir6", "std::testing::NullResourceBis", [3])
+    await create_resource("agent2", "/tmp/dir7", "std::testing::NullResourceBis", [3])
+    await create_resource("agent3", "/tmp/dir8", "std::testing::NullResourceBis", [3])
 
     env2 = data.Environment(name="dev-test2", project=project.id, repo_url="", repo_branch="")
     await env2.insert()
@@ -128,6 +128,9 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 2
 
+    result = await client.get_resources_in_version(env.id, version, filter={"resource_type": ["NullResourceBis"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 4
     result = await client.get_resources_in_version(env.id, version, filter={"resource_type": ["NullResource"]})
     assert result.code == 200
     assert len(result.result["data"]) == 6
