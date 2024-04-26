@@ -82,8 +82,8 @@ end
 """
     )
     (types, _) = compiler.do_compile()
-    files = types["std::testing::NullResource"].get_all_instances()
-    assert len(files) == 1
+    test_resources = types["std::testing::NullResource"].get_all_instances()
+    assert len(test_resources) == 1
 
 
 def test_implements_inheritance(snippetcompiler):
