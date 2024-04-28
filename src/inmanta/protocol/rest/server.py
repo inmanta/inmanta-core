@@ -65,17 +65,26 @@ class RESTHandler(tornado.web.RequestHandler):
         """
         Get the auth token provided by the caller. The token is provided as a bearer token.
         """
-        if "Authorization" not in headers:
+        header_name = server_config.server_jwt_header.get()
+        if header_name not in headers:
             return None
 
-        parts = headers["Authorization"].split(" ")
-        if len(parts) != 2 or parts[0].lower() != "bearer":
-            LOGGER.warning(
-                "Invalid authentication header, Inmanta expects a bearer token. (%s was provided)", headers["Authorization"]
-            )
-            return None
+        header_value = headers[header_name]
+        if " " in header_value:
+            parts = header_value.split(" ")
 
-        return auth.decode_token(parts[1])
+            if len(parts) != 2 or parts[0].lower() != "bearer":
+                LOGGER.warning(
+                    f"Invalid JWT token header ({header_name})."
+                    f"A bearer token is expected, instead ({header_value} was provided)"
+                )
+                return None
+
+            token_value = parts[1]
+        else:
+            token_value = header_value
+
+        return auth.decode_token(token_value)
 
     def prepare(self) -> None:
         # Setting "Access-Control-Allow-Origin": null can be exploited.

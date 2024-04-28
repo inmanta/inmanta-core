@@ -120,7 +120,7 @@ class UserService(server_protocol.ServerSlice):
         token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims={"sub": username})
         return common.ReturnValue(
             status_code=200,
-            headers={"Authentication": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}"},
             response=model.LoginReturn(
                 user=user.to_dao(),
                 token=token,

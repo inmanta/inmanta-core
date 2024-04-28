@@ -128,6 +128,7 @@ server_tz_aware_timestamps = Option(
 
 server_enable_auth = Option("server", "auth", False, "Enable authentication on the server API", is_bool)
 server_auth_method = Option("server", "auth_method", "oidc", "The authentication method to use: oidc or database", is_str)
+server_jwt_header = Option("server", "jwt_header", "Authorization", "The header in which we can find the JWT token.")
 
 server_ssl_key = Option(
     "server", "ssl_key_file", None, "Server private key to use for this server Leave blank to disable SSL", is_str_opt
