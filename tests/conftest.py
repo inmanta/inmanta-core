@@ -21,6 +21,7 @@ import warnings
 from tornado.httpclient import AsyncHTTPClient
 
 import toml
+from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 
@@ -1875,6 +1876,17 @@ async def set_running_tests():
     Ensure the RUNNING_TESTS variable is True when running tests
     """
     inmanta.RUNNING_TESTS = True
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def set_caplog_fixture_used(request):
+    """
+    Make the inmanta.logging module aware about the fact that the caplog fixture is used or not.
+    """
+    prev_val = inmanta_logging.CAPLOG_FIXTURE_USED
+    inmanta_logging.CAPLOG_FIXTURE_USED = "caplog" in request.fixturenames
+    yield
+    inmanta_logging.CAPLOG_FIXTURE_USED = prev_val
 
 
 @pytest.fixture(scope="session")

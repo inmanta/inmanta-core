@@ -32,11 +32,15 @@ from typing import Optional, TextIO
 import colorlog
 from colorlog.formatter import LogColors
 
+import inmanta
 from inmanta import config, const
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
 
 LOGGER = logging.getLogger(__name__)
+
+# True iff the tests are run and the current test case is using the caplog fixture.
+CAPLOG_FIXTURE_USED = False
 
 
 def _is_on_tty() -> bool:
@@ -164,7 +168,14 @@ class FullLoggingConfig(LoggingConfigExtension):
         Configure the logging system with this logging config.
         """
         self.ensure_log_dirs()
-        logging.config.dictConfig(self._to_dict_config())
+        dict_config = self._to_dict_config()
+        if inmanta.RUNNING_TESTS and CAPLOG_FIXTURE_USED:
+            # The caplog fixture attaches a handler to the root logger to do its log capturing.
+            # As such, overriding the root logger here would break the caplog fixture. There is also
+            # no need to override it because we want all the logs, handled by the root logger,
+            # to go to caplog when the caplog fixture is used.
+            dict_config.pop("root", None)
+        logging.config.dictConfig(dict_config)
 
     def _to_dict_config(self) -> dict[str, object]:
         """
@@ -313,21 +324,12 @@ class LoggingConfigBuilder:
                         config.log_dir.get(), server_config.server_resource_action_log_prefix.get() + "{child_logger_name}.log"
                     ),
                 },
-                "core_tornado_debug_log_handler": {
-                    "class": "inmanta.logging.TornadoDebugLogHandler",
-                    "level": "DEBUG",
-                },
             },
             loggers={
                 const.NAME_RESOURCE_ACTION_LOGGER: {
                     "level": "DEBUG",
                     "propagate": True,
                     "handlers": ["core_resource_action_handler"],
-                },
-                "tornado.general": {
-                    "level": "DEBUG",
-                    "propagate": False,
-                    "handlers": ["core_tornado_debug_log_handler"],
                 },
             },
             root_handlers={handler_root_logger},
@@ -517,7 +519,7 @@ class InmantaLoggerConfig:
         """
         log_config: FullLoggingConfig = LoggingConfigBuilder().get_bootstrap_logging_config(stream)
         self._stream = stream
-        self._handler: logging.Handler = self._apply_logging_config(log_config)
+        self._handler: Optional[logging.Handler] = self._apply_logging_config(log_config)
         self._options_applied: bool = False
         self._logging_configs_extensions: list[LoggingConfigExtension] = []
 
@@ -580,15 +582,18 @@ class InmantaLoggerConfig:
         )
         self._handler = self._apply_logging_config(logging_config)
 
-    def _apply_logging_config(self, logging_config: FullLoggingConfig) -> logging.Handler:
+    def _apply_logging_config(self, logging_config: FullLoggingConfig) -> Optional[logging.Handler]:
         """
         Apply the given logging_config as the current configuration of the logging system.
 
         This method assume that the given config defines a single root handler.
         """
         logging_config.apply_config()
-        assert len(logging.root.handlers) == 1
-        return logging.root.handlers[0]
+        if inmanta.RUNNING_TESTS and CAPLOG_FIXTURE_USED:
+            return None
+        else:
+            assert len(logging.root.handlers) == 1
+            return logging.root.handlers[0]
 
     @stable_api
     def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:
@@ -600,6 +605,8 @@ class InmantaLoggerConfig:
         :param inmanta_log_level: The inmanta logging level
         :param cli: True if the logs will be outputted to the CLI.
         """
+        if self._handler is None:
+            raise Exception("InmantaLogger.set_log_level() cannot be used together with the caplog fixture.")
         python_log_level = convert_inmanta_log_level(inmanta_log_level, cli)
         self._handler.setLevel(python_log_level)
         logging.root.setLevel(python_log_level)
@@ -611,6 +618,8 @@ class InmantaLoggerConfig:
 
         :param formatter: The log formatter.
         """
+        if self._handler is None:
+            raise Exception("InmantaLogger.set_log_formatter() cannot be used together with the caplog fixture.")
         self._handler.setFormatter(formatter)
 
     @stable_api
@@ -621,6 +630,8 @@ class InmantaLoggerConfig:
 
         :param location: The location of the log file.
         """
+        if self._handler is None:
+            raise Exception("InmantaLogger.set_logfile_location() cannot be used together with the caplog fixture.")
         file_handler = logging.handlers.WatchedFileHandler(filename=location, mode="a+")
         if self._handler:
             self._handler.close()
@@ -635,6 +646,8 @@ class InmantaLoggerConfig:
 
         :return: The logging handler
         """
+        if self._handler is None:
+            raise Exception("InmantaLogger.get_handler() cannot be used together with the caplog fixture.")
         return self._handler
 
     @stable_api
@@ -824,21 +837,3 @@ class ParametrizedFileHandler(logging.Handler):
             handler.setLevel(self.level)
             self.child_handlers[path_logfile] = handler
         self.child_handlers[path_logfile].emit(record)
-
-
-class TornadoDebugLogHandler(logging.Handler):
-    """
-    A custom log handler for Tornados 'max_clients limit reached' debug logs.
-    """
-
-    def __init__(self, level: int = logging.NOTSET) -> None:
-        super().__init__(level)
-        self.logger = logging.getLogger("inmanta.protocol.endpoints")
-
-    def emit(self, record: logging.LogRecord) -> None:
-        if (
-            record.levelno == logging.DEBUG
-            and record.name.startswith("tornado.general")
-            and record.msg.startswith("max_clients limit reached")
-        ):
-            self.logger.warning(record.msg)  # Log Tornado log as inmanta warnings
