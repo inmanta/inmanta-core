@@ -26,7 +26,7 @@ from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, Parame
 from inmanta.data import model
 from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
 from inmanta.protocol import methods
-from inmanta.protocol.common import ReturnValue
+from inmanta.protocol.common import CallContext, ReturnValue
 from inmanta.protocol.decorators import typedmethod
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes
@@ -1487,6 +1487,14 @@ def list_users() -> list[model.User]:
     """List all users
 
     :return: A list of all users"""
+
+
+@typedmethod(path="/current_user", operation="GET", client_types=[ClientType.api], api_version=2)
+def get_current_user(context: CallContext) -> model.CurrentUser:
+    """Get the current logged in user (based on the provided JWT) and server auth settings
+
+    :raises BadRequest: Raised when server authentication is not enabled
+    """
 
 
 @typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)

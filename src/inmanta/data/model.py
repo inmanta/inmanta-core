@@ -729,6 +729,12 @@ class User(BaseModel):
     auth_method: AuthMethod
 
 
+class CurrentUser(BaseModel):
+    """Information about the current logged in user"""
+
+    username: str
+
+
 class LoginReturn(BaseModel):
     """
     Login information

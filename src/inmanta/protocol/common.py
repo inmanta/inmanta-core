@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import dataclasses
 import enum
 import gzip
 import importlib
@@ -64,6 +65,13 @@ OCTET_STREAM_CONTENT = "application/octet-stream"
 ZIP_CONTENT = "application/zip"
 UTF8_CHARSET = "charset=UTF-8"
 HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
+
+
+@dataclasses.dataclass
+class CallContext:
+    """A context variable that provides more information about the current call context"""
+
+    request_headers: dict[str, str]
 
 
 class ArgOption:
@@ -422,6 +430,7 @@ class MethodProperties:
         self.function = function
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
+        self._call_context: Optional[str] = None
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -433,6 +442,11 @@ class MethodProperties:
 
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()
+
+    @property
+    def call_context_var(self) -> Optional[str]:
+        """The name of the argument that should get the call context injected"""
+        return self._call_context
 
     @property
     def varkw(self) -> bool:
@@ -473,7 +487,11 @@ class MethodProperties:
 
         return create_model(
             f"{self.function.__name__}_arguments",
-            **{param.name: to_tuple(param) for param in sig.parameters.values() if param.name != self._varkw_name},
+            **{
+                param.name: to_tuple(param)
+                for param in sig.parameters.values()
+                if param.name != self._varkw_name and param.name != self._call_context
+            },
             __base__=DateTimeNormalizerModel,
         )
 
@@ -574,7 +592,6 @@ class MethodProperties:
         :param allow_none_type: If true, allow `None` as the type for this argument
         :param in_url: This argument is passed in the URL
         """
-
         if typing_inspect.is_new_type(arg_type):
             return self._validate_type_arg(
                 arg,
@@ -656,6 +673,8 @@ class MethodProperties:
         elif allow_none_type and types.issubclass(arg_type, type(None)):
             # A check for optional arguments
             pass
+        elif issubclass(arg_type, CallContext):
+            self._call_context = arg
         else:
             valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])
             raise InvalidMethodDefinition(

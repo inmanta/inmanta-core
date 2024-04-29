@@ -26,7 +26,7 @@ from inmanta import const, data, protocol
 from inmanta.const import MIN_PASSWORD_LENGTH
 from inmanta.data import AuthMethod, model
 from inmanta.protocol import auth, common, exceptions
-from inmanta.server import SLICE_DATABASE, SLICE_TRANSPORT, SLICE_USER
+from inmanta.server import SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT, SLICE_USER
 from inmanta.server import config as server_config
 from inmanta.server import protocol as server_protocol
 
@@ -126,3 +126,7 @@ class UserService(server_protocol.ServerSlice):
                 token=token,
             ),
         )
+
+    @protocol.handle(protocol.methods_v2.get_current_user)
+    async def get_current_user(self) -> model.CurrentUser:
+        return model.CurrentUser(username="test")

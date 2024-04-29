@@ -34,6 +34,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from inmanta import config, const
+from inmanta.server import config as server_config
 
 from . import exceptions
 
@@ -200,6 +201,7 @@ def decode_token(token: str) -> claim_type:
     try:
         # copy the payload and make sure the type is claim_type
         decoded_payload: MutableMapping[str, str | Sequence[str]] = {}
+        unsupported = []
         for k, v in jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]).items():
             match v:
                 case str():
@@ -213,12 +215,16 @@ def decode_token(token: str) -> claim_type:
                             )
                     decoded_payload[k] = v
                 case _:
-                    logging.getLogger(__name__).info(
-                        "Only claims of type string or list of strings are supported. %s is filtered out.", k
-                    )
+                    unsupported.append(k)
+
+        if unsupported:
+            logging.getLogger(__name__).debug(
+                "Only claims of type string or list of strings are supported. %s are filtered out.", ", ".join(unsupported)
+            )
 
         ct_key = const.INMANTA_URN + "ct"
-        decoded_payload[ct_key] = [x.strip() for x in str(payload[ct_key]).split(",")]
+        ct_value = str(payload.get(ct_key, "api"))
+        decoded_payload[ct_key] = [x.strip() for x in ct_value.split(",")]
     except Exception as e:
         raise exceptions.Forbidden(*e.args)
 
@@ -226,6 +232,33 @@ def decode_token(token: str) -> claim_type:
         raise exceptions.Forbidden("The configured claims constraints did not match. See logs for details.")
 
     return decoded_payload
+
+
+def get_auth_token(headers: MutableMapping[str, str]) -> Optional[claim_type]:
+    """Get the auth token provided by the caller and decode it.
+
+    :return: A mapping of claims
+    """
+    header_name = server_config.server_jwt_header.get()
+    if header_name not in headers:
+        return None
+
+    header_value = headers[header_name]
+    if " " in header_value:
+        parts = header_value.split(" ")
+
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            logging.getLogger(__name__).warning(
+                f"Invalid JWT token header ({header_name})."
+                f"A bearer token is expected, instead ({header_value} was provided)"
+            )
+            return None
+
+        token_value = parts[1]
+    else:
+        token_value = header_value
+
+    return decode_token(token_value)
 
 
 #############################
