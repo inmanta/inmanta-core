@@ -556,7 +556,8 @@ class Id:
         """
         String representation for this resource id with the following format:
             <type>[<agent>,<attribute>=<value>]
-            - type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::testing::NullResource`.
+            - type: The resource type, as defined in the configuration model.
+                For example :inmanta:entity:`std::testing::NullResource`.
             - agent: The agent responsible for this resource.
             - attribute: The key attribute that uniquely identifies this resource on the agent
             - value: The corresponding value for this key attribute.

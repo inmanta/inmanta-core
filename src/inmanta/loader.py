@@ -137,7 +137,8 @@ class CodeManager:
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
 
-        :param type_name: The inmanta type name for which the source of type_object will be registered. For example std::testing::NullResource
+        :param type_name: The inmanta type name for which the source of type_object will be registered.
+            For example std::testing::NullResource
         :param instance: An instance for which the code needs to be registered.
         """
         file_name = self.get_object_source(instance)
