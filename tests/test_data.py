@@ -1147,35 +1147,6 @@ async def test_mark_done(init_dataclasses_and_load_schema, resource_state, versi
     assert cm.result == version_state
 
 
-async def populate_model(env_id, version):
-    def get_id(n):
-        return "std::testing::NullResource[agent1,name=%d],v=%s" % (n, version)
-
-    def get_resource(n, depends, status=const.ResourceState.available):
-        requires = [get_id(z) for z in depends]
-        return data.Resource.new(
-            environment=env_id,
-            resource_version_id=get_id(n),
-            status=status,
-            attributes={"name": n, "purge_on_delete": False, "purged": False, "requires": requires},
-        )
-
-    res1 = get_resource(1, [])
-    await res1.insert()
-
-    res2 = get_resource(2, [1])
-    await res2.insert()
-
-    res3 = get_resource(3, [], const.ResourceState.undefined)
-    await res3.insert()
-
-    res4 = get_resource(4, [3])
-    await res4.insert()
-
-    res5 = get_resource(5, [4])
-    await res5.insert()
-
-
 async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_client):
     project = data.Project(name="test")
     await project.insert()
