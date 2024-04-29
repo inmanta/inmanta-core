@@ -4953,27 +4953,31 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
-        status_subquery = """
-        (CASE WHEN
-            (SELECT resource.model < MAX(configurationmodel.version)
-            FROM configurationmodel
-            WHERE configurationmodel.released=TRUE
-            AND environment = $1)
-        THEN 'orphaned'
-        ELSE resource.status::text END
-        ) as status
-        """
+        def status_query(resource_table_name: str) -> str:
+            return f"""
+            (CASE
+               WHEN (SELECT {resource_table_name}.model < MAX(configurationmodel.version)
+                       FROM configurationmodel
+                       WHERE configurationmodel.released=TRUE
+                       AND environment = $1)
+                 THEN 'orphaned'
+               WHEN {resource_table_name}.status::text = 'deploying'
+                 then 'deploying'
+               ELSE ps.last_non_deploying_status::text
+             END
+            ) as status
+            """
 
         query = f"""
         SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
         first.model as first_model, latest.model AS latest_model, latest.resource_id as latest_resource_id,
         latest.resource_type, latest.agent, latest.resource_id_value, ps.last_deploy as latest_deploy, latest.attributes,
-        latest.status
+        {status_query('latest')}
         FROM resource first
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
             (SELECT distinct on (resource_id) resource_id, attribute_hash, model, attributes,
-                resource_type, agent, resource_id_value, {status_subquery}
+                resource_type, agent, resource_id_value,  resource.status as status
                 FROM resource
                 JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
                 WHERE resource.environment = $1 AND resource_id = $2 AND cm.released = TRUE
@@ -5005,11 +5009,12 @@ class Resource(BaseDocument):
         # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
         # fields requires to calculate the status for each resource record, before it is filtered
         status_query = f"""
-        SELECT DISTINCT ON (resource_id) resource_id, {status_subquery}
+        SELECT DISTINCT ON (resource.resource_id) resource.resource_id, {status_query('resource')}
         FROM resource
         INNER JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
-        WHERE resource.environment = $1 AND cm.released = TRUE AND resource_id = ANY($2)
-        ORDER BY resource_id, model DESC;
+        INNER JOIN resource_persistent_state ps on ps.resource_id = resource.resource_id AND resource.environment = ps.environment
+        WHERE resource.environment = $1 AND cm.released = TRUE AND resource.resource_id = ANY($2)
+        ORDER BY resource.resource_id, model DESC;
         """
         status_result = await cls.select_query(status_query, [cls._get_value(env), cls._get_value(requires)], no_obj=True)
 
