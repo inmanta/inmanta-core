@@ -497,7 +497,7 @@ caused by:
         entity Credentials:
         end
 
-        Credentials.file [1] -- std::testing::NullResource
+        Credentials.null_resource [1] -- std::testing::NullResource
 
         implement Credentials using std::none
 
