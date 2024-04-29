@@ -45,6 +45,7 @@ from tornado import web
 
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
+from inmanta.protocol import auth
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
@@ -67,11 +68,15 @@ UTF8_CHARSET = "charset=UTF-8"
 HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
 
 
-@dataclasses.dataclass
 class CallContext:
     """A context variable that provides more information about the current call context"""
 
     request_headers: dict[str, str]
+    auth_token: Optional[auth.claim_type]
+
+    def __init__(self, request_headers: dict[str, str], auth_token: Optional[auth.claim_type]) -> None:
+        self.request_headers = request_headers
+        self.auth_token = auth_token
 
 
 class ArgOption:
@@ -478,6 +483,10 @@ class MethodProperties:
         sig = inspect.signature(self.function)
 
         def to_tuple(param: Parameter) -> tuple[object, Optional[object]]:
+            if param.name == self._call_context:
+                # Special case the call context because we use this both to validate, cast and filter arguments
+                # CallContext is not supported by pydantic and would require arbitrary_types_allowed=True otherwise
+                return (Any, None)
             if param.annotation is Parameter.empty:
                 return (Any, param.default if param.default is not Parameter.empty else None)
             if param.default is not Parameter.empty:
@@ -487,11 +496,7 @@ class MethodProperties:
 
         return create_model(
             f"{self.function.__name__}_arguments",
-            **{
-                param.name: to_tuple(param)
-                for param in sig.parameters.values()
-                if param.name != self._varkw_name and param.name != self._call_context
-            },
+            **{param.name: to_tuple(param) for param in sig.parameters.values() if param.name != self._varkw_name},
             __base__=DateTimeNormalizerModel,
         )
 

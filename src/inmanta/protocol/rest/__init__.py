@@ -246,7 +246,7 @@ class CallArguments:
                 if value is None:
                     value = self.get_default_value(arg, i, defaults_start)
             elif arg == self._properties.call_context_var:
-                value = common.CallContext(request_header=self._headers)
+                value = common.CallContext(request_headers=self._headers, auth_token=self._auth_token)
             else:
                 value = self.get_default_value(arg, i, defaults_start)
 
