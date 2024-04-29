@@ -109,7 +109,7 @@ class LoggingConfigExtension:
                 if not name.startswith(f"{extension_name}_"):
                     raise Exception(
                         f"{logging_config_element.capitalize()} defined in the default logging config of an extension must be"
-                        f" prefixed with `<name-extension>_`. Extension {extension_name} defines a"
+                        f" prefixed with `{extension_name}_`. Extension {extension_name} defines a"
                         f" {logging_config_element[0:-1]} with the invalid name {name}."
                     )
 
