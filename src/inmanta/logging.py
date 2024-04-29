@@ -340,7 +340,6 @@ class LoggingConfigBuilder:
                     "propagate": True,
                     "handlers": ["core_tornado_debug_log_handler"],
                 },
-
             },
             root_handlers={handler_root_logger},
             root_log_level=log_level,
