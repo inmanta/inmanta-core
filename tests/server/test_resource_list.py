@@ -227,7 +227,9 @@ async def env_with_resources(server, client):
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
-    await create_resource("agent2", "file3", "std::testing::NullResource", ResourceState.deployed, [6], environment=env3.id)
+    await create_resource(
+        "agent2", "/etc/file3", "std::testing::NullResource", ResourceState.deployed, [6], environment=env3.id
+    )
 
     yield env
 

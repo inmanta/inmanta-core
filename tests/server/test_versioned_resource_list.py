@@ -278,7 +278,7 @@ async def test_filter_validation(server, client, env_with_resources):
 
 
 async def test_versioned_resource_details(server, client, env_with_resources):
-    result = await client.get_resources_in_version(env_with_resources.id, version=3, filter={"resource_id_value": ["file1"]})
+    result = await client.get_resources_in_version(env_with_resources.id, version=3, sort="resource_id_value.asc")
     assert result.code == 200
     resource_id = result.result["data"][0]["resource_id"]
     result = await client.versioned_resource_details(env_with_resources.id, version=2, rid=resource_id)

@@ -27,11 +27,21 @@ def test_issue_127_default_overrides(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 import std::testing
-f1=std::testing::NullResource(name="test", agentname="agent")
+
+entity NullResourceBis extends std::testing::NullResource:
+    string agentname ="agentbis"
+end
+
+implementation a for NullResourceBis:
+end
+
+implement NullResourceBis using a
+
+f1=NullResourceBis(name="test", agentname="agent")
         """
     )
     (types, _) = compiler.do_compile()
-    instances = types["std::testing::NullResource"].get_all_instances()
+    instances = types["__config__::NullResourceBis"].get_all_instances()
     assert instances[0].get_attribute("agentname").get_value() == "agent"
 
 
