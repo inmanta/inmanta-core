@@ -51,19 +51,20 @@ def test_issue_122_index_inheritance(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 import std::testing
+
 entity TestResource extends std::testing::NullResource:
     bool enabled=true
     string attr1
 end
 
 implementation testRes for TestResource:
-    self.name = "test"
 end
+
+index TestResource(name, agentname, attr1)
 
 implement TestResource using testRes
 
-TestResource(agentname="agent1", attr1="hello")
-TestResource(agentname="agent1", attr1="hello")
+TestResource(name="test",agentname="agent1")
         """
     )
 
@@ -71,7 +72,7 @@ TestResource(agentname="agent1", attr1="hello")
         compiler.do_compile()
         raise AssertionError("Should get exception")
     except TypingException as e:
-        assert e.location.lnr == 26
+        assert e.location.lnr == 16
 
 
 def test_issue_140_index_error(snippetcompiler):
