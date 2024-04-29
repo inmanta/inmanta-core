@@ -246,13 +246,13 @@ async def env_with_resources(server, client):
         "file2",
         ResourceState.deployed,
         2,
-        {"key3": "val3", "requires": ["std::testing::NullResource[internal,path=dir1]"]},
+        {"key3": "val3", "requires": ["std::testing::NullResource[internal,name=dir1]"]},
     )
     await resource_factory.create_resource(
         "file2",
         ResourceState.deployed,
         3,
-        {"key3": "val3", "requires": ["std::testing::NullResource[internal,path=dir1]"]},
+        {"key3": "val3", "requires": ["std::testing::NullResource[internal,name=dir1]"]},
     )
 
     await resource_factory.create_resource(

@@ -1157,7 +1157,7 @@ async def populate_model(env_id, version):
             environment=env_id,
             resource_version_id=get_id(n),
             status=status,
-            attributes={"name": n, "requires": requires},
+            attributes={"name": n, "purge_on_delete": False, "purged": False, "requires": requires},
         )
 
     res1 = get_resource(1, [])

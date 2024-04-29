@@ -478,13 +478,13 @@ def test_set_wrong_relation_type(snippetcompiler):
         entity Credentials:
         end
 
-        Credentials.test_resource [1] -- std::testing::NullResource
+        Credentials.null_resource [1] -- std::testing::NullResource
 
         implement Credentials using std::none
 
-        creds = Credentials(file=creds)
+        creds = Credentials(null_resource=creds)
         """,
-        """Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:10)`"""
+        """Could not set attribute `null_resource` on instance `__config__::Credentials (instantiated at {dir}/main.cf:10)`"""
         """ (reported in Construct(Credentials) ({dir}/main.cf:10))
 caused by:
   Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:10), should be std::testing::NullResource """
@@ -497,16 +497,16 @@ caused by:
         entity Credentials:
         end
 
-        Credentials.file [1] -- std::testing::NullResource
+        Credentials.null_resource [1] -- std::testing::NullResource
 
         implement Credentials using std::none
 
         creds = Credentials()
-        creds.file = creds
+        creds.null_resource = creds
         """,
-        r"""Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:10)` (reported in creds.file = creds ({dir}/main.cf:11))
+        r"""Could not set attribute `null_resource` on instance `__config__::Credentials (instantiated at {dir}/main.cf:10)` (reported in creds.null_resource = creds ({dir}/main.cf:11))
 caused by:
-  Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:10), should be std::testing::NullResource (reported in creds.file = creds ({dir}/main.cf:11))""",  # noqa: E501
+  Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:10), should be std::testing::NullResource (reported in creds.null_resource = creds ({dir}/main.cf:11))""",  # noqa: E501
     )
 
 

@@ -185,8 +185,8 @@ def test_index_on_subtype2(snippetcompiler):
         entity NullResourceBis extends std::testing::NullResource:
         end
 
-        a=std::testing::NullResource(name="test", agentname="agent")
-        b=NullResourceBis(name="test", agentname="agent")
+        a=std::testing::NullResource(name="test", agentname="agent1", fail=false)
+        b=NullResourceBis(name="test", agentname="agent1")
     """
     )
     with pytest.raises(DuplicateException):

@@ -49,7 +49,7 @@ async def populate_facts_and_parameters(client, env_id: str):
             "id": "fact1",
             "source": const.ParameterSource.fact,
             "value": "value1",
-            "resource_id": "std::testing::NullResource[internal,name=test1]",
+            "resource_id": "std::testing::NullResource[localhost,name=test1]",
             "expires": False,
         },
         {
