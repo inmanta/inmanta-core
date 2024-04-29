@@ -4953,7 +4953,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
-        def status_query(resource_table_name: str) -> str:
+        def status_sub_query(resource_table_name: str) -> str:
             return f"""
             (CASE
                WHEN (SELECT {resource_table_name}.model < MAX(configurationmodel.version)
@@ -4972,7 +4972,7 @@ class Resource(BaseDocument):
         SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
         first.model as first_model, latest.model AS latest_model, latest.resource_id as latest_resource_id,
         latest.resource_type, latest.agent, latest.resource_id_value, ps.last_deploy as latest_deploy, latest.attributes,
-        {status_query('latest')}
+        {status_sub_query('latest')}
         FROM resource first
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
@@ -5009,7 +5009,7 @@ class Resource(BaseDocument):
         # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
         # fields requires to calculate the status for each resource record, before it is filtered
         status_query = f"""
-        SELECT DISTINCT ON (resource.resource_id) resource.resource_id, {status_query('resource')}
+        SELECT DISTINCT ON (resource.resource_id) resource.resource_id, {status_sub_query('resource')}
         FROM resource
         INNER JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
         INNER JOIN resource_persistent_state ps on ps.resource_id = resource.resource_id AND resource.environment = ps.environment
