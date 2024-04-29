@@ -324,6 +324,10 @@ class LoggingConfigBuilder:
                         config.log_dir.get(), server_config.server_resource_action_log_prefix.get() + "{child_logger_name}.log"
                     ),
                 },
+                "core_tornado_debug_log_handler": {
+                    "class": "inmanta.logging.TornadoDebugLogHandler",
+                    "level": "DEBUG",
+                },
             },
             loggers={
                 const.NAME_RESOURCE_ACTION_LOGGER: {
@@ -331,6 +335,12 @@ class LoggingConfigBuilder:
                     "propagate": True,
                     "handlers": ["core_resource_action_handler"],
                 },
+                "tornado.general": {
+                    "level": "DEBUG",
+                    "propagate": True,
+                    "handlers": ["core_tornado_debug_log_handler"],
+                },
+
             },
             root_handlers={handler_root_logger},
             root_log_level=log_level,
@@ -837,3 +847,21 @@ class ParametrizedFileHandler(logging.Handler):
             handler.setLevel(self.level)
             self.child_handlers[path_logfile] = handler
         self.child_handlers[path_logfile].emit(record)
+
+
+class TornadoDebugLogHandler(logging.Handler):
+    """
+    A custom log handler for Tornados 'max_clients limit reached' debug logs.
+    """
+
+    def __init__(self, level: int = logging.NOTSET) -> None:
+        super().__init__(level)
+        self.logger = logging.getLogger("inmanta.protocol.endpoints")
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if (
+            record.levelno == logging.DEBUG
+            and record.name.startswith("tornado.general")
+            and record.msg.startswith("max_clients limit reached")
+        ):
+            self.logger.warning(record.msg)  # Log Tornado log as inmanta warnings
