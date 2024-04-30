@@ -25,11 +25,13 @@ from argparse import Namespace
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Optional, TextIO
+import logging.config
 
 import colorlog
+import yaml
 from colorlog.formatter import LogColors
 
-from inmanta import const
+from inmanta import const, config
 from inmanta.stable_api import stable_api
 
 
@@ -57,15 +59,17 @@ log_levels = {
 class Options(Namespace):
     """
     The Options class provides a way to configure the InmantaLoggerConfig with the following attributes:
-    - `log_file`: if this attribute is set, the logs will be written to the specified file instead of the stream
-      specified in `get_instance`.
-    - `log_file_level`: the Inmanta logging level for the file handler (if `log_file` is set).
-        The possible inmanta log levels and their associated python log level are defined in the
-        inmanta.logging.log_levels dictionary.
-    - `verbose`: the verbosity level of the log messages. can be a number from 0 to 4.
-        if a bigger number is provided, 4 will be used. Refer to log_file_level for the explanation of each level.
-        default is 1 (WARNING)
-    - `timed`: if true,  adds the time to the formatter in the log lines.
+
+    :param log_file: if this attribute is set, the logs will be written to the specified file instead of the stream
+                     specified in `get_instance`.
+    :param log_file_level: the Inmanta logging level for the file handler (if `log_file` is set).
+                           The possible inmanta log levels and their associated python log level are defined in the
+                           inmanta.logging.log_levels dictionary.
+    :param verbose: the verbosity level of the log messages. can be a number from 0 to 4.
+                    if a bigger number is provided, 4 will be used. Refer to log_file_level for the explanation of each level.
+                    default is 1 (WARNING)
+    :param timed: if true,  adds the time to the formatter in the log lines.
+    :param logging_config: Path to the dict-based logging config file.
     """
 
     log_file: Optional[str]
@@ -73,6 +77,7 @@ class Options(Namespace):
     verbose: int = 1
     timed: bool = False
     keep_logger_names: bool = False
+    logging_config: Optional[str] = None
 
 
 class LoggerMode(enum.Enum):
@@ -224,16 +229,37 @@ class InmantaLoggerConfig:
             logging.root.removeHandler(cls._instance._handler)
         cls._instance = None
 
-    @stable_api
-    def apply_options(self, options: Options) -> None:
+    def apply_logging_config_from_file(self, path: str) -> None:
         """
-        Apply the logging options to the current handler. A handler should have been created before
+        Apply the dict-based logging config defined in the given file.
+        """
+        with open(path, "r") as fh:
+            dict_content = yaml.safe_load(fh)
+        logging.config.dictConfig(dict_content)
 
-        :param options: The Option object coming from the command line. This function uses the following
-            attributes: log_file, log_file_level, verbose, timed
+    def _get_logging_config_file(self, options: Options) -> Optional[str]:
         """
-        if self._options_applied:
-            raise Exception("Options can only be applied once to a handler.")
+        Fetch the value of the logging_config configuration option. The
+        configuration options are considered in the following order:
+           1. The --logging-config CLI option.
+           2. The INMANTA_CONFIG_LOGGING_CONFIG environment variable.
+           3. The logging_config option in the config files.
+        """
+        if options.logging_config:
+            return options.logging_config
+        return config.logging_config.get()
+
+    def _apply_logging_config_from_file(self, config_file: str) -> None:
+        if not os.path.isfile(config_file):
+            raise Exception(f"File {}")
+        with open(config_file, "r") as fh:
+            dict_config = yaml.safe_load(fh)
+            try:
+                logging.config.dictConfig(dict_config)
+            except yaml.YAMLError:
+
+
+    def _apply_logging_config_from_options(self, options: Options) -> None:
         self._options_applied = True
         self._keep_logger_names = options.keep_logger_names
         log_file = options.log_file
@@ -257,6 +283,23 @@ class InmantaLoggerConfig:
             )
             self.set_log_formatter(formatter)
             self.set_log_level(str(options.verbose))
+
+    @stable_api
+    def apply_options(self, options: Options) -> None:
+        """
+        Apply the logging options to the current handler. A handler should have been created before
+
+        :param options: The Option object coming from the command line. This function uses the following
+            attributes: log_file, log_file_level, verbose, timed
+        """
+        if self._options_applied:
+            raise Exception("Options can only be applied once to a handler.")
+
+        logging_config_file: Optional[str] = self._get_logging_config_file(options)
+        if logging_config_file:
+            self._apply_logging_config_from_file(logging_config_file)
+        else:
+            self._apply_logging_config_from_options(options)
 
     def configure_file_logger(self, log_file: str, inmanta_log_level: str) -> None:
         self.set_logfile_location(log_file)
