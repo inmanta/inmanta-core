@@ -438,7 +438,8 @@ class CallArguments:
 
             else:
                 raise exceptions.ServerError(
-                    f"Method {self._config.method_name} returned an invalid result {result} instead of a BaseModel or ReturnValue"
+                    f"Method {self._config.method_name} returned an invalid result {result} "
+                    "instead of a BaseModel or ReturnValue"
                 )
 
         else:  # "old" style method definition
@@ -470,7 +471,8 @@ class CallArguments:
             return common.Response.create(ReturnValue(status_code=code, response=None), envelope=False)
 
     def authenticate(self, auth_enabled: bool) -> None:
-        """Fetch any identity information and authenticate. This will also load this authentication information in this instance.
+        """Fetch any identity information and authenticate. This will also load this authentication
+        information in this instance.
 
         :param auth_enabled: is authentication enabled?
         """

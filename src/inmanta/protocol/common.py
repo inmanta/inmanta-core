@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import dataclasses
 import enum
 import gzip
 import importlib
