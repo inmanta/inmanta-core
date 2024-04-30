@@ -29,7 +29,7 @@ from inmanta.ast import (
     TypeNotFoundException,
     TypingException,
 )
-from inmanta.ast.statements.generator import IndexCollisionException
+from inmanta.ast.statements.generator import IndexAttributeMissingInConstructorException, IndexCollisionException
 from inmanta.compiler.help.explainer import ExplainerFactory
 
 
@@ -50,29 +50,29 @@ def test_issue_121_non_matching_index(snippetcompiler):
 def test_issue_122_index_inheritance(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-import std::testing
+entity TopResource:
+    string name
+end
 
-entity TestResource extends std::testing::NullResource:
+index TopResource(name)
+
+entity TestResource extends TopResource:
     bool enabled=true
-    string attr1
 end
 
 implementation testRes for TestResource:
+    self.name="test"
 end
-
-index TestResource(name, agentname, attr1)
 
 implement TestResource using testRes
 
-TestResource(name="test",agentname="agent1")
+TestResource()
         """
     )
 
-    try:
+    with pytest.raises(IndexAttributeMissingInConstructorException) as e:
         compiler.do_compile()
-        raise AssertionError("Should get exception")
-    except TypingException as e:
-        assert e.location.lnr == 16
+    assert e.value.location.lnr == 18
 
 
 def test_issue_140_index_error(snippetcompiler):
