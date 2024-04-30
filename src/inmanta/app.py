@@ -62,7 +62,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env
-from inmanta.logging import InmantaLoggerConfig, LoggerMode, _is_on_tty
+from inmanta.logging import InmantaLoggerConfig, LoggerMode, LoggerModeManager, _is_on_tty
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version
@@ -241,8 +241,8 @@ def compiler_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequenc
     "compile", help_msg="Compile the project to a configuration model", parser_config=compiler_config, require_project=True
 )
 def compile_project(options: argparse.Namespace) -> None:
-    inmanta_logger_config = InmantaLoggerConfig.get_current_instance()
-    with inmanta_logger_config.run_in_logger_mode(LoggerMode.COMPILER):
+    logger_mode_manager = LoggerModeManager.get_instance()
+    with logger_mode_manager.run_in_logger_mode(LoggerMode.COMPILER):
         if options.environment is not None:
             Config.set("config", "environment", options.environment)
 
@@ -467,8 +467,8 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
 def export(options: argparse.Namespace) -> None:
-    inmanta_logger_config = InmantaLoggerConfig.get_current_instance()
-    with inmanta_logger_config.run_in_logger_mode(LoggerMode.COMPILER):
+    logger_mode_manager = LoggerModeManager.get_instance()
+    with logger_mode_manager.run_in_logger_mode(LoggerMode.COMPILER):
         if not options.partial_compile and options.delete_resource_set:
             raise CLIException(
                 "The --delete-resource-set option should always be used together with the --partial option", exitcode=1
@@ -538,7 +538,7 @@ def export(options: argparse.Namespace) -> None:
                 types, scopes = (None, None)
                 raise
 
-    with inmanta_logger_config.run_in_logger_mode(LoggerMode.EXPORTER):
+    with logger_mode_manager.run_in_logger_mode(LoggerMode.EXPORTER):
         # Even if the compile failed we might have collected additional data such as unknowns. So
         # continue the export
 
