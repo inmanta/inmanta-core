@@ -960,14 +960,14 @@ async def test_model_get_list(init_dataclasses_and_load_schema):
                         environment=env.id,
                         status=const.ResourceState.deployed,
                         resource_version_id=f"std::testing::NullResource[agent1,name=file{r}],v={i}",
-                        attributes={"name": f"file{r}"},
+                        attributes={"purge_on_delete": False, "name": f"file{r}"},
                     )
                 else:
                     res = data.Resource.new(
                         environment=env.id,
                         status=const.ResourceState.deploying,
                         resource_version_id=f"std::testing::NullResource[agent1,name=file{r}],v={i}",
-                        attributes={"name": f"file{r}"},
+                        attributes={"purge_on_delete": False, "name": f"file{r}"},
                     )
                 await res.insert()
 
@@ -1173,7 +1173,7 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
         status=const.ResourceState.deployed,
-        attributes={"name": "motd"},
+        attributes={"name": "motd", "purge_on_delete": True, "purged": False},
     )
     await res11.insert()
 
@@ -1193,7 +1193,7 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
         status=const.ResourceState.deployed,
-        attributes={"name": "motd"},
+        attributes={"name": "motd", "purge_on_delete": True, "purged": False},
     )
     await res12.insert()
 
@@ -1238,7 +1238,7 @@ async def test_get_resources(init_dataclasses_and_load_schema):
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=file%d],v=%d" % (i, version),
             status=const.ResourceState.deployed,
-            attributes={"name": "motd"},
+            attributes={"name": "motd", "purge_on_delete": True, "purged": False},
         )
         await res.insert()
         resource_ids.append(res.resource_version_id)
@@ -1279,7 +1279,7 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent1,name=file%d],v=%d" % (i, version),
             status=const.ResourceState.deployed,
-            attributes={"name": "motd"},
+            attributes={"name": "motd", "purge_on_delete": True, "purged": False},
         )
         await res.insert()
         resource_ids_version_one.append(res.resource_version_id)
@@ -1302,7 +1302,7 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent2,path=file%d],v=%d" % (i, version),
             status=const.ResourceState.deployed,
-            attributes={"name": "motd"},
+            attributes={"name": "motd", "purge_on_delete": True, "purged": False},
         )
         await res.insert()
         resource_ids_version_two.append(res.resource_version_id)
@@ -1325,7 +1325,7 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
             environment=env.id,
             resource_version_id="std::testing::NullResource[agent3,path=file%d],v=3" % i,
             status=status,
-            attributes={"path": "motd"},
+            attributes={"path": "motd", "purge_on_delete": True, "purged": False},
         )
         await res.insert()
         return res.resource_version_id
@@ -1374,18 +1374,22 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
                 environment=env.id,
                 resource_version_id="std::testing::NullResource[agent1,name=file%d],v=%d" % (i, version),
                 status=status,
-                attributes={"name": f"motd{i}"},
+                attributes={"name": f"motd{i}", "purge_on_delete": True, "purged": False},
             )
             await res.insert()
 
-    resources = await data.Resource.get_resources_in_latest_version(env.id, "std::testing::NullResource", {"name": "motd1"})
+    resources = await data.Resource.get_resources_in_latest_version(
+        env.id,
+        "std::testing::NullResource",
+        {"name": "motd1", "purge_on_delete": True, "purged": False},
+    )
     assert len(resources) == 1
     resource = resources[0]
     expected_resource = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=2",
         status=status,
-        attributes={"name": "motd1"},
+        attributes={"name": "motd1", "purge_on_delete": True, "purged": False},
     )
     assert resource.to_dict() == expected_resource.to_dict()
 
@@ -1400,7 +1404,9 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
-    resources = await data.Resource.get_resources_in_latest_version(env.id, "std::testing::NullResource", {"name": "motd1"})
+    resources = await data.Resource.get_resources_in_latest_version(
+        env.id, "std::testing::NullResource", {"name": "motd1", "purge_on_delete": True, "purged": False}
+    )
     assert len(resources) == 0
 
 
@@ -1478,7 +1484,7 @@ async def test_escaped_resources(init_dataclasses_and_load_schema):
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=router],v=%d" % version,
         status=const.ResourceState.deployed,
-        attributes={"name": "router", "routes": routes},
+        attributes={"name": "router", "purge_on_delete": True, "purged": False, "routes": routes},
     )
     await res.insert()
     resource_id = res.resource_version_id
@@ -1513,13 +1519,13 @@ async def test_resource_provides(init_dataclasses_and_load_schema):
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file1],v=%d" % version,
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/motd"},
+        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
     )
     res2 = data.Resource.new(
         environment=env.id,
         resource_version_id="std::testing::NullResource[agent1,name=file2],v=%d" % version,
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/motd"},
+        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
     )
     res1.provides.append(res2.resource_version_id)
 
