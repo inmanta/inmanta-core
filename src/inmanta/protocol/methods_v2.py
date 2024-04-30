@@ -1490,7 +1490,7 @@ def list_users() -> list[model.User]:
 
 
 @typedmethod(path="/current_user", operation="GET", client_types=[ClientType.api], api_version=2)
-def get_current_user(context: CallContext) -> model.CurrentUser:
+def get_current_user() -> model.CurrentUser:
     """Get the current logged in user (based on the provided JWT) and server auth settings
 
     :raises BadRequest: Raised when server authentication is not enabled

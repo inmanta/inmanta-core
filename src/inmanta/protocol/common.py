@@ -434,7 +434,6 @@ class MethodProperties:
         self.function = function
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
-        self._call_context: Optional[str] = None
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -446,11 +445,6 @@ class MethodProperties:
 
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()
-
-    @property
-    def call_context_var(self) -> Optional[str]:
-        """The name of the argument that should get the call context injected"""
-        return self._call_context
 
     @property
     def varkw(self) -> bool:
@@ -482,10 +476,6 @@ class MethodProperties:
         sig = inspect.signature(self.function)
 
         def to_tuple(param: Parameter) -> tuple[object, Optional[object]]:
-            if param.name == self._call_context:
-                # Special case the call context because we use this both to validate, cast and filter arguments
-                # CallContext is not supported by pydantic and would require arbitrary_types_allowed=True otherwise
-                return (Any, None)
             if param.annotation is Parameter.empty:
                 return (Any, param.default if param.default is not Parameter.empty else None)
             if param.default is not Parameter.empty:
@@ -678,7 +668,7 @@ class MethodProperties:
             # A check for optional arguments
             pass
         elif issubclass(arg_type, CallContext):
-            self._call_context = arg
+            raise InvalidMethodDefinition(f"CallContext should only be defined in the handler, not the method.")
         else:
             valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])
             raise InvalidMethodDefinition(

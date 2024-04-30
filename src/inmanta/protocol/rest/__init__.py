@@ -21,7 +21,7 @@ import json
 import logging
 import uuid
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
 
 import pydantic
 import typing_inspect
@@ -196,6 +196,13 @@ class CallArguments:
                         f" don't match (header={header_value}; non-header={message_value})"
                     )
 
+    def get_call_context(self) -> Optional[str]:
+        """Returns the name of the first handler argument that is of type CallContext"""
+        for arg, hint in get_type_hints(self._config.handler).items():
+            if issubclass(hint, common.CallContext):
+                return arg
+        return None
+
     async def process(self) -> None:
         """
         Process the request
@@ -245,8 +252,6 @@ class CallArguments:
                 value = self._map_headers(arg)
                 if value is None:
                     value = self.get_default_value(arg, i, defaults_start)
-            elif arg == self._properties.call_context_var:
-                value = common.CallContext(request_headers=self._headers, auth_token=self._auth_token)
             else:
                 value = self.get_default_value(arg, i, defaults_start)
 
@@ -281,6 +286,10 @@ class CallArguments:
                 if v in self._call_args:
                     self._call_args[k] = self._call_args[v]
                     del self._call_args[v]
+
+        # verify if we need to inject a CallContext
+        if call_context_var := self.get_call_context():
+            self._call_args[call_context_var] = common.CallContext(request_headers=self._headers, auth_token=self._auth_token)
 
         self._processed = True
 
