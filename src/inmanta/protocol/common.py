@@ -672,7 +672,7 @@ class MethodProperties:
             # A check for optional arguments
             pass
         elif issubclass(arg_type, CallContext):
-            raise InvalidMethodDefinition(f"CallContext should only be defined in the handler, not the method.")
+            raise InvalidMethodDefinition("CallContext should only be defined in the handler, not the method.")
         else:
             valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])
             raise InvalidMethodDefinition(

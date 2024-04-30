@@ -129,4 +129,6 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.get_current_user)
     async def get_current_user(self, context: common.CallContext) -> model.CurrentUser:
-        return model.CurrentUser(username=context.auth_username)
+        if context.auth_username:
+            return model.CurrentUser(username=context.auth_username)
+        raise exceptions.NotFound("No current user found, probably an API token is used.")
