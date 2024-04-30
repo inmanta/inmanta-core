@@ -1193,7 +1193,7 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
         status=const.ResourceState.deployed,
-        attributes={"name": "motd", "purge_on_delete": True, "purged": False},
+        attributes={"name": "motd", "purge_on_delete": True, "purged": True},
     )
     await res12.insert()
 
@@ -1381,7 +1381,7 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
     resources = await data.Resource.get_resources_in_latest_version(
         env.id,
         "std::testing::NullResource",
-        {"name": "motd1", "purge_on_delete": True, "purged": False},
+        {"name": "motd1", "purge_on_delete": True},
     )
     assert len(resources) == 1
     resource = resources[0]
@@ -1405,7 +1405,7 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
     )
     await cm.insert()
     resources = await data.Resource.get_resources_in_latest_version(
-        env.id, "std::testing::NullResource", {"name": "motd1", "purge_on_delete": True, "purged": False}
+        env.id, "std::testing::NullResource", {"name": "motd1", "purge_on_delete": True}
     )
     assert len(resources) == 0
 
