@@ -249,7 +249,7 @@ async def test_server_restart(
     resource_container.Provider.set("agent1", "key3", "value")
 
     await asyncio.wait_for(server.stop(), timeout=15)
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=False)
     server = ibl.restserver
     async_finalizer.add(agent.stop)
     async_finalizer.add(partial(ibl.stop, timeout=15))
