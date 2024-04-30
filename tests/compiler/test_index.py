@@ -21,14 +21,7 @@ import re
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import (
-    DuplicateException,
-    IndexException,
-    NotFoundException,
-    RuntimeException,
-    TypeNotFoundException,
-    TypingException,
-)
+from inmanta.ast import DuplicateException, IndexException, NotFoundException, RuntimeException, TypeNotFoundException
 from inmanta.ast.statements.generator import IndexAttributeMissingInConstructorException, IndexCollisionException
 from inmanta.compiler.help.explainer import ExplainerFactory
 
