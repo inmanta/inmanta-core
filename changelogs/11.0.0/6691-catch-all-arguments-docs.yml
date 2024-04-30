@@ -1,0 +1,3 @@
+change-type: patch
+description: Document new plugin functionality introduced in https://github.com/inmanta/inmanta-core/pull/6808
+destination-branches: [master, iso6]

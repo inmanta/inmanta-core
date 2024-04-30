@@ -1,0 +1,8 @@
+---
+description: "Increase the timeout on the status method of a server slice 1s to prevent undesired timeouts on the status page of the web-console."
+issue-nr: 6599
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"

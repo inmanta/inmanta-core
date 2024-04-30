@@ -1,0 +1,6 @@
+description: Ensure get_resource_events and resource_did_dependency_change work across incremental compiles
+issue-nr: 5493
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"

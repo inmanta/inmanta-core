@@ -1,0 +1,6 @@
+description: Rate limit resolution of cross agent dependencies and make notification asynchronous
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
+

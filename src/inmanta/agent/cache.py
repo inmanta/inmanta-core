@@ -22,24 +22,24 @@ import logging
 import sys
 import time
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from inmanta.resources import Resource
 from inmanta.stable_api import stable_api
 
 if TYPE_CHECKING:
-    from inmanta.agent.agent import AgentInstance
+    from inmanta.agent.executor import AgentInstance
 
 LOGGER = logging.getLogger()
 
 
-class Scope(object):
+class Scope:
     def __init__(self, timeout: int = 24 * 3600, version: int = 0) -> None:
         self.timeout = timeout
         self.version = version
 
 
-class CacheItem(object):
+class CacheItem:
     def __init__(self, key: str, scope: Scope, value: Any, call_on_delete: Optional[Callable[[Any], None]]) -> None:
         self.key = key
         self.scope = scope
@@ -77,7 +77,7 @@ class CacheVersionContext(contextlib.AbstractContextManager):
 
 
 @stable_api
-class AgentCache(object):
+class AgentCache:
     """
     Caching system for the agent:
 
@@ -94,13 +94,13 @@ class AgentCache(object):
         :param agent_instance: The AgentInstance that is using the cache. The value is None when the cache
                                is used from pytest-inmanta.
         """
-        self.cache: Dict[str, Any] = {}
-        self.counterforVersion: Dict[int, int] = {}
-        self.keysforVersion: Dict[int, Set[str]] = {}
-        self.timerqueue: List[CacheItem] = []
+        self.cache: dict[str, Any] = {}
+        self.counterforVersion: dict[int, int] = {}
+        self.keysforVersion: dict[int, set[str]] = {}
+        self.timerqueue: list[CacheItem] = []
         self.nextAction: float = sys.maxsize
         self.addLock = Lock()
-        self.addLocks: Dict[str, Lock] = {}
+        self.addLocks: dict[str, Lock] = {}
         self._agent_instance = agent_instance
 
     def close(self) -> None:
@@ -251,7 +251,7 @@ class AgentCache(object):
         function: Callable[..., Any],
         for_version: bool = True,
         timeout: int = 5000,
-        ignore: Set[str] = set(),
+        ignore: set[str] = set(),
         cache_none: bool = True,
         call_on_delete: Optional[Callable[[Any], None]] = None,
         **kwargs,
@@ -276,7 +276,7 @@ class AgentCache(object):
         args = {k: v for k, v in kwargs.items() if k in acceptable and k not in ignore}
         others = sorted([k for k in kwargs.keys() if k not in acceptable and k not in ignore])
         for k in others:
-            key = "%s,%s" % (k, repr(kwargs[k])) + key
+            key = f"{k},{repr(kwargs[k])}" + key
         try:
             return self.find(key, **args)
         except KeyError:

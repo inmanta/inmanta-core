@@ -1,0 +1,5 @@
+description: Drop deprecated log_msg method in the handler.
+change-type: patch
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"

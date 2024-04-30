@@ -1,0 +1,5 @@
+description: add a warning to the docs about the risk of using multiple python package indexes
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

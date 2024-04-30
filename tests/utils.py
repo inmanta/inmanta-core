@@ -15,27 +15,33 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import configparser
 import datetime
+import functools
 import json
 import logging
+import math
 import os
 import shutil
 import uuid
 from collections import abc
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
+from datetime import timezone
+from typing import Any, Optional, TypeVar, Union
 
 import pytest
 import yaml
 from pkg_resources import Requirement, parse_version
-from pydantic.tools import lru_cache
 
 import build
 import build.env
 from _pytest.mark import MarkDecorator
 from inmanta import const, data, env, module, tracing, util
+from inmanta.data import ResourceIdStr
+from inmanta.data.model import PipConfig
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
@@ -46,8 +52,10 @@ from packaging import version
 
 T = TypeVar("T")
 
+LOGGER = logging.getLogger(__name__)
 
-def get_all_subclasses(cls: Type[T]) -> set[Type[T]]:
+
+def get_all_subclasses(cls: type[T]) -> set[type[T]]:
     """
     Returns all loaded subclasses of any depth for a given class. Includes the class itself.
     """
@@ -101,7 +109,7 @@ def assert_equal_ish(minimal, actual, sortby=[]):
 
             minimal = sorted(minimal, key=keyfunc)
             actual = sorted(actual, key=keyfunc)
-        for (m, a) in zip(minimal, actual):
+        for m, a in zip(minimal, actual):
             assert_equal_ish(m, a, sortby)
     elif minimal is UNKWN:
         return
@@ -110,9 +118,7 @@ def assert_equal_ish(minimal, actual, sortby=[]):
 
 
 def assert_graph(graph, expected):
-    lines = [
-        "%s: %s" % (f.id.get_attribute_value(), t.id.get_attribute_value()) for f in graph.values() for t in f.resource_requires
-    ]
+    lines = [f"{f.id.get_attribute_value()}: {t.id.get_attribute_value()}" for f in graph.values() for t in f.resource_requires]
     lines = sorted(lines)
 
     elines = [x.strip() for x in expected.split("\n")]
@@ -121,7 +127,7 @@ def assert_graph(graph, expected):
     assert elines == lines, (lines, elines)
 
 
-class AsyncClosing(object):
+class AsyncClosing:
     def __init__(self, awaitable):
         self.awaitable = awaitable
 
@@ -185,7 +191,7 @@ def log_index(caplog, loggerpart, level, msg, after=0):
     assert False
 
 
-class LogSequence(object):
+class LogSequence:
     def __init__(self, caplog, index=0, allow_errors=True, ignore=[]):
         """
 
@@ -199,26 +205,48 @@ class LogSequence(object):
         self.allow_errors = allow_errors
         self.ignore = ignore
 
-    def _find(self, loggerpart, level, msg, after=0):
+    def _find(self, loggerpart, level, msg, after=0, min_level: int = math.inf):
+        """
+
+        :param loggerpart: part of the logger name to match
+        :param level: exact log level to match
+        :param min_level: minimal level to match (works as normal loglevel settings that take all higher levels)
+        :param msg: part of the message to match on
+        :param after: starting point in th capture buffer to search
+
+        :return: matched index in the capture buffer, -1 for no match
+        """
         for i, (logger_name, log_level, message) in enumerate(self.caplog.record_tuples[after:]):
             if msg in message:
-                if loggerpart in logger_name and level == log_level:
+                if loggerpart in logger_name and (level == log_level or (log_level >= min_level)):
                     if any(i in logger_name for i in self.ignore):
                         continue
                     return i + after
         return -1
 
-    def contains(self, loggerpart, level, msg):
-        index = self._find(loggerpart, level, msg, self.index)
+    def contains(self, loggerpart, level, msg, min_level: int = math.inf) -> "LogSequence":
+        """
+        :param loggerpart: part of the logger name to match
+        :param level: exact log level to match
+        :param min_level: minimal level to match (works as normal loglevel settings that take all higher levels)
+        :param msg: part of the message to match on
+        """
+        index = self._find(loggerpart, level, msg, self.index, min_level)
         if not self.allow_errors:
             # first error is later
-            idxe = self._find("", logging.ERROR, "", self.index)
+            idxe = self._find("", logging.ERROR, "", self.index, min_level)
             assert idxe == -1 or idxe >= index
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
-    def assert_not(self, loggerpart, level, msg):
-        idx = self._find(loggerpart, level, msg, self.index)
+    def assert_not(self, loggerpart, level, msg, min_level: int = math.inf) -> None:
+        """
+        :param loggerpart: part of the logger name to match
+        :param level: exact log level to match
+        :param min_level: minimal level to match (works as normal loglevel settings that take all higher levels)
+        :param msg: part of the message to match on
+        """
+        idx = self._find(loggerpart, level, msg, self.index, min_level)
         assert idx == -1, f"{idx}, {self.caplog.record_tuples[idx]}"
 
     def no_more_errors(self):
@@ -236,7 +264,7 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
     Assert there are no warning, except from the list of loggers to allow
     """
     for record in caplog.records:
-        assert record.levelname != "WARNING" or (record.name in loggers_to_allow)
+        assert record.levelname != "WARNING" or (record.name in loggers_to_allow), record
 
 
 def configure(unused_tcp_port, database_name, database_port):
@@ -269,7 +297,26 @@ async def report_db_index_usage(min_precent=100):
         print(row)
 
 
-async def wait_for_version(client, environment, cnt):
+async def wait_until_version_is_released(client, environment: uuid.UUID, version: int) -> None:
+    """
+    Wait until the configurationmodel with the given version and environment is released.
+    """
+
+    async def _is_version_released() -> bool:
+        result = await client.get_version(tid=environment, id=version)
+        if result.code == 404:
+            return False
+        assert result.code == 200
+        return result.result["model"]["released"]
+
+    await retry_limited(_is_version_released, timeout=10)
+
+
+async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
+    """
+    :param compile_timeout: Raise an AssertionError if the compilation didn't finish after this amount of seconds.
+    """
+
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
@@ -277,7 +324,7 @@ async def wait_for_version(client, environment, cnt):
         code = compiling.code
         return code == 204
 
-    await retry_limited(compile_done, 30)
+    await retry_limited(compile_done, compile_timeout)
 
     reports = await client.get_reports(environment)
     for report in reports.result["reports"]:
@@ -305,7 +352,20 @@ async def _wait_until_deployment_finishes(client: Client, environment: str, vers
     await retry_limited(is_deployment_finished, timeout)
 
 
-class ClientHelper(object):
+async def _wait_for_resource_actions(
+    client: Client, environment: str, rid: ResourceIdStr, deploy_count: int, timeout: int = 10
+) -> None:
+    async def is_deployment_finished() -> bool:
+        result = await client.resource_logs(environment, rid, filter={"action": ["deploy"]})
+        assert result.code == 200
+        end_lines = [line for line in result.result["data"] if "End run" in line.get("msg", "")]
+        LOGGER.info("Deploys done: %s", end_lines)
+        return len(end_lines) >= deploy_count
+
+    await retry_limited(is_deployment_finished, timeout)
+
+
+class ClientHelper:
     def __init__(self, client: Client, environment: uuid.UUID) -> None:
         self.client = client
         self.environment = environment
@@ -315,7 +375,7 @@ class ClientHelper(object):
         assert res.code == 200
         return res.result["data"]
 
-    async def put_version_simple(self, resources: Dict[str, Any], version: int) -> None:
+    async def put_version_simple(self, resources: list[dict[str, Any]], version: int, wait_for_released: bool = False) -> None:
         res = await self.client.put_version(
             tid=self.environment,
             version=version,
@@ -325,9 +385,20 @@ class ClientHelper(object):
             compiler_version=get_compiler_version(),
         )
         assert res.code == 200, res.result
+        if wait_for_released:
+            await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
+
+    async def is_released(self, version: int) -> bool:
+        versions = await self.client.list_versions(tid=self.environment)
+        assert versions.code == 200
+        lookup = {v["version"]: v["released"] for v in versions.result["versions"]}
+        return lookup[version]
+
+    async def wait_for_deployed(self, version: int) -> None:
+        await _wait_until_deployment_finishes(client=self.client, environment=self.environment, version=version)
 
 
-def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> Dict[str, Any]:
+def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> dict[str, Any]:
     return {
         "key": key,
         "value": value,
@@ -338,10 +409,10 @@ def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: 
     }
 
 
-@lru_cache(1)
+@functools.lru_cache(1)
 def get_product_meta_data() -> ProductMetadata:
     """Get the produce meta-data"""
-    bootloader = InmantaBootloader()
+    bootloader = InmantaBootloader(configure_logging=True)
     context = bootloader.load_slices()
     return context.get_product_metadata()
 
@@ -383,7 +454,7 @@ def create_python_package(
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
-    optional_dependencies: Optional[Dict[str, Sequence[Requirement]]] = None,
+    optional_dependencies: Optional[dict[str, Sequence[Requirement]]] = None,
 ) -> None:
     """
     Creates an empty Python package.
@@ -406,59 +477,61 @@ def create_python_package(
         else:
             os.makedirs(path)
 
-        with open(os.path.join(path, "pyproject.toml"), "w") as fd:
-            fd.write(
-                """
-    [build-system]
-    build-backend = "setuptools.build_meta"
-    requires = ["setuptools"]
-                """.strip()
-            )
+    with open(os.path.join(path, "pyproject.toml"), "w") as fd:
+        fd.write(
+            """
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools"]
+            """.strip()
+        )
 
-        install_requires_content = "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
-        with open(os.path.join(path, "setup.cfg"), "w") as fd:
-            egg_info: str = (
-                f"""
-    [egg_info]
-    tag_build = .dev{pkg_version.dev}
-                """.strip()
-                if pkg_version.is_devrelease
-                else ""
-            )
-            fd.write(
-                f"""
-    [metadata]
-    name = {name}
-    version = {pkg_version.base_version}
-    description = An empty package for testing purposes
-    license = Apache 2.0
-    author = Inmanta <code@inmanta.com>
+    install_requires_content = "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
+    with open(os.path.join(path, "setup.cfg"), "w") as fd:
+        egg_info: str = (
+            f"""
+[egg_info]
+tag_build = .dev{pkg_version.dev}
+            """.strip()
+            if pkg_version.is_devrelease
+            else ""
+        )
+        fd.write(
+            f"""
+[metadata]
+name = {name}
+version = {pkg_version.base_version}
+description = An empty package for testing purposes
+license = Apache 2.0
+author = Inmanta <code@inmanta.com>
 
-    {egg_info}
+{egg_info}
 
-    """.strip()
-            )
+""".strip()
+        )
 
-            fd.write("\n[options]")
-            fd.write(f"\ninstall_requires ={install_requires_content}")
+        fd.write("\n[options]")
+        fd.write(f"\ninstall_requires ={install_requires_content}")
 
-            if optional_dependencies:
-                fd.write("\n[options.extras_require]")
-                for option_name, requirements in optional_dependencies.items():
-                    requirements_as_string = "".join(f"\n  {req}" for req in requirements)
-                    fd.write(f"\n{option_name} ={requirements_as_string}")
+        if optional_dependencies:
+            fd.write("\n[options.extras_require]")
+            for option_name, requirements in optional_dependencies.items():
+                requirements_as_string = "".join(f"\n  {req}" for req in requirements)
+                fd.write(f"\n{option_name} ={requirements_as_string}")
 
-        if install:
-            env.process_env.install_from_source([env.LocalPackagePath(path=path, editable=editable)])
-        if publish_index is not None:
-            with build.env.IsolatedEnvBuilder() as build_env:
-                builder = build.ProjectBuilder(
-                    srcdir=path, python_executable=build_env.executable, scripts_dir=build_env.scripts_dir
-                )
-                build_env.install(builder.build_system_requires)
-                build_env.install(builder.get_requires_for_build(distribution="wheel"))
-                builder.build(distribution="wheel", output_directory=publish_index.artifact_dir)
-            publish_index.publish()
+    if install:
+        env.process_env.install_for_config(
+            requirements=[],
+            paths=[env.LocalPackagePath(path=path, editable=editable)],
+            config=PipConfig(use_system_config=True),
+        )
+    if publish_index is not None:
+        with build.env.DefaultIsolatedEnv() as build_env:
+            builder = build.ProjectBuilder(source_dir=path, python_executable=build_env.python_executable)
+            build_env.install(builder.build_system_requires)
+            build_env.install(builder.get_requires_for_build(distribution="wheel"))
+            builder.build(distribution="wheel", output_directory=publish_index.artifact_dir)
+        publish_index.publish()
 
 
 def module_from_template(
@@ -475,6 +548,7 @@ def module_from_template(
     new_content_init_cf: Optional[str] = None,
     new_content_init_py: Optional[str] = None,
     in_place: bool = False,
+    four_digit_version: bool = False,
 ) -> module.ModuleV2Metadata:
     """
     Creates a v2 module from a template.
@@ -492,6 +566,7 @@ def module_from_template(
     :param new_content_init_cf: The new content of the _init.cf file.
     :param new_content_init_py: The new content of the __init__.py file.
     :param in_place: Modify the module in-place instead of copying it.
+    :param four_digit_version: if the version uses 4 digits (3 by default)
     """
     with tracing.tracer.start_as_current_span("module_from_template"):
 
@@ -500,63 +575,77 @@ def module_from_template(
         ) -> abc.Iterator[Requirement]:
             return (str(req if isinstance(req, Requirement) else req.get_python_package_requirement()) for req in requires)
 
-        if (dest_dir is None) != in_place:
-            raise ValueError("Either dest_dir or in_place must be set, never both.")
-        if dest_dir is None:
-            dest_dir = source_dir
+    if (dest_dir is None) != in_place:
+        raise ValueError("Either dest_dir or in_place must be set, never both.")
+    if dest_dir is None:
+        dest_dir = source_dir
+    else:
+        shutil.copytree(source_dir, dest_dir)
+    config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
+    config: configparser.ConfigParser = configparser.ConfigParser()
+    config.read(config_file)
+    if four_digit_version:
+        config["metadata"]["four_digit_version"] = "True"
+    if new_version is not None:
+        base, tag = module.ModuleV2Metadata.split_version(new_version)
+        config["metadata"]["version"] = base
+        if tag is not None:
+            config["egg_info"] = {"tag_build": tag}
+    if new_name is not None:
+        old_name: str = module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])
+        os.rename(
+            os.path.join(dest_dir, const.PLUGINS_PACKAGE, old_name),
+            os.path.join(dest_dir, const.PLUGINS_PACKAGE, new_name),
+        )
+        config["metadata"]["name"] = module.ModuleV2Source.get_package_name_for(new_name)
+        manifest_file: str = os.path.join(dest_dir, "MANIFEST.in")
+        manifest_content: str
+        with open(manifest_file) as fd:
+            manifest_content: str = fd.read()
+        with open(manifest_file, "w", encoding="utf-8") as fd:
+            fd.write(manifest_content.replace(f"inmanta_plugins/{old_name}/", f"inmanta_plugins/{new_name}/"))
+    if new_requirements:
+        config["options"]["install_requires"] = "\n    ".join(to_python_requires(new_requirements))
+    if new_extras:
+        # start from a clean slate
+        config.remove_section("options.extras_require")
+        config.add_section("options.extras_require")
+        for extra, requires in new_extras.items():
+            config["options.extras_require"][extra] = "\n    ".join(to_python_requires(requires))
+    if new_content_init_cf is not None:
+        init_cf_file = os.path.join(dest_dir, "model", "_init.cf")
+        with open(init_cf_file, "w", encoding="utf-8") as fd:
+            fd.write(new_content_init_cf)
+    if new_content_init_py is not None:
+        init_py_file: str = os.path.join(
+            dest_dir,
+            const.PLUGINS_PACKAGE,
+            module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"]),
+            "__init__.py",
+        )
+        with open(init_py_file, "w", encoding="utf-8") as fd:
+            fd.write(new_content_init_py)
+    with open(config_file, "w") as fh:
+        config.write(fh)
+    if install:
+        if editable:
+            env.process_env.install_for_config(
+                requirements=[],
+                paths=[env.LocalPackagePath(path=dest_dir, editable=True)],
+                config=PipConfig(use_system_config=True),
+            )
         else:
-            shutil.copytree(source_dir, dest_dir)
-        config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
-        config: configparser.ConfigParser = configparser.ConfigParser()
-        config.read(config_file)
-        if new_version is not None:
-            base, tag = module.ModuleV2Metadata.split_version(new_version)
-            config["metadata"]["version"] = base
-            if tag is not None:
-                config["egg_info"] = {"tag_build": tag}
-        if new_name is not None:
-            old_name: str = module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])
-            os.rename(
-                os.path.join(dest_dir, const.PLUGINS_PACKAGE, old_name),
-                os.path.join(dest_dir, const.PLUGINS_PACKAGE, new_name),
+            mod_artifact_path = ModuleTool().build(path=dest_dir)
+            env.process_env.install_for_config(
+                requirements=[],
+                paths=[env.LocalPackagePath(path=mod_artifact_path)],
+                config=PipConfig(use_system_config=True),
             )
-            config["metadata"]["name"] = module.ModuleV2Source.get_package_name_for(new_name)
-            manifest_file: str = os.path.join(dest_dir, "MANIFEST.in")
-            manifest_content: str
-            with open(manifest_file, "r") as fd:
-                manifest_content: str = fd.read()
-            with open(manifest_file, "w", encoding="utf-8") as fd:
-                fd.write(manifest_content.replace(f"inmanta_plugins/{old_name}/", f"inmanta_plugins/{new_name}/"))
-        if new_requirements:
-            config["options"]["install_requires"] = "\n    ".join(to_python_requires(new_requirements))
-        if new_extras:
-            # start from a clean slate
-            config.remove_section("options.extras_require")
-            config.add_section("options.extras_require")
-            for extra, requires in new_extras.items():
-                config["options.extras_require"][extra] = "\n    ".join(to_python_requires(requires))
-        if new_content_init_cf is not None:
-            init_cf_file = os.path.join(dest_dir, "model", "_init.cf")
-            with open(init_cf_file, "w", encoding="utf-8") as fd:
-                fd.write(new_content_init_cf)
-        if new_content_init_py is not None:
-            init_py_file: str = os.path.join(
-                dest_dir,
-                const.PLUGINS_PACKAGE,
-                module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"]),
-                "__init__.py",
-            )
-            with open(init_py_file, "w", encoding="utf-8") as fd:
-                fd.write(new_content_init_py)
-        with open(config_file, "w") as fh:
-            config.write(fh)
-        if install:
-            ModuleTool().install(editable=editable, path=dest_dir)
-        if publish_index is not None:
-            ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
-            publish_index.publish()
-        with open(config_file, "r") as fh:
-            return module.ModuleV2Metadata.parse(fh)
+    if publish_index is not None:
+        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
+        publish_index.publish()
+    with open(config_file) as fh:
+        return module.ModuleV2Metadata.parse(fh)
 
 
 def v1_module_from_template(
@@ -582,8 +671,8 @@ def v1_module_from_template(
     """
     shutil.copytree(source_dir, dest_dir)
     config_file: str = os.path.join(dest_dir, module.ModuleV1.MODULE_FILE)
-    config: Dict[str, object] = configparser.ConfigParser()
-    with open(config_file, "r") as fd:
+    config: dict[str, object] = configparser.ConfigParser()
+    with open(config_file) as fd:
         config = yaml.safe_load(fd)
     if new_version is not None:
         config["version"] = str(new_version)
@@ -609,7 +698,7 @@ def v1_module_from_template(
                     for req in new_requirements
                 )
             )
-    with open(config_file, "r") as fd:
+    with open(config_file) as fd:
         return module.ModuleV1Metadata.parse(fd)
 
 
@@ -625,7 +714,7 @@ async def resource_action_consistency_check():
         - both methods are in use (i.e. the queries return at least one record)
     """
 
-    async with data.ResourceAction.get_connection() as postgresql_client:
+    async def get_data(postgresql_client):
         post_ra_one = await postgresql_client.fetch(
             """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resourceaction as ra
                     INNER JOIN public.resource as r
@@ -633,7 +722,7 @@ async def resource_action_consistency_check():
                     AND r.environment = ra.environment
             """
         )
-        all_ra_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_one}
+        post_ra_one_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_one}
 
         post_ra_two = await postgresql_client.fetch(
             """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resource as r
@@ -645,6 +734,22 @@ async def resource_action_consistency_check():
                         ON ra.action_id = jt.resource_action_id
             """
         )
-        assert all_ra_set == {(r[0], r[1], r[2], r[3]) for r in post_ra_two}
+        post_ra_two_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_two}
+        return post_ra_one_set, post_ra_two_set
 
-        assert all_ra_set
+    # The above-mentioned queries have to be executed with at least the repeatable_read isolation level.
+    # Otherwise it might happen that a repair run adds more resource actions between the execution of both queries.
+    (post_ra_one_set, post_ra_two_set) = await data.ResourceAction.execute_in_retryable_transaction(
+        get_data, tx_isolation_level="repeatable_read"
+    )
+    assert post_ra_one_set == post_ra_two_set
+    assert post_ra_one_set
+
+
+def get_as_naive_datetime(timestamp: datetime) -> datetime:
+    """
+    Convert the give timestamp, which is timezone aware, into a naive timestamp object in UTC.
+    """
+    if timestamp.tzinfo is None:
+        return timestamp
+    return timestamp.astimezone(timezone.utc).replace(tzinfo=None)

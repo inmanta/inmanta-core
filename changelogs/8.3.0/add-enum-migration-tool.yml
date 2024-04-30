@@ -1,0 +1,4 @@
+---
+description: Add generic enum migration tool.
+change-type: minor
+destination-branches: [master, iso6]

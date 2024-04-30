@@ -1,0 +1,8 @@
+---
+description: Remove functionality relying on netifaces from reporting.
+issue-nr: 7019
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  deprecation-note: "{{description}}"

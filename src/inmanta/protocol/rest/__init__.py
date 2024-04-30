@@ -15,11 +15,13 @@
 
     Contact: code@inmanta.com
 """
+
 import inspect
 import json
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, MutableMapping, Optional, Tuple, Type, cast  # noqa: F401
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast  # noqa: F401
 
 import pydantic
 import typing_inspect
@@ -27,7 +29,7 @@ from tornado import escape
 
 from inmanta import const, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import auth, common, exceptions
 from inmanta.protocol.common import ReturnValue
 from inmanta.types import Apireturn, JsonType
 
@@ -46,7 +48,7 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 
 
 def authorize_request(
-    auth_data: Optional[MutableMapping[str, str]], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod
+    auth_data: Optional[auth.claim_type], metadata: dict[str, str], message: JsonType, config: common.UrlMethod
 ) -> None:
     """
     Authorize a request based on the given data
@@ -58,10 +60,10 @@ def authorize_request(
     env_key: str = const.INMANTA_URN + "env"
     if env_key in auth_data:
         if env_key not in metadata:
-            raise exceptions.UnauthorizedException("The authorization token is scoped to a specific environment.")
+            raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
 
         if metadata[env_key] != "all" and auth_data[env_key] != metadata[env_key]:
-            raise exceptions.UnauthorizedException("The authorization token is not valid for the requested environment.")
+            raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
 
     # Enforce client_types restrictions
     ok: bool = False
@@ -71,19 +73,19 @@ def authorize_request(
             ok = True
 
     if not ok:
-        raise exceptions.UnauthorizedException(
+        raise exceptions.Forbidden(
             "The authorization token does not have a valid client type for this call."
-            + " (%s provided, %s expected" % (auth_data[ct_key], config.properties.client_types)
+            + f" ({auth_data[ct_key]} provided, {config.properties.client_types} expected"
         )
 
 
-class CallArguments(object):
+class CallArguments:
     """
     This class represents the call arguments for a method call.
     """
 
     def __init__(
-        self, properties: common.MethodProperties, message: Dict[str, Optional[object]], request_headers: Mapping[str, str]
+        self, properties: common.MethodProperties, message: dict[str, Optional[object]], request_headers: Mapping[str, str]
     ) -> None:
         """
         :param method_config: The method configuration that contains the metadata and functions to call
@@ -96,42 +98,61 @@ class CallArguments(object):
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
 
         self._call_args: JsonType = {}
-        self._headers: Dict[str, str] = {}
-        self._metadata: Dict[str, object] = {}
+        self._headers: dict[str, str] = {}
+        self._metadata: dict[str, object] = {}
 
         self._processed: bool = False
 
     @property
-    def call_args(self) -> Dict[str, object]:
+    def call_args(self) -> dict[str, object]:
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
         return self._call_args
 
     @property
-    def headers(self) -> Dict[str, str]:
+    def headers(self) -> dict[str, str]:
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
         return self._headers
 
     @property
-    def metadata(self) -> Dict[str, object]:
+    def metadata(self) -> dict[str, object]:
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
         return self._metadata
 
     def _is_header_param(self, arg: str) -> bool:
+        """
+        Return True if the given call argument can be provided using a header parameter.
+        """
         if arg not in self._properties.arg_options:
             return False
 
         opts = self._properties.arg_options[arg]
+        return opts.header is not None
 
-        if opts.header is None:
-            return False
+    def _is_header_param_provided(self, arg: str) -> bool:
+        """
+        Return True iff a value for the given call argument was provided using a header parameter.
 
-        return True
+        :raise Exception: The given call argument is not a header parameter.
+        """
+        value = self._get_header_value_for(arg)
+        return value is not None
+
+    def _get_header_value_for(self, arg: str) -> Optional[str]:
+        """
+        Return the header value that belongs to the given call argument or None when the header was not set.
+
+        :raise Exception: The given call argument is not a header parameter.
+        """
+        if not self._is_header_param(arg):
+            raise Exception(f"Parameter {arg} is not a header parameter")
+        opts = self._properties.arg_options[arg]
+        return self._request_headers.get(opts.header)
 
     def _map_headers(self, arg: str) -> Optional[object]:
         if not self._is_header_param(arg):
@@ -169,11 +190,45 @@ class CallArguments(object):
             LOGGER.exception("Failed to use getter for arg %s", arg)
             raise e
 
+    @staticmethod
+    def _ensure_list_if_list_type(arg_type: Optional[Type[object]], arg_value: object) -> object:
+        """
+        Handles processing of arguments for GET requests, especially for list types encoded as URL query parameters.
+        If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the specific request
+        provides a list with one element, urllib doesn't parse it as a list. Map it here explicitly to a list.
+        """
+        if typing_inspect.is_optional_type(arg_type):
+            non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
+            if len(non_none_arg_types) == 1:
+                arg_type = non_none_arg_types[0]
+
+        is_generic_list = arg_type and typing_inspect.is_generic_type(arg_type) and typing_inspect.get_origin(arg_type) is list
+        is_single_type_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
+        arg_value_is_not_list = not isinstance(arg_value, list)
+
+        if is_generic_list and is_single_type_list and arg_value_is_not_list:
+            return [arg_value]
+        return arg_value
+
+    def _validate_argument_consistency(self, args):
+        """
+        Validates the consistency of arguments, ensuring they are not passed both as a header and a non-header value.
+        """
+        for arg in args:
+            if arg in self._message and self._is_header_param(arg) and self._is_header_param_provided(arg):
+                message_value = self._message[arg]
+                header_value = self._get_header_value_for(arg)
+                if message_value != header_value:
+                    raise exceptions.BadRequest(
+                        f"Value for argument {arg} was provided via a header and a non-header argument, but both values"
+                        f" don't match (header={header_value}; non-header={message_value})"
+                    )
+
     async def process(self) -> None:
         """
         Process the message
         """
-        args: List[str] = list(self._argspec.args)
+        args: list[str] = list(self._argspec.args)
 
         if "self" in args:
             args.remove("self")
@@ -183,38 +238,43 @@ class CallArguments(object):
         if self._argspec.defaults is not None:
             defaults_start = len(args) - len(self._argspec.defaults)
 
+        self._validate_argument_consistency(args)
+
         call_args = {}
 
         for i, arg in enumerate(args):
-            # get value from headers, defaults or message
-            value = self._map_headers(arg)
-            if value is None:
-                if not self._is_header_param(arg):
-                    arg_type = self._argspec.annotations.get(arg)
-                    if arg in self._message:
-                        value = self._message[arg]
-                        all_fields.remove(arg)
-                    # Pre-process dict params for GET
-                    elif arg_type and self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
-                        dict_prefix = f"{arg}."
-                        dict_with_prefixed_names = {
-                            param_name: param_value
-                            for param_name, param_value in self._message.items()
-                            if param_name.startswith(dict_prefix) and len(param_name) > len(dict_prefix)
-                        }
-                        value = (
-                            await self._get_dict_value_from_message(arg, dict_prefix, dict_with_prefixed_names)
-                            if dict_with_prefixed_names
-                            else None
-                        )
+            arg_type: Optional[type[object]] = self._argspec.annotations.get(arg)
+            if arg in self._message:
+                # Argument is parameter in body of path of HTTP request
+                value = self._message[arg]
 
-                        for key in dict_with_prefixed_names.keys():
-                            all_fields.remove(key)
+                if arg_type and self._properties.operation == "GET":
+                    value = self._ensure_list_if_list_type(arg_type, value)
 
-                    else:  # get default value
-                        value = self.get_default_value(arg, i, defaults_start)
-                else:  # get default value
+                all_fields.remove(arg)
+
+            elif arg_type and self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
+                # Argument is dictionary-based expression in query parameters of GET operation
+                dict_prefix = f"{arg}."
+                dict_with_prefixed_names = {
+                    param_name: param_value
+                    for param_name, param_value in self._message.items()
+                    if param_name.startswith(dict_prefix) and len(param_name) > len(dict_prefix)
+                }
+                value = (
+                    await self._get_dict_value_from_message(arg, dict_prefix, dict_with_prefixed_names)
+                    if dict_with_prefixed_names
+                    else None
+                )
+
+                for key in dict_with_prefixed_names.keys():
+                    all_fields.remove(key)
+            elif self._is_header_param(arg):
+                value = self._map_headers(arg)
+                if value is None:
                     value = self.get_default_value(arg, i, defaults_start)
+            else:
+                value = self.get_default_value(arg, i, defaults_start)
 
             call_args[arg] = value
 
@@ -244,8 +304,8 @@ class CallArguments(object):
         self._processed = True
 
     async def _get_dict_value_from_message(
-        self, arg: str, dict_prefix: str, dict_with_prefixed_names: Dict[str, object]
-    ) -> Dict[str, object]:
+        self, arg: str, dict_prefix: str, dict_with_prefixed_names: dict[str, object]
+    ) -> dict[str, object]:
         value = {k[len(dict_prefix) :]: v for k, v in dict_with_prefixed_names.items()}
         # Check if the values should be converted to lists
         type_args = self._argspec.annotations.get(arg)
@@ -261,7 +321,7 @@ class CallArguments(object):
             value = {key: [val] if not isinstance(val, list) else val for key, val in value.items()}
         return value
 
-    def _is_dict_or_optional_dict(self, arg_type: Type[object]) -> bool:
+    def _is_dict_or_optional_dict(self, arg_type: type[object]) -> bool:
         if typing_inspect.is_optional_type(arg_type):
             arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
         arg_type = typing_inspect.get_origin(arg_type) if typing_inspect.get_origin(arg_type) else arg_type
@@ -269,7 +329,7 @@ class CallArguments(object):
             arg_type = type(arg_type)
         return issubclass(arg_type, dict)
 
-    def _validate_union_return(self, arg_type: Type[object], value: object) -> None:
+    def _validate_union_return(self, arg_type: type[object], value: object) -> None:
         """Validate a return with a union type
         :see: protocol.common.MethodProperties._validate_function_types
         """
@@ -295,7 +355,7 @@ class CallArguments(object):
         if typing_inspect.is_generic_type(matching_type):
             self._validate_generic_return(arg_type, matching_type)
 
-    def _validate_generic_return(self, arg_type: Type[object], value: object) -> None:
+    def _validate_generic_return(self, arg_type: type[object], value: object) -> None:
         """Validate List or Dict types.
 
         :note: we return any here because the calling function also returns any.
@@ -426,7 +486,7 @@ class CallArguments(object):
 
 
 # Shared
-class RESTBase(util.TaskHandler):
+class RESTBase(util.TaskHandler[None]):
     """
     Base class for REST based client and servers
     """
@@ -452,12 +512,12 @@ class RESTBase(util.TaskHandler):
 
     async def _execute_call(
         self,
-        kwargs: Dict[str, str],
+        kwargs: dict[str, str],
         http_method: str,
         config: common.UrlMethod,
-        message: Dict[str, object],
+        message: dict[str, object],
         request_headers: Mapping[str, str],
-        auth: Optional[MutableMapping[str, str]] = None,
+        auth: Optional[auth.claim_type] = None,
     ) -> common.Response:
         try:
             if kwargs is None or config is None:
@@ -467,10 +527,10 @@ class RESTBase(util.TaskHandler):
             message.update(kwargs)
 
             if config.properties.validate_sid:
-                if "sid" not in message:
+                if "sid" not in message or not isinstance(message["sid"], str):
                     raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
 
-                sid = uuid.UUID(message["sid"])
+                sid = uuid.UUID(str(message["sid"]))
                 if not isinstance(sid, uuid.UUID) or not self.validate_sid(sid):
                     raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
@@ -489,7 +549,7 @@ class RESTBase(util.TaskHandler):
             LOGGER.debug(
                 "Calling method %s(%s)",
                 config.handler,
-                ", ".join(["%s='%s'" % (name, common.shorten(str(value))) for name, value in arguments.call_args.items()]),
+                ", ".join([f"{name}='{common.shorten(str(value))}'" for name, value in arguments.call_args.items()]),
             )
 
             result = await config.handler(**arguments.call_args)

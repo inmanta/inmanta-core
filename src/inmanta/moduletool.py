@@ -15,11 +15,13 @@
 
     Contact: code@inmanta.com
 """
+
 import argparse
 import configparser
 import datetime
 import enum
 import inspect
+import itertools
 import logging
 import os
 import py_compile
@@ -32,23 +34,24 @@ import time
 import zipfile
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
+from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
-from types import TracebackType
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set, Type
+from re import Pattern
+from typing import IO, TYPE_CHECKING, Any, Optional
 
 import click
+import more_itertools
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
-from pkg_resources import parse_version
+from pkg_resources import Requirement
 
 import build
-import build.env
 import inmanta
 import inmanta.warnings
 import toml
-from build.env import IsolatedEnvBuilder
+from build.env import DefaultIsolatedEnv
 from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
@@ -61,13 +64,13 @@ from inmanta.module import (
     InvalidMetadata,
     InvalidModuleException,
     Module,
-    ModuleGeneration,
     ModuleLike,
     ModuleMetadata,
     ModuleMetadataFileNotFound,
     ModuleNotFoundException,
     ModuleV1,
     ModuleV2,
+    ModuleV2Metadata,
     ModuleV2Source,
     Project,
     gitprovider,
@@ -76,12 +79,9 @@ from inmanta.stable_api import stable_api
 from packaging.version import Version
 
 if TYPE_CHECKING:
-    from pkg_resources import Requirement  # noqa: F401
-
     from packaging.requirements import InvalidRequirement
 else:
     from pkg_resources.extern.packaging.requirements import InvalidRequirement
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -104,17 +104,21 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         dest="no_strict_deps_check",
         action="store_true",
         default=False,
-        help="When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
-        "All other version conflicts will result in a warning. This option is mutually exclusive with the "
-        "--strict-deps-check option.",
+        help=(
+            "When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
+            "All other version conflicts will result in a warning. This option is mutually exclusive with the "
+            r"\--strict-deps-check option."
+        ),
     )
     parser.add_argument(
         "--strict-deps-check",
         dest="strict_deps_check",
         action="store_true",
         default=False,
-        help="When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
-        "This option is mutually exclusive with the --no-strict-deps-check option.",
+        help=(
+            "When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
+            r"This option is mutually exclusive with the \--no-strict-deps-check option."
+        ),
     )
 
 
@@ -133,7 +137,7 @@ def get_strict_deps_check(no_strict_deps_check: bool, strict_deps_check: bool) -
     return strict_deps_check
 
 
-class ModuleLikeTool(object):
+class ModuleLikeTool:
     """Shared code for modules and projects"""
 
     def execute(self, cmd: Optional[str], args: argparse.Namespace) -> None:
@@ -159,11 +163,14 @@ class ModuleLikeTool(object):
             project.load()
         return project
 
-    def determine_new_version(self, old_version, version, major, minor, patch, dev):
+    def determine_new_version(
+        self, old_version: Version, version: Optional[Version], major: bool, minor: bool, patch: bool, dev: bool
+    ) -> Optional[Version]:
         """
         Only used by the `inmanta module commit` command.
         """
         was_dev = old_version.is_prerelease
+        outversion: Version
 
         if was_dev:
             if major or minor or patch:
@@ -173,17 +180,17 @@ class ModuleLikeTool(object):
             if version is not None:
                 baseversion = version
             else:
-                baseversion = old_version.base_version
+                baseversion = Version(old_version.base_version)
 
             if not dev:
                 outversion = baseversion
             else:
-                outversion = "%s.dev%d" % (baseversion, time.time())
+                outversion = Version("%s.dev%d" % (baseversion, time.time()))
         else:
             opts = [x for x in [major, minor, patch] if x]
             if version is not None:
                 if len(opts) > 0:
-                    LOGGER.warn("when using the --version option, --major, --minor and --patch are ignored")
+                    LOGGER.warning("when using the --version option, --major, --minor and --patch are ignored")
                 outversion = version
             else:
                 if len(opts) == 0:
@@ -193,18 +200,19 @@ class ModuleLikeTool(object):
                     LOGGER.error("You can use only one of the following options: --major, --minor or --patch")
                     return None
 
-                change_type: Optional[ChangeType] = ChangeType.parse_from_bools(patch, minor, major)
+                # We do not support revision for deprecated methods
+                revision = False
+                change_type: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
                 if change_type:
-                    outversion = str(VersionOperation.bump_version(change_type, old_version, version_tag=""))
+                    outversion = Version(str(VersionOperation.bump_version(change_type, old_version, version_tag="")))
                 else:
-                    outversion = str(VersionOperation.set_version_tag(old_version, version_tag=""))
+                    outversion = Version(str(VersionOperation.set_version_tag(old_version, version_tag="")))
 
             if dev:
-                outversion = "%s.dev%d" % (outversion, time.time())
+                outversion = Version("%s.dev%d" % (outversion, time.time()))
 
-        outversion = parse_version(outversion)
         if outversion <= old_version:
-            LOGGER.error("new versions (%s) is not larger then old version (%s), aborting" % (outversion, old_version))
+            LOGGER.error(f"new versions ({outversion}) is not larger then old version ({old_version}), aborting")
             return None
 
         return outversion
@@ -216,19 +224,10 @@ class ChangeType(enum.Enum):
     MAJOR: str = "major"
     MINOR: str = "minor"
     PATCH: str = "patch"
-
-    def less(self) -> Optional["ChangeType"]:
-        """
-        Returns the change type that is one less than this one.
-        """
-        if self == ChangeType.MAJOR:
-            return ChangeType.MINOR
-        if self == ChangeType.MINOR:
-            return ChangeType.PATCH
-        return None
+    REVISION: str = "revision"
 
     def __lt__(self, other: "ChangeType") -> bool:
-        order: List[ChangeType] = [ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]
+        order: list[ChangeType] = [ChangeType.REVISION, ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]
         if other not in order:
             return NotImplemented
         return order.index(self) < order.index(other)
@@ -237,7 +236,7 @@ class ChangeType(enum.Enum):
     def diff(cls, *, low: Version, high: Version) -> Optional["ChangeType"]:
         """
         Returns the order of magnitude of the change type diff between two versions.
-        Return None if the versions are less than a patch separated from each other.
+        Return None if the versions are less than a patch / a revision (if 4 digit version number) separated from each other.
         For example, a dev release and a post release for the same version number are less
         than a patch separated from each other.
         """
@@ -251,17 +250,24 @@ class ChangeType(enum.Enum):
             return cls.MINOR
         if high.micro > low.micro:
             return cls.PATCH
+        if len(high.base_version.split(".")) >= 4:
+            high_revision = int(high.base_version.split(".")[3])
+            # We are switching from 3 digits to 4
+            if len(low.base_version.split(".")) < 4 or high_revision > int(low.base_version.split(".")[3]):
+                return cls.REVISION
         raise Exception("Couldn't determine version change type diff: this state should be unreachable")
 
     @classmethod
-    def parse_from_bools(cls, patch: bool, minor: bool, major: bool) -> Optional["ChangeType"]:
+    def parse_from_bools(cls, revision: bool, patch: bool, minor: bool, major: bool) -> Optional["ChangeType"]:
         """
         Create a ChangeType for the type of which the boolean is set to True. If none
         of the boolean arguments is set to True, None is returned. If more
         than one boolean argument is set to True, a ValueError is raised.
         """
-        if sum([patch, minor, major]) > 1:
-            raise ValueError("Only one argument of patch, minor or major can be set to True at the same time.")
+        if sum([revision, patch, minor, major]) > 1:
+            raise ValueError("Only one argument of revision, patch, minor or major can be set to True at the same time.")
+        if revision:
+            return ChangeType.REVISION
         if patch:
             return ChangeType.PATCH
         if minor:
@@ -278,21 +284,34 @@ class VersionOperation:
         Bump the release part of the given version with this ChangeType and apply the given version_tag to it.
         If the given version has a different version tag set, it will be ignored.
         """
-        parts = [int(x) for x in version.base_version.split(".")]
-        while len(parts) < 3:
-            parts.append(0)
-        if change_type is ChangeType.PATCH:
-            parts[2] += 1
-        if change_type is ChangeType.MINOR:
-            parts[1] += 1
-            parts[2] = 0
-        if change_type is ChangeType.MAJOR:
-            parts[0] += 1
-            parts[1] = 0
-            parts[2] = 0
-        # Reset remaining digits to zero
-        if len(parts) > 3:
-            parts[3:] = [0 for _ in range(len(parts) - 3)]
+        bump_index: int
+        if change_type is ChangeType.REVISION:
+            bump_index = 3
+        elif change_type is ChangeType.PATCH:
+            bump_index = 2
+        elif change_type is ChangeType.MINOR:
+            bump_index = 1
+        elif change_type is ChangeType.MAJOR:
+            bump_index = 0
+        else:
+            raise RuntimeError(f"Unsupported change type: {change_type}!")
+
+        base_parts = [int(x) for x in version.base_version.split(".")]
+        # use 4th digit only if it already existed or if it is being bumped
+        nb_digits: int = max(bump_index + 1, 3, len(base_parts))
+        parts = list(
+            more_itertools.take(
+                nb_digits,
+                itertools.chain(
+                    base_parts[: bump_index + 1],
+                    itertools.repeat(0),
+                ),
+            )
+        )
+        parts[bump_index] += 1
+
+        while len(parts) > 3 and parts[-1] == 0:
+            parts.pop()
 
         return cls._to_version(parts, version_tag)
 
@@ -316,9 +335,10 @@ class VersionOperation:
 
 class ProjectTool(ModuleLikeTool):
     @classmethod
-    def parser_config(cls, parser: ArgumentParser) -> None:
+    def parser_config(cls, parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
-        freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
+
+        freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml", parents=parent_parsers)
         freeze.add_argument(
             "-o",
             "--outfile",
@@ -340,7 +360,7 @@ class ProjectTool(ModuleLikeTool):
             choices=[o.value for o in FreezeOperator],
             default=None,
         )
-        init = subparser.add_parser("init", help="Initialize directory structure for a project")
+        init = subparser.add_parser("init", help="Initialize directory structure for a project", parents=parent_parsers)
         init.add_argument("--name", "-n", help="The name of the new project", required=True)
         init.add_argument("--output-dir", "-o", help="Output directory path", default="./")
         init.add_argument(
@@ -359,6 +379,7 @@ to be updated to the latest compatible version.
 This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
 with the dependencies specified by the different Inmanta modules.
         """.strip(),
+            parents=parent_parsers,
         )
         add_deps_check_arguments(install)
 
@@ -374,6 +395,7 @@ Update all modules to the latest version compatible with the module version cons
 This command might reinstall Python packages in the development venv if the currently installed versions are not the latest
 compatible with the dependencies specified by the updated modules.
             """.strip(),
+            parents=parent_parsers,
         )
         add_deps_check_arguments(update)
 
@@ -391,7 +413,7 @@ compatible with the dependencies specified by the updated modules.
 
         freeze = project.get_freeze(mode=operator, recursive=recursive)
 
-        with open(project.get_metadata_file_path(), "r", encoding="utf-8") as fd:
+        with open(project.get_metadata_file_path(), encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
@@ -399,20 +421,21 @@ compatible with the dependencies specified by the updated modules.
 
         close = False
 
+        outfile_fd: IO[str]
         if outfile is None:
-            outfile = open(project.get_metadata_file_path(), "w", encoding="UTF-8")
+            outfile_fd = open(project.get_metadata_file_path(), "w", encoding="UTF-8")
             close = True
         elif outfile == "-":
-            outfile = sys.stdout
+            outfile_fd = sys.stdout
         else:
-            outfile = open(outfile, "w", encoding="UTF-8")
+            outfile_fd = open(outfile, "w", encoding="UTF-8")
             close = True
 
         try:
-            outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+            outfile_fd.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
         finally:
             if close:
-                outfile.close()
+                outfile_fd.close()
 
     def init(self, output_dir: str, name: str, default: bool) -> None:
         os.makedirs(output_dir, exist_ok=True)
@@ -451,10 +474,10 @@ compatible with the dependencies specified by the updated modules.
         else:
             my_project = project
 
-        def do_update(specs: "Dict[str, List[InmantaModuleRequirement]]", modules: List[str]) -> None:
+        def do_update(specs: Mapping[str, Sequence[InmantaModuleRequirement]], modules: list[str]) -> None:
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
-            v2_python_specs: List[Requirement] = [
+            v2_python_specs: list[Requirement] = [
                 module_spec.get_python_package_requirement()
                 for module, module_specs in specs.items()
                 for module_spec in module_specs
@@ -465,17 +488,20 @@ compatible with the dependencies specified by the updated modules.
                 # These could be constraints (-c) as well, but that requires additional sanitation
                 # Because for pip not every valid -r is a valid -c
                 current_requires = my_project.get_strict_python_requirements_as_list()
-                env.process_env.install_from_index(
+                env.process_env.install_for_config(
                     v2_python_specs + [Requirement.parse(r) for r in current_requires],
-                    my_project.module_source.urls,
+                    my_project.metadata.pip,
                     upgrade=True,
-                    allow_pre_releases=my_project.install_mode != InstallMode.release,
                 )
+                # Invalidate ast cache so that dependencies of installed modules can be updated as well
+                my_project.invalidate_state()
 
             for v1_module in set(modules).difference(v2_modules):
                 spec = specs.get(v1_module, [])
                 try:
                     ModuleV1.update(my_project, v1_module, spec, install_mode=my_project.install_mode)
+                    # Invalidate the state of the updated module
+                    my_project.invalidate_state(v1_module)
                 except Exception:
                     LOGGER.exception("Failed to update module %s", v1_module)
 
@@ -494,7 +520,7 @@ compatible with the dependencies specified by the updated modules.
                 # get AST
                 my_project.load_module_recursive(install=True)
                 # get current full set of requirements
-                specs: Dict[str, List[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
+                specs: dict[str, list[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
                 if module is None:
                     modules = list(specs.keys())
                 else:
@@ -534,13 +560,9 @@ class ModuleTool(ModuleLikeTool):
     A tool to manage configuration modules
     """
 
-    def __init__(self) -> None:
-        self._mod_handled_list = set()
-
     @classmethod
-    def modules_parser_config(cls, parser: ArgumentParser) -> None:
+    def modules_parser_config(cls, parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
         parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
-
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
         add_help_msg = "Add a module dependency to an Inmanta module or project."
@@ -548,7 +570,8 @@ class ModuleTool(ModuleLikeTool):
             "add",
             help=add_help_msg,
             description=f"{add_help_msg} When executed on a project, the module is installed as well. "
-            f"Either --v1 or --v2 has to be set.",
+            r"Either \--v1 or \--v2 has to be set.",
+            parents=parent_parsers,
         )
         add.add_argument(
             "module_req",
@@ -563,34 +586,51 @@ class ModuleTool(ModuleLikeTool):
             action="store_true",
         )
 
-        subparser.add_parser("list", help="List all modules used in this project in a table")
+        subparser.add_parser(
+            "list",
+            help="List all modules used in this project in a table",
+            parents=parent_parsers,
+        )
 
-        do = subparser.add_parser("do", help="Execute a command on all loaded modules")
-        do.add_argument("command", metavar="command", help="the command to  execute")
+        do = subparser.add_parser(
+            "do",
+            help="Execute a command on all loaded modules",
+            parents=parent_parsers,
+        )
+        do.add_argument("command", metavar="command", help="the command to execute")
 
         install: ArgumentParser = subparser.add_parser(
             "install",
-            help="Install a module in the active Python environment.",
+            parents=parent_parsers,
+            help="This command is no longer supported.",
             description="""
-Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the context
-of a project.
+        The 'inmanta module install' command is no longer supported. Instead, use one of the following approaches:
 
-This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
-with the dependencies specified by the installed module.
-
-Like `pip install`, this command does not reinstall a module for which the same version is already installed, except in editable
-mode.
-        """.strip(),
+        1. To install a module in editable mode, use 'pip install -e .'.
+        2. For a non-editable installation, first run 'inmanta module build' followed by 'pip install ./dist/<dist-package>'.
+            """.strip(),
         )
         install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
         install.add_argument("path", nargs="?", help="The path to the module.")
 
-        subparser.add_parser("status", help="Run a git status on all modules and report")
+        subparser.add_parser(
+            "status",
+            help="Run a git status on all modules and report",
+            parents=parent_parsers,
+        )
 
-        subparser.add_parser("push", help="Run a git push on all modules and report")
+        subparser.add_parser(
+            "push",
+            help="Run a git push on all modules and report",
+            parents=parent_parsers,
+        )
 
         # not currently working
-        subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
+        subparser.add_parser(
+            "verify",
+            help="Verify dependencies and frozen module versions",
+            parents=parent_parsers,
+        )
 
         commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
         commit.add_argument("-m", "--message", help="Commit message", required=True)
@@ -611,13 +651,22 @@ mode.
         commit.add_argument("-n", "--no-tag", dest="tag", help="Don't create a tag for the commit", action="store_false")
         commit.set_defaults(tag=False)
 
-        create = subparser.add_parser("create", help="Create a new module")
+        create = subparser.add_parser(
+            "create",
+            help="Create a new module",
+            parents=parent_parsers,
+        )
         create.add_argument("name", help="The name of the module")
         create.add_argument(
             "--v1", dest="v1", help="Create a v1 module. By default a v2 module is created.", action="store_true"
         )
 
-        freeze = subparser.add_parser("freeze", help="Set all version numbers in module.yml")
+        freeze = subparser.add_parser(
+            "freeze",
+            help="Freeze all version numbers in module.yml. This command is only supported on v1 modules. On v2 modules use"
+            " the pip freeze command instead.",
+            parents=parent_parsers,
+        )
         freeze.add_argument(
             "-o",
             "--outfile",
@@ -640,7 +689,11 @@ mode.
             default=None,
         )
 
-        build = subparser.add_parser("build", help="Build a Python package from a V2 module.")
+        build = subparser.add_parser(
+            "build",
+            help="Build a Python package from a V2 module.",
+            parents=parent_parsers,
+        )
         build.add_argument(
             "path",
             help="The path to the module that should be built. By default, the current working directory is used.",
@@ -670,24 +723,31 @@ mode.
             dest="byte_code",
         )
 
-        subparser.add_parser("v1tov2", help="Convert a V1 module to a V2 module in place")
+        subparser.add_parser(
+            "v1tov2",
+            help="Convert a V1 module to a V2 module in place",
+            parents=parent_parsers,
+        )
 
         release = subparser.add_parser(
             "release",
+            parents=parent_parsers,
             help="Release a new stable or dev release for this module.",
-            description="""
+            description=r"""
 When a stable release is done, this command:
+
 * Does a commit that changes the current version to a stable version.
 * Adds Git release tag.
 * Does a commit that changes the current version to a development version that is one patch increment ahead of the released
   version.
-When a development release is done using the --dev option, this command:
-* Does a commit that updates the current version and the version mentioned in the change to a development version that is
-  a patch, minor or major version ahead of the previous stable release. Whether a patch, minor or major version is created,
-  is determined respectively by the --patch, --minor or --major argument (--patch is the default).
 
-When a CHANGELOG.md file is present in the root of the module directory then the version number in the changelog is also
-updated accordingly.
+When a development release is done using the \--dev option, this command:
+
+* Does a commit that updates the current version of the module to a development version that is a patch, minor or major version
+  ahead of the previous stable release. The size of the increment is determined by the \--revision, \--patch, \--minor or
+  \--major argument (\--patch is the default). When a CHANGELOG.md file is present in the root of the module
+  directory then the version number in the changelog is also updated accordingly. The changelog file is always populated with
+  the associated stable version and not a development version.
             """.strip(),
             formatter_class=RawTextHelpFormatter,
         )
@@ -701,22 +761,35 @@ updated accordingly.
         release.add_argument(
             "--major",
             dest="major",
-            help="Do a major version bump compared to the previous stable release. Ignored when --dev is not set.",
+            help="Do a major version bump compared to the previous stable release.",
             action="store_true",
         )
         release.add_argument(
             "--minor",
             dest="minor",
-            help="Do a minor version bump compared to the previous stable release. Ignored when --dev is not set.",
+            help="Do a minor version bump compared to the previous stable release.",
             action="store_true",
         )
         release.add_argument(
             "--patch",
             dest="patch",
-            help="Do a patch version bump compared to the previous stable release. Ignored when --dev is not set.",
+            help="Do a patch version bump compared to the previous stable release.",
+            action="store_true",
+        )
+        release.add_argument(
+            "--revision",
+            dest="revision",
+            help="Do a revision version bump compared to the previous stable release (only with 4 digits version).",
             action="store_true",
         )
         release.add_argument("-m", "--message", help="Commit message")
+        release.add_argument(
+            "-c",
+            "--changelog-message",
+            help="This changelog message will be written to the changelog file. If the -m option is not provided, "
+            "this message will also be used as the commit message.",
+        )
+        release.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
 
     def add(self, module_req: str, v1: bool = False, v2: bool = False, override: bool = False) -> None:
         """
@@ -760,10 +833,10 @@ updated accordingly.
         """
         Convert a V1 module to a V2 module in place
         """
-        module = self.get_module(module)
-        if not isinstance(module, ModuleV1):
-            raise ModuleVersionException(f"Expected a v1 module, but found v{module.GENERATION.value} module")
-        ModuleConverter(module).convert_in_place()
+        mod = self.get_module(module)
+        if not isinstance(mod, ModuleV1):
+            raise ModuleVersionException(f"Expected a v1 module, but found v{mod.GENERATION.value} module")
+        ModuleConverter(mod).convert_in_place()
 
     def build(
         self, path: Optional[str] = None, output_dir: Optional[str] = None, dev_build: bool = False, byte_code: bool = False
@@ -817,7 +890,7 @@ updated accordingly.
             project = self.get_project(load=True)
             return project.get_module(module, allow_v1=True)
 
-    def get_modules(self, module: Optional[str] = None) -> List[Module]:
+    def get_modules(self, module: Optional[str] = None) -> list[Module]:
         if module is not None:
             return [self.get_module(module)]
         else:
@@ -904,10 +977,9 @@ version: 0.0.1dev0"""
         project = Project.get()
         project.get_complete_ast()
 
-        names: Sequence[str] = sorted(project.modules.keys())
-        specs: Dict[str, List[InmantaModuleRequirement]] = project.collect_imported_requirements()
+        names: abc.Sequence[str] = sorted(project.modules.keys())
+        specs: dict[str, list[InmantaModuleRequirement]] = project.collect_imported_requirements()
         for name in names:
-
             mod: Module = Project.get().modules[name]
             version = str(mod.version)
             if name not in specs:
@@ -951,28 +1023,16 @@ version: 0.0.1dev0"""
 
     def install(self, editable: bool = False, path: Optional[str] = None) -> None:
         """
-        Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the
-        context of a project.
+        This command is no longer supported.
+        Use 'pip install -e .' to install a module in editable mode.
+        Use 'inmanta module build' followed by 'pip install ./dist/<dist-package>' for non-editable install.
         """
-
-        def install(install_path: str) -> None:
-            try:
-                env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
-            except env.ConflictingRequirements as e:
-                raise InvalidModuleException("Module installation failed due to conflicting dependencies") from e
-
-        module_path: str = os.path.abspath(path) if path is not None else os.getcwd()
-        module: Module = self.construct_module(None, module_path)
-        if editable:
-            if module.GENERATION == ModuleGeneration.V1:
-                raise ModuleVersionException(
-                    "Can not install v1 modules in editable mode. You can upgrade your module with `inmanta module v1tov2`."
-                )
-            install(module_path)
-        else:
-            with tempfile.TemporaryDirectory() as build_dir:
-                build_artifact: str = self.build(module_path, build_dir)
-                install(build_artifact)
+        raise CLIException(
+            "The 'inmanta module install' command is no longer supported. "
+            "For editable mode installation, use 'pip install -e .'. "
+            "For a regular installation, first run 'inmanta module build' and then 'pip install ./dist/<dist-package>'.",
+            exitcode=1,
+        )
 
     def status(self, module: Optional[str] = None) -> None:
         """
@@ -1021,28 +1081,33 @@ version: 0.0.1dev0"""
             )
         )
         # find module
-        module = self.get_module(module)
-        if not isinstance(module, ModuleV1):
-            raise CLIException(f"{module.name} is a v2 module and does not support this operation.", exitcode=1)
+        mod = self.get_module(module)
+        if not isinstance(mod, ModuleV1):
+            raise CLIException(f"{mod.name} is a v2 module and does not support this operation.", exitcode=1)
         # get version
-        old_version = parse_version(str(module.version))
+        old_version = Version(str(mod.version))
 
-        outversion = self.determine_new_version(old_version, version, major, minor, patch, dev)
+        outversion = self.determine_new_version(old_version, Version(version) if version else None, major, minor, patch, dev)
 
         if outversion is None:
             return
 
-        module.rewrite_version(str(outversion))
+        mod.rewrite_version(str(outversion))
         # commit
-        gitprovider.commit(module._path, message, commit_all, [module.get_metadata_file_path()])
+        gitprovider.commit(mod._path, message, commit_all, [mod.get_metadata_file_path()])
         # tag
         if not dev or tag:
-            gitprovider.tag(module._path, str(outversion))
+            gitprovider.tag(mod._path, str(outversion))
 
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: str, module: Optional[str] = None) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
+        if (module and ModuleV2.from_path(module)) or ModuleV2.from_path(os.curdir):
+            raise CLIException(
+                "The `inmanta module freeze` command is not supported on V2 modules. Use the `pip freeze` command instead.",
+                exitcode=1,
+            )
 
         # find module
         module_obj = self.get_module(module)
@@ -1061,14 +1126,14 @@ version: 0.0.1dev0"""
         for submodule in module_obj.get_all_submodules():
             freeze.update(module_obj.get_freeze(submodule=submodule, mode=operator, recursive=recursive))
 
-        with open(module_obj.get_metadata_file_path(), "r", encoding="utf-8") as fd:
+        with open(module_obj.get_metadata_file_path(), encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
         newconfig["requires"] = requires
 
         close = False
-        out_fd = None
+        out_fd: IO[str]
         if outfile is None:
             out_fd = open(module_obj.get_metadata_file_path(), "w", encoding="UTF-8")
             close = True
@@ -1088,16 +1153,19 @@ version: 0.0.1dev0"""
         self,
         current_version: Version,
         all_existing_stable_version: abc.Collection[Version],
-        minimal_version_bump_to_prev_release: Optional[ChangeType],
+        minimal_version_bump_to_prev_release: ChangeType,
     ) -> Version:
         """
         Turn the given current_version into a dev version with version_tag dev0 and ensure
         the version number is at least `minimal_version_bump_to_prev_release` separated
         from its predecessor in all_existing_stable_version.
+
+        Invariants:
+        1. return a dev version
+        2. this version is at least `minimal_version_bump_to_prev_release`
+            separated from its predecessor in all_existing_stable_version
+        3. it is >= the current version
         """
-        if not minimal_version_bump_to_prev_release:
-            # No version bump is required
-            return VersionOperation.set_version_tag(current_version, version_tag="dev0")
         version_previous_release: Version
         try:
             version_previous_release = sorted([v for v in all_existing_stable_version if v <= current_version])[-1]
@@ -1105,129 +1173,344 @@ version: 0.0.1dev0"""
             # No previous release happened
             version_previous_release = Version("0.0.0")
 
+        LOGGER.debug("Previous release was %s", version_previous_release)
+
         assert version_previous_release <= current_version
         current_diff: Optional[ChangeType] = ChangeType.diff(low=version_previous_release, high=current_version)
+
+        LOGGER.debug("Different from current to previous release is %s", current_diff)
+
+        # Determine if we are already sufficiently far ahead
         if current_diff is None or minimal_version_bump_to_prev_release > current_diff:
+            LOGGER.debug(
+                "Incrementing version number because the current difference is smaller than requested difference: %s<%s",
+                current_diff,
+                minimal_version_bump_to_prev_release,
+            )
+            # We are not sufficiently far ahead of the previous release
+            # Increment from current_version
             new_version = VersionOperation.bump_version(
                 minimal_version_bump_to_prev_release, current_version, version_tag="dev0"
             )
-            versions_between_current_and_new_version = [
-                v for v in all_existing_stable_version if current_version < v <= new_version
-            ]
-            if versions_between_current_and_new_version:
-                raise click.ClickException(
-                    f"Stable release {versions_between_current_and_new_version[0]} exists between "
-                    f"current version {current_version} and new version {new_version}"
+            # invariant 2 holds because
+            # current_version >= version_previous_release
+            # current_version + minimal_version_bump_to_prev_release >=
+            #   version_previous_release + minimal_version_bump_to_prev_release
+            # new_version-version_previous_release >= minimal_version_bump_to_prev_release
+        else:
+            # We are sufficiently far ahead (invariant 2 holds)
+            if current_version.is_devrelease:
+                LOGGER.debug(
+                    "Keeping current dev version because we are sufficiently far ahead of the previous release: %s>=%s",
+                    current_diff,
+                    minimal_version_bump_to_prev_release,
                 )
+                # It is good as it is
+                new_version = current_version
             else:
-                return new_version
-        else:
-            return VersionOperation.set_version_tag(current_version, version_tag="dev0")
+                LOGGER.debug(
+                    "Incrementing to next dev version because we are sufficiently far ahead of the previous release: %s>=%s",
+                    current_diff,
+                    minimal_version_bump_to_prev_release,
+                )
+                # We are a normal or pre release version
+                # Adding 0.0.0.dev would make the new_version < current_version
+                # so we add 0.0.1.dev
+                new_version = VersionOperation.bump_version(ChangeType.PATCH, current_version, version_tag="dev0")
+        LOGGER.debug("New version is %s", new_version)
 
-    def _update_version_in_changelog_file(self, path_changelog_file: str, old_version: Version, new_version: Version) -> None:
-        """
-        In the given changelog file replace the version number old_version with new_version.
-        This operation is performed in-place.
-        """
-        if old_version.base_version == new_version.base_version:
-            return
-        with open(path_changelog_file, "r", encoding="utf-8") as fh:
-            content_changelog = fh.read()
-        # The changelog only contains the base_version. Replace only the first occurrence
-        # to not accidentally perform invalid replacements in the remainder of the file.
-        new_content_changelog = content_changelog.replace(old_version.base_version, new_version.base_version, 1)
-        if content_changelog == new_content_changelog:
-            LOGGER.warning(
-                "Failed to bump the version number in the changelog file from %s to %s.",
-                str(old_version.base_version),
-                str(new_version.base_version),
+        # Sanity checks
+        versions_between_current_and_new_version = [
+            v for v in all_existing_stable_version if current_version < v <= new_version
+        ]
+        if versions_between_current_and_new_version:
+            raise click.ClickException(
+                f"Error: Stable release {versions_between_current_and_new_version[0]} exists between "
+                f"current version {current_version} and new version {new_version}. Make sure your branch is up-to-update "
+                f"with the remote repository."
             )
-        else:
-            with open(path_changelog_file, "w", encoding="utf-8") as fh:
-                fh.write(new_content_changelog)
+
+        return new_version
 
     def release(
         self,
         dev: bool,
         message: Optional[str] = None,
+        revision: bool = False,
         patch: bool = False,
         minor: bool = False,
         major: bool = False,
-        add_new_version_to_changelog: bool = False,
+        commit_all: bool = False,
+        changelog_message: Optional[str] = None,
     ) -> None:
         """
         Execute the release command.
-
-        :param add_new_version_to_changelog: Indicate that the new version has to be added to the changelog instead of
-                                             bumping the current version. This is used by the recursive call to prevent
-                                             bumping the latest stable release.
         """
-        nb_version_bump_arguments_set = sum([patch, minor, major])
+
+        # Validate patch, minor, major
+        nb_version_bump_arguments_set = sum([revision, patch, minor, major])
         if nb_version_bump_arguments_set > 1:
-            raise click.UsageError("Only one of --patch, --minor and --major arguments can be set at the same time.")
+            raise click.UsageError("Error: Only one of --revision, --patch, --minor and --major can be set at the same time.")
+
+        # Make module
         module_dir = os.path.abspath(os.getcwd())
         module: Module[ModuleMetadata] = self.construct_module(project=DummyProject(), path=module_dir)
         if not gitprovider.is_git_repository(repo=module_dir):
-            raise click.ClickException(f"Directory {module_dir} is not a git repository.")
+            raise click.ClickException(f"Error: Directory {module_dir} is not a git repository.")
+
+        # Validate current state of the module
         current_version: Version = module.version
         if current_version.epoch != 0:
-            raise click.ClickException("Version with an epoch value larger than zero are not supported by this tool.")
+            raise click.ClickException("Error: Version with an epoch value larger than zero are not supported by this tool.")
         gitprovider.fetch(module_dir)
+
+        # Get history
         stable_releases: list[Version] = gitprovider.get_version_tags(module_dir, only_return_stable_versions=True)
+
         path_changelog_file = os.path.join(module_dir, const.MODULE_CHANGELOG_FILE)
-        if dev:
-            requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(patch, minor, major)
+        changelog: Optional[Changelog] = Changelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
+
+        requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
+        if not requested_version_bump and dev:
+            # Dev always bumps
+            if isinstance(module.metadata, ModuleV2Metadata) and module.metadata.four_digit_version:
+                requested_version_bump = ChangeType.REVISION
+            else:
+                requested_version_bump = ChangeType.PATCH
+
+        if requested_version_bump:
             new_version: Version = self._get_dev_version_with_minimal_distance_to_previous_stable_release(
                 current_version, stable_releases, requested_version_bump
             )
+        else:
+            # Never happens for dev release
+            new_version = current_version
+
+        if not changelog and changelog_message:
+            changelog = Changelog.create_changelog_file(path_changelog_file, new_version, changelog_message)
+        elif changelog:
+            if current_version.is_devrelease:
+                # Update the existing dev version to the new dev version
+                changelog.rewrite_version_in_changelog_header(old_version=current_version, new_version=new_version)
+            else:
+                changelog.add_section_for_version(current_version, new_version)
+
+            if changelog_message:
+                changelog.add_changelog_entry(current_version, new_version, changelog_message)
+
+        if dev:
             assert new_version.dev is not None and new_version.dev == 0
-            new_version_str, version_tag = str(new_version).rsplit(".", maxsplit=1)
-            module.rewrite_version(new_version=new_version_str, version_tag=version_tag)
-            files_to_commit = [module.get_metadata_file_path()]
-            if os.path.exists(path_changelog_file):
-                if add_new_version_to_changelog:
-                    # Create a new section in the changelog for the version number
-                    with open(path_changelog_file, "r+", encoding="utf-8") as fh:
-                        current_content = fh.read()
-                        fh.seek(0, 0)
-                        fh.write(f"V{new_version_str}\n-\n\n{current_content}")
-                else:
-                    self._update_version_in_changelog_file(
-                        path_changelog_file=path_changelog_file, old_version=current_version, new_version=new_version
-                    )
-                files_to_commit.append(path_changelog_file)
+            new_base_version_str, version_tag = str(new_version).rsplit(".", maxsplit=1)
+            module.rewrite_version(new_version=new_base_version_str, version_tag=version_tag)
+            # If no changes, commit will not happen
             gitprovider.commit(
                 repo=module_dir,
-                message=message if message else f"Bump version to {new_version}",
-                commit_all=True,
-                add=files_to_commit,
+                message=changelog_message if changelog_message else message if message else f"Bump version to {new_version}",
+                commit_all=commit_all,
+                add=[module.get_metadata_file_path()] + ([changelog.get_path()] if changelog else []),
                 raise_exc_when_nothing_to_commit=False,
             )
         else:
-            if nb_version_bump_arguments_set > 0:
-                LOGGER.warning("Performing a stable release. The --patch, --minor and --major arguments will be ignored.")
-            release_tag: Version = VersionOperation.set_version_tag(current_version, version_tag="")
+            release_tag: Version = VersionOperation.set_version_tag(new_version, version_tag="")
             if release_tag in stable_releases:
-                raise click.ClickException(f"A Git version tag already exists for version {release_tag}")
+                raise click.ClickException(f"Error: A Git version tag already exists for version {release_tag}")
             module.rewrite_version(new_version=str(release_tag), version_tag="")
+            if changelog:
+                changelog.set_release_date_for_version(release_tag)
             gitprovider.commit(
                 repo=module_dir,
                 message=message if message else f"Release version {module.metadata.get_full_version()}",
-                commit_all=True,
-                add=[module.get_metadata_file_path()],
+                commit_all=commit_all,
+                add=[module.get_metadata_file_path()] + ([changelog.get_path()] if changelog else []),
                 raise_exc_when_nothing_to_commit=False,
             )
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
+            print(f"Tag created successfully: {release_tag}")
             # bump to the next dev version
-            self.release(
-                dev=True, message="Bump version to next development version", patch=True, add_new_version_to_changelog=True
+            if isinstance(module.metadata, ModuleV2Metadata) and module.metadata.four_digit_version:
+                self.release(dev=True, message="Bump version to next development version", revision=True)
+            else:
+                self.release(dev=True, message="Bump version to next development version", patch=True)
+
+
+class Changelog:
+    """
+    This class represent a changelog file e.g. in an Inmanta module or an Inmanta python package.
+
+    The expected format of the changelog is the following:
+
+    ```
+    # Changelog
+
+    ## v1.2.1 - ?
+
+    - Change3
+
+    ## v1.2.0 - 2022-12-19
+
+    - Change1
+    - change2
+    ```
+    """
+
+    def __init__(self, path_changelog_file: str) -> None:
+        if not os.path.isfile(path_changelog_file):
+            raise Exception(f"{path_changelog_file} is not a file.")
+        self.path_changelog_file = os.path.abspath(path_changelog_file)
+
+    @classmethod
+    def create_changelog_file(cls, path: str, version: Version, changelog_message: str) -> "Changelog":
+        """
+        Create a new changelog file at the given path. Add a section for the given version and write the given
+        changelog message to it.
+        """
+        if os.path.exists(path):
+            raise Exception(f"File {path} already exists.")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(
+                f"""
+{cls._get_top_level_header()}
+
+{cls._get_header_for_version(version)}
+
+- {changelog_message}
+            """.strip()
             )
+        return cls(path)
+
+    def get_path(self) -> str:
+        return self.path_changelog_file
+
+    @classmethod
+    def _get_header_for_version(cls, version: Version) -> str:
+        """
+        Return the header the given version would have in the changelog.
+        """
+        return f"## v{version.base_version} - ?"
+
+    @classmethod
+    def _get_top_level_header(cls) -> str:
+        """
+        Return the top-level header of the changelog file.
+        """
+        return "# Changelog"
+
+    def regex_for_changelog_line(self, version: Version) -> re.Pattern[str]:
+        return re.compile(rf"(^#{{1,2}} [vV]?{re.escape(version.base_version)}[^\n]*$)", re.MULTILINE)
+
+    def _add_changelog_section(self, content_changelog: str, old_version: Version, new_version: Version) -> str:
+        """
+        Add a new section for the given new_version to the changelog, given the current content of the changelog file.
+        """
+        header_for_new_version: str = self._get_header_for_version(new_version)
+        # Try to insert the section before the section of the previous version if such a section exists
+        regex_header_previous_version: re.Pattern[str] = self.regex_for_changelog_line(old_version)
+        new_content_changelog = regex_header_previous_version.sub(
+            repl=f"{header_for_new_version}\n\n\n\\g<1>",
+            string=content_changelog,
+            count=1,
+        )
+        if new_content_changelog != content_changelog:
+            return new_content_changelog
+        # No changelog section exists for the previous version. Search for the top-level header of the changelog and insert the
+        # section below it.
+        regex_top_level_header: re.Pattern[str] = re.compile(r"(^\# [^\n]*$)", re.MULTILINE)
+        new_content_changelog = regex_top_level_header.sub(
+            repl=f"\\g<1>\n\n{header_for_new_version}\n\n\n",
+            string=content_changelog,
+            count=1,
+        )
+        if new_content_changelog != content_changelog:
+            return new_content_changelog
+        # No top-level header exists in changelog file. It's a new changelog, insert at the beginning of the file.
+        return f"{self._get_top_level_header()}\n\n{header_for_new_version}\n\n\n{content_changelog}"
+
+    def add_section_for_version(self, old_version: Version, new_version: Version) -> None:
+        """
+        Add a new section for the given new_version to the changelog file. This new section is added right
+        above the section of the previous version. If no such section exists, it's added at the top of the file.
+        """
+        with open(self.path_changelog_file, "r+", encoding="utf-8") as fh:
+            content_changelog: str = fh.read()
+            new_content_changelog: str = self._add_changelog_section(content_changelog, old_version, new_version)
+            fh.seek(0, 0)
+            fh.write(new_content_changelog)
+            fh.truncate()
+
+    def _has_section_for_version(self, version: Version) -> bool:
+        """
+        Return True iff this changelog contains a section of the given version.
+        """
+        with open(self.path_changelog_file, encoding="utf-8") as fh:
+            regex_version_header: re.Pattern[str] = self.regex_for_changelog_line(version)
+            content = fh.read()
+            return regex_version_header.search(content) is not None
+
+    def rewrite_version_in_changelog_header(self, old_version: Version, new_version: Version) -> None:
+        """
+        Replaces the first occurrence of the given old_version in this changelog file with new_version.
+        This operation is performed in-place.
+        """
+        with open(self.path_changelog_file, "r+", encoding="utf-8") as fh:
+            content_changelog = fh.read()
+            # The changelog only contains the base_version. Replace only the first occurrence
+            # to not accidentally perform invalid replacements in the remainder of the file.
+            new_content_changelog = content_changelog.replace(old_version.base_version, new_version.base_version, 1)
+            if content_changelog != new_content_changelog:
+                fh.seek(0, 0)
+                fh.write(new_content_changelog)
+                fh.truncate()
+
+    def set_release_date_for_version(self, version: Version) -> None:
+        """
+        Replace the question mark placeholder in the changelog file with the current data.
+        """
+        with open(self.path_changelog_file, "r+", encoding="utf-8") as fh:
+            content_changelog = fh.read()
+            regex_version_header: re.Pattern[str] = re.compile(rf"^({re.escape(f'## v{version} - ')})\?([ ]*)$", re.MULTILINE)
+            new_content_changelog = regex_version_header.sub(
+                repl=f"\\g<1>{datetime.date.today().isoformat()}\\g<2>",
+                string=content_changelog,
+                count=1,
+            )
+            if new_content_changelog != content_changelog:
+                fh.seek(0, 0)
+                fh.write(new_content_changelog)
+                fh.truncate()
+            else:
+                LOGGER.warning(
+                    "Failed to set the release date in the changelog for version %s.",
+                    str(version.base_version),
+                )
+
+    def add_changelog_entry(self, old_version: Version, version: Version, message: str) -> None:
+        """
+        Add an entry to the changelog section of the given version.
+        """
+        if not self._has_section_for_version(version):
+            self.add_section_for_version(old_version, version)
+        with open(self.path_changelog_file, "r+", encoding="utf-8") as fh:
+            content_changelog = fh.read()
+            regex_version_header: re.Pattern[str] = re.compile(rf"({re.escape(f'## v{version.base_version} - ?')}[ ]*\n\n)")
+            new_content_changelog = regex_version_header.sub(repl=f"\\g<1>- {message}\n", string=content_changelog, count=1)
+            if new_content_changelog != content_changelog:
+                fh.seek(0, 0)
+                fh.write(new_content_changelog)
+                fh.truncate()
+            else:
+                LOGGER.warning(
+                    "Failed to add changelog entry to section for version %s.",
+                    str(version.base_version),
+                )
+
+
+ModuleChangelog = Changelog  # For backwards compatibility after class rename
 
 
 class ModuleBuildFailedError(Exception):
     def __init__(self, msg: str, *args: Any) -> None:
         self.msg = msg
-        super(ModuleBuildFailedError, self).__init__(msg, *args)
+        super().__init__(msg, *args)
 
     def __str__(self) -> str:
         return self.msg
@@ -1236,7 +1519,7 @@ class ModuleBuildFailedError(Exception):
 BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc", rf"{CF_CACHE_DIR}")))
 
 
-class IsolatedEnvBuilderCached(IsolatedEnvBuilder):
+class DefaultIsolatedEnvCached(DefaultIsolatedEnv):
     """
     An IsolatedEnvBuilder that maintains its build environment across invocations of the context manager.
     This class is only used by the test suite. It decreases the runtime of the test suite because the build
@@ -1245,14 +1528,14 @@ class IsolatedEnvBuilderCached(IsolatedEnvBuilder):
     This class is a singleton. The get_instance() method should be used to obtain an instance of this class.
     """
 
-    _instance: Optional["IsolatedEnvBuilderCached"] = None
+    _instance: Optional["DefaultIsolatedEnvCached"] = None
 
     def __init__(self) -> None:
         super().__init__()
-        self._isolated_env: Optional[build.env.IsolatedEnv] = None
+        self._isolated_env: Optional[DefaultIsolatedEnv] = None
 
     @classmethod
-    def get_instance(cls) -> "IsolatedEnvBuilderCached":
+    def get_instance(cls) -> "DefaultIsolatedEnvCached":
         """
         This method should be used to obtain an instance of this class, because this class is a singleton.
         """
@@ -1260,16 +1543,16 @@ class IsolatedEnvBuilderCached(IsolatedEnvBuilder):
             cls._instance = cls()
         return cls._instance
 
-    def __enter__(self) -> build.env.IsolatedEnv:
+    def __enter__(self) -> DefaultIsolatedEnv:
         if not self._isolated_env:
-            self._isolated_env = super(IsolatedEnvBuilderCached, self).__enter__()
+            self._isolated_env = super().__enter__()
             self._install_build_requirements(self._isolated_env)
             # All build dependencies are installed, so we can disable the install() method on self._isolated_env.
             # This prevents unnecessary pip processes from being spawned.
             setattr(self._isolated_env, "install", lambda *args, **kwargs: None)
         return self._isolated_env
 
-    def _install_build_requirements(self, isolated_env: build.env.IsolatedEnv) -> None:
+    def _install_build_requirements(self, isolated_env: DefaultIsolatedEnv) -> None:
         """
         Install the build requirements required to build the modules present in the tests/data/modules_v2 directory.
         """
@@ -1288,16 +1571,13 @@ build-backend = "setuptools.build_meta"
                 """
                 )
             builder = build.ProjectBuilder(
-                srcdir=tmp_python_project_dir,
-                python_executable=self._isolated_env.executable,
-                scripts_dir=self._isolated_env.scripts_dir,
+                source_dir=tmp_python_project_dir,
+                python_executable=self._isolated_env.python_executable,
             )
             isolated_env.install(builder.build_system_requires)
             isolated_env.install(builder.get_requires_for_build(distribution="wheel"))
 
-    def __exit__(
-        self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]
-    ) -> None:
+    def __exit__(self, *args: object) -> None:
         # Ignore implementation from the super class to keep the environment
         pass
 
@@ -1306,13 +1586,12 @@ build-backend = "setuptools.build_meta"
         Cleanup the cached build environment. It should be called at the end of the test suite.
         """
         if self._isolated_env:
-            super(IsolatedEnvBuilderCached, self).__exit__(None, None, None)
+            super().__exit__()
             self._isolated_env = None
 
 
 class V2ModuleBuilder:
-
-    DISABLE_ISOLATED_ENV_BUILDER_CACHE: bool = False
+    DISABLE_DEFAULT_ISOLATED_ENV_CACHED: bool = False
 
     def __init__(self, module_path: str) -> None:
         """
@@ -1323,7 +1602,7 @@ class V2ModuleBuilder:
 
     def build(self, output_directory: str, dev_build: bool = False, byte_code: bool = False) -> str:
         """
-        Build the module and return the path to the build artifact.
+        Build the module using the pip system config and return the path to the build artifact.
 
         :param byte_code: When set to true, only bytecode will be included. This also results in a binary wheel
         """
@@ -1421,11 +1700,11 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         files_in_python_package_dir = self._get_files_in_directory(abs_path_namespace_package, ignore=BUILD_FILE_IGNORE_PATTERN)
         with zipfile.ZipFile(path_to_wheel) as z:
             dir_prefix = f"{rel_path_namespace_package}/"
-            files_in_wheel = set(
+            files_in_wheel = {
                 info.filename[len(dir_prefix) :]
                 for info in z.infolist()
                 if not info.is_dir() and info.filename.startswith(dir_prefix)
-            )
+            }
         unpackaged_files = files_in_python_package_dir - files_in_wheel
         if unpackaged_files:
             LOGGER.warning(
@@ -1441,7 +1720,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         if not os.path.exists(init_file):
             open(init_file, "w").close()
 
-    def _get_files_in_directory(self, directory: str, ignore: Optional[Pattern[str]] = None) -> Set[str]:
+    def _get_files_in_directory(self, directory: str, ignore: Optional[Pattern[str]] = None) -> set[str]:
         """
         Return the relative paths to all the files in all subdirectories of the given directory.
 
@@ -1455,14 +1734,14 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
 
         if not os.path.isdir(directory):
             raise Exception(f"{directory} is not a directory")
-        result: Set[str] = set()
-        for (dirpath, dirnames, filenames) in os.walk(directory):
+        result: set[str] = set()
+        for dirpath, dirnames, filenames in os.walk(directory):
             if should_ignore(os.path.basename(dirpath)):
                 # ignore whole subdirectory
                 continue
-            relative_paths_to_filenames = set(
+            relative_paths_to_filenames = {
                 os.path.relpath(os.path.join(dirpath, f), directory) for f in filenames if not should_ignore(f)
-            )
+            }
             result = result | relative_paths_to_filenames
         return result
 
@@ -1470,7 +1749,16 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         """
         Copy all files that have to be packaged into the Python package of the module
         """
-        python_pkg_dir = os.path.join(build_path, "inmanta_plugins", self._module.name)
+        python_pkg_dir: str = os.path.join(build_path, "inmanta_plugins", self._module.name)
+        model_dir: str = os.path.join(python_pkg_dir, "model")
+        if os.path.exists(model_dir):
+            raise ModuleBuildFailedError(
+                msg="There is already a model directory in %s. "
+                "The `inmanta_plugins.%s.model` package is reserved for bundling the inmanta model files. "
+                "Please use a different name for this Python package."
+                % (os.path.join(self._module.path, "inmanta_plugins", self._module.name), self._module.name)
+            )
+
         for dir_name in ["model", "files", "templates"]:
             fq_dir_name = os.path.join(build_path, dir_name)
             if os.path.exists(fq_dir_name):
@@ -1478,26 +1766,26 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         metadata_file = os.path.join(build_path, "setup.cfg")
         shutil.copy(metadata_file, python_pkg_dir)
 
-    def _get_isolated_env_builder(self) -> IsolatedEnvBuilder:
+    def _get_isolated_env_builder(self) -> DefaultIsolatedEnv:
         """
-        Returns the IsolatedEnvBuilder instance that should be used to build V2 modules. To speed to up the test
+        Returns the DefaultIsolatedEnv instance that should be used to build V2 modules. To speed to up the test
         suite, the build environment is cached when the tests are ran. This is possible because all modules, built
         by the test suite, have the same build requirements. For tests that need to test the code path used in
-        production, the V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE flag can be set to True.
+        production, the V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED flag can be set to True.
         """
-        if inmanta.RUNNING_TESTS and not V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE:
-            return IsolatedEnvBuilderCached.get_instance()
+        if inmanta.RUNNING_TESTS and not V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED:
+            return DefaultIsolatedEnvCached.get_instance()
         else:
-            return IsolatedEnvBuilder()
+            return DefaultIsolatedEnv()
 
     def _build_v2_module(self, build_path: str, output_directory: str) -> str:
         """
-        Build v2 module using PEP517 package builder.
+        Build v2 module using the pip system config and using PEP517 package builder.
         """
         try:
             with self._get_isolated_env_builder() as env:
                 distribution = "wheel"
-                builder = build.ProjectBuilder(srcdir=build_path, python_executable=env.executable, scripts_dir=env.scripts_dir)
+                builder = build.ProjectBuilder(source_dir=build_path, python_executable=env.python_executable)
                 env.install(builder.build_system_requires)
                 env.install(builder.get_requires_for_build(distribution=distribution))
                 return builder.build(distribution=distribution, output_directory=output_directory)
@@ -1602,7 +1890,7 @@ graft inmanta_plugins/{self._module.name}/templates
 
         config_in = {}
         if os.path.exists(os.path.join(in_folder, "pyproject.toml")):
-            with open(os.path.join(in_folder, "pyproject.toml"), "r") as fh:
+            with open(os.path.join(in_folder, "pyproject.toml")) as fh:
                 loglevel = logging.WARNING if warn_on_merge else logging.INFO
                 LOGGER.log(
                     level=loglevel,
@@ -1653,12 +1941,12 @@ graft inmanta_plugins/{self._module.name}/templates
         config.add_section("options.packages.find")
 
         # add requirements
-        module_requirements: List[InmantaModuleRequirement] = [
+        module_requirements: list[InmantaModuleRequirement] = [
             req for req in self._module.get_all_requires() if req.project_name != self._module.name
         ]
-        python_requirements: List[str] = self._module.get_strict_python_requirements_as_list()
+        python_requirements: list[str] = self._module.get_strict_python_requirements_as_list()
         if module_requirements or python_requirements:
-            requires: List[str] = sorted([str(r.get_python_package_requirement()) for r in module_requirements])
+            requires: list[str] = sorted([str(r.get_python_package_requirement()) for r in module_requirements])
             requires += python_requirements
             config.set("options", "install_requires", "\n".join(requires))
 

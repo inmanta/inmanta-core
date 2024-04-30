@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import pytest
 
 from inmanta.moduletool import ChangeType
@@ -25,10 +26,6 @@ def test_change_type() -> None:
     assert ChangeType.MAJOR.value == "major"
     assert ChangeType.MINOR.value == "minor"
     assert ChangeType.PATCH.value == "patch"
-
-    assert ChangeType.MAJOR.less() == ChangeType.MINOR
-    assert ChangeType.MINOR.less() == ChangeType.PATCH
-    assert ChangeType.PATCH.less() is None
 
     assert ChangeType.PATCH < ChangeType.MINOR < ChangeType.MAJOR
     assert ChangeType.MAJOR > ChangeType.MINOR > ChangeType.PATCH

@@ -15,17 +15,20 @@
 
     Contact: code@inmanta.com
 """
+
+import enum
 import inspect
 import json
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Literal, Optional, Union
 from uuid import UUID
 
+import pydantic
 import pytest
 from openapi_spec_validator import openapi_v30_spec_validator
 from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
 
-from inmanta.const import ResourceAction
+from inmanta.const import ClientType, ResourceAction
 from inmanta.data import model
 from inmanta.data.model import EnvironmentSetting
 from inmanta.protocol import method
@@ -37,15 +40,15 @@ from inmanta.protocol.openapi.converter import (
     OpenApiTypeConverter,
     OperationHandler,
 )
-from inmanta.protocol.openapi.model import MediaType, Schema
-from inmanta.server import SLICE_SERVER
+from inmanta.protocol.openapi.model import MediaType, OpenApiDataTypes, ParameterType, Schema
+from inmanta.server import SLICE_SERVER, config
 from inmanta.server.extensions import FeatureManager
 from inmanta.server.protocol import Server
 
 
 class DummyException(BaseHttpException):
     def __init__(self):
-        super(DummyException, self).__init__(status_code=405)
+        super().__init__(status_code=405)
 
 
 @pytest.fixture
@@ -55,11 +58,11 @@ def feature_manager(server: Server) -> FeatureManager:
 
 @pytest.fixture(scope="function")
 def api_methods_fixture(clean_reset):
-    @method(path="/simpleoperation", client_types=["api", "agent"], envelope=True)
+    @method(path="/simpleoperation", client_types=[ClientType.api, ClientType.agent], envelope=True)
     def post_method() -> str:
         return ""
 
-    @method(path="/simpleoperation", client_types=["agent"], operation="GET")
+    @method(path="/simpleoperation", client_types=[ClientType.agent], operation="GET")
     def get_method():
         pass
 
@@ -68,7 +71,7 @@ def api_methods_fixture(clean_reset):
         "non_header": ArgOption(getter=lambda x, y: "test"),
     }
 
-    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options)
+    @method(path="/operation/<id>", client_types=[ClientType.api, ClientType.agent], envelope=True, arg_options=arg_options)
     def dummy_post_with_parameters(header: str, non_header: str, param: int, id: UUID) -> str:
         """
         This is a brief description.
@@ -86,7 +89,13 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
-    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options, operation="GET")
+    @method(
+        path="/operation/<id>",
+        client_types=[ClientType.api, ClientType.agent],
+        envelope=True,
+        arg_options=arg_options,
+        operation="GET",
+    )
     def dummy_get_with_parameters(header: str, non_header: str, param: int, id: UUID) -> str:
         """
         This is a brief description.
@@ -104,11 +113,17 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
-    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options)
+    @method(path="/operation/<id>", client_types=[ClientType.api, ClientType.agent], envelope=True, arg_options=arg_options)
     def dummy_post_with_parameters_no_docstring(header: str, non_header: str, param: int, id: UUID) -> str:
         return ""
 
-    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options, operation="GET")
+    @method(
+        path="/operation/<id>",
+        client_types=[ClientType.api, ClientType.agent],
+        envelope=True,
+        arg_options=arg_options,
+        operation="GET",
+    )
     def dummy_get_with_parameters_no_docstring(header: str, non_header: str, param: int, id: UUID) -> str:
         return ""
 
@@ -119,7 +134,7 @@ def api_methods_fixture(clean_reset):
 
     @method(
         path="/operation/<id_doc>/<id_no_doc>",
-        client_types=["api", "agent"],
+        client_types=[ClientType.api, ClientType.agent],
         envelope=True,
         arg_options=arg_options_partial_doc,
     )
@@ -137,7 +152,7 @@ def api_methods_fixture(clean_reset):
 
     @method(
         path="/operation/<id_doc>/<id_no_doc>",
-        client_types=["api", "agent"],
+        client_types=[ClientType.api, ClientType.agent],
         envelope=True,
         arg_options=arg_options_partial_doc,
         operation="GET",
@@ -154,14 +169,34 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
+    @method(
+        path="/default/<id>",
+        client_types=[ClientType.api],
+        envelope=True,
+        operation="GET",
+    )
+    def dummy_get_with_default_values(
+        no_def: int, id: int = 5, param: str = "test", fl: float = 0.1, opt: Optional[str] = None
+    ) -> str:
+        return ""
 
-async def test_generate_openapi_definition(server: Server, feature_manager: FeatureManager):
+
+async def test_generate_openapi_definition(server: Server):
+    feature_manager = server.get_slice(SLICE_SERVER).feature_manager
     global_url_map = server._transport.get_global_url_map(server.get_slices().values())
     openapi = OpenApiConverter(global_url_map, feature_manager)
     openapi_json = openapi.generate_openapi_json()
     assert openapi_json
     openapi_parsed = json.loads(openapi_json)
     openapi_v30_spec_validator.validate(openapi_parsed)
+    assert "https" not in openapi_parsed["servers"][0]["url"]
+    # enable https
+    config.server_ssl_key.set("ssl_key")
+    config.server_ssl_cert.set("ssl_cert")
+    openapi_json = openapi.generate_openapi_json()
+    assert openapi_json
+    openapi_parsed = json.loads(openapi_json)
+    assert "https" in openapi_parsed["servers"][0]["url"]
 
 
 def test_filter_api_methods(server, api_methods_fixture, feature_manager):
@@ -220,16 +255,45 @@ def test_openapi_types_base_model():
     openapi_type = type_converter.get_openapi_type_of_parameter(
         inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=model.Environment)
     )
-    assert openapi_type.ref == type_converter.ref_prefix + "Environment"
+    assert openapi_type.ref == type_converter.openapi_ref_prefix + "Environment"
 
     environment_type = type_converter.resolve_reference(openapi_type.ref)
     assert environment_type.required == ["id", "name", "project_id", "repo_url", "repo_branch", "settings", "halted"]
 
 
-def test_openapi_types_union():
+def test_openapi_types_union() -> None:
+    # Test union type
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(Union[str, bytes])
-    assert openapi_type == Schema(anyOf=[Schema(type="string"), Schema(type="string", format="binary")])
+    openapi_type = type_converter.get_openapi_type(Union[str, bytes, Literal["test"]])
+    assert openapi_type == Schema(
+        anyOf=[
+            Schema(type="string"),
+            Schema(type="string", format="binary"),
+            Schema(type="string", enum=["test"]),
+        ]
+    )
+
+    # Test union type wrapped into an object
+    class Test(pydantic.BaseModel):
+        val: Union[str, bytes, Literal["test"]]
+
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Test)
+    schema_ref = f"{type_converter.openapi_ref_prefix}{Test.__name__}"
+    assert openapi_type.ref == schema_ref
+    schema_test_obj = type_converter.components.schemas[Test.__name__]
+    assert schema_test_obj.title == Test.__name__
+    assert schema_test_obj.required == ["val"]
+    assert len(schema_test_obj.properties) == 1
+    schema_val_property = schema_test_obj.properties["val"]
+    assert schema_val_property == Schema(
+        title="Val",
+        anyOf=[
+            Schema(type="string"),
+            Schema(type="string", format="binary"),
+            Schema(type="string", enum=["test"]),
+        ],
+    )
 
 
 def test_openapi_types_optional():
@@ -239,18 +303,52 @@ def test_openapi_types_optional():
 
 
 def test_openapi_types_list():
+    # Test list type
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(List[Union[int, UUID]])
+    openapi_type = type_converter.get_openapi_type(list[Union[int, UUID, Literal["test"]]])
     assert openapi_type == Schema(
-        type="array", items=Schema(anyOf=[Schema(type="integer"), Schema(type="string", format="uuid")])
+        type="array",
+        items=Schema(
+            anyOf=[
+                Schema(type="integer"),
+                Schema(type="string", format="uuid"),
+                Schema(type="string", enum=["test"]),
+            ]
+        ),
+    )
+
+    # Test list type wrapped into an object
+    class Test(pydantic.BaseModel):
+        val: list[Union[int, UUID, Literal["test"]]]
+
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Test)
+    schema_ref = f"{type_converter.openapi_ref_prefix}{Test.__name__}"
+    assert openapi_type.ref == schema_ref
+    schema_test_obj = type_converter.components.schemas[Test.__name__]
+    assert schema_test_obj.title == Test.__name__
+    assert schema_test_obj.required == ["val"]
+    assert schema_test_obj.type == "object"
+    assert len(schema_test_obj.properties) == 1
+    schema_array = schema_test_obj.properties["val"]
+    assert schema_array == Schema(
+        title="Val",
+        type="array",
+        items=Schema(
+            anyOf=[
+                Schema(type="integer"),
+                Schema(type="string", format="uuid"),
+                Schema(type="string", enum=["test"]),
+            ]
+        ),
     )
 
 
 def test_openapi_types_enum():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(List[ResourceAction])
+    openapi_type = type_converter.get_openapi_type(list[ResourceAction])
     assert openapi_type.type == "array"
-    assert openapi_type.items.ref == type_converter.ref_prefix + "ResourceAction"
+    assert openapi_type.items.ref == type_converter.openapi_ref_prefix + "ResourceAction"
 
     resource_action_type = type_converter.components.schemas["ResourceAction"]
     assert resource_action_type.type == "string"
@@ -259,33 +357,34 @@ def test_openapi_types_enum():
 
 def test_openapi_types_dict():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(Dict[str, UUID])
+    openapi_type = type_converter.get_openapi_type(dict[str, UUID])
     assert openapi_type == Schema(type="object", additionalProperties=Schema(type="string", format="uuid"))
 
 
 def test_openapi_types_list_of_model():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(List[model.Project])
+    openapi_type = type_converter.get_openapi_type(list[model.Project])
     assert openapi_type.type == "array"
-    assert openapi_type.items.ref == type_converter.ref_prefix + "Project"
+    assert openapi_type.items.ref == type_converter.openapi_ref_prefix + "Project"
 
 
 def test_openapi_types_list_of_list_of_optional_model():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(List[List[Optional[model.Project]]])
+    openapi_type = type_converter.get_openapi_type(list[list[Optional[model.Project]]])
     assert openapi_type.type == "array"
     assert openapi_type.items.type == "array"
-    assert openapi_type.items.items.ref == type_converter.ref_prefix + "Project"
+    assert openapi_type.items.items.ref == type_converter.openapi_ref_prefix + "Project"
     assert openapi_type.items.items.nullable
 
 
 def test_openapi_types_dict_of_union():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(Dict[str, Union[model.Project, model.Environment]])
+    openapi_type = type_converter.get_openapi_type(dict[str, Union[model.Project, model.Environment, Literal["test"]]])
     assert openapi_type.type == "object"
-    assert len(openapi_type.additionalProperties.anyOf) == 2
-    assert openapi_type.additionalProperties.anyOf[0].ref == type_converter.ref_prefix + "Project"
-    assert openapi_type.additionalProperties.anyOf[1].ref == type_converter.ref_prefix + "Environment"
+    assert len(openapi_type.additionalProperties.anyOf) == 3
+    assert openapi_type.additionalProperties.anyOf[0].ref == type_converter.openapi_ref_prefix + "Project"
+    assert openapi_type.additionalProperties.anyOf[1].ref == type_converter.openapi_ref_prefix + "Environment"
+    assert openapi_type.additionalProperties.anyOf[2] == Schema(type="string", enum=["test"])
 
 
 def test_openapi_types_optional_union():
@@ -350,6 +449,28 @@ def test_openapi_types_uuid():
     assert openapi_type == Schema(type="string", format="uuid")
 
 
+def test_openapi_types_literal() -> None:
+    # Test literal type
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Literal["test"])
+    assert openapi_type == Schema(type="string", enum=["test"])
+
+    # Test literal type wrapped into an object
+    class Test(pydantic.BaseModel):
+        val: Literal["test"]
+
+    type_converter = OpenApiTypeConverter()
+    openapi_type = type_converter.get_openapi_type(Test)
+    schema_ref = f"{type_converter.openapi_ref_prefix}{Test.__name__}"
+    assert openapi_type.ref == schema_ref
+    schema_test_obj = type_converter.components.schemas[Test.__name__]
+    assert schema_test_obj.title == Test.__name__
+    assert schema_test_obj.required == ["val"]
+    assert len(schema_test_obj.properties) == 1
+    schema_val_property = schema_test_obj.properties["val"]
+    assert schema_val_property == Schema(title="Val", type="string", enum=["test"])
+
+
 def test_openapi_types_anyurl():
     type_converter = OpenApiTypeConverter()
 
@@ -360,13 +481,13 @@ def test_openapi_types_anyurl():
     assert openapi_type == Schema(type="string", format="uri")
 
     openapi_type = type_converter.get_openapi_type(PostgresDsn)
-    assert openapi_type == Schema(type="string", format="uri")
+    assert openapi_type == Schema(type="string", format="multi-host-uri")
 
 
 def test_openapi_types_env_setting():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(EnvironmentSetting)
-    assert openapi_type.ref == type_converter.ref_prefix + "EnvironmentSetting"
+    assert openapi_type.ref == type_converter.openapi_ref_prefix + "EnvironmentSetting"
 
     env_settings_type = type_converter.resolve_reference(openapi_type.ref)
     assert env_settings_type.title == "EnvironmentSetting"
@@ -722,3 +843,77 @@ def test_openapi_schema() -> None:
     assert not Schema(**{"$ref": ref_prefix + "person"}).recursive_resolve(ref_prefix, schemas, update={}) == person_schema
     person_schema.properties["address"] = schemas["address"]
     assert Schema(**{"$ref": ref_prefix + "person"}).recursive_resolve(ref_prefix, schemas, update={}) == person_schema
+
+
+def test_get_openapi_parameter_type_for(api_methods_fixture: None) -> None:
+    """
+    Verify whether the MethodProperties.get_openapi_parameter_type_for() method works as expected.
+    """
+    assert len(MethodProperties.methods["dummy_post_with_parameters_no_docstring"]) == 1
+    method_properties = MethodProperties.methods["dummy_post_with_parameters_no_docstring"][0]
+    assert method_properties.get_openapi_parameter_type_for("id") is ParameterType.path
+    assert method_properties.get_openapi_parameter_type_for("header") is ParameterType.header
+    assert method_properties.get_openapi_parameter_type_for("non_header") is None
+    assert method_properties.get_openapi_parameter_type_for("param") is None
+
+    assert len(MethodProperties.methods["dummy_get_with_parameters_no_docstring"]) == 1
+    method_properties = MethodProperties.methods["dummy_get_with_parameters_no_docstring"][0]
+    assert method_properties.get_openapi_parameter_type_for("id") is ParameterType.path
+    assert method_properties.get_openapi_parameter_type_for("header") is ParameterType.header
+    assert method_properties.get_openapi_parameter_type_for("non_header") is ParameterType.query
+    assert method_properties.get_openapi_parameter_type_for("param") is ParameterType.query
+
+
+def test_get_openapi_type_of_parameter(api_methods_fixture: None) -> None:
+    """
+    Verify whether the OpenApiTypeConverter.get_openapi_type_of_parameter() method works as expected.
+    """
+    type_converter = OpenApiTypeConverter()
+    assert len(MethodProperties.methods["dummy_get_with_default_values"]) == 1
+    method_properties = MethodProperties.methods["dummy_get_with_default_values"][0]
+    param_dct = inspect.signature(method_properties.function).parameters
+    for param_name, data_type, default_value, nullable in [
+        ("no_def", OpenApiDataTypes.INTEGER.value, None, False),
+        ("id", OpenApiDataTypes.INTEGER.value, 5, False),
+        ("param", OpenApiDataTypes.STRING.value, "test", False),
+        ("fl", OpenApiDataTypes.NUMBER.value, 0.1, False),
+        ("opt", OpenApiDataTypes.STRING.value, None, True),
+    ]:
+        schema = type_converter.get_openapi_type_of_parameter(param_dct[param_name])
+        assert schema.type == data_type
+        assert schema.default == default_value
+        assert schema.nullable if nullable else not schema.nullable
+
+
+def test_get_openapi_type_for_on_enum() -> None:
+    """
+    Ensure that the type field is populated correctly when OpenApiTypeConverter.get_openapi_type() is called on an Enum.
+    """
+
+    class StrValEnum(enum.Enum):
+        A = "a"
+        B = "b"
+
+    class IntValEnum(enum.Enum):
+        A = 1
+        B = 2
+
+    class FloatValEnum(enum.Enum):
+        A = 1
+        B = 2.0
+
+    class BoolValEnum(enum.Enum):
+        A = True
+        B = False
+
+    openapi_type_converter = OpenApiTypeConverter()
+
+    for python_type, openapi_type in [
+        (StrValEnum, OpenApiDataTypes.STRING.value),
+        (IntValEnum, OpenApiDataTypes.INTEGER.value),
+        (FloatValEnum, OpenApiDataTypes.NUMBER.value),
+        (BoolValEnum, OpenApiDataTypes.BOOLEAN.value),
+    ]:
+        schema = openapi_type_converter.get_openapi_type(python_type)
+        resolved_schema = schema.resolve(openapi_type_converter.openapi_ref_prefix, openapi_type_converter.components.schemas)
+        assert resolved_schema.type == openapi_type

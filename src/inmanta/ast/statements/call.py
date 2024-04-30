@@ -17,8 +17,9 @@
 """
 
 import logging
+from collections import abc
 from itertools import chain
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import inmanta.ast.type as InmantaType
 import inmanta.execute.dataflow as dataflow
@@ -60,30 +61,30 @@ class FunctionCall(ReferenceStatement):
     def __init__(
         self,
         name: LocatableString,
-        arguments: List[ExpressionStatement],
-        kwargs: List[Tuple[LocatableString, ExpressionStatement]],
-        wrapped_kwargs: List[WrappedKwargs],
+        arguments: list[ExpressionStatement],
+        kwargs: list[tuple[LocatableString, ExpressionStatement]],
+        wrapped_kwargs: list[WrappedKwargs],
         location: Location,
         namespace: Namespace,
     ) -> None:
         ReferenceStatement.__init__(self, list(chain(arguments, (v for _, v in kwargs), wrapped_kwargs)))
         self.name: LocatableString = name
-        self.arguments: List[ExpressionStatement] = arguments
-        self.wrapped_kwargs: List[WrappedKwargs] = wrapped_kwargs
+        self.arguments: list[ExpressionStatement] = arguments
+        self.wrapped_kwargs: list[WrappedKwargs] = wrapped_kwargs
         self.location: Location = location
         self.namespace: Namespace = namespace
-        self.anchors = [TypeReferenceAnchor(self.namespace, self.name)]
-        self.kwargs: Dict[str, ExpressionStatement] = {}
+        self.kwargs: dict[str, ExpressionStatement] = {}
         for loc_name, expr in kwargs:
             arg_name: str = str(loc_name)
             if arg_name in self.kwargs:
-                raise RuntimeException(self, "Keyword argument %s repeated in function call %s()" % (arg_name, self.name))
+                raise RuntimeException(self, f"Keyword argument {arg_name} repeated in function call {self.name}()")
             self.kwargs[arg_name] = expr
         self.function: Optional[Function] = None
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
         func = self.namespace.get_type(self.name)
+        self.anchors = [TypeReferenceAnchor(self.namespace, self.name)]
         if isinstance(func, InmantaType.Primitive):
             self.function = Cast(self, func)
         elif isinstance(func, plugins.Plugin):
@@ -92,7 +93,7 @@ class FunctionCall(ReferenceStatement):
             raise RuntimeException(self, "Can not call '%s', can only call plugin or primitive type cast" % self.name)
 
     def requires_emit(self, resolver, queue):
-        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+        requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         # add lazy vars
         temp = ResultVariable()
@@ -100,11 +101,10 @@ class FunctionCall(ReferenceStatement):
         requires[self] = temp
         return requires
 
-    def execute(self, requires, resolver, queue):
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires, resolver, queue):
         return requires[self]
 
-    def execute_direct(self, requires):
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         arguments = [a.execute_direct(requires) for a in self.arguments]
         kwargs = {k: v.execute_direct(requires) for k, v in self.kwargs.items()}
         for wrapped_kwarg_expr in self.wrapped_kwargs:
@@ -131,25 +131,25 @@ class FunctionCall(ReferenceStatement):
         return dataflow.NodeStub("FunctionCall.get_node() placeholder for %s" % self).reference()
 
     def __repr__(self) -> str:
-        return "%s(%s)" % (
+        return "{}({})".format(
             self.name,
             ",".join(
                 chain(
                     (repr(a) for a in self.arguments),
-                    ("%s=%s" % (k, repr(v)) for k, v in self.kwargs.items()),
-                    ("%s" % repr(kwargs) for kwargs in self.wrapped_kwargs),
+                    (f"{k}={repr(v)}" for k, v in self.kwargs.items()),
+                    (repr(kwargs) for kwargs in self.wrapped_kwargs),
                 )
             ),
         )
 
     def pretty_print(self) -> str:
-        return "%s(%s)" % (
+        return "{}({})".format(
             self.name,
             ",".join(
                 chain(
                     (a.pretty_print() for a in self.arguments),
-                    ("%s=%s" % (k, v.pretty_print()) for k, v in self.kwargs.items()),
-                    ("%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
+                    (f"{k}={v.pretty_print()}" for k, v in self.kwargs.items()),
+                    (kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
                 )
             ),
         )
@@ -177,7 +177,7 @@ class Cast(Function):
         Function.__init__(self, ast_node)
         self.type = tp
 
-    def call_direct(self, args: List[object], kwargs: Dict[str, object]) -> object:
+    def call_direct(self, args: list[object], kwargs: dict[str, object]) -> object:
         if len(kwargs) > 0:
             raise RuntimeException(self.ast_node, "Only positional arguments allowed in type cast")
         if len(args) != 1:
@@ -187,7 +187,7 @@ class Cast(Function):
         return self.type.cast(*args)
 
     def call_in_context(
-        self, args: List[object], kwargs: Dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
+        self, args: list[object], kwargs: dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
     ) -> None:
         result.set_value(self.call_direct(args, kwargs), self.ast_node.location)
 
@@ -197,7 +197,7 @@ class PluginFunction(Function):
         Function.__init__(self, ast_node)
         self.plugin: plugins.Plugin = plugin
 
-    def call_direct(self, args: List[object], kwargs: Dict[str, object]) -> object:
+    def call_direct(self, args: list[object], kwargs: dict[str, object]) -> object:
         no_unknows = self.plugin.check_args(args, kwargs)
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
@@ -223,7 +223,7 @@ class PluginFunction(Function):
                 raise ExternalException(self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e)
 
     def call_in_context(
-        self, args: List[object], kwargs: Dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
+        self, args: list[object], kwargs: dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
     ) -> None:
         no_unknows = self.plugin.check_args(args, kwargs)
 
@@ -262,7 +262,6 @@ class PluginFunction(Function):
 
 
 class FunctionUnit(Waiter):
-
     __slots__ = ("result", "base_requires", "function", "resolver")
 
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall) -> None:

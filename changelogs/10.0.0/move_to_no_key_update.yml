@@ -1,0 +1,3 @@
+description: Update all 'for update' locks to the more accurate 'for no key update'
+change-type: patch
+destination-branches: [master, iso6]

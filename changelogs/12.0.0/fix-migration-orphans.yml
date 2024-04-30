@@ -1,0 +1,4 @@
+description: Fix incomplete migration script to include orphans in resource_persistent_state
+issue-nr: 7289
+change-type: patch
+destination-branches: [master, iso7]

@@ -1,0 +1,3 @@
+description: Bump std version to stay compatible with pinned email-validator version
+change-type: patch
+destination-branches: [master, iso6]

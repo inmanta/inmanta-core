@@ -1,0 +1,6 @@
+description: Add python-like f-strings.
+issue-nr: 5757
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

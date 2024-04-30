@@ -15,9 +15,9 @@
 
     Contact: bart@inmanta.com
 """
+
 import glob
 import importlib
-import json
 import logging
 import os
 import re
@@ -25,15 +25,19 @@ import subprocess
 import sys
 import tempfile
 from importlib.abc import Loader
+from re import Pattern
 from subprocess import CalledProcessError
-from typing import Dict, List, Optional, Pattern, Tuple
+from typing import Callable, LiteralString, Optional
 from unittest.mock import patch
 
+import pkg_resources
 import py
 import pytest
 from pkg_resources import Requirement
 
 from inmanta import env, loader, module
+from inmanta.data.model import PipConfig
+from inmanta.env import Pip
 from packaging import version
 from utils import LogSequence, PipIndex, create_python_package
 
@@ -47,6 +51,7 @@ if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
     )
 
 
+@pytest.mark.slowtest
 def test_venv_pyton_env_empty_string(tmpdir):
     """test that an exception is raised if the venv path is an empty string"""
     with pytest.raises(ValueError) as e:
@@ -73,78 +78,51 @@ def test_venv_pyton_env_empty_string(tmpdir):
     assert e.value.args[0] == "The env_path cannot be an empty string."
 
 
+@pytest.mark.slowtest
 def test_basic_install(tmpdir):
-    """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it."""
     env_dir1 = tmpdir.mkdir("env1").strpath
-
-    with pytest.raises(ImportError):
-        import lorem  # NOQA
-
     venv1 = env.VirtualEnv(env_dir1)
+    assert not venv1.are_installed(["lorem"])
 
     venv1.use_virtual_env()
     venv1.install_from_list(["lorem"])
-    import lorem  # NOQA
+    assert venv1.are_installed(["lorem"])
 
-    lorem.sentence()
-
-    with pytest.raises(ImportError):
-        import yummy  # NOQA
+    assert not venv1.are_installed(["dummy-yummy"])
 
     venv1 = env.VirtualEnv(env_dir1)
-
     venv1.use_virtual_env()
     venv1.install_from_list(["dummy-yummy"])
-    import yummy  # NOQA
+    assert venv1.are_installed(["dummy-yummy"])
 
-    with pytest.raises(ImportError):
-        import iplib  # NOQA
 
-    venv1 = env.VirtualEnv(env_dir1)
+def test_git_based_install(tmpdir: py.path.local) -> None:
+    """
+    Verify that the install methods can handle git-based installs over https.
+    """
+    venv = env.VirtualEnv(tmpdir.mkdir("env").strpath)
+    venv.use_virtual_env()
 
-    venv1.use_virtual_env()
+    pkg_name: LiteralString = "pytest-inmanta"
+    assert not venv.are_installed([pkg_name])
+
     try:
-        venv1.install_from_list(
-            ["lorem == 0.1.1", "dummy-yummy", "iplib@git+https://github.com/bartv/python3-iplib", "lorem", "iplib >=0.0.1"]
-        )
+        venv.install_from_list([f"{pkg_name}@git+https://github.com/inmanta/{pkg_name}"])
     except CalledProcessError as ep:
         print(ep.stdout)
         raise
-    import iplib  # NOQA
+
+    assert venv.are_installed([pkg_name])
 
 
-def test_install_fails(tmpdir, caplog, monkeypatch):
-    venv = env.VirtualEnv(tmpdir)
-    venv.use_virtual_env()
-    caplog.clear()
-    caplog.set_level(logging.INFO)
-    package_name = "non-existing-pkg-inmanta"
-
-    # monkeypatch pip install to set --no-index for security reasons (anyone could publish this package to PyPi)
-    compose = env.PipCommandBuilder.compose_install_command
-
-    def mock_compose(*args, **kwargs):
-        if "index_urls" in kwargs or len(args) < 5:
-            return compose(*args, **{**kwargs, "index_urls": []})
-        else:
-            return compose(*args[:3], [], *args[4:], **kwargs)
-
-    monkeypatch.setattr(env.PipCommandBuilder, "compose_install_command", mock_compose)
-
-    with pytest.raises(Exception):
-        venv.install_from_list([package_name])
-
-    log_sequence = LogSequence(caplog)
-    log_sequence.contains("inmanta.env", logging.INFO, f"requirements:\n{package_name}")
-
-
+@pytest.mark.slowtest
 def test_install_package_already_installed_in_parent_env(tmpdir):
     """Test using and installing a package that is already present in the parent virtual environment."""
     # get all packages in the parent
     parent_installed = list(env.process_env.get_installed_packages().keys())
 
     # create a venv and list all packages available in the venv
-    venv = env.VirtualEnv(tmpdir)
+    venv = env.VirtualEnv(str(tmpdir))
     venv.use_virtual_env()
 
     installed_packages = list(env.PythonEnvironment(python_path=venv._parent_python).get_installed_packages().keys())
@@ -158,7 +136,7 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     assert len(dirs) == 1
     site_dir = dirs[0]
 
-    def _list_dir(path: str, ignore: List[str]) -> List[str]:
+    def _list_dir(path: str, ignore: list[str]) -> list[str]:
         return [d for d in os.listdir(site_dir) if d not in ignore]
 
     # site_dir should only contain a sitecustomize.py file that sets up inheritance from the parent venv
@@ -175,28 +153,15 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     subprocess.check_output([os.path.join(venv.env_path, "bin/pip"), "list"])
 
 
-def test_req_parser(tmpdir):
-    url = "git+https://github.com/bartv/python3-iplib"
-    at_url = "iplib@" + url
-    egg_url = url + "#egg=iplib"
+def test_gen_req_file():
+    """
+    These are all examples used in older testcases that did not work correctly before
+    They are supported now
 
-    e = env.VirtualEnv(tmpdir)
-    name, u = e._parse_line(url)
-    assert name is None
-    assert u == url
+    This testcase now only verifies they are all correctly parsed
+    """
 
-    name, u = e._parse_line(at_url)
-    assert name == "iplib"
-    assert u == egg_url
-
-    e._parse_line(egg_url)
-    assert name == "iplib"
-    assert u == egg_url
-
-
-def test_gen_req_file(tmpdir):
-    e = env.VirtualEnv(tmpdir)
-    req = [
+    reqs = [
         "lorem == 0.1.1",
         "lorem > 0.1",
         "dummy-yummy",
@@ -205,14 +170,15 @@ def test_gen_req_file(tmpdir):
         # verify support for environment markers as described in PEP 508
         "lorem;python_version<'3.7'",
         "lorem;platform_machine == 'x86_64' and platform_system == 'Linux'",
+        "lorem == 0.1;python_version=='3.7'",
+        "lorem == 0.2;python_version=='3.9'",
+        "dep[opt]",
+        "dep[otheropt]",
     ]
 
-    req_lines = [x for x in e._gen_content_requirements_file(req).split("\n") if len(x) > 0]
-    assert len(req_lines) == 3
-    assert (
-        'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_machine == "x86_64" and platform_system == "Linux"'
-        in req_lines
-    )
+    # make sure they all parse
+    for req in reqs:
+        pkg_resources.parse_requirements(req)
 
 
 def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
@@ -228,10 +194,11 @@ def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
             )
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize_any("version", [None, version.Version("8.6.0")])
 def test_process_env_install_from_index(
     tmpdir: str,
-    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    tmpvenv_active: tuple[py.path.local, py.path.local],
     version: Optional[version.Version],
 ) -> None:
     """
@@ -239,24 +206,118 @@ def test_process_env_install_from_index(
     """
     package_name: str = "more-itertools"
     assert package_name not in env.process_env.get_installed_packages()
-    env.process_env.install_from_index([Requirement.parse(package_name + (f"=={version}" if version is not None else ""))])
-    installed: Dict[str, version.Version] = env.process_env.get_installed_packages()
+    env.process_env.install_for_config(
+        [Requirement.parse(package_name + (f"=={version}" if version is not None else ""))],
+        config=PipConfig(
+            use_system_config=True,  # we need an upstream for some packages
+        ),
+    )
+    installed: dict[str, version.Version] = env.process_env.get_installed_packages()
     assert package_name in installed
     if version is not None:
         assert installed[package_name] == version
+    # legacy method
+    # We call it here to make sure the legacy compatibility works
+    # It massages the inputs to get to the same call as the one above.
+    # It should hit the cache there and return here.
+    # Cheap and fast test
+    env.process_env.install_from_index(
+        [Requirement.parse(package_name + (f"=={version}" if version is not None else ""))],
+        use_pip_config=True,
+    )
 
 
-def test_process_env_install_from_index_not_found(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> None:
+@pytest.mark.slowtest
+@pytest.mark.parametrize_any("use_extra_indexes_env", [False, True])
+@pytest.mark.parametrize_any("use_extra_indexes", [False, True])
+@pytest.mark.parametrize_any("use_system_config", [False, True])
+def test_process_env_install_from_index_not_found_env_var(
+    tmpvenv_active: tuple[py.path.local, py.path.local],
+    monkeypatch,
+    create_empty_local_package_index_factory: Callable[[str], str],
+    use_extra_indexes: bool,
+    use_extra_indexes_env: bool,
+    use_system_config: bool,
+) -> None:
     """
-    Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
+    Attempt to install a package that does not exist from the pip indexes defined in the env vars, in the pip config or in both.
+    This if the system config are used or not.
+    Assert the appropriate error is raised.
     """
-    with pytest.raises(env.PackageNotFound):
-        # pass empty index list for security reasons (anyone could publish this package to PyPi)
-        env.process_env.install_from_index([Requirement.parse("this-package-does-not-exist")], index_urls=[])
+    index_urls = [create_empty_local_package_index_factory()]
+
+    if use_extra_indexes_env:
+        extra_env_indexes = [
+            create_empty_local_package_index_factory("extra_env1"),
+            create_empty_local_package_index_factory("extra_env2"),
+        ]
+        # Convert list to a space-separated string for the environment variable
+        monkeypatch.setenv("PIP_EXTRA_INDEX_URL", " ".join(extra_env_indexes))
+        if use_system_config:
+            # Include environment extra indexes in the main list for assertion
+            index_urls.extend(extra_env_indexes)
+
+    if use_extra_indexes:
+        index_urls.extend(
+            [
+                create_empty_local_package_index_factory("extra1"),
+                create_empty_local_package_index_factory("extra2"),
+            ]
+        )
+
+    expected = (
+        "Packages this-package-does-not-exist were not "
+        "found in the given indexes. (Looking in indexes: %s)" % ", ".join(index_urls)
+    )
+
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
+        env.process_env.install_for_config(
+            [Requirement.parse("this-package-does-not-exist")],
+            config=PipConfig(
+                index_url=index_urls[0],
+                # The first element should only be passed to the index_url. If there are indexes in the environment
+                # they should not be passed in the extra_index_url as they are already present in PIP_EXTRA_INDEX_URL
+                # (second and third element of index_urls).
+                extra_index_url=index_urls[3:] if (use_system_config and use_extra_indexes_env) else index_urls[1:],
+                use_system_config=use_system_config,
+            ),
+        )
 
 
+@pytest.mark.parametrize_any("use_system_config", [True, False])
+def test_process_env_install_no_index(tmpdir: py.path.local, monkeypatch, use_system_config: bool) -> None:
+    """
+    Attempt to install a package that does not exist with --no-index.
+    To have --no-index set in the pip cmd, the config should not contain an index_url,
+    we should not be using the system config and a path needs to be specified.
+    it can also be set in the env_vars
+    Assert the appropriate error is raised.
+    """
+    if use_system_config:
+        monkeypatch.setenv("PIP_NO_INDEX", "true")
+
+    setup_py_content = """
+from setuptools import setup
+setup(name="test")
+"""
+    # Write the minimal setup.py content to the temporary directory
+    setup_py_path = os.path.join(tmpdir, "setup.py")
+    with open(setup_py_path, "w") as setup_file:
+        setup_file.write(setup_py_content)
+
+    expected = "Packages this-package-does-not-exist were not found. No indexes were used."
+
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
+        env.process_env.install_for_config(
+            requirements=[Requirement.parse("this-package-does-not-exist")],
+            paths=[env.LocalPackagePath(path=str(tmpdir))],
+            config=PipConfig(use_system_config=use_system_config),
+        )
+
+
+@pytest.mark.slowtest
 def test_process_env_install_from_index_conflicting_reqs(
-    tmpdir: str, tmpvenv_active: Tuple[py.path.local, py.path.local]
+    tmpdir: str, tmpvenv_active: tuple[py.path.local, py.path.local]
 ) -> None:
     """
     Attempt to install a package with conflicting version requirements from a pip index. Make sure this fails and the
@@ -264,14 +325,20 @@ def test_process_env_install_from_index_conflicting_reqs(
     """
     package_name: str = "more-itertools"
     with pytest.raises(env.ConflictingRequirements) as e:
-        env.process_env.install_from_index([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
+        env.process_env.install_for_config(
+            [Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]],
+            config=PipConfig(
+                use_system_config=True,  # we need an upstream for some packages
+            ),
+        )
     assert "conflicting dependencies" in e.value.msg
     assert package_name not in env.process_env.get_installed_packages()
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize("editable", [True, False])
 def test_process_env_install_from_source(
-    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    tmpvenv_active: tuple[py.path.local, py.path.local],
     modules_v2_dir: str,
     editable: bool,
 ) -> None:
@@ -294,7 +361,7 @@ def test_process_env_install_from_source(
 def test_active_env_get_module_file(
     local_module_package_index: str,
     tmpdir: py.path.local,
-    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    tmpvenv_active: tuple[py.path.local, py.path.local],
     v1_plugin_loader: bool,
     package_name: str,
 ) -> None:
@@ -308,9 +375,15 @@ def test_active_env_get_module_file(
     if package_name.startswith(module.ModuleV2.PKG_NAME_PREFIX):
         module_name = "inmanta_plugins." + package_name[len(module.ModuleV2.PKG_NAME_PREFIX) :].replace("-", "_")
         index = str(local_module_package_index)
+        pip_config = PipConfig(
+            index_url=index,
+        )
+
     else:
         module_name = package_name.replace("-", "_")
-        index = None
+        pip_config = PipConfig(
+            use_system_config=True,
+        )
 
     # unload module if already loaded from encapsulating development venv
     if module_name in sys.modules:
@@ -323,9 +396,9 @@ def test_active_env_get_module_file(
         loader.PluginModuleFinder.configure_module_finder([os.path.join(str(tmpdir), "libs")])
 
     assert env.ActiveEnv.get_module_file(module_name) is None
-    env.process_env.install_from_index([Requirement.parse(package_name)], index_urls=[index] if index is not None else None)
+    env.process_env.install_for_config([Requirement.parse(package_name)], pip_config)
     assert package_name in env.process_env.get_installed_packages()
-    module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
+    module_info: Optional[tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
     module_file, mod_loader = module_info
     assert module_file is not None
@@ -338,10 +411,12 @@ def test_active_env_get_module_file(
     assert sys.modules[module_name].__file__ == module_file
 
 
+@pytest.mark.slowtest
 def test_active_env_get_module_file_editable_namespace_package(
     tmpdir: str,
-    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    tmpvenv_active: tuple[py.path.local, py.path.local],
     modules_v2_dir: str,
+    local_module_package_index,
 ) -> None:
     """
     Verify that get_module_file works after installing an editable namespace package in an active environment.
@@ -351,9 +426,13 @@ def test_active_env_get_module_file_editable_namespace_package(
 
     assert env.ActiveEnv.get_module_file(module_name) is None
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
-    env.process_env.install_from_source([env.LocalPackagePath(path=project_dir, editable=True)])
+    env.process_env.install_for_config(
+        requirements=[],
+        paths=[env.LocalPackagePath(path=project_dir, editable=True)],
+        config=PipConfig(use_system_config=False, index_url=local_module_package_index),
+    )
     assert package_name in env.process_env.get_installed_packages()
-    module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
+    module_info: Optional[tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
     module_file, mod_loader = module_info
     assert module_file is not None
@@ -362,9 +441,19 @@ def test_active_env_get_module_file_editable_namespace_package(
     importlib.import_module(module_name)
     assert module_name in sys.modules
     assert sys.modules[module_name].__file__ == module_file
+    # legacy method
+    # We call it here to make sure the legacy compatibility works
+    # It massages the inputs to get to the same call as the one above.
+    # It should hit the cache there and return here.
+    # Cheap and fast test
+    env.process_env.install_from_source(
+        paths=[env.LocalPackagePath(path=project_dir, editable=True)],
+    )
 
 
-def create_install_package(name: str, version: version.Version, requirements: List[Requirement]) -> None:
+def create_install_package(
+    name: str, version: version.Version, requirements: list[Requirement], local_module_package_index: str
+) -> None:
     """
     Creates and installs a simple package with specified requirements. Creates package in a temporary directory and
     cleans it up after install.
@@ -372,6 +461,7 @@ def create_install_package(name: str, version: version.Version, requirements: Li
     :param name: Package name.
     :param version: Version for this package.
     :param requirements: Requirements on other packages. Required packages must already be installed when calling this function.
+    :param local_module_package_index: upstream index to get setuptools and wheel
     """
     req_string: str = (
         "" if len(requirements) == 0 else ("[options]\ninstall_requires=" + "\n    ".join(str(req) for req in requirements))
@@ -395,7 +485,14 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
                 """.strip()
             )
-        env.process_env.install_from_source([env.LocalPackagePath(path=str(tmpdir), editable=False)])
+        env.process_env.install_for_config(
+            requirements=[],
+            paths=[env.LocalPackagePath(path=str(tmpdir), editable=False)],
+            config=PipConfig(
+                use_system_config=False,
+                index_url=local_module_package_index,
+            ),
+        )
 
 
 @pytest.mark.slowtest
@@ -403,6 +500,7 @@ def test_active_env_check_basic(
     caplog,
     tmpdir: str,
     tmpvenv_active_inherit: str,
+    local_module_package_index,  # upstream for setuptools for isolated build
 ) -> None:
     """
     Verify that the env.ActiveEnv.check() method detects all possible forms of incompatibilities within the environment.
@@ -414,7 +512,7 @@ def test_active_env_check_basic(
 
     error_msg: str = "Incompatibility between constraint"
 
-    def assert_all_checks(expect_test: Tuple[bool, str] = (True, ""), expect_nonext: Tuple[bool, str] = (True, "")) -> None:
+    def assert_all_checks(expect_test: tuple[bool, str] = (True, ""), expect_nonext: tuple[bool, str] = (True, "")) -> None:
         """
         verify what the check method for 2 different scopes: for an existing package and a non existing one.
 
@@ -439,11 +537,13 @@ def test_active_env_check_basic(
                 assert expect[1] in e.value.get_message()
 
     assert_all_checks()
-    create_install_package("test-package-one", version.Version("1.0.0"), [])
+    create_install_package("test-package-one", version.Version("1.0.0"), [], local_module_package_index)
     assert_all_checks()
-    create_install_package("test-package-two", version.Version("1.0.0"), [Requirement.parse("test-package-one~=1.0")])
+    create_install_package(
+        "test-package-two", version.Version("1.0.0"), [Requirement.parse("test-package-one~=1.0")], local_module_package_index
+    )
     assert_all_checks()
-    create_install_package("test-package-one", version.Version("2.0.0"), [])
+    create_install_package("test-package-one", version.Version("2.0.0"), [], local_module_package_index)
     assert_all_checks(
         expect_test=(
             False,
@@ -453,13 +553,14 @@ def test_active_env_check_basic(
     )
 
 
-def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> None:
+@pytest.mark.slowtest
+def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local_module_package_index) -> None:
     """
     Verify that the env.ActiveEnv.check() method's constraints parameter is taken into account as expected.
     """
     caplog.set_level(logging.WARNING)
     in_scope: Pattern[str] = re.compile("test-package-.*")
-    constraints: List[Requirement] = [Requirement.parse("test-package-one~=1.0")]
+    constraints: list[Requirement] = [Requirement.parse("test-package-one~=1.0")]
 
     env.ActiveEnv.check(in_scope)
 
@@ -468,20 +569,22 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> No
         env.ActiveEnv.check(in_scope, constraints)
 
     caplog.clear()
-    create_install_package("test-package-one", version.Version("1.0.0"), [])
+    create_install_package("test-package-one", version.Version("1.0.0"), [], local_module_package_index)
     env.ActiveEnv.check(in_scope, constraints)
     assert "Incompatibility between constraint" not in caplog.text
 
     # Add an unrelated package to the venv, that should not matter
     # setup for #4761
     caplog.clear()
-    create_install_package("ext-package-one", version.Version("1.0.0"), [Requirement.parse("test-package-one==1.0")])
+    create_install_package(
+        "ext-package-one", version.Version("1.0.0"), [Requirement.parse("test-package-one==1.0")], local_module_package_index
+    )
     env.ActiveEnv.check(in_scope, constraints)
     assert "Incompatibility between constraint" not in caplog.text
 
     caplog.clear()
     v: version.Version = version.Version("2.0.0")
-    create_install_package("test-package-one", v, [])
+    create_install_package("test-package-one", v, [], local_module_package_index)
     # test for #4761
     # without additional constrain, this is not a hard failure
     # except for the unrelated package, which should produce a warning
@@ -496,6 +599,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> No
         env.ActiveEnv.check(in_scope, constraints)
 
 
+@pytest.mark.slowtest
 def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> None:
     """
     Ensure that an ActiveEnv cannot override the main inmanta packages: inmanta-service-orchestrator, inmanta, inmanta-core.
@@ -505,37 +609,38 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
 
     inmanta_requirements = Requirement.parse("inmanta-core==4.0.0")
     with pytest.raises(env.ConflictingRequirements) as excinfo:
-        tmpvenv_active_inherit.install_from_index(requirements=[inmanta_requirements])
+        tmpvenv_active_inherit.install_for_config(
+            requirements=[inmanta_requirements],
+            config=PipConfig(
+                use_system_config=True,  # we need some upstream
+            ),
+        )
     match = re.search(
-        r"Cannot install inmanta-core==4\.0\.0 and inmanta-core=.* because these "
+        r"Cannot install (inmanta-core==4\.0\.0 and inmanta-core=.*|inmanta-core=.* and inmanta-core==4\.0\.0) because these "
         r"package versions have conflicting dependencies",
         excinfo.value.msg,
     )
     assert match is not None
 
 
-def test_pip_binary_when_venv_path_contains_double_quote(tmpdir) -> None:
+@pytest.mark.slowtest
+@pytest.mark.parametrize("invalid_char", ['"', "$", "`"])
+def test_invalid_chars_in_venv_path(tmpdir, invalid_char: str) -> None:
     """
-    Test whether the pip binary generated by the VirtualEnv class works correctly when the
-    pip binary contains a double quote.
+    Test that an error is raised when attempting to create a venv with invalid chars in its path.
     """
-    venv_dir = os.path.join(tmpdir, 'tes t"test')
-    venv = env.VirtualEnv(venv_dir)
-    venv.use_virtual_env()
-    assert any('"' in path and " " in path for path in sys.path)
+    venv_name = f"test{invalid_char}test"
+    venv_dir = os.path.join(tmpdir, venv_name)
 
-    pip_binary = os.path.join(os.path.dirname(venv.python_path), "pip")
-    # Ensure that the pip command doesn't raise an exception
-    result = subprocess.check_output(
-        [pip_binary, "list", "--format", "json", "--disable-pip-version-check", "--no-python-version-warning"],
-        timeout=10,
-        encoding="utf-8",
-    )
-    parsed_output = json.loads(result)
-    # Ensure inheritance works correctly
-    assert "inmanta-core" in [elem["name"] for elem in parsed_output]
+    with pytest.raises(ValueError) as excinfo:
+        env.VirtualEnv(venv_dir)
+    assert (
+        f"Cannot create virtual environment because the provided path `{venv_dir}` contains an"
+        f" invalid character (`{invalid_char}`)."
+    ) in str(excinfo.value)
 
 
+@pytest.mark.slowtest
 def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module_package_index: str) -> None:
     """
     Test whether the cache on an active env works correctly.
@@ -547,9 +652,11 @@ def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module
             assert tmpvenv_active_inherit.are_installed(requirements=[r]) == installed
 
     _assert_install("inmanta-module-elaboratev2module==1.2.3", installed=False)
-    tmpvenv_active_inherit.install_from_index(
+    tmpvenv_active_inherit.install_for_config(
         requirements=[Requirement.parse("inmanta-module-elaboratev2module==1.2.3")],
-        index_urls=[local_module_package_index],
+        config=PipConfig(
+            index_url=local_module_package_index,
+        ),
     )
     _assert_install("inmanta-module-elaboratev2module==1.2.3", installed=True)
     _assert_install("inmanta-module-elaboratev2module~=1.2.0", installed=True)
@@ -558,23 +665,7 @@ def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module
     _assert_install("inmanta-module-elaboratev2module==1.2.4", installed=False)
 
 
-def test_gen_content_requirements_file_extras():
-    """
-    Ensure that the `env.ActiveEnv._gen_content_requirements_file` method takes into account extras.
-    """
-    dependency = "dep==1.2.3"
-    content: str = env.ActiveEnv._gen_content_requirements_file([dependency])
-    assert content.strip() == "dep == 1.2.3"
-
-    dependency = "dep[opt]==1.2.3"
-    content: str = env.ActiveEnv._gen_content_requirements_file([dependency])
-    assert content.strip() == "dep[opt] == 1.2.3"
-
-    dependency = "dep[opt,dev]==1.2.3"
-    content: str = env.ActiveEnv._gen_content_requirements_file([dependency])
-    assert content.strip() == "dep[dev,opt] == 1.2.3"
-
-
+@pytest.mark.slowtest
 def test_basic_logging(tmpdir, caplog):
     with caplog.at_level(logging.INFO):
         env_dir1 = tmpdir.mkdir("env1").strpath
@@ -585,9 +676,10 @@ def test_basic_logging(tmpdir, caplog):
 
         log_sequence = LogSequence(caplog)
         log_sequence.assert_not("inmanta.env", logging.INFO, f"Creating new virtual environment in {env_dir1}")
-        log_sequence.contains("inmanta.env", logging.INFO, f"Using virtual environment at {env_dir1}")
+        log_sequence.contains("inmanta.env", logging.INFO, f"Initializing virtual environment at {env_dir1}")
 
 
+@pytest.mark.slowtest
 def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit: env.VirtualEnv) -> None:
     """
     Ensure that the `ActiveEnv.are_installed()` method doesn't go into an infinite loop when there is a circular dependency
@@ -619,10 +711,16 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
     )
 
     requirements = [Requirement.parse("pkg[optional-pkg]")]
-    tmpvenv_active_inherit.install_from_index(requirements=requirements, index_urls=[pip_index.url])
+    tmpvenv_active_inherit.install_for_config(
+        requirements=requirements,
+        config=PipConfig(
+            index_url=pip_index.url,
+        ),
+    )
     assert tmpvenv_active_inherit.are_installed(requirements=requirements)
 
 
+@pytest.mark.slowtest
 def test_pip_logs(caplog, tmpvenv_active_inherit: str) -> None:
     """
     Verify the logs of a pip install:
@@ -669,10 +767,11 @@ inmanta-module-net
                 """
             )
         caplog.clear()
-        tmpvenv_active_inherit._run_pip_install_command(
+        Pip.run_pip_install_command_from_config(
             python_path=env.process_env.python_path,
             constraints_files=[constraint1, constraint2],
             requirements_files=[requirement1, requirement2],
+            config=PipConfig(use_system_config=True),
         )
 
         assert all(record.name == "inmanta.pip" for record in caplog.records)

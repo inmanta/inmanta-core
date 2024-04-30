@@ -15,9 +15,11 @@
 
     Contact: code@inmanta.com
 """
-from typing import Callable, Type, TypeVar
 
-T = TypeVar("T", Callable, Type)
+from collections.abc import Callable
+from typing import TypeVar
+
+T = TypeVar("T", Callable, type)
 
 
 def stable_api(elem: T) -> T:

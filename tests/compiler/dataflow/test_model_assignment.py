@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from typing import Dict, List, Optional
+from typing import Optional
 
 import pytest
 
@@ -69,7 +69,7 @@ x = 0
     graph: DataflowGraph = dataflow_test_helper.get_graph()
     x: AssignableNodeReference = get_dataflow_node(graph, "x")
     assert isinstance(x, VariableNodeReference)
-    assignments: List[Assignment] = x.node.value_assignments
+    assignments: list[Assignment] = x.node.value_assignments
     assert len(assignments) == 2
     zero_index: int = [assignment.rhs for assignment in assignments].index(ValueNode(0).reference())
     for i, assignment in enumerate(assignments):
@@ -104,7 +104,7 @@ def test_dataflow_model_attribute_assignment_responsible(dataflow_test_helper: D
     dataflow_test_helper.compile(
         """
 entity Test:
-    number n
+    int n
 end
 implement Test using std::none
 
@@ -204,7 +204,7 @@ def test_dataflow_model_assignment_from_attribute(dataflow_test_helper: Dataflow
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
+    int n
 end
 implement A using std::none
 
@@ -232,7 +232,7 @@ def test_dataflow_model_assignment_outside_constructor(dataflow_test_helper: Dat
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
+    int n
 end
 implement A using std::none
 
@@ -268,7 +268,7 @@ def test_dataflow_model_result_variable(dataflow_test_helper: DataflowTestHelper
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
+    int n
 end
 
 index A(n)
@@ -291,7 +291,7 @@ y = A(n = 4)
     def assert_rv(result_variable: ResultVariable) -> None:
         node_ref: Optional[AssignableNodeReference] = result_variable.get_dataflow_node()
         assert node_ref is not None
-        nodes: List[AssignableNode] = list(node_ref.nodes())
+        nodes: list[AssignableNode] = list(node_ref.nodes())
         assert len(nodes) == 1
         assert nodes[0].result_variable is result_variable
 
@@ -299,12 +299,12 @@ y = A(n = 4)
     assert isinstance(x, ResultVariable)
     assert_rv(x)
 
-    types: Dict[str, inmanta_type.Type] = dataflow_test_helper.get_types()
+    types: dict[str, inmanta_type.Type] = dataflow_test_helper.get_types()
     a_entity_str: str = "__config__::A"
     assert a_entity_str in types
     a_entity: inmanta_type.Type = types[a_entity_str]
     assert isinstance(a_entity, Entity)
-    a_instances: List[Instance] = a_entity.get_all_instances()
+    a_instances: list[Instance] = a_entity.get_all_instances()
     assert len(a_instances) == 1
     for attr in ["n", "other"]:
         assert_rv(a_instances[0].get_attribute(attr))

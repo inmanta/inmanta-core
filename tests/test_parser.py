@@ -16,12 +16,12 @@
     Contact: code@inmanta.com
 """
 
+import logging
 import re
-import warnings
-from typing import List
 
 import pytest
 
+from inmanta import compiler
 from inmanta.ast import LocatableString, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, Equals, GreaterThan, In, IsDefined, Not, Or, Regex
@@ -35,14 +35,16 @@ from inmanta.ast.statements.assign import (
     SetAttribute,
     ShortIndexLookup,
     StringFormat,
+    StringFormatV2,
 )
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineTypeConstraint, TypeDeclaration
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning
+from inmanta.parser import InvalidNamespaceAccess, ParserException
 from inmanta.parser.plyInmantaParser import base_parse
+from utils import log_contains, log_doesnt_contain
 
 
 def parse_code(model_code: str):
@@ -139,7 +141,7 @@ entity Test extends Foo, foo::sub::Bar:
     \"\"\"
     string hello
     bool bar = true
-    number? ten=5
+    int? ten=5
 end
 """
         % documentation
@@ -172,7 +174,7 @@ def test_relation():
     """Test definition of relations"""
     statements = parse_code(
         """
-Test tests [0:] -- [5:10] Foo bars
+Test.bars [5:10] -- Foo.tests [0:]
 """
     )
 
@@ -196,7 +198,7 @@ def test_relation_2():
     """Test definition of relations"""
     statements = parse_code(
         """
-Test tests [3] -- [:10] Foo bars
+Test.bars [:10] -- Foo.tests [3]
 """
     )
 
@@ -216,7 +218,7 @@ Test tests [3] -- [:10] Foo bars
     assert rel.right[2] == (0, 10)
 
 
-def test_new_relation():
+def test_relation_3():
     """Test definition of relations"""
     statements = parse_code(
         """
@@ -240,7 +242,7 @@ Test.bar [1] -- Foo.tests [5:10]
     assert rel.right[2] == (1, 1)
 
 
-def test_new_relation_with_annotations():
+def test_relation_with_annotations():
     """Test definition of relations"""
     statements = parse_code(
         """
@@ -272,7 +274,7 @@ Test.bar [1] foo,bar Foo.tests [5:10]
     assert rel.annotation_expression[1][1].location == range2
 
 
-def test_new_relation_unidir():
+def test_relation_unidir():
     """Test definition of relations"""
     statements = parse_code(
         """
@@ -296,7 +298,7 @@ Test.bar [1] -- Foo
     assert rel.right[2] == (1, 1)
 
 
-def test_new_relation_with_annotations_unidir():
+def test_relation_with_annotations_unidir():
     """Test definition of relations"""
     statements = parse_code(
         """
@@ -425,7 +427,7 @@ implement Test using parents  \""" testc \"""
     "implementations",
     [["parents", "std::none"], ["std::none", "parents"], ["i1", "parents", "i2"], ["std::none"], ["i1", "i2"]],
 )
-def test_implements_parent_in_list(implementations: List[str]):
+def test_implements_parent_in_list(implementations: list[str]):
     statements = parse_code(
         """
 implement Test using %s
@@ -460,75 +462,123 @@ implement Test using test when not (fg(self) and false)
     assert isinstance(stmt.select.children[0].children[1], Literal)
 
 
-def test_regex():
+@pytest.mark.parametrize("sep", [" ", "  "])
+def test_regex(sep: str):
+    """
+    @param sep: The separator between the matching keyword and the actual regular expression.
+    """
     statements = parse_code(
-        """
-a = /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
+        f"""
+typedef test as string matching{sep}/[a-fA-F0-9]{{8}}-[a-fA-F0-9]{{4}}-[a-fA-F0-9]{{4}}-[a-fA-F0-9]{{4}}-[a-fA-F0-9]{{12}}/
 """
     )
 
     assert len(statements) == 1
-    stmt = statements[0].value
-    assert isinstance(stmt, Regex)
-    assert stmt.children[1].value == stmt.regex
-    assert stmt.regex == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
+    assert isinstance(statements[0], DefineTypeConstraint)
+    regex_expr = statements[0].expression
+    assert isinstance(regex_expr, Regex)
+    assert regex_expr.children[1].value == regex_expr.regex
+    assert regex_expr.regex == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
+
+
+def test_matching_keyword_in_identifier(snippetcompiler):
+    """
+    Verify that 'matching' is allowed as part of an identifier even though it's a keyword.
+    """
+    statements = parse_code(
+        """
+entity A:
+    int matching_attribute
+end
+"""
+    )
+
+    assert len(statements) == 1
+    assert isinstance(statements[0], DefineEntity)
+    assert len(statements[0].attributes) == 1
+    compare_attr(statements[0].attributes[0], "matching_attribute", "int", lambda _: True)
 
 
 def test_regex_backslash():
     statements = parse_code(
         r"""
-a = /\\/
+typedef test as string matching /\\/
 """
     )
 
     assert len(statements) == 1
-    stmt = statements[0].value
-    assert isinstance(stmt, Regex)
-    assert stmt.regex == re.compile(r"\\")
+    assert isinstance(statements[0], DefineTypeConstraint)
+    regex_expr = statements[0].expression
+    assert isinstance(regex_expr, Regex)
+    assert regex_expr.regex == re.compile(r"\\")
 
 
 def test_regex_escape():
     statements = parse_code(
         r"""
-a = /\/1/
+typedef test as string matching /\/1/
 """
     )
 
     assert len(statements) == 1
-    stmt = statements[0].value
-    assert isinstance(stmt, Regex)
-    assert stmt.regex == re.compile(r"\/1")
+    regex_expr = statements[0].expression
+    assert isinstance(regex_expr, Regex)
+    assert regex_expr.regex == re.compile(r"\/1")
 
 
 def test_regex_twice():
     statements = parse_code(
         r"""
-a = /\/1/
+typedef regex1 as string matching /\/1/
 b = "v"
-c = /\/1/
+typedef regex2 as string matching /\/1/
 """
     )
 
     assert len(statements) == 3
-    stmt = statements[0].value
-    assert isinstance(stmt, Regex)
-    assert stmt.regex == re.compile(r"\/1")
+    regex_expr = statements[0].expression
+    assert isinstance(regex_expr, Regex)
+    assert regex_expr.regex == re.compile(r"\/1")
 
 
 def test_1584_regex_error():
     with pytest.raises(ParserException) as pytest_e:
         parse_code(
             """
-a = /)/
+typedef test as string matching /)/
             """
         )
 
     exception: ParserException = pytest_e.value
     assert exception.location.file == "test"
     assert exception.location.lnr == 2
-    assert exception.location.start_char == 5
+    assert exception.location.start_char == 33
     assert exception.location.end_lnr == 2
-    assert exception.location.end_char == 8
+    assert exception.location.end_char == 36
+    assert exception.value == "/)/"
+    assert exception.msg == "Syntax error: Regex error in /)/: 'unbalanced parenthesis at position 0'"
+
+
+@pytest.mark.parametrize("nr_of_newlines", [1, 2])
+def test_regex_newline_between_matching_keyword_and_regex(nr_of_newlines: int) -> None:
+    """
+    Ensure that the line number of the regex is reported correctly, if the regex
+    is defined on a different line than the matching keyword.
+    """
+    newlines = "\n" * nr_of_newlines
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            f"""
+typedef test as string matching{newlines}/)/
+            """
+        )
+
+    exception: ParserException = pytest_e.value
+    assert exception.location.file == "test"
+    assert exception.location.lnr == 2 + nr_of_newlines
+    assert exception.location.start_char == 32 + nr_of_newlines
+    assert exception.location.end_lnr == 2 + nr_of_newlines
+    assert exception.location.end_char == 32 + nr_of_newlines + 3
     assert exception.value == "/)/"
     assert exception.msg == "Syntax error: Regex error in /)/: 'unbalanced parenthesis at position 0'"
 
@@ -564,31 +614,7 @@ typedef abc as string matching self in ["a","b","c"]
     assert str(stmt.name) == "abc"
     assert str(stmt.basetype) == "string"
     assert isinstance(stmt.get_expression(), In)
-    assert [x.value for x in stmt.get_expression().children[1].items] == ["a", "b", "c"]
-
-
-def test_typedef_plugin_call():
-    """
-    If this test fails, the collection of validation types and
-    validation_parameters will fail in the LSM module.
-    plugin_call() must expand to (plugin_call() == true)
-    """
-    statements = parse_code(
-        """
-typedef abc as string matching std::is_base64_encoded(self)
-"""
-    )
-    assert len(statements) == 1
-    stmt = statements[0]
-    assert isinstance(stmt, DefineTypeConstraint)
-    assert str(stmt.name) == "abc"
-    assert str(stmt.basetype) == "string"
-    assert isinstance(stmt.get_expression(), Equals)
-    left_side_equals = stmt.get_expression()._arguments[0]
-    right_side_equals = stmt.get_expression()._arguments[1]
-    assert isinstance(left_side_equals, FunctionCall)
-    assert isinstance(right_side_equals, Literal)
-    assert isinstance(right_side_equals.value, bool) and right_side_equals.value
+    assert stmt.get_expression().children[1].value == ["a", "b", "c"]
 
 
 def test_index():
@@ -602,7 +628,7 @@ index File(host, path)
     stmt = statements[0]
     assert isinstance(stmt, DefineIndex)
     assert str(stmt.type) == "File"
-    assert stmt.attributes == ["host", "path"]
+    assert [str(a) for a in stmt.attributes] == ["host", "path"]
 
 
 def test_ctr():
@@ -798,8 +824,8 @@ a=["a]","b"]
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, CreateList)
-    assert [x.value for x in stmt.value.items] == ["a]", "b"]
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == ["a]", "b"]
 
 
 def test_list_def_trailing_comma():
@@ -812,8 +838,8 @@ a=["a]","b",]
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, CreateList)
-    assert [x.value for x in stmt.value.items] == ["a]", "b"]
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == ["a]", "b"]
 
 
 def test_map_def():
@@ -826,8 +852,8 @@ a={ "a":"b", "b":1}
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, CreateDict)
-    assert [(x[0], x[1].value) for x in stmt.value.items] == [("a", "b"), ("b", 1)]
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == {"a": "b", "b": 1}
 
 
 def test_map_def_var():
@@ -844,8 +870,7 @@ def test_map_def_list():
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, CreateDict)
-    assert isinstance(stmt.value.items[0][1], CreateList)
+    assert isinstance(stmt.value, Literal)
 
 
 def test_map_def_map():
@@ -853,8 +878,7 @@ def test_map_def_map():
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, CreateDict)
-    assert isinstance(stmt.value.items[0][1], CreateDict)
+    assert isinstance(stmt.value, Literal)
 
 
 def test_booleans():
@@ -1018,6 +1042,30 @@ a="j{{c.d}}s"
     assert stmt.value._variables[0][0].attribute.location == Range("test", 2, 9, 2, 10)
 
 
+def test_string_format_v2():
+    statements = parse_code('f"hello { world }"')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, StringFormatV2)
+    assert len(stmt._variables) == 1
+    ref: Reference
+    full_name: str
+    ref, full_name = list(stmt._variables.items())[0]
+    assert ref.name == "world"
+    assert full_name == " world "
+
+    statements = parse_code('f"hello { world:>{width }}"')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, StringFormatV2)
+    assert len(stmt._variables) == 2
+    assert {ref.name: full_name for ref, full_name in stmt._variables.items()} == {"world": " world", "width": "width "}
+    assert stmt._format_string == "hello { world:>{width }}"
+
+    with pytest.raises(ParserException, match=r"Syntax error: Invalid f-string:.*\(test:1:1\)"):
+        statements = parse_code('f"hello {"')
+
+
 def test_attribute_reference():
     statements = parse_code(
         """
@@ -1157,19 +1205,9 @@ end"""
     assert len(stmt.attributes) == 5
 
     compare_attr(stmt.attributes[0], "bar", "dict", assert_is_none)
-    compare_attr(stmt.attributes[1], "foo", "dict", lambda x: assert_equals([], x.items))
-
-    def compare_default(list):
-        def comp(x):
-            assert len(list) == len(x.items)
-            for (ok, ov), (k, v) in zip(list, x.items):
-                assert k == ok
-                assert ov == v.value
-
-        return comp
-
-    compare_attr(stmt.attributes[2], "blah", "dict", compare_default([("a", "a")]))
-    compare_attr(stmt.attributes[3], "xxx", "dict", compare_default([("a", "a")]), opt=True)
+    compare_attr(stmt.attributes[1], "foo", "dict", lambda x: x.value == {})
+    compare_attr(stmt.attributes[2], "blah", "dict", lambda x: x.value == {"a": "a"})
+    compare_attr(stmt.attributes[3], "xxx", "dict", lambda x: x.value == {"a": "a"}, opt=True)
     compare_attr(stmt.attributes[4], "xxxx", "dict", assert_is_non_value, opt=True)
 
 
@@ -1482,7 +1520,7 @@ a=|
         )
 
 
-def test_doc_string_on_new_relation():
+def test_doc_string_on_relation_unidir():
     statements = parse_code(
         """
 File.host [1] -- Host
@@ -1500,7 +1538,7 @@ Each file needs to be associated with a host
 def test_doc_string_on_relation():
     statements = parse_code(
         """
-File file [1] -- [0:] Host host
+Host.file [1] -- File.host [0:]
 \"""
 Each file needs to be associated with a host
 \"""
@@ -1938,7 +1976,7 @@ def test_640_syntax_error_output_6():
     with pytest.raises(ParserException) as pytest_e:
         parse_code(
             """
-typedef positive as number matching self >= 1-
+typedef positive as number matching self >= 1&
             """
         )
     exc: ParserException = pytest_e.value
@@ -1947,8 +1985,8 @@ typedef positive as number matching self >= 1-
     assert exc.location.start_char == 46
     assert exc.location.end_lnr == 2
     assert exc.location.end_char == 47
-    assert exc.value == "-"
-    assert exc.msg == "Syntax error: Illegal character '-'"
+    assert exc.value == "&"
+    assert exc.msg == "Syntax error: Illegal character '&'"
 
 
 def test_1766_empty_model_single_newline():
@@ -2024,8 +2062,8 @@ end
             (
                 Or,
                 [
-                    (In, [(Literal, 42), (CreateList, [(Literal, 12), (Literal, 42)])]),
-                    (In, [(Literal, "test"), (CreateList, [])]),
+                    (In, [(Literal, 42), (Literal, [12, 42])]),
+                    (In, [(Literal, "test"), (Literal, [])]),
                 ],
             ),
         ),
@@ -2060,27 +2098,6 @@ __x__ = {expression}
             raise Exception("this test does not support %s" % type(expression))
 
     expression_asserter(assign_stmt.rhs, expected_tree)
-
-
-def test_relation_deprecated_syntax():
-    with warnings.catch_warnings(record=True) as w:
-        parse_code(
-            """
-entity A:
-end
-
-entity B:
-end
-
-A aa [1] -- [0:] B bb
-            """,
-        )
-        assert len(w) == 1
-        assert issubclass(w[0].category, SyntaxDeprecationWarning)
-        assert str(w[0].message) == (
-            "The relation definition syntax `A aa [1] -- [0:] B bb` is deprecated."
-            " Please use `A.bb [0:] -- B.aa [1]` instead. (test:8)"
-        )
 
 
 def test_conditional_expression():
@@ -2313,14 +2330,13 @@ def test_expression_as_statements():
 "hello"
 file(b)
 File(host = 5, path = "Jos")
-[1,2]
-{ "a":"b", "b":1}
+[1,2, z]
+{ "a":"b", "b":1, "c":b}
 File[host = 5, path = "Jos"]
 y > 0 ? y : y < 0 ? -1 : 0
-/some_out_of_place_regex/
     """
     )
-    assert len(statements) == 9
+    assert len(statements) == 8
     boolean_expression = statements[0]
     constant = statements[1]
     function_call = statements[2]
@@ -2329,7 +2345,6 @@ y > 0 ? y : y < 0 ? -1 : 0
     map_def = statements[5]
     index_lookup = statements[6]
     conditional_expression = statements[7]
-    regex = statements[8]
     assert isinstance(boolean_expression, Equals)
     assert isinstance(constant, Literal)
     assert isinstance(function_call, FunctionCall)
@@ -2338,4 +2353,45 @@ y > 0 ? y : y < 0 ? -1 : 0
     assert isinstance(map_def, CreateDict)
     assert isinstance(index_lookup, IndexLookup)
     assert isinstance(conditional_expression, ConditionalExpression)
-    assert isinstance(regex, Regex)
+
+
+def test_invalid_escape_sequence(snippetcompiler, caplog):
+    """
+    Check that invalid escape sequences in regular strings and multi-line strings raise warnings.
+    Check that raw strings don't raise such warnings.
+    """
+    snippetcompiler.setup_for_snippet(
+        r'''
+s1 = r"No warnings in raw strings: \."
+s2 = 'Warnings in standard strings: \.'
+s3 = "Warnings in standard strings: \."
+s4 = """l1
+Warnings in MLS:
+Bad escape sequence: \.
+"""
+std::print(s1)
+        '''
+    )
+    compiler.do_compile()
+
+    dir = snippetcompiler.project_dir
+    expected_warnings = [
+        f"ParserWarning: Invalid escape sequence in string. ({dir}/main.cf:3)",
+        f"ParserWarning: Invalid escape sequence in string. ({dir}/main.cf:4)",
+        f"ParserWarning: Invalid escape sequence in multi-line string. ({dir}/main.cf:5)",
+    ]
+    for warning in expected_warnings:
+        log_contains(
+            caplog,
+            "inmanta.warnings",
+            logging.WARNING,
+            warning,
+        )
+
+    absent_warning = f"ParserWarning: Invalid escape sequence in string. ({dir}/main.cf:2)"
+    log_doesnt_contain(
+        caplog,
+        "inmanta.warnings",
+        logging.WARNING,
+        absent_warning,
+    )

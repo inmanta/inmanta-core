@@ -1,0 +1,5 @@
+description: Removed duplicate fact-expire from default config file
+destination-branches: [master, iso6]
+change-type: patch
+sections:
+  bugfix: "{{description}}"

@@ -15,14 +15,16 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import ssl
 import uuid
 from asyncio import CancelledError
 from collections import defaultdict
+from collections.abc import MutableMapping, Sequence
 from json import JSONDecodeError
-from typing import Dict, List, MutableMapping, Optional, Sequence, Union
+from typing import Optional, Union
 
 import tornado
 from pyformance import timer
@@ -31,10 +33,10 @@ from tornado import httpserver, iostream, routing, web
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const, tracing
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import auth, common, exceptions
 from inmanta.protocol.rest import RESTBase
 from inmanta.server import config as server_config
-from inmanta.server.config import server_access_control_allow_origin, server_enable_auth
+from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
 from opentelemetry import trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
@@ -47,7 +49,7 @@ class RESTHandler(tornado.web.RequestHandler):
     A generic class use by the transport
     """
 
-    def initialize(self, transport: "RESTServer", config: Dict[str, common.UrlMethod]) -> None:
+    def initialize(self, transport: "RESTServer", config: dict[str, common.UrlMethod]) -> None:
         self._transport: "RESTServer" = transport
         self._config = config
 
@@ -56,12 +58,12 @@ class RESTHandler(tornado.web.RequestHandler):
             allowed = ", ".join(self._config.keys())
             self.set_header("Allow", allowed)
             raise exceptions.BaseHttpException(
-                405, "%s is not supported for this url. Supported methods: %s" % (http_method, allowed)
+                405, f"{http_method} is not supported for this url. Supported methods: {allowed}"
             )
 
         return self._config[http_method]
 
-    def get_auth_token(self, headers: MutableMapping[str, str]) -> Optional[MutableMapping[str, str]]:
+    def get_auth_token(self, headers: MutableMapping[str, str]) -> Optional[auth.claim_type]:
         """
         Get the auth token provided by the caller. The token is provided as a bearer token.
         """
@@ -69,13 +71,13 @@ class RESTHandler(tornado.web.RequestHandler):
             return None
 
         parts = headers["Authorization"].split(" ")
-        if len(parts) == 0 or parts[0].lower() != "bearer" or len(parts) > 2 or len(parts) == 1:
+        if len(parts) != 2 or parts[0].lower() != "bearer":
             LOGGER.warning(
                 "Invalid authentication header, Inmanta expects a bearer token. (%s was provided)", headers["Authorization"]
             )
             return None
 
-        return common.decode_token(parts[1])
+        return auth.decode_token(parts[1])
 
     def prepare(self) -> None:
         # Setting "Access-Control-Allow-Origin": null can be exploited.
@@ -100,7 +102,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
     def _encode_body(self, body: ReturnTypes, content_type: str) -> Union[str, bytes]:
         if content_type == common.JSON_CONTENT:
-            return common.json_encode(body)
+            return common.json_encode(body, tz_aware=server_tz_aware_timestamps.get())
         if content_type == common.HTML_CONTENT:
             assert isinstance(body, str)
             return body.encode(common.HTML_ENCODING)
@@ -114,7 +116,7 @@ class RESTHandler(tornado.web.RequestHandler):
             )
         return body
 
-    async def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:
+    async def _call(self, kwargs: dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:
         """
         An rpc like call
         """
@@ -146,14 +148,14 @@ class RESTHandler(tornado.web.RequestHandler):
                     request_headers = self.request.headers
                     auth_token = self.get_auth_token(request_headers)
 
-                    auth_enabled = server_enable_auth.get()
-                    if not auth_enabled or auth_token is not None:
-                        result = await self._transport._execute_call(
-                            kwargs, http_method, call_config, message, request_headers, auth_token
-                        )
-                        self.respond(result.body, result.headers, result.status_code)
-                    else:
-                        raise exceptions.UnauthorizedException("Access to this resource is unauthorized.")
+                auth_enabled = server_enable_auth.get()
+                if not auth_enabled or auth_token is not None or not call_config.properties.enforce_auth:
+                    result = await self._transport._execute_call(
+                        kwargs, http_method, call_config, message, request_headers, auth_token
+                    )
+                    self.respond(result.body, result.headers, result.status_code)
+                else:
+                    raise exceptions.UnauthorizedException()
 
                 except JSONDecodeError as e:
                     error_message = f"The request body couldn't be decoded as a JSON: {e}"
@@ -164,8 +166,9 @@ class RESTHandler(tornado.web.RequestHandler):
                     LOGGER.exception("An exception occured")
                     self.respond({"message": "Unable to decode request body"}, {}, 400)
 
-                except exceptions.BaseHttpException as e:
-                    self.respond(e.to_body(), {}, e.to_status())
+            except exceptions.BaseHttpException as e:
+                LOGGER.warning("Received an exception with status code %d and message %s", e.to_status(), e.to_body())
+                self.respond(e.to_body(), {}, e.to_status())
 
                 except CancelledError:
                     self.respond({"message": "Request is cancelled on the server"}, {}, 500)
@@ -244,7 +247,7 @@ class StaticContentHandler(tornado.web.RequestHandler):
         self._content = content
         self._content_type = content_type
 
-    def get(self, *args: List[str], **kwargs: Dict[str, str]) -> None:
+    def get(self, *args: list[str], **kwargs: dict[str, str]) -> None:
         self.set_header("Content-Type", self._content_type)
         self.write(self._content)
         self.set_status(200)
@@ -261,7 +264,7 @@ class RESTServer(RESTBase):
         super().__init__()
 
         self._id = id
-        self.headers: Dict[str, str] = {}
+        self.headers: dict[str, str] = {}
         self.session_manager = session_manager
         # number of ongoing requests
         self.inflight_counter = 0
@@ -284,9 +287,9 @@ class RESTServer(RESTBase):
         return self.session_manager.validate_sid(sid)
 
     def get_global_url_map(
-        self, targets: List[inmanta.protocol.endpoints.CallTarget]
-    ) -> Dict[str, Dict[str, common.UrlMethod]]:
-        global_url_map: Dict[str, Dict[str, common.UrlMethod]] = defaultdict(dict)
+        self, targets: list[inmanta.protocol.endpoints.CallTarget]
+    ) -> dict[str, dict[str, common.UrlMethod]]:
+        global_url_map: dict[str, dict[str, common.UrlMethod]] = defaultdict(dict)
         for slice in targets:
             url_map = slice.get_op_mapping()
             for url, configs in url_map.items():
@@ -296,14 +299,14 @@ class RESTServer(RESTBase):
         return global_url_map
 
     async def start(
-        self, targets: Sequence[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
+        self, targets: Sequence[inmanta.protocol.endpoints.CallTarget], additional_rules: list[routing.Rule] = []
     ) -> None:
         """
         Start the server on the current ioloop
         """
-        global_url_map: Dict[str, Dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
+        global_url_map: dict[str, dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
-        rules: List[routing.Rule] = []
+        rules: list[routing.Rule] = []
         rules.extend(additional_rules)
 
         for url, handler_config in global_url_map.items():

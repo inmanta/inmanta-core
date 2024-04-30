@@ -5,4 +5,4 @@ downloadpath: libs
 repo:
     - https://github.com/inmanta/
 requires:
-    - std 
+    - std

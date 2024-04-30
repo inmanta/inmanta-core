@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import re
 
 import pytest
@@ -55,7 +56,7 @@ entity Repository extends std::File:
     bool enabled=true
     string baseurl
     string gpgkey=""
-    number metadata_expire=7200
+    int metadata_expire=7200
     bool send_event=true
 end
 
@@ -296,7 +297,7 @@ end
 implement Host using none
 implement File using none
 
-Host host [1] -- [0:] File files
+Host.files [0:] -- File.host [1]
 
 index Host(name)
 index File(host, name)
@@ -543,7 +544,7 @@ def test_index_attribute_missing_in_constructor_call(snippetcompiler, use_wrappe
     """
     model = f"""
 entity Test_A:
-    number id
+    int id
     string name
 end
 

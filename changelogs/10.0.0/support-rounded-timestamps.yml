@@ -1,0 +1,8 @@
+---
+description: "Added support to the `GET /metrics` endpoint to round the returned timestamps to a full hour."
+issue-nr: 6051
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

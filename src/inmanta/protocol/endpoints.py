@@ -15,18 +15,18 @@
 
     Contact: code@inmanta.com
 """
+
+import asyncio
 import inspect
 import logging
 import socket
 import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
-from collections import defaultdict
+from collections import abc, defaultdict
+from collections.abc import Coroutine
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Set, Tuple, Union  # noqa: F401
+from typing import Any, Callable, Optional
 from urllib import parse
-
-from tornado import ioloop
-from tornado.platform.asyncio import BaseAsyncIOLoop
 
 from inmanta import config as inmanta_config
 from inmanta import util
@@ -39,30 +39,30 @@ from .rest import client
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
-class CallTarget(object):
+class CallTarget:
     """
     A baseclass for all classes that are target for protocol calls / methods
     """
 
-    def _get_endpoint_metadata(self) -> Dict[str, List[Tuple[str, Callable]]]:
+    def _get_endpoint_metadata(self) -> dict[str, list[tuple[str, Callable]]]:
         total_dict = {
             method_name: method
             for method_name, method in inspect.getmembers(self)
             if callable(method) and method_name[0] != "_"
         }
 
-        methods: Dict[str, List[Tuple[str, Callable]]] = defaultdict(list)
+        methods: dict[str, list[tuple[str, Callable]]] = defaultdict(list)
         for name, attr in total_dict.items():
             if hasattr(attr, "__protocol_method__"):
                 methods[attr.__protocol_method__.__name__].append((name, attr))
 
         return methods
 
-    def get_op_mapping(self) -> Dict[str, Dict[str, UrlMethod]]:
+    def get_op_mapping(self) -> dict[str, dict[str, UrlMethod]]:
         """
         Build a mapping between urls, ops and methods
         """
-        url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
+        url_map: dict[str, dict[str, UrlMethod]] = defaultdict(dict)
 
         # Loop over all methods in this class that have a handler annotation. The handler annotation refers to a method
         # definition. This method definition defines how the handler is invoked.
@@ -87,26 +87,26 @@ class CallTarget(object):
         return url_map
 
 
-class Endpoint(TaskHandler):
+class Endpoint(TaskHandler[None]):
     """
     An end-point in the rpc framework
     """
 
     def __init__(self, name: str):
-        super(Endpoint, self).__init__()
+        super().__init__()
         self._name: str = name
         self._node_name: str = inmanta_config.nodename.get()
-        self._end_point_names: Set[str] = set()
-        self._targets: List[CallTarget] = []
+        self._end_point_names: set[str] = set()
+        self._targets: list[CallTarget] = []
 
     def add_call_target(self, target: CallTarget) -> None:
         self._targets.append(target)
 
     @property
-    def call_targets(self) -> List[CallTarget]:
+    def call_targets(self) -> list[CallTarget]:
         return self._targets
 
-    def get_end_point_names(self) -> Set[str]:
+    def get_end_point_names(self) -> set[str]:
         return self._end_point_names
 
     async def add_end_point_name(self, name: str) -> None:
@@ -142,7 +142,7 @@ class Endpoint(TaskHandler):
 
     async def stop(self) -> None:
         """Stop this endpoint"""
-        await super(Endpoint, self).stop()
+        await super().stop()
 
 
 class SessionEndpoint(Endpoint, CallTarget):
@@ -151,6 +151,7 @@ class SessionEndpoint(Endpoint, CallTarget):
     """
 
     _client: "SessionClient"
+    _heartbeat_client: "SessionClient"
 
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
         super().__init__(name)
@@ -164,6 +165,9 @@ class SessionEndpoint(Endpoint, CallTarget):
         self.server_timeout = timeout
         self.reconnect_delay = reconnect_delay
         self.add_call_target(self)
+
+        self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
+        self._heartbeat_client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout, force_instance=True)
 
     def get_environment(self) -> Optional[uuid.UUID]:
         return self._env_id
@@ -185,47 +189,44 @@ class SessionEndpoint(Endpoint, CallTarget):
         """
         This method is called after starting the client transport, but before sending the first heartbeat.
         """
-        pass
 
     async def start(self) -> None:
         """
         Connect to the server and use a heartbeat and long-poll for two-way communication
         """
         assert self._env_id is not None
-        LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
-        self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
+        LOGGER.info("Starting agent for %s", str(self.sessionid))
         await self.start_connected()
         self.add_background_task(self.perform_heartbeat())
 
     async def stop(self) -> None:
+        self._heartbeat_client.close()
         await self._sched.stop()
-        await super(SessionEndpoint, self).stop()
+        await super().stop()
 
     async def on_reconnect(self) -> None:
         """
         Called when a connection becomes active. i.e. when a first heartbeat is received after startup or
         a first hearbeat after an :py:`on_disconnect`
         """
-        pass
 
     async def on_disconnect(self) -> None:
         """
         Called when the connection is lost unexpectedly (not on shutdown)
         """
-        pass
 
     async def perform_heartbeat(self) -> None:
         """
         Start a continuous heartbeat call
         """
-        if self._client is None:
+        if self._heartbeat_client is None or self._client is None:
             raise Exception("AgentEndpoint not started")
 
         connected: bool = False
         try:
             while True:
                 LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
-                result = await self._client.heartbeat(
+                result = await self._heartbeat_client.heartbeat(
                     sid=str(self.sessionid),
                     tid=str(self._env_id),
                     endpoint_names=list(self.end_point_names),
@@ -239,7 +240,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                         self.add_background_task(self.on_reconnect())
                     if result.result is not None:
                         if "method_calls" in result.result:
-                            method_calls: List[common.Request] = [
+                            method_calls: list[common.Request] = [
                                 common.Request.from_dict(req) for req in result.result["method_calls"]
                             ]
                             # FIXME: reuse transport?
@@ -271,16 +272,17 @@ class SessionEndpoint(Endpoint, CallTarget):
         kwargs, config = transport.match_call(method_call.url, method_call.method)
 
         if config is None:
-            msg = "An error occurred during heartbeat method call (%s %s %s): %s" % (
+            msg = "An error occurred during heartbeat method call ({} {} {}): {}".format(
                 method_call.reply_id,
                 method_call.method,
                 method_call.url,
                 "No such method",
             )
             LOGGER.error(msg)
-            self.add_background_task(
-                self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500})
-            )
+            # if reply_id is none, we don't send the reply
+            if method_call.reply_id is not None:
+                await self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500})
+            return
 
         body = method_call.body or {}
         query_string = parse.urlparse(method_call.url).query
@@ -290,7 +292,6 @@ class SessionEndpoint(Endpoint, CallTarget):
             else:
                 body[key] = [v.decode("latin-1") for v in value]
 
-        # FIXME: why create a new transport instance on each call? keep-alive?
         response: common.Response = await transport._execute_call(kwargs, method_call.method, config, body, method_call.headers)
 
         if response.status_code == 500:
@@ -308,9 +309,11 @@ class SessionEndpoint(Endpoint, CallTarget):
         if self._client is None:
             raise Exception("AgentEndpoint not started")
 
-        await self._client.heartbeat_reply(
-            self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
-        )
+        # if reply is is none, we don't send the reply
+        if method_call.reply_id is not None:
+            await self._client.heartbeat_reply(
+                self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
+            )
 
 
 class VersionMatch(str, Enum):
@@ -337,19 +340,26 @@ class Client(Endpoint):
         version_match: VersionMatch = VersionMatch.lowest,
         exact_version: int = 0,
         with_rest_client: bool = True,
+        force_instance: bool = False,
     ) -> None:
         super().__init__(name)
         assert isinstance(timeout, int), "Timeout needs to be an integer value."
         LOGGER.debug("Start transport for client %s", self.name)
         if with_rest_client:
-            self._transport_instance = client.RESTClient(self, connection_timout=timeout)
+            self._transport_instance = client.RESTClient(self, connection_timout=timeout, force_instance=force_instance)
         else:
             self._transport_instance = None
         self._version_match = version_match
         self._exact_version = exact_version
 
+    def close(self):
+        """
+        Closes the RESTclient instance manually. This is only needed when it is started with force_instance set to true
+        """
+        self._transport_instance.close()
+
     async def _call(
-        self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
+        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
     ) -> common.Result:
         """
         Execute a call and return the result
@@ -368,9 +378,7 @@ class Client(Endpoint):
         elif self._version_match is VersionMatch.highest:
             return max(methods, key=lambda x: x.api_version)
         elif self._version_match is VersionMatch.exact:
-            for method in methods:
-                if method.api_version == self._exact_version:
-                    return method
+            return next((m for m in methods if m.api_version == self._exact_version), None)
 
         return None
 
@@ -391,7 +399,7 @@ class Client(Endpoint):
         return wrap
 
 
-class SyncClient(object):
+class SyncClient:
     """
     A synchronous client that communicates with end-point based on its configuration
     """
@@ -401,7 +409,7 @@ class SyncClient(object):
         name: Optional[str] = None,
         timeout: int = 120,
         client: Optional[Client] = None,
-        ioloop: Optional[ioloop.IOLoop] = None,
+        ioloop: Optional[asyncio.AbstractEventLoop] = None,
     ) -> None:
         """
         either name or client is required.
@@ -411,15 +419,16 @@ class SyncClient(object):
         :param client: the client to use for this sync_client
         :param timeout: http timeout on all requests
 
-        :param ioloop: the specific (running) ioloop to schedule this request on.
-        if no ioloop is passed,we assume there is no running ioloop in the context where this syncclient is used.
+        :param ioloop: the specific (running) ioloop to schedule this request on. The loop should run on a different thread
+            than the one the client methods are called on. If no ioloop is passed, we assume there is no running ioloop in the
+            context where this syncclient is used.
         """
         if (name is None) == (client is None):
             # Exactly one must be set
             raise Exception("Either name or client needs to be provided.")
 
         self.timeout = timeout
-        self._ioloop = ioloop
+        self._ioloop: Optional[asyncio.AbstractEventLoop] = ioloop
         if client is None:
             assert name is not None  # Make mypy happy
             self.name = name
@@ -429,22 +438,17 @@ class SyncClient(object):
             self._client = client
 
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
-        def async_call(*args: List[object], **kwargs: Dict[str, object]) -> common.Result:
-            method: Callable[..., Coroutine[Any, Any, common.Result]] = getattr(self._client, name)
-
-            def method_call() -> Coroutine[Any, Any, common.Result]:
-                return method(*args, **kwargs)
+        def async_call(*args: list[object], **kwargs: dict[str, object]) -> common.Result:
+            method: Callable[..., abc.Awaitable[common.Result]] = getattr(self._client, name)
+            with_timeout: abc.Awaitable[common.Result] = asyncio.wait_for(method(*args, **kwargs), self.timeout)
 
             try:
                 if self._ioloop is None:
-                    # No specific IOLoop if given, so we assume we can start one in this context
-                    return ioloop.IOLoop.current().run_sync(method_call, self.timeout)
+                    # no loop is running: create a loop for this thread if it doesn't exist already and run it
+                    return util.ensure_event_loop().run_until_complete(with_timeout)
                 else:
-                    # a specific IOloop is passed
-                    # we unwrap the tornado loop to get the native python loop
-                    # and safely tap into it using run_coroutine_threadsafe
-                    assert isinstance(self._ioloop, BaseAsyncIOLoop)  # make mypy happy
-                    return run_coroutine_threadsafe(method_call(), self._ioloop.asyncio_loop).result(self.timeout)
+                    # loop is running on different thread
+                    return run_coroutine_threadsafe(with_timeout, self._ioloop).result()
             except TimeoutError:
                 raise ConnectionRefusedError()
 
@@ -456,12 +460,12 @@ class SessionClient(Client):
     A client that communicates with server endpoints over a session.
     """
 
-    def __init__(self, name: str, sid: uuid.UUID, timeout: int = 120) -> None:
-        super().__init__(name, timeout)
+    def __init__(self, name: str, sid: uuid.UUID, timeout: int = 120, force_instance: bool = False) -> None:
+        super().__init__(name, timeout, force_instance=force_instance)
         self._sid = sid
 
     async def _call(
-        self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
+        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
     ) -> common.Result:
         """
         Execute the rpc call

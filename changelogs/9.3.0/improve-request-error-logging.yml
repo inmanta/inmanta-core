@@ -1,0 +1,4 @@
+---
+description: Improve the logging of exceptions in API requests
+change-type: patch
+destination-branches: [master, iso6, iso5]

@@ -15,10 +15,11 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import uuid
-from typing import List, Optional, cast
+from typing import Optional, cast
 
 import asyncpg
 
@@ -48,12 +49,12 @@ class ProjectService(protocol.ServerSlice):
     resource_service: ResourceService
 
     def __init__(self) -> None:
-        super(ProjectService, self).__init__(SLICE_PROJECT)
+        super().__init__(SLICE_PROJECT)
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_RESOURCE, SLICE_AUTOSTARTED_AGENT_MANAGER]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -64,7 +65,7 @@ class ProjectService(protocol.ServerSlice):
     # v1 handlers
     @handle(methods.create_project)
     async def create_project(self, name: str, project_id: Optional[uuid.UUID]) -> Apireturn:
-        return 200, {"project": (await self.project_create(name, project_id)).dict()}
+        return 200, {"project": (await self.project_create(name, project_id)).model_dump()}
 
     @handle(methods.delete_project, project_id="id", api_version=1)
     async def delete_project(self, project_id: uuid.UUID) -> Apireturn:
@@ -73,18 +74,18 @@ class ProjectService(protocol.ServerSlice):
 
     @handle(methods.modify_project, project_id="id")
     async def modify_project(self, project_id: uuid.UUID, name: str) -> Apireturn:
-        return 200, {"project": (await self.project_modify(project_id, name)).dict()}
+        return 200, {"project": (await self.project_modify(project_id, name)).model_dump()}
 
     @handle(methods.list_projects)
     async def list_projects(self) -> Apireturn:
-        project_list: List[JsonType] = [x.dict() for x in await self.project_list()]
+        project_list: list[JsonType] = [x.model_dump() for x in await self.project_list()]
         for project in project_list:
             project["environments"] = [x["id"] for x in project["environments"]]
         return 200, {"projects": project_list}
 
     @handle(methods.get_project, project_id="id")
     async def get_project(self, project_id: uuid.UUID) -> Apireturn:
-        project_model = (await self.project_get(project_id)).dict()
+        project_model = (await self.project_get(project_id)).model_dump()
         project_model["environments"] = [e.id for e in await data.Environment.get_list(project=project_id)]
         return 200, {"project": project_model}
 
@@ -110,8 +111,7 @@ class ProjectService(protocol.ServerSlice):
 
         environments = await data.Environment.get_list(project=project.id)
         for env in environments:
-            await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade())
-            self.resource_service.close_resource_action_logger(env.id)
+            await asyncio.gather(self.autostarted_agent_manager.stop_agents(env, delete_venv=True), env.delete_cascade())
 
         await project.delete()
 
@@ -130,13 +130,16 @@ class ProjectService(protocol.ServerSlice):
             raise ServerError(f"A project with name {name} already exists.")
 
     @handle(methods_v2.project_list)
-    async def project_list(self, environment_details: bool = False) -> List[model.Project]:
+    async def project_list(self, environment_details: bool = False) -> list[model.Project]:
         project_list = []
 
-        for project in await data.Project.get_list():
+        for project in await data.Project.get_list(order_by_column="name", order="ASC"):
             project_model = project.to_dto()
             project_model.environments = [
-                e.to_dto() for e in await data.Environment.get_list(project=project.id, details=environment_details)
+                e.to_dto()
+                for e in await data.Environment.get_list(
+                    project=project.id, details=environment_details, order_by_column="name", order="ASC"
+                )
             ]
 
             project_list.append(project_model)

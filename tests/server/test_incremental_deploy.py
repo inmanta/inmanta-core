@@ -15,19 +15,20 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import re
 import uuid
 from collections import defaultdict
 from datetime import datetime
 from re import sub
-from typing import Any, Dict, List
+from typing import Any
 from uuid import UUID, uuid4
 
 import utils
 from inmanta import config, const, data
 from inmanta.agent.agent import Agent
-from inmanta.const import ResourceAction, ResourceState
+from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
@@ -36,7 +37,7 @@ from inmanta.util import get_compiler_version
 from utils import assert_no_warning
 
 
-class MultiVersionSetup(object):
+class MultiVersionSetup:
     """
     create scenarios by describing the history of a resource, from newest to oldest state
 
@@ -56,12 +57,13 @@ class MultiVersionSetup(object):
 
     def __init__(self):
         self.firstversion: int = 100
-        self.versions: List[List[Dict[str, Any]]] = [[] for _ in range(100)]
-        self.states: Dict[str, ResourceState] = {}
-        self.results: Dict[str, List[str]] = defaultdict(lambda: [])
+        self.versions: list[list[dict[str, Any]]] = [[] for _ in range(100)]
+        self.states: dict[str, ResourceState] = {}
+        self.states_per_version: dict[int, dict[str, ResourceState]] = defaultdict(dict)
+        self.results: dict[str, list[str]] = defaultdict(list)
         self.sid = uuid4()
 
-    def get_version(self, v: int) -> List[Dict[str, Any]]:
+    def get_version(self, v: int) -> list[dict[str, Any]]:
         return self.versions[v]
 
     def expand_code(self, code: str) -> ResourceState:
@@ -92,7 +94,7 @@ class MultiVersionSetup(object):
         assert False, f"Unknown code {code}"
 
     def make_resource(
-        self, name: str, value: str, version: int, agent: str = "agent1", requires: List[str] = [], send_event: bool = False
+        self, name: str, value: str, version: int, agent: str = "agent1", requires: list[str] = [], send_event: bool = False
     ) -> str:
         """
         requires: list of resource identifiers
@@ -112,10 +114,13 @@ class MultiVersionSetup(object):
         self, name: str, scenario: str, increment: bool, agent="agent1", requires=[], send_event: bool = False
     ) -> str:
         v = self.firstversion
-        rid = "test::Resource[%s,key=%s]" % (agent, name)
+        rid = f"test::Resource[{agent},key={name}]"
 
         if increment:
             self.results[agent].append(rid)
+        else:
+            # make sure it is set in the default dict
+            self.results[agent]
 
         for step in scenario.split():
             v -= 1
@@ -127,11 +132,12 @@ class MultiVersionSetup(object):
             code = match.group(1)
             value = match.group(2)
             rvid = self.make_resource(name, value, v, agent, requires, send_event)
-            self.states[rvid] = self.expand_code(code)
+            state = self.expand_code(code)
+            self.states[rvid] = state
+            self.states_per_version[v][rvid] = state
         return rid
 
     async def setup_agent(self, server, environment):
-
         agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
         endpoints = list(self.results.keys())
@@ -168,31 +174,32 @@ class MultiVersionSetup(object):
 
                 result, _ = await serverdirect.release_version(env, version, False)
                 assert result == 200
-        for rid, state in self.states.items():
-            # Start the deploy
-            action_id = uuid.uuid4()
-            now = datetime.now()
-            if state == const.ResourceState.available:
-                # initial state can not be set
-                continue
-            if state not in const.TRANSIENT_STATES:
-                finished = now
-            else:
-                finished = None
-            result = await resource_service.resource_action_update(
-                env,
-                [rid],
-                action_id,
-                ResourceAction.deploy,
-                now,
-                finished,
-                status=state,
-                messages=[],
-                changes={},
-                change=None,
-                send_events=False,
-            )
-            assert result == 200
+
+            for rid, state in self.states_per_version[version].items():
+                # Start the deploy
+                action_id = uuid.uuid4()
+                now = datetime.now()
+                if state == const.ResourceState.available:
+                    # initial state can not be set
+                    continue
+                if state not in const.TRANSIENT_STATES:
+                    finished = now
+                else:
+                    finished = None
+                result = await resource_service.resource_action_update(
+                    env,
+                    [rid],
+                    action_id,
+                    ResourceAction.deploy,
+                    now,
+                    finished,
+                    status=state,
+                    messages=[],
+                    changes={},
+                    change=None,
+                    send_events=False,
+                )
+                assert result == 200
 
         # increments are disjoint
         pos, neg = await data.ConfigurationModel.get_increment(env.id, version)
@@ -211,6 +218,7 @@ class MultiVersionSetup(object):
             result, payload = await resource_service.get_resources_for_agent(
                 env, agent, version=None, incremental_deploy=True, sid=sid
             )
+            assert result == 200
             assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(results)
             allresources.update({r["resource_id"]: r for r in payload["resources"]})
 
@@ -245,7 +253,7 @@ async def test_deploy(server, agent: Agent, environment, caplog):
                     "key": "key2",
                     "id": "test::Resource[agent1,key=key2],v=%d" % version,
                     "send_event": False,
-                    "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
+                    "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
                     "purged": False,
                 },
                 {
@@ -354,7 +362,7 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
         setup.add_resource("R9", "A1 E2 D1", True)
         setup.add_resource("R10", "A1 A1 D1", False)
         setup.add_resource("R13", "A1 A1 A1 A1 A1", True)
-        setup.add_resource("R14", "A1 A1 d1 D1", True)
+        setup.add_resource("R14", "A1 A1 d1 D1", False)  # issue 5434
         setup.add_resource("R15", "SU1 A1", False)
         setup.add_resource("R16", "A1 SU1 A1", True)
         setup.add_resource("R17", "D1 SU1 A1", False)
@@ -448,7 +456,14 @@ async def test_deploy_scenarios_added_by_send_event(server, agent: Agent, enviro
     assert_no_warning(caplog)
 
 
-async def test_deploy_scenarios_added_by_send_event_cad(server, agent: Agent, environment, caplog):
+async def test_deploy_scenarios_added_by_send_event_cad(server, agent_factory, environment, caplog):
+    agent = await agent_factory(
+        hostname="node1",
+        environment=environment,
+        agent_map={"agent1": "localhost", "agent2": "localhost"},
+        code_loader=False,
+        agent_names=["agent1", "agent2"],
+    )
     # ensure CAD does not change send_event
     with caplog.at_level(logging.WARNING):
         # acquire raw server
@@ -471,3 +486,76 @@ async def test_deploy_scenarios_added_by_send_event_cad(server, agent: Agent, en
         await setup.setup(orchestration_service, resource_service, env, sid)
 
     assert_no_warning(caplog)
+
+
+async def test_deploy_cad_double(server, agent_factory, environment, caplog, client, clienthelper):
+    # resource has CAD with send_events B requires A
+    # do full deploy
+    # then produce a change on A
+    # B is once more in the increment
+    agent = await agent_factory(
+        hostname="node1",
+        environment=environment,
+        agent_map={"agent1": "localhost", "agent2": "localhost"},
+        code_loader=False,
+        agent_names=["agent1", "agent2"],
+    )
+    sid = agent.sessionid
+
+    version = await clienthelper.get_version()
+    rvid = f"test::Resource[agent1,key=key1],v={version}"
+    rvid2 = f"test::Resource[agent2,key=key2],v={version}"
+
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": rvid,
+            "send_event": True,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value1",
+            "id": rvid2,
+            "send_event": False,
+            "purged": False,
+            "requires": [rvid],
+        },
+    ]
+    await clienthelper.put_version_simple(resources, version)
+    result = await client.release_version(environment, version, False)
+    assert result.code == 200
+
+    async def deploy(rid, change: Change = Change.nochange):
+        actionid = uuid.uuid4()
+        result = await agent._client.resource_deploy_start(environment, rid, actionid)
+        assert result.code == 200
+        await agent._client.resource_deploy_done(
+            environment,
+            rid,
+            actionid,
+            status=ResourceState.deployed,
+            messages=[],
+            changes={},
+            change=change,
+        )
+        assert result.code == 200
+
+    result = await agent._client.get_resources_for_agent(environment, "agent2", incremental_deploy=True, sid=sid)
+    assert result.code == 200, result.result
+    assert len(result.result["resources"]) == 1
+
+    await deploy(rvid)
+    await deploy(rvid2)
+
+    result = await agent._client.get_resources_for_agent(environment, "agent2", incremental_deploy=True, sid=sid)
+    assert result.code == 200, result.result
+    assert len(result.result["resources"]) == 0
+
+    await deploy(rvid, change=Change.updated)
+
+    result = await agent._client.get_resources_for_agent(environment, "agent2", incremental_deploy=True, sid=sid)
+    assert result.code == 200, result.result
+    assert len(result.result["resources"]) == 1

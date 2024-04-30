@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import importlib.util
 import logging
 import os
@@ -25,7 +26,7 @@ import sys
 import zipfile
 from importlib.machinery import ModuleSpec
 from types import ModuleType
-from typing import List, Optional
+from typing import Optional
 
 import pytest
 from pytest import MonkeyPatch
@@ -173,8 +174,8 @@ def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, ca
 
     # Rewrite the MANIFEST.in file
     manifest_file: str = os.path.join(module_copy_dir, "MANIFEST.in")
-    lines: List[str]
-    with open(manifest_file, "r") as fd:
+    lines: list[str]
+    with open(manifest_file) as fd:
         lines = fd.read().splitlines()
     with open(manifest_file, "w") as fd:
         fd.write("\n".join(line for line in lines if "/model" not in line))
@@ -223,6 +224,32 @@ def test_build_invalid_module(tmpdir, modules_v2_dir: str):
     os.remove(setup_cfg_file)
 
     with pytest.raises(ModuleMetadataFileNotFound, match=f"Metadata file {setup_cfg_file} does not exist"):
+        V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
+
+
+def test_build_with_existing_model_directory(tmpdir, modules_v2_dir: str):
+    """
+    Ensure the module build process raises a proper exception if the model directory
+    already exists in inmanta_plugins/<module_name>/
+    """
+    module_name = "minimalv2module"
+    module_dir = os.path.join(modules_v2_dir, module_name)
+    module_copy_dir = os.path.join(tmpdir, "module")
+    shutil.copytree(module_dir, module_copy_dir)
+    assert os.path.isdir(module_copy_dir)
+
+    # Simulate the existence of a model directory in inmanta_plugins/<module_name>/
+    python_pkg_dir = os.path.join(module_copy_dir, "inmanta_plugins", module_name)
+    model_dir_path = os.path.join(python_pkg_dir, "model")
+    os.makedirs(model_dir_path)
+    assert os.path.exists(model_dir_path)  # Ensure the model directory exists
+
+    with pytest.raises(
+        Exception,
+        match="There is already a model directory in %s. "
+        "The `inmanta_plugins.minimalv2module.model` package is reserved for bundling the inmanta model files. "
+        "Please use a different name for this Python package." % python_pkg_dir,
+    ):
         V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
 
 

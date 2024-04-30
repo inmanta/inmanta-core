@@ -1,0 +1,6 @@
+---
+description: Add a queryBuilder (PreludeBasedFilteringQueryBuilder) that applies its filters and LIMIT on the prelude query instead of the outer query.
+issue-nr: 1279
+issue-repo: inmanta-lsm
+change-type: minor
+destination-branches: [master, iso6]

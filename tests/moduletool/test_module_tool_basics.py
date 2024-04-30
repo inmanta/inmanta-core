@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import argparse
 import asyncio
 import logging
@@ -24,12 +25,12 @@ import shutil
 import subprocess
 import sys
 import warnings
-from typing import Iterator, Optional, Type
+from collections.abc import Iterator
+from typing import Optional
 
 import py
 import pytest
 import yaml
-from pkg_resources import parse_version
 
 from inmanta import module
 from inmanta.command import CLIException
@@ -59,38 +60,38 @@ def tmp_working_dir(tmpdir: py.path.local) -> Iterator[py.path.local]:
 def test_versioning():
     mt = ModuleTool()
 
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, False, False, True, False)
+    newversion = mt.determine_new_version(version.Version("1.2.3"), None, False, False, True, False)
     assert str(newversion) == "1.2.4"
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, False, True, False, False)
+    newversion = mt.determine_new_version(version.Version("1.2.3"), None, False, True, False, False)
     assert str(newversion) == "1.3.0"
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, False, False, False)
+    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, False, False, False)
     assert str(newversion) == "2.0.0"
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, True, False, False)
+    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, True, False, False)
     assert newversion is None
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, False, True, False)
+    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, False, True, False)
     assert newversion is None
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, True, True, False)
+    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, True, True, False)
     assert newversion is None
-    newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, True, False)
+    newversion = mt.determine_new_version(version.Version("1.2.3.dev025"), None, False, False, True, False)
     assert str(newversion) == "1.2.3"
-    newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, False, False)
+    newversion = mt.determine_new_version(version.Version("1.2.3.dev025"), None, False, False, False, False)
     assert str(newversion) == "1.2.3"
 
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, False, False, True, True)
+    newversion = mt.determine_new_version(version.Version("1.2.3"), None, False, False, True, True)
     assert re.search("1.2.4.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, False, True, False, True)
+    newversion = mt.determine_new_version(version.Version("1.2.3"), None, False, True, False, True)
     assert re.search("1.3.0.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, False, False, True)
+    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, False, False, True)
     assert re.search("2.0.0.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, True, False, True)
+    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, True, False, True)
     assert newversion is None
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, False, True, True)
+    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, False, True, True)
     assert newversion is None
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, True, True, True)
+    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, True, True, True)
     assert newversion is None
-    newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, True, True)
+    newversion = mt.determine_new_version(version.Version("1.2.3.dev025"), None, False, False, True, True)
     assert re.search("1.2.3.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, False, True)
+    newversion = mt.determine_new_version(version.Version("1.2.3.dev025"), None, False, False, False, True)
     assert re.search("1.2.3.dev[0-9]+", str(newversion))
 
 
@@ -144,7 +145,7 @@ def test_get_module_metadata_file_not_found(tmp_working_dir: py.path.local):
 
 
 @pytest.mark.parametrize("module_type", [module.ModuleV1, module.ModuleV2])
-def test_rewrite(tmpdir, module_type: Type[module.Module]):
+def test_rewrite(tmpdir, module_type: type[module.Module]):
     v1: bool = module_type.GENERATION == module.ModuleGeneration.V1
     module_path = tmpdir.join("mod").mkdir()
     model = module_path.join("model").mkdir()
@@ -154,7 +155,6 @@ def test_rewrite(tmpdir, module_type: Type[module.Module]):
 
     def metadata_contents(version: str, version_tag: str = "") -> str:
         if v1:
-
             return f"""
 name: mod
 license: ASL
@@ -299,7 +299,7 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     projectyml = os.path.join(proj, "project.yml")
     assert os.path.exists(projectyml)
 
-    with open(projectyml, "r", encoding="utf-8") as fh:
+    with open(projectyml, encoding="utf-8") as fh:
         pyml = yaml.safe_load(fh)
 
     pyml["requires"] = ["mod10 == 3.5"]
@@ -516,8 +516,9 @@ requires:
     assert isinstance(cause, InvalidMetadata)
     assert (
         f"Metadata defined in {inmanta_module_v1.get_metadata_file_path()} is invalid:\n"
-        + "  requires -> 0\n"
-        + "    str type expected (type=type_error.str)"
+        "  1 validation error for ModuleV1Metadata\n"
+        "  requires.0\n"
+        "    Input should be a valid string [type=string_type, input_value={'std': 'std > 1.0.0'}, input_type=dict]"
         in cause.msg
     )
 
@@ -625,8 +626,12 @@ packages = find_namespace:
     )
     with pytest.raises(InvalidMetadata) as e:
         module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
-    assert f"Metadata defined in {inmanta_module_v2.get_metadata_file_path()} is invalid:\n  version\n" in str(e.value)
-    assert error_msg in str(e.value)
+    assert (
+        f"Metadata defined in {inmanta_module_v2.get_metadata_file_path()} is invalid:\n"
+        "  1 validation error for ModuleV2Metadata\n"
+        "  version\n"
+        f"    Value error, {error_msg} [type=value_error, input_value='{version}', input_type=str]\n" in str(e.value)
+    )
 
 
 def test_module_v2_incompatible_commands(caplog, local_module_package_index: str, snippetcompiler, modules_v2_dir: str) -> None:
@@ -639,7 +644,7 @@ def test_module_v2_incompatible_commands(caplog, local_module_package_index: str
 import minimalv1module
 import minimalv2module
         """.strip(),
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=[module.InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement()],
         autostd=False,
     )

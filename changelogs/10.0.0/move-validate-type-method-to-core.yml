@@ -1,0 +1,8 @@
+---
+description: Moved the `validate_type` logic from the std module to inmanta-core.
+issue-nr: 6540
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"

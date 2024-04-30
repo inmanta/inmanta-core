@@ -1,0 +1,4 @@
+---
+description: "Fix the performance degradation on the `get_resources_for_agent()` call"
+change-type: patch
+destination-branches: [master, iso6]

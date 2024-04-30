@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import pytest
 
 import inmanta.compiler as compiler
@@ -56,7 +57,7 @@ entity Test2:
 end
 implement Test2 using std::none
 
-Test1 test1 [1] -- [0:] Test2 test2
+Test1.test2 [0:] -- Test2.test1 [1]
 
 a=Test1()
 b=Test2()
@@ -272,7 +273,7 @@ def test_lazy_attibutes(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity  Thing:
-   number id
+   int id
    string value = ""
 end
 
@@ -295,7 +296,7 @@ def test_lazy_attibutes2(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity  Thing:
-   number id
+   int id
    string value
 end
 
@@ -319,7 +320,7 @@ def test_lazy_attibutes3(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity  Thing:
-   number id
+   int id
 end
 
 Thing.value [1] -- StringWrapper
@@ -345,7 +346,6 @@ a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
 
 
 def test_veryhardsequencing(snippetcompiler):
-
     snippetcompiler.setup_for_snippet(
         """
 implementation none for std::Entity:

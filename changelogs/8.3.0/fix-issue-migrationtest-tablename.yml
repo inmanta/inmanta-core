@@ -1,0 +1,3 @@
+description: Fix an issue with the table name in a migration test.
+change-type: patch
+destination-branches: [master, iso6]

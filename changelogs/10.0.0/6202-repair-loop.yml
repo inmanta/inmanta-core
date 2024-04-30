@@ -1,0 +1,6 @@
+description: Prevent repairs from restarting indefinitely when a short deploy interval is set
+issue-nr: 6202
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"

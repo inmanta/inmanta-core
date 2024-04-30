@@ -5,8 +5,9 @@
     :contact: code@inmanta.com
     :license: Inmanta EULA
 """
+
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
 import inmanta_plugins.lsm.allocation as lsm
 import psycopg2
@@ -40,20 +41,20 @@ class PGRouterResolver(ExternalAttributeAllocator[T]):
         self.conn.close()
 
     def needs_allocation(
-        self, ctx: AllocationContext, instance: Dict[str, Any]
+        self, ctx: AllocationContext, instance: dict[str, Any]
     ) -> bool:
         attribute_not_yet_allocated = super().needs_allocation(ctx, instance)
         id_attribute_changed = self._id_attribute_changed(instance)
         return attribute_not_yet_allocated or id_attribute_changed
 
-    def _id_attribute_changed(self, instance: Dict[str, Any]) -> bool:
+    def _id_attribute_changed(self, instance: dict[str, Any]) -> bool:
         if instance["candidate_attributes"] and instance["active_attributes"]:
             return instance["candidate_attributes"].get(self.id_attribute) != instance[
                 "active_attributes"
             ].get(self.id_attribute)
         return False
 
-    def _get_value_from_result(self, result: Optional[Tuple[T]]) -> Optional[T]:
+    def _get_value_from_result(self, result: Optional[tuple[T]]) -> Optional[T]:
         if result and result[0]:
             return result[0]
         return None

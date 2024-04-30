@@ -1,0 +1,6 @@
+description: The server now keeps track of database pool exhaustion events and will report daily how many occured, if some exhaustion was noticed.
+issue-nr: 5944
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

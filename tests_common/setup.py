@@ -15,16 +15,17 @@
 
     Contact: code@inmanta.com
 """
+
 from os import path
 
 from setuptools import find_namespace_packages, setup
 
-version = "8.0.1"
+version = "13.0.0"
 
 requires = [
     "asyncpg",
     "click",
-    f"inmanta-core~={version}.dev",
+    f"inmanta-core~={version}.0.dev",
     "pip2pi",
     "pyformance",
     "pytest-asyncio",

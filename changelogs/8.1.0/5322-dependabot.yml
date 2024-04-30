@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump cryptography from 38.0.4 to 39.0.0
+destination-branches:
+- master
+- iso6
+sections: {}

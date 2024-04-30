@@ -1,0 +1,8 @@
+description: Improved error reporting when an optional list attribute (not relation) remains unset
+change-type: patch
+sections:
+  minor-improvement: "{{description}}"
+destination-branches:
+  - iso5
+  - iso6
+  - master

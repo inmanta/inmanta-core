@@ -1,0 +1,7 @@
+description: Add documentation on how to upgrade an orchestrator by migrating from one running orchestrator to another.
+issue-nr: 391
+issue-repo: inmanta-service-orchestrator
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import os
 import shutil
@@ -41,7 +42,7 @@ def find_executable(executable: str) -> Optional[str]:
 
     # fall back to pg_config
     try:
-        bindir = subprocess.check_output(["pg_config", "--bindir"], universal_newlines=True).strip()
+        bindir = subprocess.check_output(["pg_config", "--bindir"], text=True).strip()
         binpath = os.path.join(bindir, executable)
         if os.path.isfile(binpath):
             return binpath
@@ -51,7 +52,7 @@ def find_executable(executable: str) -> Optional[str]:
     return None
 
 
-class PostgresProc(object):
+class PostgresProc:
     def __init__(
         self, port: int, pg_ctl_bin: Optional[str] = None, initdb_bin: Optional[str] = None, db_path: Optional[str] = None
     ) -> None:

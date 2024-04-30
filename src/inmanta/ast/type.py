@@ -16,22 +16,15 @@
     Contact: code@inmanta.com
 """
 
+import copy
+import functools
 import numbers
-import typing
+from collections.abc import Sequence
 from typing import Callable
 from typing import List as PythonList
-from typing import Optional, Sequence
+from typing import Optional
 
-from inmanta.ast import (
-    DuplicateException,
-    Locatable,
-    Location,
-    Named,
-    Namespace,
-    NotFoundException,
-    RuntimeException,
-    TypeNotFoundException,
-)
+from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException
 from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.stable_api import stable_api
 
@@ -42,41 +35,6 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
-
-
-class BasicResolver(object):
-    def __init__(self, types):
-        self.types = types
-
-    def get_type(self, namespace, name):
-        if not isinstance(name, str):
-            raise Exception("Should Not Occur, bad AST construction")
-        if "::" in name:
-            if name in self.types:
-                return self.types[name]
-            else:
-                raise TypeNotFoundException(name, namespace)
-        elif name in TYPES:
-            return self.types[name]
-        else:
-            cns = namespace
-            while cns is not None:
-                full_name = "%s::%s" % (cns.get_full_name(), name)
-                if full_name in self.types:
-                    return self.types[full_name]
-                cns = cns.get_parent()
-                raise TypeNotFoundException(name, namespace)
-
-
-class NameSpacedResolver(object):
-    def __init__(self, ns):
-        self.ns = ns
-
-    def get_type(self, name):
-        return self.ns.get_type(name)
-
-    def get_resolver_for(self, namespace: Namespace):
-        return NameSpacedResolver(namespace)
 
 
 @stable_api
@@ -144,6 +102,9 @@ class NamedType(Type, Named):
         """produce an error message for this type"""
         raise DuplicateException(self, other, "Type %s is already defined" % (self.get_full_name()))
 
+    def type_string(self) -> str:
+        return self.get_full_name()
+
 
 @stable_api
 class NullableType(Type):
@@ -200,7 +161,7 @@ class Primitive(Type):
         """
         Cast a value to this type. If the value can not be cast, raises a :py:class:`inmanta.ast.RuntimeException`.
         """
-        exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
+        exception: RuntimeException = RuntimeException(None, f"Failed to cast '{value}' to {self}")
 
         if isinstance(value, Unknown):
             # propagate unknowns
@@ -227,15 +188,21 @@ class Primitive(Type):
 @stable_api
 class Number(Primitive):
     """
-    This class represents an integer or float in the configuration model. On
-    these numbers the following operations are supported:
-
-    +, -, /, *
+    This class represents an integer or a float in the configuration model.
     """
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [int, float]
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [float]
+
+    def cast(self, value: Optional[object]) -> object:
+        """
+        Attempts to cast a given value to an int or a float.
+        """
+        # Keep precision: cast to an int only if it already is an int
+        if isinstance(value, int):
+            return int(value)
+        return super().cast(value)
 
     def validate(self, value: Optional[object]) -> bool:
         """
@@ -246,18 +213,54 @@ class Number(Primitive):
             return True
 
         if not isinstance(value, numbers.Number):
-            raise RuntimeException(None, "Invalid value '%s', expected Number" % value)
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True  # allow this function to be called from a lambda function
 
     def is_primitive(self) -> bool:
         return True
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
     def type_string(self) -> str:
         return "number"
+
+    def type_string_internal(self) -> str:
+        return self.type_string()
+
+
+@stable_api
+class Float(Primitive):
+    """
+    This class is an alias for the Number class and represents a float in
+    the configuration model.
+    """
+
+    def __init__(self) -> None:
+        Primitive.__init__(self)
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [float]
+
+    def validate(self, value: Optional[object]) -> bool:
+        """
+        Validate the given value to check if it satisfies the constraints
+        associated with this type
+        """
+        if isinstance(value, AnyType):
+            return True
+
+        if not isinstance(value, float):
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+        return True  # allow this function to be called from a lambda function
+
+    def is_primitive(self) -> bool:
+        return True
+
+    def get_location(self) -> None:
+        return None
+
+    def type_string(self) -> str:
+        return "float"
 
     def type_string_internal(self) -> str:
         return self.type_string()
@@ -274,11 +277,16 @@ class Integer(Number):
         self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [int]
 
     def validate(self, value: Optional[object]) -> bool:
-        if not super().validate(value):
-            return False
+        """
+        Validate the given value to check if it satisfies the constraints
+        associated with this type
+        """
+        if isinstance(value, AnyType):
+            return True
+
         if not isinstance(value, numbers.Integral):
-            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
-        return True
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+        return True  # allow this function to be called from a lambda function
 
     def type_string(self) -> str:
         return "int"
@@ -303,7 +311,7 @@ class Bool(Primitive):
             return True
         if isinstance(value, bool):
             return True
-        raise RuntimeException(None, "Invalid value '%s', expected Bool" % value)
+        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
     def cast(self, value: Optional[object]) -> object:
         return super().cast(value if not isinstance(value, NoneValue) else None)
@@ -317,7 +325,7 @@ class Bool(Primitive):
     def is_primitive(self) -> bool:
         return True
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
 
@@ -339,7 +347,7 @@ class String(Primitive):
         if isinstance(value, AnyType):
             return True
         if not isinstance(value, str):
-            raise RuntimeException(None, "Invalid value '%s', expected String" % value)
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True
 
@@ -359,7 +367,7 @@ class String(Primitive):
     def is_primitive(self) -> bool:
         return True
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
 
@@ -367,6 +375,7 @@ class String(Primitive):
 class List(Type):
     """
     Instances of this class represent a list type containing any types of values.
+    This class refers to the list type used in plugin annotations. For the list type in the Inmanta DSL, see `LiteralList`.
     """
 
     def __init__(self):
@@ -380,14 +389,18 @@ class List(Type):
             return True
 
         if not isinstance(value, list):
-            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True
+
+    def type_string(self) -> str:
+        # This is not a type in the model, but it is used in plugin annotations, which are also part of the DSL.
+        return "list"
 
     def type_string_internal(self) -> str:
         return "List"
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
 
@@ -420,13 +433,13 @@ class TypedList(List):
         return "%s[]" % string
 
     def type_string(self) -> Optional[str]:
-        element_type_string: Optional[str] = self.element_type.type_string()
+        element_type_string = self.element_type.type_string()
         return None if element_type_string is None else self._wrap_type_string(element_type_string)
 
     def type_string_internal(self) -> str:
         return self._wrap_type_string(self.element_type.type_string_internal())
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
     def get_base_type(self) -> Type:
@@ -488,14 +501,17 @@ class Dict(Type):
             return True
 
         if not isinstance(value, dict):
-            raise RuntimeException(None, "Invalid value '%s', expected dict" % value)
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True
 
     def type_string_internal(self) -> str:
         return "Dict"
 
-    def get_location(self) -> Location:
+    def type_string(self) -> str:
+        return "dict"
+
+    def get_location(self) -> None:
         return None
 
 
@@ -525,7 +541,7 @@ class TypedDict(Dict):
     def type_string_internal(self) -> str:
         return "dict[%s]" % self.element_type.type_string_internal()
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
 
@@ -565,10 +581,10 @@ class Union(Type):
                     return True
             except RuntimeException:
                 pass
-        raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self))
+        raise RuntimeException(None, f"Invalid value '{value}', expected {self}")
 
     def type_string_internal(self) -> str:
-        return "Union[%s]" % ",".join((t.type_string_internal() for t in self.types))
+        return "Union[%s]" % ",".join(t.type_string_internal() for t in self.types)
 
 
 @stable_api
@@ -579,7 +595,7 @@ class Literal(Union):
     """
 
     def __init__(self) -> None:
-        Union.__init__(self, [NullableType(Number()), Bool(), String(), TypedList(self), TypedDict(self)])
+        Union.__init__(self, [NullableType(Float()), Number(), Bool(), String(), TypedList(self), TypedDict(self)])
 
     def type_string_internal(self) -> str:
         return "Literal"
@@ -637,13 +653,13 @@ class ConstraintType(NamedType):
         assert self._constraint is not None
         if not self._constraint(value):
             raise RuntimeException(
-                self, "Invalid value %s, does not match constraint `%s`" % (repr(value), self.expression.pretty_print())
+                self, f"Invalid value {repr(value)}, does not match constraint `{self.expression.pretty_print()}`"
             )
 
         return True
 
-    def type_string(self):
-        return "%s::%s" % (self.namespace, self.name)
+    def type_string(self) -> str:
+        return f"{self.namespace}::{self.name}"
 
     def type_string_internal(self) -> str:
         return self.type_string()
@@ -681,8 +697,9 @@ def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
     return function
 
 
-TYPES: typing.Dict[str, Type] = {  # Part of the stable API
+TYPES: dict[str, Type] = {  # Part of the stable API
     "string": String(),
+    "float": Float(),
     "number": Number(),
     "int": Integer(),
     "bool": Bool(),
@@ -693,3 +710,39 @@ TYPES: typing.Dict[str, Type] = {  # Part of the stable API
     Maps Inmanta :term:`DSL` types to their internal representation. For each key, value pair, `value.type_string()` is
     guaranteed to return key.
 """
+
+
+@stable_api
+def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Type:
+    """
+    Convert a locatable type string, into a real inmanta type, that can be used for validation.
+
+    :param locatable_type: An object pointing to the type expression.
+    :param resolver: The namespace that can be used to resolve the type expression
+    """
+    # quickfix issue #1774
+    allowed_element_type: Type = Type()
+    if locatable_type.value == "list":
+        return List()
+    if locatable_type.value == "dict":
+        return TypedDict(allowed_element_type)
+
+    # stack of transformations to be applied to the base inmanta_type.Type
+    # transformations will be applied right to left
+    transformation_stack: List[Callable[[Type], Type]] = []
+
+    if locatable_type.value.endswith("?"):
+        # We don't want to modify the object we received as argument
+        locatable_type = copy.copy(locatable_type)
+        locatable_type.value = locatable_type.value[0:-1]
+        transformation_stack.append(NullableType)
+
+    if locatable_type.value.endswith("[]"):
+        # We don't want to modify the object we received as argument
+        locatable_type = copy.copy(locatable_type)
+        locatable_type.value = locatable_type.value[0:-2]
+        transformation_stack.append(TypedList)
+
+    return functools.reduce(
+        lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type)
+    )

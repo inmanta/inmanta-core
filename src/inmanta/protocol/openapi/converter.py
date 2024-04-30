@@ -15,18 +15,17 @@
 
     Contact: code@inmanta.com
 """
+
 import inspect
 import json
 import re
-from typing import Callable, Dict, List, Optional, Type, Union
+from typing import Callable, Optional, Union
 
-from pydantic.networks import AnyUrl
-from pydantic.schema import model_schema
-from pydantic.typing import NoneType
+from pydantic import ConfigDict
 from typing_inspect import get_args, get_origin, is_generic_type
 
 from inmanta import util
-from inmanta.data.model import BaseModel, patch_pydantic_field_type_schema
+from inmanta.data.model import BaseModel
 from inmanta.protocol.common import ArgOption, MethodProperties, ReturnValue, UrlMethod
 from inmanta.protocol.openapi.model import (
     Components,
@@ -34,6 +33,7 @@ from inmanta.protocol.openapi.model import (
     Info,
     MediaType,
     OpenAPI,
+    OpenApiDataTypes,
     Operation,
     Parameter,
     ParameterType,
@@ -60,17 +60,20 @@ class OpenApiConverter:
     Extracts API information for the OpenAPI definition from the server
     """
 
-    def __init__(self, global_url_map: Dict[str, Dict[str, UrlMethod]], feature_manager: FeatureManager):
+    def __init__(self, global_url_map: dict[str, dict[str, UrlMethod]], feature_manager: FeatureManager):
         self.global_url_map = global_url_map
         self.feature_manager = feature_manager
         self.type_converter = OpenApiTypeConverter()
         self.arg_option_handler = ArgOptionHandler(self.type_converter)
 
-    def _collect_server_information(self) -> List[Server]:
+    def _collect_server_information(self) -> list[Server]:
         bind_port = config.get_bind_port()
         server_address = config.server_address.get()
+        protocol = "https" if config.ssl_enabled() else "http"
         return [
-            Server(url=AnyUrl(url=f"http://{server_address}:{bind_port}/", scheme="http", host=server_address, port=bind_port))
+            Server(
+                url=f"{protocol}://{server_address}:{bind_port}/",
+            )
         ]
 
     def _get_inmanta_version(self) -> Optional[str]:
@@ -90,7 +93,7 @@ class OpenApiConverter:
                 paths[path_in_openapi_format] = path_item
         return OpenAPI(openapi="3.0.2", info=info, paths=paths, servers=servers, components=self.type_converter.components)
 
-    def _filter_api_methods(self, methods: Dict[str, UrlMethod]) -> Dict[str, UrlMethod]:
+    def _filter_api_methods(self, methods: dict[str, UrlMethod]) -> dict[str, UrlMethod]:
         return {
             method_name: url_method
             for method_name, url_method in methods.items()
@@ -100,7 +103,7 @@ class OpenApiConverter:
     def _format_path(self, path: str) -> str:
         return path.replace("(?P<", "{").replace(">[^/]+)", "}")
 
-    def _extract_operations_from_methods(self, api_methods: Dict[str, UrlMethod], path: str) -> PathItem:
+    def _extract_operations_from_methods(self, api_methods: dict[str, UrlMethod], path: str) -> PathItem:
         path_item = PathItem()
         for http_method_name, url_method in api_methods.items():
             operation_handler = OperationHandler(self.type_converter, self.arg_option_handler)
@@ -154,34 +157,94 @@ class OpenApiTypeConverter:
 
     def __init__(self) -> None:
         self.components = Components(schemas={})
-        self.ref_prefix = "#/components/schemas/"
-        self.ref_regex = re.compile(self.ref_prefix + r"(.*)")
-
-        # Applying some monkey patching to pydantic
-        patch_pydantic_field_type_schema()
+        self._pydantic_ref_key = "$defs"
+        self.openapi_ref_prefix = "#/components/schemas/"
+        self._ref_regex = re.compile(re.escape(self.openapi_ref_prefix) + r"(.*)")
 
     def get_openapi_type_of_parameter(self, parameter_type: inspect.Parameter) -> Schema:
-        type_annotation = parameter_type.annotation
-        return self.get_openapi_type(type_annotation)
+        schema = self.get_openapi_type(parameter_type.annotation)
+        if parameter_type.default is not inspect.Parameter.empty:
+            schema.default = parameter_type.default
+        return schema
 
-    def _handle_pydantic_model(self, type_annotation: Type, by_alias: bool = True) -> Schema:
-        # JsonSchema stores the model (and sub-model) definitions at #/definitions,
-        # but OpenAPI requires them to be placed at "#/components/schemas/"
-        # The ref_prefix changes the references, but the actual schemas are still at #/definitions
-        schema = model_schema(type_annotation, by_alias=by_alias, ref_prefix=self.ref_prefix)
-        if "definitions" in schema.keys():
-            definitions: Dict[str, Dict[str, object]] = schema.pop("definitions")
+    def _handle_pydantic_model(self, type_annotation: BaseModel, by_alias: bool = True) -> Schema:
+        schema = type_annotation.model_json_schema(by_alias=by_alias, ref_template=f"{self.openapi_ref_prefix}{{model}}")
+        # pydantic.BaseModel.model_json_schema() stores the model (and sub-model) definitions at #/$defs/{model}
+        # (pydantic.main.DEFAULT_REF_TEMPLATE) but OpenAPI requires them to be placed at "#/components/schemas/"
+        # The ref_template tells pydantic to update the references (the referring side) but not the schema location (the
+        # referred side). So we need to perform that translation manually.
+        if self._pydantic_ref_key in schema.keys():
+            definitions: dict[str, dict[str, object]] = schema.pop(self._pydantic_ref_key)
             if self.components.schemas is not None:
                 for key, definition in definitions.items():
-                    self.components.schemas[key] = Schema(**definition)
+                    patched_definition = self._handle_pydantic_model_recursively(definition)
+                    self.components.schemas[key] = Schema(**patched_definition)
+
+        schema = self._handle_pydantic_model_recursively(schema)
         return Schema(**schema)
 
-    def get_openapi_type(self, type_annotation: Type) -> Schema:
+    def _handle_pydantic_model_recursively(self, definition: dict[str, object]) -> dict[str, object]:
+        """
+        The json-schema is not 1-to-1 compatible with the OpenAPI schema. This method patches the
+        given json-schema as such that it becomes compatible with the OpenAPI schema.
+        """
+        # Recursive calls
+        if definition.get("properties") is not None:
+            properties = definition["properties"]
+            for property_name in list(properties.keys()):
+                properties[property_name] = self._handle_pydantic_model_recursively(properties[property_name])
+        if definition.get("additionalProperties") is not None and isinstance(definition["additionalProperties"], dict):
+            definition["additionalProperties"] = self._handle_pydantic_model_recursively(definition["additionalProperties"])
+        if definition.get("items") is not None:
+            definition["items"] = self._handle_pydantic_model_recursively(definition["items"])
+        for attr_name in ["anyOf", "allOf", "oneOf"]:
+            if definition.get(attr_name) is not None:
+                for i in range(len(definition[attr_name])):
+                    definition[attr_name][i] = self._handle_pydantic_model_recursively(definition[attr_name][i])
+
+        definition = self._convert_const_to_enum(definition)
+        definition = self._add_type_field_to_enum_value(definition)
+        return definition
+
+    def _convert_const_to_enum(self, definition: dict[str, object]) -> dict[str, object]:
+        """
+        The 'const' field, which is part of the JSON schema, is not part of the OpenAPI schema.
+        We convert the 'const' field into an 'enum' field here to make sure the constant value
+        of the parameter is available in the OpenAPI schema.
+        """
+        if definition.get("enum") is not None:
+            # The enum field is already populated
+            return definition
+        if definition.get("const") is not None:
+            definition["enum"] = [str(definition["const"])]
+            del definition["const"]
+        return definition
+
+    def _add_type_field_to_enum_value(self, definition: dict[str, object]) -> dict[str, object]:
+        """
+        When pydantic converts a Python Enum type to its corresponding json schema, it doesn't
+        populate the type field. This way the rendered API documentation doesn't include all possible
+        enum values. This method makes sure that the type attribute of an enum is always populated.
+        """
+        if definition.get("enum") is not None:
+            if not definition.get("type"):
+                # Convert Python type to a type known by OpenAPI
+                if all(isinstance(e, bool) for e in definition["enum"]):
+                    definition["type"] = OpenApiDataTypes.BOOLEAN.value
+                elif all(isinstance(e, int) for e in definition["enum"]):
+                    definition["type"] = OpenApiDataTypes.INTEGER.value
+                elif all(isinstance(e, float) or isinstance(e, int) for e in definition["enum"]):
+                    definition["type"] = OpenApiDataTypes.NUMBER.value
+                else:
+                    definition["type"] = OpenApiDataTypes.STRING.value
+            # OpenAPI expects enum values to be strings
+            definition["enum"] = [str(e) for e in definition["enum"]]
+        return definition
+
+    def get_openapi_type(self, type_annotation: type) -> Schema:
         class Sub(BaseModel):
             the_field: type_annotation
-
-            class Config:
-                arbitrary_types_allowed = True
+            model_config = ConfigDict(arbitrary_types_allowed=True)
 
         pydantic_result = self._handle_pydantic_model(Sub).properties["the_field"]
         pydantic_result.title = None
@@ -194,7 +257,7 @@ class OpenApiTypeConverter:
 
         :param reference: The reference to the schema
         """
-        ref_match = self.ref_regex.match(reference)
+        ref_match = self._ref_regex.match(reference)
         if not ref_match:
             return None
 
@@ -211,9 +274,9 @@ class ArgOptionHandler:
         self.type_converter = type_converter
 
     def extract_parameters_from_arg_options(
-        self, method_properties: MethodProperties, function_parameters: Dict[str, inspect.Parameter]
-    ) -> List[Parameter]:
-        result: List[Parameter] = []
+        self, method_properties: MethodProperties, function_parameters: dict[str, inspect.Parameter]
+    ) -> list[Parameter]:
+        result: list[Parameter] = []
         for option_name, option in method_properties.arg_options.items():
             param = function_parameters[option_name]
             param_schema = self.type_converter.get_openapi_type_of_parameter(param)
@@ -225,12 +288,14 @@ class ArgOptionHandler:
         return result
 
     def extract_response_headers_from_arg_options(
-        self, arg_options: Dict[str, ArgOption]
-    ) -> Optional[Dict[str, Union[Header, Reference]]]:
-        headers: Dict[str, Union[Header, Reference]] = {}
+        self, arg_options: dict[str, ArgOption]
+    ) -> Optional[dict[str, Union[Header, Reference]]]:
+        headers: dict[str, Union[Header, Reference]] = {}
         for option_name, option in arg_options.items():
             if option.header and option.reply_header:
-                headers[option.header] = Header(description=option.header, schema=Schema(type="string"))
+                headers[option.header] = Header(
+                    description=f"The value of the request header {option.header}", schema=Schema(type="string")
+                )
         return headers if headers else None
 
 
@@ -252,10 +317,10 @@ class FunctionParameterHandler:
         self.method_properties = method_properties
 
         # Get the parameters of the handler function
-        self.all_params_dct: Dict[str, inspect.Parameter] = self._extract_function_parameters(method_properties.function)
-        self.path_params: Dict[str, inspect.Parameter] = {}
-        self.header_params: Dict[str, inspect.Parameter] = {}
-        self.non_path_and_non_header_params: Dict[str, inspect.Parameter] = {}
+        self.all_params_dct: dict[str, inspect.Parameter] = self._extract_function_parameters(method_properties.function)
+        self.path_params: dict[str, inspect.Parameter] = {}
+        self.header_params: dict[str, inspect.Parameter] = {}
+        self.non_path_and_non_header_params: dict[str, inspect.Parameter] = {}
 
         for param_name, param in self.all_params_dct.items():
             if f"{{{param_name}}}" in self.path:
@@ -270,28 +335,28 @@ class FunctionParameterHandler:
 
     # Parameters
 
-    def _extract_function_parameters(self, url_method_function: Callable) -> Dict[str, inspect.Parameter]:
+    def _extract_function_parameters(self, url_method_function: Callable) -> dict[str, inspect.Parameter]:
         function_parameters = {
             parameter_name: parameter_type
             for parameter_name, parameter_type in inspect.signature(url_method_function).parameters.items()
         }
         return function_parameters
 
-    def get_parameters(self) -> List[Parameter]:
+    def get_parameters(self) -> list[Parameter]:
         result = self._convert_header_and_path_params()
         if self.method_properties.operation not in ["POST", "PUT", "PATCH"]:
             result.extend(self._convert_function_params_to_query_params())
         return result
 
-    def _convert_header_and_path_params(self) -> List[Parameter]:
-        arg_options_params: List[Parameter] = self.arg_option_handler.extract_parameters_from_arg_options(
+    def _convert_header_and_path_params(self) -> list[Parameter]:
+        arg_options_params: list[Parameter] = self.arg_option_handler.extract_parameters_from_arg_options(
             self.method_properties, self.all_params_dct
         )
-        path_params: List[Parameter] = self._convert_path_params_to_openapi()
+        path_params: list[Parameter] = self._convert_path_params_to_openapi()
         return arg_options_params + path_params
 
-    def _convert_path_params_to_openapi(self) -> List[Parameter]:
-        parameters: List[Union[Parameter, Reference]] = []
+    def _convert_path_params_to_openapi(self) -> list[Parameter]:
+        parameters: list[Union[Parameter, Reference]] = []
         for parameter_name, parameter_type in self.path_params.items():
             type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
             param_description = self.method_properties.get_description_for_param(parameter_name)
@@ -306,8 +371,8 @@ class FunctionParameterHandler:
             )
         return parameters
 
-    def _convert_function_params_to_query_params(self) -> List[Parameter]:
-        parameters: List[Parameter] = []
+    def _convert_function_params_to_query_params(self) -> list[Parameter]:
+        parameters: list[Parameter] = []
         for parameter_name, parameter_type in self.non_path_and_non_header_params.items():
             type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
             param_description = self.method_properties.get_description_for_param(parameter_name)
@@ -322,7 +387,7 @@ class FunctionParameterHandler:
         properties = self._convert_function_params_to_openapi_request_body_properties()
         return self._build_json_request_body(properties)
 
-    def _convert_function_params_to_openapi_request_body_properties(self) -> Dict[str, Schema]:
+    def _convert_function_params_to_openapi_request_body_properties(self) -> dict[str, Schema]:
         properties = {}
         for parameter_name, parameter_type in self.non_path_and_non_header_params.items():
             type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
@@ -344,7 +409,7 @@ class FunctionParameterHandler:
                 result += f"* **{param_name}:**\n"
         return result
 
-    def _build_json_request_body(self, properties: Dict) -> RequestBody:
+    def _build_json_request_body(self, properties: dict) -> RequestBody:
         request_body = RequestBody(
             required=True,
             content={"application/json": MediaType(schema=Schema(type="object", properties=properties))},
@@ -386,7 +451,7 @@ class OperationHandler:
             **extra_params,
         )
 
-    def _get_tags_of_operation(self, url_method: UrlMethod) -> Optional[List[str]]:
+    def _get_tags_of_operation(self, url_method: UrlMethod) -> Optional[list[str]]:
         if url_method.endpoint is not None:
             if hasattr(url_method.endpoint, "_name"):
                 return [url_method.endpoint._name]
@@ -395,8 +460,8 @@ class OperationHandler:
         else:
             return None
 
-    def _build_responses(self, url_method_properties: MethodProperties) -> Dict[str, Response]:
-        result: Dict[str, Response] = {}
+    def _build_responses(self, url_method_properties: MethodProperties) -> dict[str, Response]:
+        result: dict[str, Response] = {}
         status_code_to_description_map = url_method_properties.get_description_foreach_http_status_code()
         for status_code, description in status_code_to_description_map.items():
             if status_code == 200:
@@ -410,21 +475,21 @@ class OperationHandler:
 
         return result
 
-    def _build_return_value_wrapper(self, url_method_properties: MethodProperties) -> Optional[Dict[str, MediaType]]:
+    def _build_return_value_wrapper(self, url_method_properties: MethodProperties) -> Optional[dict[str, MediaType]]:
         return_type = inspect.signature(url_method_properties.function).return_annotation
 
         if return_type is None or return_type == inspect.Signature.empty:
             return None
 
-        return_properties: Optional[Dict[str, Schema]] = None
+        return_properties: Optional[dict[str, Schema]] = None
 
         if return_type == ReturnValue or is_generic_type(return_type) and get_origin(return_type) == ReturnValue:
             # Dealing with the special case of ReturnValue[...]
-            links_type = self.type_converter.get_openapi_type(Dict[str, str])
+            links_type = self.type_converter.get_openapi_type(dict[str, str])
             links_type.title = "Links"
             links_type.nullable = True
 
-            warnings_type = self.type_converter.get_openapi_type(List[str])
+            warnings_type = self.type_converter.get_openapi_type(list[str])
             warnings_type.title = "Warnings"
 
             return_properties = {
@@ -449,7 +514,7 @@ class OperationHandler:
             if not url_method_properties.envelope:
                 raise RuntimeError("Methods returning a ReturnValue object should always have an envelope")
 
-            if type_args[0] != NoneType:
+            if type_args[0] is not type(None):
                 return_properties[url_method_properties.envelope_key] = self.type_converter.get_openapi_type(type_args[0])
 
         else:

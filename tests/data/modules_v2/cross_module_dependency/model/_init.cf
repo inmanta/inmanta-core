@@ -1,0 +1,1 @@
+cross_module_dependency::print_message("message from cross_module_dependency model")

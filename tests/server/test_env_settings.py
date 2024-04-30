@@ -15,7 +15,8 @@
 
     Contact: code@inmanta.com
 """
-from typing import Dict
+
+import logging
 from uuid import UUID
 
 import pytest
@@ -23,19 +24,31 @@ import pytest
 from inmanta import data
 from inmanta.data import Environment, Setting, convert_boolean
 from inmanta.util import get_compiler_version
+from utils import log_contains
 
 
 def get_environment_setting_default(setting: str) -> object:
     return data.Environment._settings[setting].default
 
 
-def check_only_contains_default_setting(settings_dict: Dict[str, object]) -> None:
+def check_only_contains_default_setting(settings_dict: dict[str, object]) -> None:
     """
     Depending on when the background cleanup processes are run, it is possible that environment settings are set, independently
     of the tests below. This method ensures these settings are properly set with their default values.
     """
     for setting_name, setting_value in settings_dict.items():
         assert setting_value == get_environment_setting_default(setting_name)
+
+
+async def test_api_return_type(client, server, environment):
+    """
+    https://github.com/inmanta/inmanta-core/pull/6574 changed the type of AUTOSTART_AGENT_REPAIR_INTERVAL and
+    AUTOSTART_AGENT_DEPLOY_INTERVAL from int to str. This test makes sure the type returned by the api is correct
+    """
+    result = await client.get_setting(tid=environment, id=data.AUTOSTART_AGENT_REPAIR_INTERVAL)
+
+    assert result.code == 200
+    assert result.result["value"] == "86400"
 
 
 async def test_environment_settings(client, server, environment_default):
@@ -250,76 +263,6 @@ async def test_clear_protected_environment(server, client):
     await assert_clear_env(env_id, clear_succeeds=True)
 
 
-async def test_decommission_protected_environment(server, client):
-    result = await client.create_project("env-test")
-    assert result.code == 200
-    project_id = result.result["project"]["id"]
-
-    result = await client.create_environment(project_id=project_id, name="dev")
-    assert result.code == 200
-    env_id = result.result["environment"]["id"]
-
-    async def push_version_to_environment() -> None:
-        res = await client.reserve_version(env_id)
-        assert res.code == 200
-        version = res.result["data"]
-
-        result = await client.put_version(
-            tid=env_id,
-            version=version,
-            resources=[],
-            unknowns=[],
-            compiler_version=get_compiler_version(),
-        )
-        assert result.code == 200
-
-    async def assert_decomission_env(env_id: str, decommission_succeeds: bool) -> None:
-        result = await client.list_versions(env_id)
-        assert result.code == 200
-        original_number_of_versions = len(result.result["versions"])
-        assert original_number_of_versions != 0
-        # Execute clear operation
-        result = await client.environment_decommission(env_id)
-        assert result.code == 200 if decommission_succeeds else 403
-        # Assert result
-        result = await client.list_versions(env_id)
-        assert result.code == 200
-        # Another version is added when decommissioning succeeds
-        assert (len(result.result["versions"]) > original_number_of_versions) == decommission_succeeds
-
-    # Test default settings
-    await push_version_to_environment()
-    await assert_decomission_env(env_id, decommission_succeeds=True)
-
-    # Test environment is protected
-    await push_version_to_environment()
-    result = await client.environment_settings_set(env_id, data.PROTECTED_ENVIRONMENT, True)
-    assert result.code == 200
-    await assert_decomission_env(env_id, decommission_succeeds=False)
-
-    # Test environment is unprotected
-    result = await client.environment_settings_set(env_id, data.PROTECTED_ENVIRONMENT, False)
-    assert result.code == 200
-    await assert_decomission_env(env_id, decommission_succeeds=True)
-
-
-async def test_default_value_purge_on_delete_setting(server, client):
-    """
-    Ensure that the purge_on_delete setting of an environment is set to false by default.
-    """
-    result = await client.create_project("env-test")
-    assert result.code == 200
-    project_id = result.result["project"]["id"]
-
-    result = await client.create_environment(project_id=project_id, name="dev")
-    assert result.code == 200
-    env_id = result.result["environment"]["id"]
-
-    result = await client.get_setting(tid=env_id, id=data.PURGE_ON_DELETE)
-    assert result.code == 200
-    assert result.result["value"] is False
-
-
 async def test_environment_add_new_setting_parameter(server, client, environment):
     new_setting: Setting = Setting(
         name="a new setting",
@@ -400,3 +343,27 @@ async def test_get_setting_no_longer_exist(server, client, environment):
     result = await client.list_settings(tid=environment)
     assert result.code == 200
     assert "new_setting" in result.result["settings"].keys()
+
+
+async def test_halt_env_before_deletion(environment, server, client, caplog):
+    """
+    Verify env will be halted before it is deleted.
+    """
+    with caplog.at_level(logging.INFO):
+        result = await client.environment_delete(environment)
+        assert result.code == 200
+
+    log_contains(caplog, "inmanta.server.services.environmentservice", logging.INFO, f"Halting Environment {environment}")
+
+
+async def test_resume_marked_for_delete(environment, server, client, caplog):
+    """
+    Cannot resume environment that is marked for deletion
+    """
+
+    env1 = await data.Environment.get_by_id(environment)
+    await env1.mark_for_deletion()
+
+    result = await client.resume_environment(environment)
+    assert result.code == 400
+    assert result.result["message"] == "Invalid request: Cannot resume an environment that is marked for deletion."

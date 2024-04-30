@@ -1,0 +1,5 @@
+description: Added new pip config framework
+issue-nr: 6516
+change-type: major
+destination-branches: [master]
+

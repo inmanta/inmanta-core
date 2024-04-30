@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump furo from 2023.3.23 to 2023.3.27
+destination-branches:
+- master
+- iso6
+sections: {}

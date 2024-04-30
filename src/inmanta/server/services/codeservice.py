@@ -15,8 +15,9 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
-from typing import Dict, List, cast
+from typing import cast
 
 from inmanta import data
 from inmanta.data import model
@@ -35,12 +36,12 @@ class CodeService(protocol.ServerSlice):
     file_slice: FileService
 
     def __init__(self) -> None:
-        super(CodeService, self).__init__(SLICE_CODE)
+        super().__init__(SLICE_CODE)
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_FILE, SLICE_DATABASE]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -69,15 +70,16 @@ class CodeService(protocol.ServerSlice):
                 ):
                     raise BadRequest("The values in the source map should be of the form (filename, module, [requirements])")
 
+        # list of file hashes
         allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
 
-        val = self.file_slice.stat_file_internal(allrefs)
+        val = await self.file_slice.stat_file_internal(allrefs)
 
         if len(val) != 0:
             raise BadRequest("Not all file references provided are valid", details={"references": val})
 
         code = await data.Code.get_versions(environment=env.id, version=code_id)
-        oldmap: Dict[str, data.Code] = {c.resource: c for c in code}
+        oldmap: dict[str, data.Code] = {c.resource: c for c in code}
 
         new = {k: v for k, v in resources.items() if k not in oldmap}
         conflict = [k for k, v in resources.items() if k in oldmap and oldmap[k].source_refs != v]
@@ -106,7 +108,7 @@ class CodeService(protocol.ServerSlice):
         if code.source_refs is not None:
             for code_hash, (file_name, module, req) in code.source_refs.items():
                 try:
-                    content = self.file_slice.get_file_internal(code_hash)
+                    content = await self.file_slice.get_file_internal(code_hash)
                     sources[code_hash] = (file_name, module, content.decode(), req)
                 except UnicodeDecodeError:
                     raise BadRequest(
@@ -116,12 +118,14 @@ class CodeService(protocol.ServerSlice):
         return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": sources}
 
     @handle(methods_v2.get_source_code, env="tid")
-    async def get_source_code(self, env: data.Environment, version: int, resource_type: str) -> List[model.Source]:
+    async def get_source_code(self, env: data.Environment, version: int, resource_type: str) -> list[model.Source]:
         code = await data.Code.get_version(environment=env.id, version=version, resource=resource_type)
         if code is None:
             raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
 
         sources = []
+
+        # Get all module code pertaining to this env/version/resource
         if code.source_refs is not None:
             for code_hash, (file_name, module, requires) in code.source_refs.items():
                 sources.append(

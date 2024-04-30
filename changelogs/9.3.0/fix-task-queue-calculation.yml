@@ -1,0 +1,6 @@
+---
+description: Fix bug that causes the `/serverstatus` endpoint to report an incorrect length of the compiler queue.
+change-type: patch
+destination-branches: [master, iso6, iso5]
+sections:
+  bugfix: "{{description}}"

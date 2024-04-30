@@ -15,16 +15,20 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
+import itertools
 from collections import defaultdict
-from typing import Dict
+from typing import Any
 from uuid import UUID
 
 import pytest
+from dateutil.tz import UTC
 
-from inmanta import data
+from inmanta import const, data
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr
+from inmanta.util import parse_timestamp
 
 
 @pytest.fixture
@@ -47,17 +51,23 @@ async def env_with_resources(server, client):
     cm_time_idx = 0
     resource_deploy_times = []
     for i in range(30):
-        resource_deploy_times.append(datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
+        resource_deploy_times.append(
+            datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f").astimezone(UTC)
+        )
 
-    # Add multiple versions of model, with 2 of them released
+    # nr 0 is not used
+    is_version_released = [None, False, True, True, True, False]
+
+    # Add multiple versions of model, with 2 of them not released
     for i in range(1, 6):
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
             date=cm_times[cm_time_idx],
             total=1,
-            released=i != 1 and i != 5,
+            released=is_version_released[i],
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         cm_time_idx += 1
         await cm.insert()
@@ -69,6 +79,7 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     cm_time_idx += 1
     await cm.insert()
@@ -80,44 +91,46 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     cm_time_idx += 1
     await cm.insert()
     resources = {env.id: defaultdict(list), env2.id: defaultdict(list), env3.id: defaultdict(list)}
+    deploy_times = {env.id: defaultdict(list), env2.id: defaultdict(list), env3.id: defaultdict(list)}
 
-    def total_number_of_resources():
-        return sum(
-            [
-                len(resource_list_by_env)
-                for resource_list_by_env in [
-                    [
-                        specific_resource
-                        for specific_resource_list in envdict.values()
-                        for specific_resource in specific_resource_list
-                    ]
-                    for envdict in resources.values()
-                ]
-            ]
-        )
+    counter = itertools.count()
 
     async def create_resource(
         path: str,
         status: ResourceState,
         version: int,
-        attributes: Dict[str, object],
+        attributes: dict[str, object],
         agent: str = "internal",
         resource_type: str = "std::File",
         environment: UUID = env.id,
     ):
         key = f"{resource_type}[{agent},path={path}]"
+
+        if environment == env.id:
+            # check consistency of the testcase itself
+            if not is_version_released[version]:
+                assert status == ResourceState.available
+
+        update_last_deployed = status in const.DONE_STATES
+
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
             attributes={**attributes, **{"path": path}},
             status=status,
-            last_deploy=resource_deploy_times[total_number_of_resources()],
         )
         await res.insert()
+
+        last_deploy = resource_deploy_times[next(counter)]
+        deploy_times[environment][key].append(last_deploy)
+        if update_last_deployed:
+            await res.update_persistent_state(last_deploy=last_deploy)
+
         return res
 
     # A resource with multiple resources in its requires list, and multiple versions where it was released,
@@ -125,7 +138,7 @@ async def env_with_resources(server, client):
     resources[env.id]["std::File[internal,path=/tmp/dir1/file1]"].append(
         await create_resource(
             "/tmp/dir1/file1",
-            ResourceState.undefined,
+            ResourceState.available,
             1,
             {"key1": "val1", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
@@ -169,7 +182,7 @@ async def env_with_resources(server, client):
     resources[env.id]["std::File[internal,path=/tmp/dir1/file1]"].append(
         await create_resource(
             "/tmp/dir1/file1",
-            ResourceState.undefined,
+            ResourceState.available,
             5,
             {
                 "key1": "modified_value",
@@ -183,7 +196,7 @@ async def env_with_resources(server, client):
     resources[env.id]["std::Directory[internal,path=/tmp/dir1]"].append(
         await create_resource(
             "/tmp/dir1",
-            ResourceState.undefined,
+            ResourceState.available,
             1,
             {"key2": "val2", "requires": []},
             resource_type="std::Directory",
@@ -209,7 +222,7 @@ async def env_with_resources(server, client):
     # so the last and the first time the attributes are the same, is the same as well;
     # And it also has a single requirement
     resources[env.id]["std::File[internal,path=/tmp/dir1/file2]"].append(
-        await create_resource("/tmp/dir1/file2", ResourceState.undefined, 1, {"key3": "val3", "requires": []})
+        await create_resource("/tmp/dir1/file2", ResourceState.available, 1, {"key3": "val3", "requires": []})
     )
     resources[env.id]["std::File[internal,path=/tmp/dir1/file2]"].append(
         await create_resource(
@@ -240,7 +253,7 @@ async def env_with_resources(server, client):
     resources[env.id]["std::File[internal,path=/etc/filexyz]"].append(
         await create_resource(
             "/etc/filexyz",
-            ResourceState.undefined,
+            ResourceState.available,
             5,
             {"key4": "val4", "requires": []},
         )
@@ -308,7 +321,7 @@ async def env_with_resources(server, client):
     resources[env.id]["std::File[internal,path=/etc/requirement_in_later_version]"].append(
         await create_resource(
             "/etc/requirement_in_later_version",
-            ResourceState.skipped,
+            ResourceState.available,
             5,
             {"key8": "val8", "requires": []},
         )
@@ -379,27 +392,36 @@ async def env_with_resources(server, client):
         "orphaned_and_requires_orphaned": "std::File[internal,path=/tmp/orphaned]",
     }
 
-    yield env, cm_times, ids, resources
+    yield env, cm_times, ids, resources, deploy_times
+
+
+async def assert_matching_attributes(resource_api: dict[str, Any], resource_db: data.Resource) -> None:
+    """
+    This method throws an AssertionError when the attributes of the resource retrieved via the API
+    doesn't match with the attributes present in the DAO.
+    """
+    attributes_api = resource_api["attributes"]
+    # Due to a bug, the version field has always been present in the attributes dictionary sent to the server.
+    # This bug has been fixed in the database. For backwards compatibility reason the version field is present
+    # in the attributes dictionary served out via the API.
+    attributes_db = {**resource_db.attributes, "version": resource_db.model}
+    assert attributes_api == attributes_db
 
 
 async def test_resource_details(server, client, env_with_resources):
     """Test the resource details endpoint with multiple resources
     The released versions in the test environment are 2, 3 and 4, while 1 and 5 are not released.
     """
-    env, cm_times, ids, resources = env_with_resources
+    env, cm_times, ids, resources, deploy_times = env_with_resources
     multiple_requires = ids["multiple_requires"]
     result = await client.resource_details(env.id, multiple_requires)
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 2
-    generated_time = datetime.datetime.strptime(result.result["data"]["first_generated_time"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    )
+    generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert generated_time == cm_times[1].astimezone(datetime.timezone.utc)
-    deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    )
-    assert deploy_time == resources[env.id][multiple_requires][3].last_deploy.astimezone(datetime.timezone.utc)
-    assert result.result["data"]["attributes"] == resources[env.id][multiple_requires][3].attributes
+    deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
+    assert deploy_time == deploy_times[env.id][multiple_requires][3]
+    await assert_matching_attributes(result.result["data"], resources[env.id][multiple_requires][3])
     assert result.result["data"]["requires_status"] == {
         "std::Directory[internal,path=/tmp/dir1]": "deployed",
         "std::File[internal,path=/tmp/dir1/file2]": "deploying",
@@ -410,15 +432,11 @@ async def test_resource_details(server, client, env_with_resources):
     result = await client.resource_details(env.id, no_requires)
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 2
-    generated_time = datetime.datetime.strptime(result.result["data"]["first_generated_time"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    )
+    generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert generated_time == cm_times[1].astimezone(datetime.timezone.utc)
-    deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    )
-    assert deploy_time == resources[env.id][no_requires][3].last_deploy.astimezone(datetime.timezone.utc)
-    assert result.result["data"]["attributes"] == resources[env.id][no_requires][3].attributes
+    deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
+    assert deploy_time == deploy_times[env.id][no_requires][3]
+    await assert_matching_attributes(result.result["data"], resources[env.id][no_requires][3])
     assert result.result["data"]["requires_status"] == {}
     assert result.result["data"]["status"] == "deployed"
 
@@ -426,15 +444,11 @@ async def test_resource_details(server, client, env_with_resources):
     result = await client.resource_details(env.id, single_requires)
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 4
-    generated_time = datetime.datetime.strptime(result.result["data"]["first_generated_time"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    )
+    generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert generated_time == cm_times[3].astimezone(datetime.timezone.utc)
-    deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    )
-    assert deploy_time == resources[env.id][single_requires][3].last_deploy.astimezone(datetime.timezone.utc)
-    assert result.result["data"]["attributes"] == resources[env.id][single_requires][3].attributes
+    deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
+    assert deploy_time == deploy_times[env.id][single_requires][2]
+    await assert_matching_attributes(result.result["data"], resources[env.id][single_requires][3])
     assert result.result["data"]["requires_status"] == {"std::Directory[internal,path=/tmp/dir1]": "deployed"}
     assert result.result["data"]["status"] == "deploying"
 
@@ -449,21 +463,21 @@ async def test_resource_details(server, client, env_with_resources):
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 3
     assert result.result["data"]["status"] == "unavailable"
-    assert result.result["data"]["attributes"] == resources[env.id][never_deployed_resource][1].attributes
+    await assert_matching_attributes(result.result["data"], resources[env.id][never_deployed_resource][1])
 
     deployed_only_with_different_hash = ids["deployed_only_with_different_hash"]
     result = await client.resource_details(env.id, deployed_only_with_different_hash)
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 4
     assert result.result["data"]["status"] == "undefined"
-    assert result.result["data"]["attributes"] == resources[env.id][deployed_only_with_different_hash][1].attributes
+    await assert_matching_attributes(result.result["data"], resources[env.id][deployed_only_with_different_hash][1])
 
     deployed_only_in_earlier_version = ids["deployed_only_in_earlier_version"]
     result = await client.resource_details(env.id, deployed_only_in_earlier_version)
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 3
     assert result.result["data"]["status"] == "orphaned"
-    assert result.result["data"]["attributes"] == resources[env.id][deployed_only_in_earlier_version][0].attributes
+    await assert_matching_attributes(result.result["data"], resources[env.id][deployed_only_in_earlier_version][0])
     assert result.result["data"]["requires_status"] == {
         "std::File[internal,path=/etc/requirement_in_later_version]": "deployed"
     }
@@ -473,5 +487,5 @@ async def test_resource_details(server, client, env_with_resources):
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 3
     assert result.result["data"]["status"] == "orphaned"
-    assert result.result["data"]["attributes"] == resources[env.id][orphaned][0].attributes
+    await assert_matching_attributes(result.result["data"], resources[env.id][orphaned][0])
     assert result.result["data"]["requires_status"] == {"std::File[internal,path=/tmp/orphaned_req]": "orphaned"}

@@ -29,8 +29,8 @@ def test_dataflow_model_index_resultvariable_binding(dataflow_test_helper: Dataf
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
-    number m
+    int n
+    int m
 end
 
 index A(n)

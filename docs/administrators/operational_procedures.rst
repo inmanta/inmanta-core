@@ -15,10 +15,17 @@ Project Release for Production
 
 This process describes the steps to prepare an inmanta project for production release.
 
+For small projects relying exclusively on public modules and Python dependencies, the default pip config, which pulls
+packages from ``https://pypi.org/`` can be used. If the project requires private packages, then, for security
+reasons, the default pip config, which pulls packages from ``https://pypi.org/`` should not be used and all packages
+should be hosted in an internal, curated python repository (like nexus or devpi). See
+`PEP 708 <https://peps.python.org/pep-0708/#motivation>`_ for more information. See the :ref:`specify_location_pip`
+section for more information on how to set the project's pip configuration.
+
 Context
 ++++++++
 * The project development and testing is complete
-* All modules have been properly released.
+* All modules have been properly released (See :ref:`Releasing and distributing modules` for the procedure).
 * The project is in a git repo, with a specific branch dedicated to production releases
 * The project is checked out on disk.
 * All modules are checked out on the correct, tagged commit.
@@ -26,23 +33,34 @@ Context
 Procedure
 ++++++++++
 
-1. Verify in `project.yml` that `install_mode` is set to `release`.
-2. Freeze all modules with
+1. Check modules install mode:
+    - For v1 modules (if any): ensure that ``install_mode`` in ``project.yml`` is set to ``release``.
+    - For v2 modules (if any): ensure that ``pip.pre`` is not set in ``project.yml``.
+
+2. Freeze all modules with:
 
 .. code-block:: bash
 
     inmanta -vv -X project freeze --recursive --operator "=="
 
+This will cause the ``project.yml`` file to be updated with constraints that only allow this project to work with
+this exact set of module versions. This ensures that no unwanted updates can 'leak' into the production environment.
 
-    This will cause the `project.yml` file to be updated with constraints that only allow this project to work with this exact set of module versions.
-    This ensures that no unwanted updates can 'leak' into the production environment.
+3. Verify that all modules are frozen to the correct version.
 
-4. Verify that all modules are frozen to the correct version.
+    Open ``project.yml`` and verify that all module versions are frozen to the expected versions
 
-    * Open `project.yml` and verify that all module versions are frozen to the expected versions
+4. Commit this change.
 
-5. Commit this change (`git commit -a`)
-6. Push to the release branch (`git push`)
+.. code-block:: bash
+
+    git commit -a
+
+5. Push to the release branch.
+
+.. code-block:: bash
+
+    git push
 
 .. _operational_procedures_upgrade:
 
@@ -58,9 +76,8 @@ Context
 
 Pre-Upgrade steps
 ++++++++++++++++++
-1. Verify that environment safety setting are on (this should always be the case)
+1. Verify that environment safety settings are on (this should always be the case)
 
-    * `purge_on_delete = False`
     * `protected_environment = True`
 
 2. Temporarily disable auto_deploy
@@ -118,7 +135,6 @@ Procedure
 1. Cross check all settings in the environment settings tab with the development team.
 2. Verify that environment safety settings are on (should always be the case)
 
-   * `purge_on_delete = False`
    * `protected_environment = True`
 
 3. Temporarily disable auto_deploy
@@ -213,9 +229,8 @@ Upgrade of service model on the orchestrator
 
    * Pre-Upgrade steps:
 
-   1. Verify that environment safety setting are on (this should always be the case)
+   1. Verify that environment safety settings are on (this should always be the case)
 
-       * [ ] `purge_on_delete = False`
        * [ ] `protected_environment = True`
 
    2. Temporarily disable auto_deploy

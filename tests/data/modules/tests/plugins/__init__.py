@@ -1,5 +1,6 @@
 from _collections import defaultdict
 from inmanta import resources
+from inmanta.execute.proxy import UnknownException
 from inmanta.execute.util import Unknown
 from inmanta.plugins import PluginException, plugin
 
@@ -10,7 +11,8 @@ def unknown() -> "any":
 
 
 @plugin
-def length(string: "string") -> "number":
+def length(string: "string") -> "int":
+    """returns the length of the string"""
     return len(string)
 
 
@@ -29,6 +31,21 @@ def do_uknown(inp: "any") -> "string":
     return "XX"
 
 
+@plugin
+def convert_unknowns(inp: "list", replace: "any") -> "list":
+    def convert():
+        iterator = iter(inp)
+        while True:
+            try:
+                yield next(iterator)
+            except UnknownException:
+                yield replace
+            except StopIteration:
+                break
+
+    return list(convert())
+
+
 counter = defaultdict(lambda: 0)
 
 
@@ -44,7 +61,7 @@ def resolve_rule_purged_status(
 
 
 @plugin
-def once(string: "string") -> "number":
+def once(string: "string") -> "int":
     prev = counter[string]
     counter[string] = prev + 1
     return prev
@@ -63,3 +80,8 @@ class TestPluginException(PluginException):
 @plugin
 def raise_exception(message: "string") -> None:
     raise TestPluginException(message)
+
+
+@plugin
+def sum(x: "int", y: "int") -> "int":
+    return x + y

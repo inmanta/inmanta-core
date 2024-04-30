@@ -1,0 +1,7 @@
+description: Documentation PR for the new pip config and its behaviour. This PR centralizes the change entries.
+issue-nr: 6518
+change-type: major
+destination-branches: [master]
+sections:
+  feature: "A project-wide pip configuration can be set through the project.yml pip section."
+  upgrade-note: "All projects now require a pip config in the `project.yml`: please refer to the [migration guide](migrate_to_project_wide_pip_config) to move to a project-wide pip configuration."

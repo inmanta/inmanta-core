@@ -1,0 +1,6 @@
+---
+description: "The following API endpoints now return their results in a consistent, meaningful order: methods.list_settings, methods_v2.environment_settings_list, methods.list_params, methods_v2.get_facts, methods.list_projects, methods_v2.project_list, methods.dryrun_list."
+change-type: patch
+destination-branches: [master, iso6, iso5]
+sections:
+    bugfix: "{{description}}"

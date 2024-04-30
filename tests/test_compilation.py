@@ -80,7 +80,7 @@ def test_compile_test_index(setup_project_for):
     for i in range(len(firsts)):
         for j in range(len(firsts)):
             if not i == j:
-                assert firsts[i][2] != firsts[j][2], "Variable %s%s should not be equal to %s%s" % (
+                assert firsts[i][2] != firsts[j][2], "Variable {}{} should not be equal to {}{}".format(
                     firsts[i][0],
                     firsts[i][1],
                     firsts[j][0],

@@ -1,0 +1,5 @@
+---
+description: "change type of unmanaged resources discovered_at column from timstamp without timezone to timstamp with timezone"
+issue-nr: 6343
+change-type: patch
+destination-branches: [master, iso6]

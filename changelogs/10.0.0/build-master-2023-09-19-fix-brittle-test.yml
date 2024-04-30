@@ -1,0 +1,3 @@
+description: Fix test_override_inmanta_package test.
+change-type: patch
+destination-branches: [master]

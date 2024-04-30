@@ -28,6 +28,7 @@ import pytest
 
 import inmanta.util
 from inmanta import const
+from inmanta.app import CompileSummaryReporter
 
 
 def get_command(
@@ -250,7 +251,7 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
 
 
 @pytest.mark.parametrize_any(
-    "log_level, with_tty, regexes_required_lines, regexes_forbidden_lines",
+    "log_level,with_tty, regexes_required_lines, regexes_forbidden_lines",
     [
         (
             3,
@@ -262,7 +263,22 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
             [],
         ),
         (
+            "DEBUG",
+            False,
+            [
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+            ],
+            [],
+        ),
+        (
             2,
+            False,
+            [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
+            [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
+        ),
+        (
+            "INFO",
             False,
             [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
             [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
@@ -290,18 +306,67 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
         pytest.skip("Colorama is present")
 
     log_file = "server.log"
-    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, log_file=log_file, log_level_log_file=log_level)
+    (args, log_dir) = get_command(tmpdir, log_file=log_file, log_level_log_file=log_level)
     if with_tty:
         (stdout, _, _) = run_with_tty(args)
     else:
         (stdout, _, _) = run_without_tty(args)
     assert log_file in os.listdir(log_dir)
     log_file = os.path.join(log_dir, log_file)
-    with open(log_file, "r") as f:
+    with open(log_file) as f:
         log_lines = f.readlines()
     check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed=True)
     check_logs(stdout, [], regexes_required_lines, timed=True)
     check_logs(stdout, [], regexes_required_lines, timed=False)
+
+
+@pytest.mark.parametrize_any(
+    "log_level, regexes_required_lines, regexes_forbidden_lines",
+    [
+        (
+            5,
+            [
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+            ],
+            [],
+        ),
+        (
+            4,
+            [
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+            ],
+            [],
+        ),
+        (
+            3,
+            [
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+            ],
+            [],
+        ),
+        (
+            2,
+            [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
+            [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
+        ),
+        (
+            1,
+            [],
+            [
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+            ],
+        ),
+    ],
+)
+@pytest.mark.timeout(60)
+def test_log_stdout_log_level(tmpdir, log_level, regexes_required_lines, regexes_forbidden_lines):
+    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level)
+    (stdout, _, _) = run_without_tty(args)
+    check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed=False)
 
 
 def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed):
@@ -311,10 +376,10 @@ def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed
         print(line)
     for regex in compiled_regexes_requires_lines:
         if not any(regex.match(line) for line in log_lines):
-            pytest.fail("Required pattern was not found in log lines: %s" % (regex.pattern,))
+            pytest.fail(f"Required pattern was not found in log lines: {regex.pattern}")
     for regex in compiled_regexes_forbidden_lines:
         if any(regex.match(line) for line in log_lines):
-            pytest.fail("Forbidden pattern found in log lines: %s" % (regex.pattern,))
+            pytest.fail(f"Forbidden pattern found in log lines: {regex.pattern}")
 
 
 def test_check_shutdown():
@@ -376,7 +441,7 @@ def test_compiler_exception_output(snippetcompiler, cache_cf_files):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
-    number attr
+    int attr
 end
 
 implement Test using std::none
@@ -390,7 +455,7 @@ o = Test(attr="1234")
         f"""Could not set attribute `attr` on instance `__config__::Test (instantiated at {cwd}/main.cf:8)` """
         f"""(reported in Construct(Test) ({cwd}/main.cf:8))
 caused by:
-  Invalid value '1234', expected Number (reported in Construct(Test) ({cwd}/main.cf:8))
+  Invalid value '1234', expected int (reported in Construct(Test) ({cwd}/main.cf:8))
 """
     )
 
@@ -446,7 +511,7 @@ def test_warning_min_c_option_file_doesnt_exist(snippetcompiler, tmpdir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
-    number attr
+    int attr
 end
 """
     )
@@ -494,3 +559,58 @@ def test_init_project(tmpdir):
     (stdout, stderr, return_code) = run_without_tty(args, killtime=15, termtime=10)
     assert return_code != 0
     assert any("already exists" in error for error in stderr)
+
+
+def test_compiler_summary_reporter(monkeypatch, capsys) -> None:
+    """
+    Test whether the CompileSummaryReporter class produces correct output.
+    """
+    # Success
+    summary_reporter = CompileSummaryReporter()
+    with summary_reporter.compiler_exception.capture():
+        pass
+    assert not summary_reporter.is_failure()
+    summary_reporter.print_summary(show_stack_traces=True)
+    assert re.match(r"\n=+ SUCCESS =+\n", capsys.readouterr().err)
+
+    # Compile failure
+    summary_reporter = CompileSummaryReporter()
+    with summary_reporter.compiler_exception.capture():
+        raise Exception("This is a compilation failure")
+    assert summary_reporter.is_failure()
+    summary_reporter.print_summary(show_stack_traces=False)
+    output = capsys.readouterr().err
+    assert re.match(r"\n=+ COMPILATION FAILURE =+\nError: This is a compilation failure\n", output)
+    assert "= EXCEPTION TRACE =" not in output
+    summary_reporter.print_summary(show_stack_traces=True)
+    output = capsys.readouterr().err
+    assert re.match(
+        r"\n=+ EXCEPTION TRACE =+\n(.|\n)*\n=+ COMPILATION FAILURE =+\nError: This is a compilation failure\n", output
+    )
+
+    # Compile failure and export failure
+    summary_reporter = CompileSummaryReporter()
+    with summary_reporter.compiler_exception.capture():
+        raise Exception("This is a compilation failure")
+    with summary_reporter.exporter_exception.capture():
+        raise Exception("This is an export failure")
+    assert summary_reporter.is_failure()
+    summary_reporter.print_summary(show_stack_traces=False)
+    output = capsys.readouterr().err
+    assert re.match(r"\n=+ COMPILATION FAILURE =+\nError: This is a compilation failure\n", output)
+    assert "= EXCEPTION TRACE =" not in output
+
+    # Export failure
+    summary_reporter = CompileSummaryReporter()
+    with summary_reporter.compiler_exception.capture():
+        pass
+    with summary_reporter.exporter_exception.capture():
+        raise Exception("This is an export failure")
+    assert summary_reporter.is_failure()
+    summary_reporter.print_summary(show_stack_traces=False)
+    output = capsys.readouterr().err
+    assert re.match(r"\n=+ EXPORT FAILURE =+\nError: This is an export failure\n", output)
+    assert "= EXCEPTION TRACE =" not in output
+    summary_reporter.print_summary(show_stack_traces=True)
+    output = capsys.readouterr().err
+    assert re.match(r"\n=+ EXCEPTION TRACE =+\n(.|\n)*\n=+ EXPORT FAILURE =+\nError: This is an export failure\n", output)

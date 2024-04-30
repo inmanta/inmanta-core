@@ -1,9 +1,0 @@
-description: Improve stability of incremental deploy for resources containing dicts
-issue-nr: 5306
-sections:
-  feature: "{{description}"
-  upgrade-note: "The first recompile after this upgrade will always perform a full deploy"
-change-type: minor
-destination-branches:
-  - iso6
-  - master

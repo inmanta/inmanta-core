@@ -1,0 +1,8 @@
+entity Test extends std::PurgeableResource:
+   int id_attr
+   string agent
+end
+
+index Test(id_attr)
+
+implement Test using std::none

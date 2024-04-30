@@ -1,0 +1,4 @@
+---
+description: Make sure the background tasks of the database slice are stopped first, before the slice disconnects from the database. This is required because the background tasks need the database connection.
+change-type: patch
+destination-branches: [master, iso6]

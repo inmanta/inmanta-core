@@ -1,0 +1,5 @@
+description: Moved sphinx dependencies from inmanta-dev-dependencies to requirements.dev.txt and dropped unused extensions
+change-type: patch
+destination-branches:
+  - master
+  - iso6

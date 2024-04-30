@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-from typing import List
 
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER
 from inmanta.server.extensions import ApplicationContext
@@ -24,9 +23,9 @@ from inmanta.server.protocol import ServerSlice
 
 class XTestSlice(ServerSlice):
     def __init__(self):
-        super(XTestSlice, self).__init__("testplugin.testslice")
+        super().__init__("testplugin.testslice")
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_SERVER, SLICE_AGENT_MANAGER]
 
 

@@ -15,10 +15,11 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import uuid
-from typing import Dict, List, Optional, cast
+from typing import Optional, cast
 
 from inmanta import data
 from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus, ResourceVersionIdStr
@@ -47,13 +48,13 @@ class DyrunService(protocol.ServerSlice):
     autostarted_agent_manager: AutostartedAgentManager
 
     def __init__(self) -> None:
-        super(DyrunService, self).__init__(SLICE_DRYRUN)
+        super().__init__(SLICE_DRYRUN)
         self.dryrun_lock = asyncio.Lock()
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -92,14 +93,14 @@ class DyrunService(protocol.ServerSlice):
 
         # Mark the resources in an undeployable state as done
         async with self.dryrun_lock:
-            undeployable_ids = await model.get_undeployable()
+            undeployable_ids = model.get_undeployable()
             undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undeployable_ids]
             undeployable = await data.Resource.get_resources(environment=env.id, resource_version_ids=undeployable_version_ids)
             await self._save_resources_without_changes_to_dryrun(
                 dryrun_id=dryrun.id, resources=undeployable, diff_status=ResourceDiffStatus.undefined
             )
 
-            skip_undeployable_ids = await model.get_skipped_for_undeployable()
+            skip_undeployable_ids = model.get_skipped_for_undeployable()
             skip_undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skip_undeployable_ids]
             skipundeployable = await data.Resource.get_resources(
                 environment=env.id, resource_version_ids=skip_undeployable_version_ids
@@ -122,8 +123,8 @@ class DyrunService(protocol.ServerSlice):
         return dryrun
 
     async def _save_resources_without_changes_to_dryrun(
-        self, dryrun_id: uuid.UUID, resources: List[data.Resource], diff_status: Optional[ResourceDiffStatus] = None
-    ):
+        self, dryrun_id: uuid.UUID, resources: list[data.Resource], diff_status: Optional[ResourceDiffStatus] = None
+    ) -> None:
         for res in resources:
             parsed_id = Id.parse_id(res.resource_id)
             parsed_id.set_version(res.model)
@@ -153,7 +154,7 @@ class DyrunService(protocol.ServerSlice):
 
     @handle(methods.dryrun_list, env="tid")
     async def dryrun_list(self, env: data.Environment, version: Optional[int] = None) -> Apireturn:
-        query_args = {}
+        query_args: dict[str, object] = {}
         query_args["environment"] = env.id
         if version is not None:
             model = await data.ConfigurationModel.get_version(environment=env.id, version=version)
@@ -163,7 +164,7 @@ class DyrunService(protocol.ServerSlice):
             query_args["model"] = version
 
         dryruns = await data.DryRun.get_list(
-            order_by_column=None, order=None, limit=None, offset=None, no_obj=None, lock=None, connection=None, **query_args
+            order_by_column="id", order=None, limit=None, offset=None, no_obj=None, lock=None, connection=None, **query_args
         )
 
         return (
@@ -172,7 +173,7 @@ class DyrunService(protocol.ServerSlice):
         )
 
     @handle(methods_v2.list_dryruns, env="tid")
-    async def list_dryruns(self, env: data.Environment, version: int) -> List[DryRun]:
+    async def list_dryruns(self, env: data.Environment, version: int) -> list[DryRun]:
         model = await data.ConfigurationModel.get_version(environment=env.id, version=version)
         if model is None:
             raise NotFound("The requested version does not exist.")
@@ -230,13 +231,13 @@ class DyrunService(protocol.ServerSlice):
 
         return dto
 
-    def get_attributes_from_changes(self, changes: Dict[str, Dict[str, object]], key: str) -> Dict[str, object]:
+    def get_attributes_from_changes(self, changes: dict[str, dict[str, object]], key: str) -> dict[str, object]:
         return {attr_name: values[key] for attr_name, values in changes.items() if attr_name != "requires"}
 
-    def resource_will_be_unpurged(self, from_attributes: Dict[str, object], to_attributes: Dict[str, object]) -> bool:
+    def resource_will_be_unpurged(self, from_attributes: dict[str, object], to_attributes: dict[str, object]) -> bool:
         return from_attributes.get("purged") is True and to_attributes.get("purged") is False
 
-    def resource_will_be_purged(self, from_attributes: Dict[str, object], to_attributes: Dict[str, object]) -> bool:
+    def resource_will_be_purged(self, from_attributes: dict[str, object], to_attributes: dict[str, object]) -> bool:
         return from_attributes.get("purged") is False and to_attributes.get("purged") is True
 
     @handle(methods.dryrun_update, dryrun_id="id", env="tid")

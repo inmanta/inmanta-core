@@ -1,0 +1,6 @@
+description: Port inmanta to pydantic v2
+change-type: major
+destination-branches: [master]
+sections:
+  feature: "Migrated to pydantic v2, which offers more accurate type validation and increased performance"
+  upgrade-note: "stricturl is no longer supported. This has been dropped by pydantic"

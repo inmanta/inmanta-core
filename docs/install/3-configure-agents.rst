@@ -94,13 +94,14 @@ Step 1: Installing the required Inmanta packages
     machine that will run the agent.
 
     .. code-block:: sh
+        :substitutions:
 
         sudo tee /etc/yum.repos.d/inmanta-oss-stable.repo <<EOF
         [inmanta-oss-stable]
         name=Inmanta OSS stable
         baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/\$releasever/\$basearch
         gpgcheck=1
-        gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.A34DD0A274F07713.key
+        gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.|oss_gpg_key|.key
         repo_gpgcheck=1
         enabled=1
         enabled_metadata=1
@@ -114,13 +115,14 @@ Step 1: Installing the required Inmanta packages
     machine that will run the agent.
 
     .. code-block:: sh
+       :substitutions:
 
         sudo tee /etc/yum.repos.d/inmanta.repo <<EOF
-        [inmanta-service-orchestrator-6-stable]
-        name=inmanta-service-orchestrator-6-stable
-        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-7-stable/rpm/el/8/$basearch
+        [inmanta-service-orchestrator-|version_major|-stable]
+        name=inmanta-service-orchestrator-|version_major|-stable
+        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|version_major|-stable/rpm/el/8/$basearch
         gpgcheck=1
-        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-7-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
+        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|version_major|-stable/cfg/gpg/gpg.|iso_gpg_key|.key
         repo_gpgcheck=1
         enabled=1
         enabled_metadata=1
@@ -153,6 +155,8 @@ configure the behavior of the manually started agent:
 * :inmanta.config:option:`agent_rest_transport.ssl`
 * :inmanta.config:option:`agent_rest_transport.ssl-ca-cert-file`
 
+The agent will follow the pip configuration defined in the :ref:`project_yml`. Make sure it can access the pip
+index configured by the project (See the `pip documentation for netrc <https://pip.pypa.io/en/stable/topics/authentication/#netrc-support>`_ for more information on how to setup authentication).
 
 The :inmanta.config:option:`config.agent-map` option can be configured in the same way as the ``autostart_agent_map`` for
 auto-started agents.

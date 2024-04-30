@@ -15,12 +15,13 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import json
 import uuid
+from collections.abc import Sequence
 from functools import partial
 from operator import itemgetter
-from typing import Sequence
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -34,12 +35,12 @@ from inmanta.server.services.notificationservice import NotificationService
 from utils import retry_limited
 
 
-@pytest.fixture
-async def environment_with_notifications(server, environment: str):
-    env_id = uuid.UUID(environment)
-
+async def add_notifications_with_timestamp(env_id: uuid.UUID, days_old: int):
+    """
+    Adds 8 notifications to the database, each with a creation date `days_old` days in the past.
+    """
     for i in range(8):
-        created = (datetime.datetime.now().astimezone() - datetime.timedelta(days=1)).replace(hour=i)
+        created = (datetime.datetime.now().astimezone() - datetime.timedelta(days=days_old)).replace(hour=i)
         await data.Notification(
             title="Notification" if i % 2 else "Error",
             message="Something happened" if i % 2 else "Something bad happened",
@@ -51,6 +52,30 @@ async def environment_with_notifications(server, environment: str):
             cleared=i in {4, 5},
         ).insert()
 
+
+@pytest.fixture
+async def environment_with_notifications(environment: str):
+    """
+    A fixture that sets up a new environment with notifications for testing.
+    """
+    environment = uuid.UUID(environment)
+    await add_notifications_with_timestamp(
+        environment, days_old=1
+    )  # add notifications with timestamp 1 day before current time
+    yield environment
+
+
+@pytest.fixture
+async def halted_env_with_old_notifications(server, client, environment: str):
+    """
+    A fixture that sets up a halted environment with notifications older than 365 days for testing.
+    """
+    environment = uuid.UUID(environment)
+    result = await client.halt_environment(environment)
+    assert result.code == 200
+    await add_notifications_with_timestamp(
+        environment, days_old=500
+    )  # add notifications with timestamp 500 day before current time
     yield environment
 
 
@@ -145,7 +170,7 @@ async def test_notifications_paging(server, client, environment_with_notificatio
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page
@@ -385,3 +410,22 @@ async def test_notification_cleanup_on_start(init_dataclasses_and_load_schema, a
     # Only the latest one is kept
     assert len(short_retention_notifications) == 1
     assert short_retention_notifications[0].created == timestamps[2]
+
+
+@pytest.mark.parametrize("halted", [True, False])
+async def test_cleanup_notifications(server, client, halted_env_with_old_notifications, halted):
+    # test that the notifications are only cleaned up if the env is not halted
+    env_id = halted_env_with_old_notifications
+    result = await client.list_notifications(env_id)
+    assert result.code == 200
+    assert len(result.result["data"]) == 8
+
+    if not halted:
+        result = await client.resume_environment(env_id)
+        assert result.code == 200
+
+    await data.Notification.clean_up_notifications()
+
+    result = await client.list_notifications(env_id)
+    assert result.code == 200
+    assert len(result.result["data"]) == (8 if halted else 0)

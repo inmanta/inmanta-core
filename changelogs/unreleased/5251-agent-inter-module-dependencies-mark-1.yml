@@ -1,7 +1,0 @@
-description: Added a project option to install dependencies on other modules when loading code on the agent
-sections:
-  feature: "experimental: {{description}"
-change-type: minor
-destination-branches:
-  - iso6
-  - master

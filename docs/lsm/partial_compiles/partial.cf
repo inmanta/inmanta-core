@@ -1,0 +1,81 @@
+import lsm
+import lsm::fsm
+import std::testing
+
+entity Router extends lsm::ServiceEntity:
+    """
+        A service for managing routers
+    """
+    string mgmt_ip
+end
+
+index Router(instance_id)
+
+entity Port extends lsm::ServiceEntity:
+    """
+        A service for managing ports on routers
+    """
+    string name
+end
+
+index Port(instance_id)
+
+Port.router [1] lsm::__service__, lsm::__rwplus__ Router
+""" An Inter Service Relation between Router and Port"""
+
+implementation router_config for Router:
+    """ Add a dummy resource to the router to represent actual configuration """
+    self.resources += std::testing::NullResource(name=self.mgmt_ip)
+    self.owned_resources += self.resources # We own all our resources and nothing else
+end
+
+implementation port_config for Port:
+    """ Add a dummy resource to the Port to represent actual configuration """
+    self.resources += std::testing::NullResource(
+        name="{{self.router.mgmt_ip}}-{{self.name}}",
+        requires = self.router.resources
+    )
+    self.owned_resources += self.resources # We own all our resources and nothing else
+end
+
+implement Router using router_config, parents
+implement Port using port_config, parents
+
+# Service binding for Router
+binding_router = lsm::ServiceEntityBinding(
+    service_entity="__config__::Router",
+    lifecycle=lsm::fsm::simple_with_delete_validate,
+    service_entity_name="router",
+    service_identity="mgmt_ip",
+)
+
+# Service binding for Port
+binding_port = lsm::ServiceEntityBinding(
+    service_entity="__config__::Port",
+    lifecycle=lsm::fsm::simple_with_delete_validate,
+    service_entity_name="port",
+    service_identity="name",
+    relation_to_owner="router", # required for Partial Compile
+    owner=binding_router, # required for Partial Compile
+)
+
+# Normal Service unrolling
+for instance in lsm::all(binding_router):
+    Router(
+        instance_id = instance["id"],
+        entity_binding = binding_router,
+        **instance["attributes"],
+    )
+end
+
+for instance in lsm::all(binding_port):
+    Port(
+        instance_id = instance["id"],
+        entity_binding = binding_port,
+        name = instance["attributes"]["name"],
+        router = Router[instance_id=instance["attributes"]["router"]]
+    )
+end
+
+
+

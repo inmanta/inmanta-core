@@ -19,8 +19,7 @@
 from enum import Enum
 from typing import Optional
 
-import pydantic
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from inmanta.stable_api import stable_api
 
@@ -114,8 +113,5 @@ class Error(BaseModel):
     """
         Location where this error occurred.
     """
-
-    class Config:
-        # allow additional fields to be set for exception types that require it
-        extra = pydantic.Extra.allow
-        validate_assignment = True
+    # allow additional fields to be set for exception types that require it
+    model_config = ConfigDict(extra="allow", validate_assignment=True)

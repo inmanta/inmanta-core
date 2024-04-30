@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump sphinx-click from 4.4.0 to 5.0.1
+destination-branches:
+- master
+sections: {}

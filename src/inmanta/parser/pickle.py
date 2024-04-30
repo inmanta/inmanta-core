@@ -15,15 +15,16 @@
 
     Contact: code@inmanta.com
 """
+
 from io import BytesIO
 from pickle import Pickler, Unpickler, UnpicklingError
-from typing import Optional, Tuple
+from typing import Optional
 
 from inmanta.ast import Namespace
 
 
 class ASTPickler(Pickler):
-    def persistent_id(self, obj: object) -> Optional[Tuple[str, str]]:
+    def persistent_id(self, obj: object) -> Optional[tuple[str, str]]:
         if isinstance(obj, Namespace):
             # Don't pickle namespaces
             return ("Namespace", obj.get_full_name())
@@ -37,7 +38,7 @@ class ASTUnpickler(Unpickler):
         self.namespace = namespace
         self.namespace_name = namespace.get_full_name()
 
-    def persistent_load(self, pid: Tuple[str, str]) -> object:
+    def persistent_load(self, pid: tuple[str, str]) -> object:
         type_tag, key_id = pid
         if type_tag == "Namespace":
             assert self.namespace_name == key_id

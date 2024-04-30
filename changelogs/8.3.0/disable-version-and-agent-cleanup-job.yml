@@ -1,0 +1,4 @@
+---
+description: Disable the cleanup job, that removes old model versions and agent records, when the test suite is ran. If this job is enabled, it causes race conditions in test cases that manually create agent records without an associated model.
+change-type: patch
+destination-branches: [master, iso6]

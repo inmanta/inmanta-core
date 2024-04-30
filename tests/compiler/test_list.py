@@ -15,13 +15,16 @@
 
     Contact: code@inmanta.com
 """
+
+import textwrap
+
 import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import AttributeException, OptionalValueException, RuntimeException
 
 
-def test_list_atributes(snippetcompiler):
+def test_list_attributes(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Jos:
@@ -59,7 +62,7 @@ d = Jos(bar = [], floom=["test","test2"])
     check_jos(scope.lookup("d"), [], floom=["test", "test2"])
 
 
-def test_list_atribute_type_violation_1(snippetcompiler):
+def test_list_attribute_type_violation_1(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Jos:
@@ -73,7 +76,7 @@ c = Jos()
         compiler.do_compile()
 
 
-def test_list_atribute_type_violation_2(snippetcompiler):
+def test_list_attribute_type_violation_2(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Jos:
@@ -87,7 +90,7 @@ c = Jos()
         compiler.do_compile()
 
 
-def test_list_atribute_type_violation_3(snippetcompiler):
+def test_list_attribute_type_violation_3(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Jos:
@@ -113,7 +116,7 @@ entity Test2:
 end
 implement Test2 using std::none
 
-Test1 tests [0:] -- [0:] Test2 tests
+Test1.tests [0:] -- Test2.tests [0:]
 
 t1 = Test1(tests=[])
 std::print(t1.tests)
@@ -418,11 +421,12 @@ def test_emptylists(snippetcompiler):
     compiler.do_compile()
 
 
-def test_653_list_attribute_unset(snippetcompiler):
+@pytest.mark.parametrize_any("type", ["[]", "[]?"])
+def test_653_list_attribute_unset(snippetcompiler, type: str):
     snippetcompiler.setup_for_error(
-        """
+        f"""
         entity Test:
-            string[] bla
+            string{type} bla
         end
 
         Test()
@@ -430,7 +434,7 @@ def test_653_list_attribute_unset(snippetcompiler):
         implement Test using std::none
         """,
         "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete:"
-        " attribute bla ({dir}/main.cf:3:22) requires 1 values but only 0 are set",
+        f" attribute bla ({{dir}}/main.cf:3:{20 + len(type)}) is not set",
     )
 
 
@@ -528,3 +532,96 @@ x.lst = [x]
         "  Invalid value '__config__::ListContainer (instantiated at {dir}/main.cf:12)', expected Literal"
         " (reported in x.lst = List() ({dir}/main.cf:13))",
     )
+
+
+def test_relation_list_duplicate_assignment(snippetcompiler):
+    """
+    Verify that including the same instance twice in a list for relation assignment works without issue.
+
+    This test was included because naive implementations of ResultVariable listener tracking would break this.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            entity A: end
+            A.others [0:] -- A
+            implement A using std::none
+
+            x = A()
+            y = A()
+
+            x.others += [y.others, y.others]
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()
+
+
+def test_error_list_validation(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+        std::print(std::count("hello"))
+        """
+    )
+    with pytest.raises(RuntimeException, match="Invalid value 'hello', expected list"):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_error_dict_validation(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+        std::print(std::dict_get("hello1", "hello2"))
+        """
+    )
+    with pytest.raises(RuntimeException, match="Invalid value 'hello1', expected dict"):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_list_duplicates(snippetcompiler):
+    """Primitive lists retain duplicates"""
+    snippetcompiler.setup_for_snippet(
+        """
+        a = ['a', 'a']
+        len_var = 2
+        len_var = std::count(a)
+        """
+    )
+    compiler.do_compile()
+
+
+def test_nested_list_on_as_constant(snippetcompiler):
+    """Constant lists are flattened in typedefs"""
+    snippetcompiler.setup_for_snippet(
+        """
+        typedef thestring as string matching self in [["a","b"],"c", ["d"]]
+
+        entity It:
+            thestring a = "a"
+        end
+
+        It(a="a")
+
+        implement It using std::none
+        """
+    )
+    compiler.do_compile()
+
+
+def test_nested_list_on_execute_direct(snippetcompiler):
+    """Conditional lists are flattened in typedefs"""
+    snippetcompiler.setup_for_snippet(
+        """
+        typedef thestring as string matching self in [1==1?["a","b"]:[],"c", ["d"]]
+
+        entity It:
+            thestring a = "a"
+        end
+
+        It(a="a")
+
+        implement It using std::none
+        """
+    )
+    compiler.do_compile()

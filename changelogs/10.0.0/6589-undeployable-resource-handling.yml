@@ -1,0 +1,6 @@
+---
+description: Fix issue where `resource_deploy_done()` raises an exception because `resource_deploy_start()` was never called.
+issue-nr: 6589
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]

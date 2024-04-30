@@ -15,16 +15,19 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import sys
 from collections import abc
+from collections.abc import Sequence
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Optional
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
 from inmanta import const, module
 from inmanta.ast import (
+    AnchorTarget,
     AttributeException,
     CompilerException,
     DoubleSetException,
@@ -53,7 +56,7 @@ if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, Statement  # noqa: F401
 
 
-def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
+def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict[str, inmanta_type.Type], Namespace]:
     """
     Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
 
@@ -95,7 +98,7 @@ def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type],
 def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") -> None:
     from inmanta.execute.dataflow.graphic import GraphicRenderer
 
-    types: Dict[str, inmanta_type.Type] = scheduler.get_types()
+    types: dict[str, inmanta_type.Type] = scheduler.get_types()
     ns: Namespace = compiler.get_ns()
     config_ns: Namespace = ns.get_child("__config__")
     GraphicRenderer.view(
@@ -108,7 +111,7 @@ def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") 
     )
 
 
-def anchormap(refs: Dict[Any, Any] = {}) -> Sequence[Tuple[Location, Location]]:
+def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[tuple[Location, AnchorTarget]]:
     """
     Return all lexical references
 
@@ -123,10 +126,10 @@ def anchormap(refs: Dict[Any, Any] = {}) -> Sequence[Tuple[Location, Location]]:
 
     (statements, blocks) = compiler.compile()
     sched = scheduler.Scheduler()
-    return sched.anchormap(compiler, statements, blocks)
+    return sched.get_anchormap(compiler, statements, blocks)
 
 
-def get_types_and_scopes() -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
+def get_types_and_scopes() -> tuple[dict[str, inmanta_type.Type], Namespace]:
     """
     Only run the compilation steps required to extract the different types and scopes.
     """
@@ -137,7 +140,7 @@ def get_types_and_scopes() -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
     return sched.get_types(), compiler.get_ns()
 
 
-class Compiler(object):
+class Compiler:
     """
     An inmanta compiler
 
@@ -146,13 +149,13 @@ class Compiler(object):
                     * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
 
-    def __init__(self, cf_file: str = "main.cf", refs: Dict[Any, Any] = {}) -> None:
+    def __init__(self, cf_file: str = "main.cf", refs: Optional[abc.Mapping[object, object]] = None) -> None:
         self.__root_ns: Optional[Namespace] = None
         self._data: CompileData = CompileData()
-        self.plugins: Dict[str, Plugin] = {}
-        self.refs = refs
+        self.plugins: dict[str, Plugin] = {}
+        self.refs = refs if refs is not None else {}
 
-    def get_plugins(self) -> Dict[str, Plugin]:
+    def get_plugins(self) -> dict[str, Plugin]:
         return self.plugins
 
     def is_loaded(self) -> bool:
@@ -174,10 +177,10 @@ class Compiler(object):
         """
         Return the content of the given file
         """
-        with open(path, "r", encoding="utf-8") as file_d:
+        with open(path, encoding="utf-8") as file_d:
             return file_d.read()
 
-    def compile(self) -> Tuple[List["Statement"], List["BasicBlock"]]:
+    def compile(self) -> tuple[list["Statement"], list["BasicBlock"]]:
         """
         This method will parse and prepare everything to start evaluation
         the configuration specification.
@@ -192,16 +195,21 @@ class Compiler(object):
 
         project.load()
         statements, blocks = project.get_complete_ast()
-
         project.log_installed_modules()
+
+        # This lookup variable provides efficiency in the loop below by skipping iterations for plugins
+        # that are part of modules that are not imported in the model.
+        non_imported_modules: set[str] = set()
 
         # load plugins
         for name, cls in PluginMeta.get_functions().items():
+            if cls.__module__ in non_imported_modules:
+                continue
 
             mod_ns = cls.__module__.split(".")
             if mod_ns[0] != const.PLUGINS_PACKAGE:
                 raise Exception(
-                    "All plugin modules should be loaded in the %s package not in %s" % (const.PLUGINS_PACKAGE, cls.__module__)
+                    f"All plugin modules should be loaded in the {const.PLUGINS_PACKAGE} package not in {cls.__module__}"
                 )
 
             mod_ns = mod_ns[1:]
@@ -213,11 +221,13 @@ class Compiler(object):
                 ns = ns.get_child(part)
 
             if ns is None:
-                raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
-
-            name = name.split("::")[-1]
-            statement = PluginStatement(ns, name, cls)
-            statements.append(statement)
+                # This plugin is part of a module that is not imported in the model. We mark this module as such
+                # so that future iterations on other plugins from this module can be skipped.
+                non_imported_modules.add(cls.__module__)
+            else:
+                name = name.split("::")[-1]
+                statement = PluginStatement(ns, name, cls)
+                statements.append(statement)
 
         # add the entity type (hack?)
         ns = self.__root_ns.get_child_or_create("std")
@@ -270,7 +280,7 @@ class Compiler(object):
             """
             handled: bool = False
             if isinstance(exception, MultiException):
-                unset_attrs: Dict[dataflow.AttributeNode, UnsetException] = {
+                unset_attrs: dict[dataflow.AttributeNode, UnsetException] = {
                     cause.instance.instance_node.node().register_attribute(cause.attribute.name): cause
                     for cause in exception.get_causes()
                     if isinstance(cause, UnsetException)
@@ -278,12 +288,12 @@ class Compiler(object):
                     if cause.instance.instance_node is not None
                     if cause.attribute is not None
                 }
-                root_causes: Set[dataflow.AttributeNode] = UnsetRootCauseAnalyzer(unset_attrs.keys()).root_causes()
+                root_causes: set[dataflow.AttributeNode] = UnsetRootCauseAnalyzer(unset_attrs.keys()).root_causes()
                 for attr, e in unset_attrs.items():
                     if attr not in root_causes:
                         exception.others.remove(e)
                 handled = True
-            causes: List[CompilerException] = exception.get_causes()
+            causes: list[CompilerException] = exception.get_causes()
             for cause in causes:
                 if add_trace(cause):
                     handled = True

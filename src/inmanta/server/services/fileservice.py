@@ -15,17 +15,19 @@
 
     Contact: code@inmanta.com
 """
+
 import base64
 import difflib
 import logging
-import os
-from typing import Iterable, List, cast
+from collections.abc import Iterable
+from typing import Optional
 
+from asyncpg.exceptions import UniqueViolationError
+
+from inmanta.data import File
 from inmanta.protocol import handle, methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
-from inmanta.server import SLICE_FILE, SLICE_SERVER, SLICE_TRANSPORT
-from inmanta.server import config as opt
-from inmanta.server import protocol
+from inmanta.server import SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.server import Server
 from inmanta.types import Apireturn
 from inmanta.util import hash_file
@@ -39,133 +41,82 @@ class FileService(protocol.ServerSlice):
     server_slice: Server
 
     def __init__(self) -> None:
-        super(FileService, self).__init__(SLICE_FILE)
+        super().__init__(SLICE_FILE)
 
-    def get_dependencies(self) -> List[str]:
-        return [SLICE_SERVER]
+    def get_dependencies(self) -> list[str]:
+        return [SLICE_DATABASE]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
-
-    async def prestart(self, server: protocol.Server) -> None:
-        await super().prestart(server)
-        self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
 
     @handle(methods.upload_file, file_hash="id")
     async def upload_file(self, file_hash: str, content: str) -> Apireturn:
-        self.upload_file_internal(file_hash, base64.b64decode(content))
+        await self.upload_file_internal(file_hash, base64.b64decode(content))
         return 200
 
-    def upload_file_internal(self, file_hash: str, content: bytes) -> None:
-        file_name = os.path.join(self.server_slice._server_storage["files"], file_hash)
-
-        if os.path.exists(file_name):
-            raise ServerError("A file with this id already exists.")
-
+    async def upload_file_internal(self, file_hash: str, content: bytes) -> None:
         if hash_file(content) != file_hash:
             raise BadRequest("The hash does not match the content")
 
-        with open(file_name, "wb+") as fd:
-            fd.write(content)
+        try:
+            await File(content_hash=file_hash, content=content).insert()
+        except UniqueViolationError:
+            raise ServerError("A file with this id already exists.")
 
     @handle(methods.stat_file, file_hash="id")
     async def stat_file(self, file_hash: str) -> Apireturn:
-        file_name = os.path.join(self.server_slice._server_storage["files"], file_hash)
-
-        if os.path.exists(file_name):
+        if await File.has_file_with_hash(file_hash):
             return 200
         else:
             return 404
 
     @handle(methods.get_file, file_hash="id")
     async def get_file(self, file_hash: str) -> Apireturn:
-        content = self.get_file_internal(file_hash)
+        content = await self.get_file_internal(file_hash)
         return 200, {"content": base64.b64encode(content).decode("ascii")}
 
-    def get_file_internal(self, file_hash: str) -> bytes:
+    async def get_file_internal(self, file_hash: str) -> bytes:
         """get_file, but on return code 200, content is not encoded"""
-
-        file_name = os.path.join(self.server_slice._server_storage["files"], file_hash)
-
-        if not os.path.exists(file_name):
+        file: Optional[File] = await File.get_one(content_hash=file_hash)
+        if not file:
             raise NotFound()
-
-        with open(file_name, "rb") as fd:
-            content = fd.read()
-            actualhash = hash_file(content)
-            if actualhash == file_hash:
-                return content
-
-            # handle corrupt file
-            if opt.server_delete_currupt_files.get():
-                LOGGER.error(
-                    "File corrupt, expected hash %s but found %s at %s, Deleting file", file_hash, actualhash, file_name
-                )
-                try:
-                    os.remove(file_name)
-                except OSError:
-                    LOGGER.exception("Failed to delete file %s", file_name)
-                    raise ServerError(
-                        f"File corrupt, expected hash {file_hash} but found {actualhash}. Failed to delete file, please "
-                        "contact the server administrator"
-                    )
-
-                raise ServerError(
-                    f"File corrupt, expected hash {file_hash} but found {actualhash}. "
-                    "Deleting file, please re-upload the corrupt file."
-                )
-            else:
-                LOGGER.error("File corrupt, expected hash %s but found %s at %s", file_hash, actualhash, file_name)
-                raise ServerError(
-                    f"File corrupt, expected hash {file_hash} but found {actualhash}, please contact the server administrator"
-                )
+        return file.content
 
     @handle(methods.stat_files)
-    async def stat_files(self, files: List[str]) -> Apireturn:
-        """
-        Return which files in the list exist on the server
-        """
-        return 200, {"files": self.stat_file_internal(files)}
-
-    def stat_file_internal(self, files: Iterable[str]) -> List[str]:
+    async def stat_files(self, files: list[str]) -> Apireturn:
         """
         Return which files in the list don't exist on the server
         """
-        response: List[str] = []
-        for f in files:
-            f_path = os.path.join(self.server_slice._server_storage["files"], f)
-            if not os.path.exists(f_path):
-                response.append(f)
+        return 200, {"files": await self.stat_file_internal(files)}
 
-        return response
+    async def stat_file_internal(self, files: Iterable[str]) -> list[str]:
+        """
+        Return which files in the list don't exist on the server
+        """
+        return list(await File.get_non_existing_files(files))
 
     @handle(methods.diff)
-    async def file_diff(self, a: str, b: str) -> Apireturn:
+    async def file_diff(self, file_id_1: str, file_id_2: str) -> Apireturn:
         """
         Diff the two files identified with the two hashes
         """
-        if a == "" or a == "0":
-            a_lines: List[str] = []
-        else:
-            a_path = os.path.join(self.server_slice._server_storage["files"], a)
-            if not os.path.exists(a_path):
-                raise NotFound()
 
-            with open(a_path, "r", encoding="utf-8") as fd:
-                a_lines = fd.readlines()
+        async def _get_lines_for_file(content_hash: str) -> list[str]:
+            if content_hash == "" or content_hash == "0":
+                return []
+            else:
+                file = await File.get_one(content_hash=content_hash)
+                if not file:
+                    raise NotFound()
 
-        if b == "" or b == "0":
-            b_lines: List[str] = []
-        else:
-            b_path = os.path.join(self.server_slice._server_storage["files"], b)
-            if not os.path.exists(b_path):
-                raise NotFound()
+                file_content = file.content.decode(encoding="utf-8")
+                # keepends for backwards compatibility with <file_handle>.readlines()
+                return file_content.splitlines(keepends=True)
 
-            with open(b_path, "r", encoding="utf-8") as fd:
-                b_lines = fd.readlines()
-
+        file_1_lines = await _get_lines_for_file(content_hash=file_id_1)
+        file_2_lines = await _get_lines_for_file(content_hash=file_id_2)
         try:
-            diff = difflib.unified_diff(a_lines, b_lines, fromfile=a, tofile=b)
+            diff = difflib.unified_diff(file_1_lines, file_2_lines, fromfile=file_id_1, tofile=file_id_2)
         except FileNotFoundError:
             raise NotFound()
 

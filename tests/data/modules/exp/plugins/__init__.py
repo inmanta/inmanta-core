@@ -44,7 +44,6 @@ class Test2(resources.PurgeableResource):
 
 @resources.resource("exp::Test3", id_attribute="name", agent="name")
 class Test3(resources.PurgeableResource):
-
     fields = (
         "name",
         "real_name",
@@ -57,7 +56,6 @@ class Test3(resources.PurgeableResource):
 
 @resources.resource("exp::RequiresTest", agent="agent", id_attribute="name")
 class RequiresTest(resources.PurgeableResource):
-
     fields = ("name", "agent", "do_break")
 
 

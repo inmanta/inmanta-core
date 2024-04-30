@@ -16,8 +16,9 @@
     Contact: code@inmanta.com
 """
 
+from collections.abc import Iterable, Iterator
 from functools import reduce
-from typing import Iterable, Iterator, Optional, Set, cast
+from typing import Optional, cast
 
 from inmanta.ast import RuntimeException
 from inmanta.execute.dataflow import (
@@ -79,8 +80,8 @@ class GraphicGraph:
 
     def __init__(self) -> None:
         self.digraph: Digraph = Digraph(engine="fdp")
-        self._nodes: Set[Node] = set(())
-        self._assignments: Set[Assignment] = set(())
+        self._nodes: set[Node] = set()
+        self._assignments: set[Assignment] = set()
 
     def view(self) -> None:
         try:
@@ -171,7 +172,7 @@ class GraphicGraph:
                 label = ""
                 instance_var_ref: AssignableNodeReference
                 (label, instance_var_ref) = reduce(
-                    lambda acc, x: (".%s%s" % (x.attribute, acc[0]), x.instance_var_ref),
+                    lambda acc, x: (f".{x.attribute}{acc[0]}", x.instance_var_ref),
                     unroll_attribute_reference(assignment.rhs),
                     ("", cast(AssignableNodeReference, assignment.rhs)),
                 )
@@ -180,7 +181,7 @@ class GraphicGraph:
             elif isinstance(assignment.rhs, DirectNodeReference):
                 rhs = assignment.rhs.node
             else:
-                raise Exception("Unknown node reference %s of type %s" % (assignment.rhs, type(assignment.rhs)))
+                raise Exception(f"Unknown node reference {assignment.rhs} of type {type(assignment.rhs)}")
 
             self.add_node(rhs)
             self.digraph.edge(self.node_key(assignment.lhs), self.node_key(rhs), label=label)

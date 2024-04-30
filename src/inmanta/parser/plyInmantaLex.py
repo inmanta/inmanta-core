@@ -15,25 +15,28 @@
 
     Contact: code@inmanta.com
 """
+
+import typing
+import warnings
 from re import error as RegexError
 
 import ply.lex as lex
 
-from inmanta.ast import LocatableString, Range
+from inmanta.ast import LocatableString, Location, Range
 from inmanta.ast.constraint.expression import Regex
 from inmanta.ast.variables import Reference
-from inmanta.parser import ParserException
+from inmanta.parser import ParserException, ParserWarning
 
 keyworldlist = [
     "typedef",
     "as",
-    "matching",
     "entity",
     "extends",
     "end",
     "in",
     "implementation",
     "for",
+    "matching",
     "index",
     "implement",
     "using",
@@ -54,13 +57,70 @@ keyworldlist = [
     "else",
     "elif",
 ]
-literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?", "*"]
+literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?", "*", "%"]
 reserved = {k: k.upper() for k in keyworldlist}
 
 # List of token names.   This is always required
-tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "CMP_OP", "REGEX", "REL", "PEQ", "RSTRING"] + sorted(
-    list(reserved.values())
-)
+tokens = [
+    "INT",
+    "FLOAT",
+    "ID",
+    "CID",
+    "SEP",
+    "STRING",
+    "MLS",
+    "CMP_OP",
+    "REGEX",
+    "REL",
+    "PEQ",
+    "RSTRING",
+    "FSTRING",
+    "PLUS_OP",
+    "MINUS_OP",
+    "DIVISION_OP",
+    "DOUBLE_STAR",
+] + sorted(list(reserved.values()))
+
+
+def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
+    r"matching[\s]+/([^/\\\n]|\\.)+/"
+    # We include the "matching" part in the regex, because a regex is demarcated by two slashes.
+    # By including the "matching" part in the regex, we can make the distinction between a regex and
+    # two subsequent division operations.
+    index_first_slash_char = t.value.index("/")
+    part_before_regex = t.value[:index_first_slash_char]
+    regex_with_slashes_as_str = t.value[index_first_slash_char:]
+    regex_as_str = regex_with_slashes_as_str[1:-1]
+    value = Reference("self")  # anonymous value
+    try:
+        expr = Regex(value, regex_as_str)
+        t.value = expr
+        return t
+    except RegexError as error:
+        t.value = regex_with_slashes_as_str
+        end = t.lexer.lexpos - t.lexer.linestart + 1
+        (s, e) = t.lexer.lexmatch.span()
+        start = end - (e - s) + index_first_slash_char
+
+        line_nr_regex = t.lexer.lineno + part_before_regex.count("\n")
+        r: Range = Range(t.lexer.inmfile, line_nr_regex, start, line_nr_regex, end)
+        raise ParserException(r, t.value, f"Regex error in {t.value}: '{error}'")
+
+
+def t_FSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
+    r"f(\"([^\\\"\n]|\\.)*\")|f(\'([^\\\'\n]|\\.)*\')"
+    t.value = safe_decode(token=t, warning_message="Invalid escape sequence in f-string.", start=2, end=-1)
+    lexer = t.lexer
+
+    end = lexer.lexpos - lexer.linestart + 1
+    (s, e) = lexer.lexmatch.span()
+    start = end - (e - s)
+
+    t.value = LocatableString(
+        t.value, Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end), lexer.lexpos, lexer.namespace
+    )
+
+    return t
 
 
 def t_RSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
@@ -120,19 +180,19 @@ def t_COMMENT(t: lex.LexToken) -> None:  # noqa: N802
     r"\#.*?\n"
     t.lexer.lineno += 1
     t.lexer.linestart = t.lexer.lexpos
-    pass
 
 
 def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
     r"\//.*?\n"
     t.lexer.lineno += 1
     t.lexer.linestart = t.lexer.lexpos
-    pass
 
 
 def t_MLS(t: lex.LexToken) -> lex.LexToken:
     r'"{3,5}([\s\S]*?)"{3,5}'
-    value = bytes(t.value[3:-3], "utf-8").decode("unicode_escape")
+
+    value = safe_decode(token=t, warning_message="Invalid escape sequence in multi-line string.", start=3, end=-3)
+
     lexer = t.lexer
     match = lexer.lexmatch[0]
     lines = match.split("\n")
@@ -162,7 +222,9 @@ def t_INT(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
 def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r"(\"([^\\\"\n]|\\.)*\")|(\'([^\\\'\n]|\\.)*\')"
-    t.value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
+
+    t.value = safe_decode(token=t, warning_message="Invalid escape sequence in string.", start=1, end=-1)
+
     lexer = t.lexer
 
     end = lexer.lexpos - lexer.linestart + 1
@@ -176,20 +238,24 @@ def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     return t
 
 
-def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r"/([^/\\]|\\.)+/"
-    value = Reference("self")  # anonymous value
-    try:
-        expr = Regex(value, t.value[1:-1])
-        t.value = expr
-        return t
-    except RegexError as error:
-        end = t.lexer.lexpos - t.lexer.linestart + 1
-        (s, e) = t.lexer.lexmatch.span()
-        start = end - (e - s)
+def t_PLUS_OP(t: lex.LexToken) -> lex.LexToken:
+    r"\+"
+    return t
 
-        r: Range = Range(t.lexer.inmfile, t.lexer.lineno, start, t.lexer.lineno, end)
-        raise ParserException(r, t.value, "Regex error in %s: '%s'" % (t.value, error))
+
+def t_MINUS_OP(t: lex.LexToken) -> lex.LexToken:
+    r"-"
+    return t
+
+
+def t_DIVISION_OP(t: lex.LexToken) -> lex.LexToken:
+    r"/"
+    return t
+
+
+def t_DOUBLE_STAR(t: lex.LexToken) -> lex.LexToken:
+    r"\*\*"
+    return t
 
 
 # Define a rule so we can track line numbers
@@ -215,3 +281,40 @@ def t_ANY_error(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
 # Build the lexer
 lexer = lex.lex()
+
+
+def safe_decode(token: lex.LexToken, warning_message: str, start: int = 1, end: int = -1) -> str:
+    r"""
+    Check for the presence of an invalid escape sequence (e.g. "\.") in the value attribute of a given token.
+    This function assumes to be called from within a t_STRING or a t_MLS rule.
+
+    - Python < 3.12 raises a DeprecationWarning when encountering an invalid escape sequence
+    - Python 3.12 will raise a SyntaxWarning
+    - Future versions will eventually raise a SyntaxError
+    (see https://docs.python.org/3.12/whatsnew/3.12.html#other-language-changes )
+
+    :param token: The token whose value we want to decode.
+    :param warning_message: The warning message to display.
+    :param start: Start of the value slice (To only decode the characters after the leading quotation mark(s))
+    :param end: End of the value slice (To only decode the characters before the trailing quotation mark(s))
+
+    :return: The token value as a python str.
+    """
+
+    try:
+        # This first block will try to decode the value and turn any deprecation warning into an actual Exception.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error", message="invalid escape sequence", category=DeprecationWarning)
+            value: str = bytes(typing.cast(str, token.value)[start:end], "utf_8").decode("unicode_escape")
+    except DeprecationWarning:
+        # If the first block did actually encounter an invalid escape sequence, we have to decode the value again, this time
+        # ignoring this or any other python warning that has already been emitted, and raising a warning of our own.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            value = bytes(typing.cast(str, token.value)[start:end], "utf_8").decode("unicode_escape")
+
+        warnings.warn(
+            ParserWarning(location=Location(file=token.lexer.inmfile, lnr=token.lexer.lineno), msg=warning_message, value=value)
+        )
+
+    return value

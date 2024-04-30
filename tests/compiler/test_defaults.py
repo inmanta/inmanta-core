@@ -46,8 +46,8 @@ entity Test2:
 end
 implement Test2 using std::none
 
-Test1 test1 [1] -- [0:] Test2 test2
-Test1 test1 [0:1] -- [0:] Test2 test2
+Test1.test2 [0:] -- Test2.test1 [1]
+Test1.test2 [0:] -- Test2.test1 [0:1]
 """
     )
     with pytest.raises(DuplicateException):
@@ -188,12 +188,12 @@ def test_1292_default_type_check(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
 entity Test:
-    number t = "str"
+    int t = "str"
 end
 
 Test(t=5)
         """,
-        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3:12))",
+        "Invalid value 'str', expected int (reported in int t = 'str' ({dir}/main.cf:3:9))",
     )
 
 
@@ -208,7 +208,7 @@ implement Test using std::none
 
 Test(t = ["str"])
         """,
-        "Invalid value '1', expected String (reported in string[]? t = List() ({dir}/main.cf:3:15))",
+        "Invalid value '1', expected string (reported in string[]? t = List() ({dir}/main.cf:3:15))",
     )
 
 
@@ -216,21 +216,21 @@ def test_1292_default_type_check3(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
 entity Test:
-    number? t = [1, 2]
+    int? t = [1, 2]
 end
 
 implement Test using std::none
 
 Test(t = 12)
         """,
-        "Invalid value '[1, 2]', expected Number (reported in number? t = List() ({dir}/main.cf:3:13))",
+        "Invalid value '[1, 2]', expected int (reported in int? t = List() ({dir}/main.cf:3:10))",
     )
 
 
 def test_1292_default_type_check4(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
-typedef digit as number matching self > 0 and self < 10
+typedef digit as int matching self > 0 and self < 10
 
 entity Test:
     digit t = 12
@@ -249,10 +249,10 @@ def test_1292_default_type_check5(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
 entity Test:
-    number t = "str"
+    int t = "str"
 end
         """,
-        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3:12))",
+        "Invalid value 'str', expected int (reported in int t = 'str' ({dir}/main.cf:3:9))",
     )
 
 
@@ -274,6 +274,6 @@ entity Test:
     std::date d = "nodatevalue"
 end
         """,
-        "Invalid value 'nodatevalue', does not match constraint `(std::validate_type('datetime.date',self) == true)`"
+        "Invalid value 'nodatevalue', does not match constraint `std::validate_type('datetime.date',self)`"
         " (reported in std::date d = 'nodatevalue' ({dir}/main.cf:3:15))",
     )

@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-setuptools from 67.7.0.3 to 67.8.0.0
+destination-branches:
+- master
+sections: {}

@@ -1,0 +1,8 @@
+---
+description: Improve the output of the `inmanta compile` and `inmanta export` commands, by using the logger name `compiler`, `exporter` or `<name-inmanta-module>` for log records produced by respectively the compiler, the exporter or an Inmanta module.
+issue-nr: 6489
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

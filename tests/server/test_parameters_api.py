@@ -15,17 +15,19 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import json
 import uuid
 from operator import itemgetter
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
 from inmanta.server.config import get_bind_port
+from inmanta.util import parse_timestamp
 
 
 @pytest.fixture
@@ -39,12 +41,13 @@ async def env_with_parameters(server, client, environment: str):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     ).insert()
 
     id_counter = [0x1000]
 
     async def insert_param(
-        name: str, source: str, updated: Optional[datetime.datetime] = None, metadata: Optional[Dict[str, str]] = None
+        name: str, source: str, updated: Optional[datetime.datetime] = None, metadata: Optional[dict[str, str]] = None
     ) -> uuid.UUID:
         id_counter[0] += 1
         param_id = uuid.UUID(int=id_counter[0])
@@ -56,6 +59,7 @@ async def env_with_parameters(server, client, environment: str):
             source=source,
             updated=updated,
             metadata=metadata,
+            expires=False,
         ).insert()
         return param_id
 
@@ -76,7 +80,7 @@ async def env_with_parameters(server, client, environment: str):
     yield environment, timestamps
 
 
-async def test_parameter_list_filters(client, env_with_parameters: Tuple[str, List[datetime.datetime]]):
+async def test_parameter_list_filters(client, env_with_parameters: tuple[str, list[datetime.datetime]]):
     environment, timestamps = env_with_parameters
     result = await client.get_parameters(
         environment,
@@ -128,9 +132,7 @@ async def test_parameters_paging(server, client, order_by_column, order, env_wit
         if not parameter["updated"]:
             parameter["updated"] = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
         else:
-            parameter["updated"] = datetime.datetime.strptime(parameter["updated"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-                tzinfo=datetime.timezone.utc
-            )
+            parameter["updated"] = parse_timestamp(parameter["updated"])
     all_parameters_in_expected_order = sorted(all_parameters, key=itemgetter(order_by_column, "id"), reverse=order == "DESC")
     all_parameter_ids_in_expected_order = parameter_ids(all_parameters_in_expected_order)
 
@@ -144,7 +146,7 @@ async def test_parameters_paging(server, client, order_by_column, order, env_wit
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for self page

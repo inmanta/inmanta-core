@@ -1,0 +1,6 @@
+description: For the agent count metric, only count agents that are required for the resources in the latest released model
+issue-nr: 5350
+change-type: patch
+destination-branches:
+  - master
+  - iso6

@@ -1,0 +1,3 @@
+description: Don't raise 409 when calling put_version with stale version
+change-type: patch
+destination-branches: [master, iso6]

@@ -13,8 +13,8 @@ Overview different log files
 ============================
 
 By default log files are collected in the directory ``/var/log/inmanta/``. Three different types of log files exist: the
-server log, the resources action logs and the agent logs. The server log and the resource action log files are produced by
-the Inmanta server. The agent log files are produces by the Inmanta agents.
+server log, the resource action logs and the agent logs. The server log and the resource action log files are produced by
+the Inmanta server. The agent log files are produced by the Inmanta agents.
 
 
 Server log
@@ -98,7 +98,7 @@ Apply the changes by reloading the service file and restarting the Inmanta serve
 
 .. code-block:: sh
 
-  sudo systemctl daemon-reload inmanta-server
+  sudo systemctl daemon-reload
   sudo systemctl restart inmanta-server
 
 

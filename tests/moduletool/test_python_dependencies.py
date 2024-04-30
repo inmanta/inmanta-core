@@ -15,10 +15,10 @@
 
     Contact: code@inmanta.com
 """
+
 import os
 
 import common
-from inmanta.loader import SourceInfo
 from inmanta.module import Project
 
 
@@ -56,29 +56,3 @@ dummy-yummy # A comment
     reqs = project.collect_python_requirements()
     expected_reqs = ["iplib@git+https://github.com/bartv/python3-iplib", "pytest>=1.5", "iplib>=0.0.1", "dummy-yummy"]
     assert sorted(reqs) == sorted(expected_reqs)
-
-
-def test_requirements_from_source_info(tmpdir):
-    """Test the code path used by the exporter"""
-    common.makeproject(tmpdir, "test-project", deps=[("mod1", "")], imports=["mod1"])
-    project_dir = os.path.join(tmpdir, "test-project")
-    libs_dir = os.path.join(project_dir, "libs")
-    common.makemodule(libs_dir, "mod1", project=False)
-    mod1 = os.path.join(libs_dir, "mod1")
-    mod1_req_txt = """# I'm a comment
-pytest\
->=\
-1.5
-
-
-iplib>=0.0.1
-
-        """
-    common.add_file(mod1, "requirements.txt", mod1_req_txt, msg="initial commit")
-    project = Project(project_dir, venv_path=os.path.join(project_dir, ".env"))
-    Project.set(project)
-    project.load_module("mod1", allow_v1=True)
-    requirements = SourceInfo(mod1, "inmanta_plugins.mod1").requires
-    assert sorted(requirements) == sorted(["pytest>=1.5", "iplib>=0.0.1"])
-    # This would fail if the comments weren't filtered out
-    project.virtualenv.install_from_list(requirements)

@@ -20,7 +20,7 @@ import re
 import shutil
 from functools import total_ordering
 from itertools import chain
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Optional
 
 import pytest
 
@@ -54,12 +54,12 @@ class LocationBasedGraphicGraph(GraphicGraph):
     def node_key(self, node: Node) -> str:
         if isinstance(node, InstanceNode):
             assert node.responsible is not None
-            return "cluster_instance_%s_%s" % (dot_stringify(node), dot_stringify(node.responsible.location))
+            return f"cluster_instance_{dot_stringify(node)}_{dot_stringify(node.responsible.location)}"
         elif isinstance(node, ValueNode):
             return "value_%s" % dot_stringify(node.value)
         elif isinstance(node, AttributeNode):
             assert node.instance.responsible is not None
-            return "attribute_%s_on_%s_%s" % (
+            return "attribute_{}_on_{}_{}".format(
                 dot_stringify(node.name),
                 dot_stringify(node.instance),
                 dot_stringify(node.instance.responsible.location),
@@ -75,7 +75,7 @@ class LocationBasedGraphicGraph(GraphicGraph):
                 assert isinstance(value, Instance)
                 locatable = value
             assert locatable.location is not None
-            return "assignable_%s_%s" % (dot_stringify(node.name), dot_stringify(locatable.location))
+            return f"assignable_{dot_stringify(node.name)}_{dot_stringify(locatable.location)}"
         assert False
 
 
@@ -89,9 +89,9 @@ class DotSource:
     during construction.
     """
 
-    def __init__(self, lines: List[str], subgraphs: List[Tuple[str, "DotSource"]]) -> None:
-        self.lines: List[str] = sorted(lines)
-        self.subgraphs: List[Tuple[str, DotSource]] = sorted(subgraphs)
+    def __init__(self, lines: list[str], subgraphs: list[tuple[str, "DotSource"]]) -> None:
+        self.lines: list[str] = sorted(lines)
+        self.subgraphs: list[tuple[str, DotSource]] = sorted(subgraphs)
 
     @classmethod
     def parse(cls, source: str) -> "DotSource":
@@ -100,7 +100,7 @@ class DotSource:
         return DotSource(lines, subgraphs)
 
     @classmethod
-    def _get_lines_and_subgraphs(cls, lines: List[str]) -> Tuple[List[str], List[Tuple[str, "DotSource"]], List[str]]:
+    def _get_lines_and_subgraphs(cls, lines: list[str]) -> tuple[list[str], list[tuple[str, "DotSource"]], list[str]]:
         if len(lines) == 0:
             return ([], [], [])
         (head, tail) = (lines[0], lines[1:])
@@ -129,7 +129,7 @@ def graphic_asserter(dataflow_test_helper: DataflowTestHelper) -> Callable[[str,
     def asserter(model: str, expected: str, view: Optional[bool] = False) -> None:
         dataflow_test_helper.compile(model)
         namespace: Namespace = dataflow_test_helper.get_namespace()
-        entities: List[Entity] = [
+        entities: list[Entity] = [
             tp for tp in dataflow_test_helper.get_types().values() if isinstance(tp, Entity) if tp.namespace is namespace
         ]
         graphic: GraphicGraph = LocationBasedGraphicGraph()
@@ -193,9 +193,9 @@ def test_dataflow_graphic_instance(graphic_asserter: GraphicAsserter) -> None:
     graphic_asserter(
         """
 entity A:
-    number l
-    number m
-    number n
+    int l
+    int m
+    int n
 end
 
 implement A using std::none
@@ -329,8 +329,8 @@ def test_dataflow_graphic_implementation(graphic_asserter: GraphicAsserter) -> N
     graphic_asserter(
         """
 entity A:
-    number m
-    number n
+    int m
+    int n
 end
 
 implement A using i
@@ -393,8 +393,8 @@ def test_dataflow_graphic_index(graphic_asserter: GraphicAsserter) -> None:
     graphic_asserter(
         """
 entity A:
-    number m
-    number n
+    int m
+    int n
 end
 
 index A(n)

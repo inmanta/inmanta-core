@@ -53,7 +53,7 @@ Test(value="ab")
 """,
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` (reported in Construct(Test) ({dir}/main.cf:10))
 caused by:
-  Invalid value 'ab', does not match constraint `(self in ['a','b','c'])` (reported in __config__::abc ({dir}/main.cf:2:9))""",  # noqa: E501
+  Invalid value 'ab', does not match constraint `(self in ['a', 'b', 'c'])` (reported in __config__::abc ({dir}/main.cf:2:9))""",  # noqa: E501
     )
 
 
@@ -75,7 +75,7 @@ end
 
 implement Test using std::none
         """,
-        "Invalid value 'value', does not match constraint `(self in ['accepted','values'])`"
+        "Invalid value 'value', does not match constraint `(self in ['accepted', 'values'])`"
         " (reported in mytype v = 'value' ({dir}/main.cf:5:16))",
     )
 
@@ -105,7 +105,7 @@ entity A:
         mytype v = [42, 42]
 end
         """,
-        "Invalid value [42, 42], does not match constraint `(std::unique(self) == true)`"
+        "Invalid value [42, 42], does not match constraint `std::unique(self)`"
         " (reported in mytype v = List() ({dir}/main.cf:5:16))",
     )
 

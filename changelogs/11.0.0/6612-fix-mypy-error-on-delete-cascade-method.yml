@@ -1,0 +1,4 @@
+description: Fix mypy error on delete_cascade method.
+issue-nr: 6612
+change-type: patch
+destination-branches: [master, iso6]

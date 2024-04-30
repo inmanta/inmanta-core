@@ -15,9 +15,9 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import re
-from typing import Type
 
 import pytest
 import tornado
@@ -61,7 +61,7 @@ class WriteMockHandler(tornado.web.RequestHandler):
             self.parent.failure = e
 
 
-class InfluxdbMock(object):
+class InfluxdbMock:
     def __init__(self, socket):
         self.querycount = 0
         self.writecount = 0
@@ -165,7 +165,7 @@ async def test_timing():
 async def test_available_metrics(server):
     metrics = global_registry().dump_metrics()
 
-    types: dict[str, list[Type]] = {}
+    types: dict[str, list[type]] = {}
     # Ensure type consistency
     for metric in metrics.values():
         for key, value in metric.items():

@@ -15,13 +15,14 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
-from inmanta import resources
-from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourcePurged
+from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler
+from inmanta.agent.handler import HandlerContext, ResourcePurged
 from inmanta.const import ResourceState
 from inmanta.resources import Id, PurgeableResource, resource
 from utils import log_contains, no_error_in_logs
@@ -47,31 +48,31 @@ def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, creat
     """
     caplog.set_level(logging.DEBUG)
 
-    class DummyCrud(CRUDHandler):
+    @resource("aa::Aa", "aa", "aa")
+    class TestResource(PurgeableResource):
+        fields = ("value",)
+
+    class DummyCrud(CRUDHandler[TestResource]):
         def __init__(self):
             self.updated = False
             self.created = False
             self.deleted = False
 
-        def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+        def read_resource(self, ctx: HandlerContext, resource: TestResource) -> None:
             resource.purged = purged_actual
             if updated:
                 resource.value = "b"
             if excn:
                 raise ResourcePurged()
 
-        def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource) -> None:
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: TestResource) -> None:
             self.updated = True
 
-        def create_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+        def create_resource(self, ctx: HandlerContext, resource: TestResource) -> None:
             self.created = True
 
-        def delete_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+        def delete_resource(self, ctx: HandlerContext, resource: TestResource) -> None:
             self.deleted = True
-
-    @resource("aa::Aa", "aa", "aa")
-    class TestResource(PurgeableResource):
-        fields = ("value",)
 
     res = TestResource(Id("aa::Aa", "aa", "aa", "aa", 1))
     res.purged = purged_desired
@@ -103,21 +104,19 @@ def test_3470_CRUD_handler_with_unserializable_changes(running_test: bool, monke
 
     monkeypatch.setattr(inmanta, "RUNNING_TESTS", running_test)
 
-    class DummyCrud(CRUDHandler):
-        def __init__(self):
-            self.updated = False
-
-        def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
-            resource.value = "b"
-
-        def update_resource(
-            self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: resources.PurgeableResource
-        ) -> None:
-            self.updated = True
-
     @resource(name="aa::Aa", id_attribute="aa", agent="aa")
     class TestResource(PurgeableResource):
         fields = ("value",)
+
+    class DummyCrud(CRUDHandler[TestResource]):
+        def __init__(self):
+            self.updated = False
+
+        def read_resource(self, ctx: HandlerContext, resource: TestResource) -> None:
+            resource.value = "b"
+
+        def update_resource(self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: TestResource) -> None:
+            self.updated = True
 
     res = TestResource(Id(entity_type="aa::Aa", agent_name="aa", attribute="aa", attribute_value="aa", version=1))
 
@@ -156,23 +155,21 @@ def test_3470_CRUD_handler_with_unserializable_items_log_message(running_test: b
 
     monkeypatch.setattr(inmanta, "RUNNING_TESTS", running_test)
 
-    class DummyCrud(CRUDHandler):
+    @resource(name="aa::Aa", id_attribute="aa", agent="aa")
+    class TestResource(PurgeableResource):
+        fields = ("value",)
+
+    class DummyCrud(CRUDHandler[TestResource]):
         def __init__(self):
             self.updated = False
 
-        def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+        def read_resource(self, ctx: HandlerContext, resource: TestResource) -> None:
             resource.value = "b"
             unserializable_set = {"b"}
             ctx.debug(msg="Unserializable kwargs: ", kwargs={"unserializable": unserializable_set})
 
-        def update_resource(
-            self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: resources.PurgeableResource
-        ) -> None:
+        def update_resource(self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: TestResource) -> None:
             self.updated = True
-
-    @resource(name="aa::Aa", id_attribute="aa", agent="aa")
-    class TestResource(PurgeableResource):
-        fields = ("value",)
 
     res = TestResource(Id(entity_type="aa::Aa", agent_name="aa", attribute="aa", attribute_value="aa", version=1))
 

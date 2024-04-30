@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import configparser
 import logging
 import os
@@ -166,14 +167,14 @@ def assert_v2_module(module_name, tmpdir, minimal=False):
         assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "other_module.py"))
         assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
 
-        with open(os.path.join(tmpdir, "pyproject.toml"), "r") as fht:
+        with open(os.path.join(tmpdir, "pyproject.toml")) as fht:
             contentt = toml.load(fht)
 
             assert set(contentt["build-system"]["requires"]) == {"jinja2", "setuptools", "wheel"}, contentt
             assert contentt["build-system"]["build-backend"] == "setuptools.build_meta"
             assert contentt["tool"]["black"]["line-length"] == 128
 
-    with open(os.path.join(tmpdir, "setup.cfg"), "r") as fh:
+    with open(os.path.join(tmpdir, "setup.cfg")) as fh:
         content = fh.read()
         meta = ModuleV2Metadata.parse(content)
         assert meta.name == "inmanta-module-" + module_name
@@ -195,7 +196,7 @@ jinja2"""
         else:
             assert raw_content["options"]["install_requires"].strip() == """inmanta-module-std"""
 
-    with open(os.path.join(tmpdir, "MANIFEST.in"), "r") as fh:
+    with open(os.path.join(tmpdir, "MANIFEST.in")) as fh:
         assert (
             fh.read().strip()
             == f"""
@@ -250,7 +251,7 @@ def test_issue_4373_circular_dependency(tmpdir, modules_dir: str) -> None:
 
     # Verify that the module itself is not present in the install_requires of the setup.cfg
     setup_cfg_file = os.path.join(converted_module, "setup.cfg")
-    with open(setup_cfg_file, "r") as fh:
+    with open(setup_cfg_file) as fh:
         parser = configparser.ConfigParser()
         parser.read_string(fh.read())
         assert "inmanta-module-module-imports-self" not in parser.get("options", "install_requires")
@@ -284,3 +285,11 @@ def test_module_conversion_build_tags(tmpdir: py.path.local, modules_dir: str, f
     metadata: ModuleV2Metadata = ModuleV2.from_path(new_mod_dir).metadata
     assert metadata.version == base
     assert metadata.version_tag == tag
+
+    config = metadata.to_config()
+    assert "metadata" in config
+    assert "name" in config["metadata"]
+    assert config["metadata"]["name"] == "inmanta-module-mytaggedmodule"
+    assert "version" in config["metadata"]
+    assert config["metadata"]["version"] == base
+    assert "version_tag" not in config["metadata"]

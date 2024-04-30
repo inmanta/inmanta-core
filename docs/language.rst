@@ -121,18 +121,48 @@ Literal values can be assigned to variables
     sshservice = ip::services::ssh
 
 
+Arithmetic operations
+=====================
+
+The following arithmetic operations are supported:
+
+* Addition (``+``)
+* Substraction (``-``)
+* Multiplication (``*``)
+* Division (``/``)
+* Exponentiation (``**``)
+* Modulo (``%``)
+
+Example:
+
+.. code-block:: inmanta
+
+    var = 3 + 5
+    var = 10 - 2
+    var = 4 * 2
+    var = int(16 / 2)
+    var = 2 ** 3
+    var = 18 % 10
+
+Note that the result of the division operation is cast to the type ``int``. This is done because a division always
+results in a value of type ``float``.
+
 
 Primitive types
 ==============================
 
-The basic primitive types are ``string``, ``number``, ``int`` or ``bool``. These basic types also support type casts:
+The basic primitive types are ``string``, ``float``, ``int`` or ``bool``. These basic types also support type casts:
+
+.. note::
+    To initialize or assign a float, the value should either include a decimal point or be explicitly converted to a float type.
+
 
 .. code-block:: inmanta
 
     assert = true
     assert = int("1") == 1
-    assert = number("1.2") == 1.2
-    assert = number(true) == 1
+    assert = float("1.2") == 1.2
+    assert = int(true) == 1
     assert = bool(1.2) == true
     assert = bool(0) == false
     assert = bool(null) == false
@@ -164,7 +194,7 @@ For example
     typedef mac_addr as string matching /([0-9a-fA-F]{2})(:[0-9a-fA-F]{2}){5}$/
 
 
-Lists of primitive types are also primitive types: ``string[]``, ``number[]``, ``bool[]`` or ``mac_addr[]``
+Lists of primitive types are also primitive types: ``string[]``, ``float[]``, ``bool[]`` or ``mac_addr[]``
 
 ``dict`` is the primitive type that represents a dictionary, with string keys. Dict values can be accessed using the ``[]`` operator. All members of a dict have to be set when the dict is constructed. e.g.
 
@@ -176,6 +206,137 @@ Lists of primitive types are also primitive types: ``string[]``, ``number[]``, `
     # value = "value"
     # incorrect, can't assign to dict after construction
     # a["otherkey"] = "othervalue"
+
+Strings
++++++++
+
+
+There are four kinds of strings in the Inmanta language:
+
+- regular strings
+
+.. code-block:: inmanta
+
+    regular_string_1 = "This is...\n...a basic string."
+
+    # Output when displayed:
+    # This is...
+    # ...a basic string.
+
+
+    regular_string_2 = 'This one too.'
+
+    # Output when displayed:
+    # This one too.
+
+- multi-line strings
+
+It is possible to make a string span multiple lines by triple quoting it e.g.:
+
+.. code-block:: inmanta
+
+    multi_line_string = """This
+    string
+    spans
+    multiple
+    lines"""
+
+    # Output when displayed:
+    # This
+    # string
+    # spans
+    # multiple
+    # lines
+
+.. note::
+    Unlike python's multi-line strings, only double quotes are supported to define a multi-line string i.e. ``"""`` is
+    valid, but ``'''`` is not.
+
+- raw strings
+
+Raw strings are similar to python's raw strings in that they treat backslashes as regular characters.
+On the other hand, in regular and multi-line strings, escape characters (e.g. ``\n``, ``\t``...) are interpreted and
+therefore backslashes need to be escaped in order to be displayed. In addition, no variable expansion is performed
+in raw strings.
+
+.. code-block:: inmanta
+
+    raw_string = r"This is...\n...a raw string."
+
+    # Output when displayed:
+    # This is...\n...a raw string.
+
+    hostname = "serv1.example.org"
+    raw_motd = r"Welcome to {hostname}"
+
+    # Output when displayed:
+    # Welcome to {hostname}
+
+
+.. _language_reference_string_formatting:
+
+- f-strings
+
+
+An alternative syntax similar to python's `f-strings <https://peps.python.org/pep-3101/>`_ can be used for string formatting.
+
+.. code-block:: inmanta
+
+    hostname = "serv1.example.org"
+    motd = f"Welcome to {hostname}"
+
+    # Output when displayed:
+    # Welcome to serv1.example.org
+
+
+Python's format specification `mini-language <https://docs.python.org/3.9/library/string.html#format-specification-mini-language>`_
+can be used for fine-grained formatting:
+
+.. code-block:: inmanta
+
+    width = 10
+    precision = 2
+    arg = 12.34567
+
+    std::print(f"result: {arg:{width}.{precision}f}")
+
+    # Output:
+    # result:      12.35
+
+.. note::
+    The \'=\' character specifier added in `python 3.8 <https://docs.python.org/3/whatsnew/3.8.html#f-strings-support-for-self-documenting-expressions-and-debugging>`_ is not supported yet in the Inmanta language.
+
+.. note::
+    Unlike in python, raw and format string cannot be used together in the same string e.g.
+    ``raw_and_format = rf"Both specifiers"`` is not allowed.
+
+
+.. _language_reference_string_interpolation:
+
+String interpolation
+####################
+
+An alternative syntax to f-strings is string interpolation. It allows variables to be included as parameters inside
+a regular or multi-line string. The included variables are resolved in the lexical scope of the string they are
+included in:
+
+
+.. code-block:: inmanta
+
+    hostname = "serv1.example.org"
+    motd = "Welcome to {{hostname}}"
+
+    # Output when displayed:
+    # Welcome to serv1.example.org
+
+String concatenation
+####################
+
+Strings can be concatenated with the ``+`` operator.
+
+.. code-block:: inmanta
+
+    hello_world = "hello " + "world"
 
 
 .. _lang-conditions:
@@ -195,9 +356,27 @@ value. It can have the following forms
         | value
         | value ('>' | '>=' | '<' | '<=' | '==' | '!=') value
         | value 'in' value
+        | value 'not in' value
         | functioncall
         | value 'is' 'defined'
         ;
+
+
+The ``in`` and ``not in`` operators can be used to check if a value is present in a list:
+
+.. code-block:: inmanta
+
+    myfiles = ["/a/b/c", "/c/d/e", "x/y/z/u/v/w"]
+
+    condition1 = "/a/b/c" in myfiles # evaluates to True
+    condition2 = "/f/g/h" in myfiles # evaluates to False
+
+    condition3 = "/a/b/c" not in myfiles # evaluates to False
+    condition4 = "/f/g/h" not in myfiles # evaluates to True
+
+    condition5 = not "/a/b/c" in myfiles # evaluates to False
+    condition6 = not "/f/g/h" in myfiles # evaluates to True
+
 
 The ``is defined`` keyword checks if a value was assigned to an attribute or a relation of a certain entity. The following
 example sets the monitoring configuration on a certain host when it has a monitoring server associated:
@@ -343,12 +522,6 @@ For example
 Relation multiplicities are enforced by the compiler. If they are violated a compilation error
 is issued.
 
-.. note::
-
-    In previous version another relation syntax was used that was less natural to read and allowed only bidirectional relations. The relation above was defined as ``File file [1:] -- [1] Service service``
-    This synax is deprecated but still widely used in many modules.
-
-
 .. _lang-instance:
 
 Instantiation
@@ -376,7 +549,7 @@ any values to the relation attribute.
     f2 = File(host=h1, path="/opt/2")
     f3 = File(host=h1, path="/opt/3")
 
-    // h1.files equals [f1, f2, f3]
+    # h1.files equals [f1, f2, f3]
 
     FileSet.files [0:] -- File.set [1]
 
@@ -384,13 +557,13 @@ any values to the relation attribute.
     s1.files = [f1,f2]
     s1.files = f3
 
-    // s1.files equals [f1, f2, f3]
+    # s1.files equals [f1, f2, f3]
 
     s1.files = f3
-    // adding a value twice does not affect the relation,
-    // s1.files still equals [f1, f2, f3]
+    # adding a value twice does not affect the relation,
+    # s1.files still equals [f1, f2, f3]
 
-In addition, attributes can be assigned in a constructor using keyword arguments by using `**dct` where `dct` is a dictionary that contains
+In addition, attributes can be assigned in a constructor using keyword arguments by using ``**dct`` where ``dct`` is a dictionary that contains
 attribute names as keys and the desired values as values. For example:
 
 .. code-block:: inmanta
@@ -400,6 +573,73 @@ attribute names as keys and the desired values as values. For example:
 
     file1_config = {"path": "/opt/1"}
     f1 = File(host=h1, **file1_config)
+
+It is also possible to add elements to a relation with the ``+=`` operator:
+
+.. code-block:: inmanta
+
+    Host.files [0:] -- File.host [1]
+
+    h1 = Host("test")
+    h1.files += f1
+    h1.files += f2
+    h1.files += f3
+
+    # h1.files equals [f1, f2, f3]
+
+
+.. note::
+    This syntax is only defined for relations. The ``+=`` operator can not be used on variables, which are immutable.
+
+Referring to instances
+++++++++++++++++++++++
+
+When referring to entities in the same module, a parent model or std, short names can be used
+
+Following code blocks are equivalent and both valid
+
+.. code-block:: inmanta
+
+    std::Host("test")
+
+.. code-block:: inmanta
+
+    Host("test")
+
+
+When constructing entities from other modules, the fully qualified name must be used
+
+.. code-block:: inmanta
+
+   import srlinux
+   import srlinux::interface
+
+   interface = srlinux::Interface(
+        subinterface = srlinux::interface::Subinterface(
+        )
+    )
+
+When nesting constructors, short names can be used for the nested constructors, because their types can be inferred
+
+.. code-block:: inmanta
+
+   import srlinux
+   import srlinux::interface
+
+   interface = srlinux::Interface( # This type is qualified
+        subinterface = Subinterface( # This type is inferred
+        )
+    )
+
+However, when relying on type inference:
+
+1. avoid creating sibling types with the same name, but different fully qualified name, as they may become indistinguishable, breaking the inference on existing models.
+
+    1. if multiple types exist with the same name, and one is in scope, that one is selected (i.e. it is defined in this module, a parent module or ``std``)
+    2. if multiple types exist that are all out of scope, inference fails
+
+2. make sure the type you want to infer is imported somewhere in the model. Otherwise the compiler will not find it.
+
 
 Refinements
 ===========
@@ -500,6 +740,15 @@ For indices on relations (instead of attributes) an alternative syntax can be us
     b = vm1.files[path="/etc/passwd"]  # selector style index lookup
     # a == b
 
+.. note::
+    The use of ``float`` (or ``number``) as part of index properties is
+    generally discouraged. This is due to the reliance of index matching on precise equality,
+    while floating-point numbers are represented with an inherent imprecision.
+    If floating-point attributes are used in an index, it is crucial to handle arithmetic
+    operations with caution to ensure the accuracy of the attribute values for index operations.
+
+
+
 
 For loop
 =========
@@ -563,6 +812,49 @@ The syntax is:
 The :ref:`lang-conditions` section describes allowed forms for the condition.
 
 
+List comprehensions
+===================
+
+A list comprehension constructs a list (either a primitive list or a relation) by mapping over another list, optionally
+filtering some values.
+
+.. code-block:: inmanta
+
+    myfiles = ["/a/b/c", "/c/d/e", "x/y/z/u/v/w"]
+    # create File instance for each file in myfiles shorter than 10 characters
+    host.files = [File(path=path) for path in myfiles if std::length(path) < 10]
+
+The syntax is the following.
+
+.. code-block:: antlr
+
+    list_comprehension : '[' expression ('for' ID 'in' expression)+ ('if' expression)* ']'
+
+It shows that the list comprehension allows for multiple ``for`` expressions and multiple ``if`` guards. The top ``for``
+is always executed first, as if it were the outer ``for`` in a conventional for loop. Here's an example:
+
+.. code-block:: inmanta
+
+    all_short_files = [
+        file
+        for host in all_hosts
+        for file in host.files  # we can refer to the upper loop variable `host`
+        if host.name != "exclude_this_host"
+        if std::length(file.path) < 10
+    ]
+
+While the inmanta language does not make any guarantees about statement execution order, it does provide some guarantees
+regarding data ordering for list comprehensions. In the context of relations even data order doesn't matter, but in the context
+of a literal list it might. In such a context the list comprehension promises to keep the order of the list in the ``for``
+expression.
+
+.. code-block:: inmanta
+
+    my_ordered_numbers = std::sequence(10)
+    my_ordered_pairs = ["{{i}}-{{i}}" for i in my_ordered_numbers]
+    # order is kept => ["0-0", "1-1", "2-2", ...]
+
+
 Transformations
 ==============================================================
 
@@ -570,31 +862,9 @@ At the lowest level of abstraction the configuration of an infrastructure often 
 configuration files. To construct configuration files, templates and string interpolation can be used.
 
 
-String interpolation
---------------------
-
-String interpolation allows variables to be included as parameters inside a string.
-
-The included variables are resolved in the lexical scope of the string they are included in.
-
-Interpolating strings
-
-.. code-block:: inmanta
-
-    hostname = "serv1.example.org"
-    motd = "Welcome to {{hostname}}\n"
-
-To prevent string interpolation, use raw strings
-
-.. code-block:: inmanta
-
-    # this string will go into the variable as is
-    # containing the {{ and \n
-    motd = r"Welcome to {{hostname}}\n"
-
-
 Templates
----------
++++++++++
+
 
 Inmanta integrates the Jinja2 template engine. A template is evaluated in the lexical
 scope where the ``std::template`` function is called. This function accepts as an argument the

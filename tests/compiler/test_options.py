@@ -35,7 +35,7 @@ end
 
 implement Test2 using std::none
 
-Test1 test1 [1] -- [0:1] Test2 other
+Test1.other [0:1] -- Test2.test1 [1]
 
 implementation tt for Test1:
 
@@ -63,7 +63,7 @@ end
 
 implement Test2 using std::none
 
-Test1 test1 [1] -- [0:1] Test2 other
+Test1.other [0:1] -- Test2.test1 [1]
 
 implementation tt for Test1:
 

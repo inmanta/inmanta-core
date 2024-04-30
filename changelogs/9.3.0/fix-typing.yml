@@ -1,0 +1,8 @@
+change-type: patch
+description: Use older version of typing-extensions
+destination-branches:
+- master
+- iso6
+- iso5
+- iso4
+sections: {}

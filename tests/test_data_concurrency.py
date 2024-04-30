@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+from utils import get_resource
+
 """
 This module contains tests related to database concurrency issues. Whenever we fix a concurrency issue, be it performance
 or deadlock related, a test should be added to ensure this occurence can not accidentally be introduced again.
@@ -25,7 +27,7 @@ import asyncio
 import datetime
 import uuid
 from collections import abc
-from typing import Optional, Type, TypeVar
+from typing import Optional, TypeVar
 
 import asyncpg
 import pytest
@@ -38,7 +40,7 @@ from inmanta.protocol.common import Result
 def slowdown_queries(
     monkeypatch,
     *,
-    cls: Type[data.BaseDocument] = data.BaseDocument,
+    cls: type[data.BaseDocument] = data.BaseDocument,
     query_funcs: Optional[abc.Collection[str]] = None,
     delay: float = 1,
 ) -> None:
@@ -100,6 +102,7 @@ async def test_4889_deadlock_delete_resource_action_update(
         date=datetime.datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     ).insert()
 
     resource = model.ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
@@ -191,6 +194,7 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
         date=datetime.datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await confmodel.insert()
 
@@ -225,3 +229,30 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
         await asyncio.gather(insert, delete())
     except asyncpg.ForeignKeyViolationError:
         pass
+
+
+@pytest.mark.slowtest
+async def test_release_version_concurrently(monkeypatch, server, client, environment: str, clienthelper) -> None:
+    version1 = await clienthelper.get_version()
+    resource1 = get_resource(version1, key="test1")
+    await clienthelper.put_version_simple(resources=[resource1], version=version1)
+
+    version2 = await clienthelper.get_version()
+    resource1 = get_resource(version2, key="test1")
+    await clienthelper.put_version_simple(resources=[resource1], version=version2)
+
+    slowdown_queries(monkeypatch)
+
+    f1 = asyncio.create_task(client.release_version(environment, version2))
+    f2 = asyncio.create_task(client.release_version(environment, version2))
+
+    # get results
+    r1 = await f1
+    r2 = await f2
+
+    # One should have made it, the other was too late
+    assert {r1.code, r2.code} == {200, 409}
+
+    # releasing an older version is always too late
+    r3 = await client.release_version(environment, version1)
+    assert r3.code == 409

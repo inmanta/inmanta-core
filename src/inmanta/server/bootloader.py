@@ -15,14 +15,19 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import importlib
 import logging
 import pkgutil
+from collections.abc import Generator
 from pkgutil import ModuleInfo
 from types import ModuleType
-from typing import Dict, Generator, List, Optional
+from typing import Optional
 
+import asyncpg
+
+from inmanta import logging as inmanta_logging
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
@@ -42,7 +47,6 @@ def iter_namespace(ns_pkg: ModuleType) -> Generator[ModuleInfo, None, None]:
 
 
 class PluginLoadFailed(Exception):
-
     pass
 
 
@@ -61,9 +65,17 @@ class ConstrainedApplicationContext(ApplicationContext):
     def set_feature_manager(self, feature_manager: FeatureManager) -> None:
         self.parent.set_feature_manager(feature_manager)
 
+    def register_default_logging_config(self, logging_config: inmanta_logging.LoggingConfigExtension) -> None:
+        """
+        Used by an Inmanta extension to register the default configuration of specific loggers, formatters
+        and handlers it uses. The names of the formatters and handlers must be prefixed with `<name-extension>_`.
+        """
+        logging_config.validate_for_extension(self.namespace)
+        self.parent.register_default_logging_config(logging_config)
+
 
 @stable_api
-class InmantaBootloader(object):
+class InmantaBootloader:
     """The inmanta bootloader is responsible for:
     - discovering extensions
     - loading extensions
@@ -72,16 +84,30 @@ class InmantaBootloader(object):
     """
 
     # Cache field for available extensions
-    AVAILABLE_EXTENSIONS: Optional[Dict[str, str]] = None
+    AVAILABLE_EXTENSIONS: Optional[dict[str, str]] = None
 
-    def __init__(self) -> None:
+    def __init__(self, configure_logging: bool = False) -> None:
+        """
+        :param configure_logging: This config option is used by the tests to configure the logging framework.
+                                  In normal execution, the logging framework is configured by the app.py
+        """
         self.restserver = Server()
         self.started = False
         self.feature_manager: Optional[FeatureManager] = None
 
+        if configure_logging:
+            inmanta_logger_config = inmanta_logging.InmantaLoggerConfig.get_instance()
+            inmanta_logger_config.apply_options(inmanta_logging.Options())
+
     async def start(self) -> None:
+        db_wait_time: int = config.db_wait_time.get()
+        if db_wait_time != 0:
+            # Wait for the database to be up before starting the server
+            await self.wait_for_db(db_wait_time)
+
         ctx = self.load_slices()
-        self.feature_manager = ctx.get_feature_manager()
+        version = ctx.get_feature_manager().get_product_metadata().version
+        LOGGER.info("Starting inmanta-server version %s", version)
         for mypart in ctx.get_slices():
             self.restserver.add_slice(mypart)
             ctx.get_feature_manager().add_slice(mypart)
@@ -102,12 +128,12 @@ class InmantaBootloader(object):
     async def _stop(self) -> None:
         await self.restserver.stop()
         if self.feature_manager is not None:
-            self.feature_manager.stop()
+            await self.feature_manager.stop()
 
     @classmethod
-    def get_available_extensions(cls) -> Dict[str, str]:
+    def get_available_extensions(cls) -> dict[str, str]:
         """
-        Returns a dictionary of with all available inmanta extensions.
+        Returns a dictionary of all available inmanta extensions.
         The key contains the name of the extension and the value the fully qualified path to the python package.
         """
         if cls.AVAILABLE_EXTENSIONS is None:
@@ -123,7 +149,7 @@ class InmantaBootloader(object):
         return dict(cls.AVAILABLE_EXTENSIONS)
 
     # Extension loading Phase I: from start to setup functions collected
-    def _discover_plugin_packages(self, return_all_available_packages: bool = False) -> List[str]:
+    def _discover_plugin_packages(self, return_all_available_packages: bool = False) -> list[str]:
         """Discover all packages that are defined in the inmanta_ext namespace package. Filter available extensions based on
         enabled_extensions and disabled_extensions config in the server configuration.
 
@@ -134,7 +160,7 @@ class InmantaBootloader(object):
         available = self.get_available_extensions()
         LOGGER.info("Discovered extensions: %s", ", ".join(available.keys()))
 
-        extensions: List[str] = []
+        extensions: list[str] = []
         enabled = [x for x in config.server_enabled_extensions.get() if len(x)]
 
         if return_all_available_packages:
@@ -185,10 +211,12 @@ class InmantaBootloader(object):
         if not hasattr(ext_mod, "setup"):
             raise PluginLoadFailed("extension.py doesn't have a setup method.")
 
-    def _load_extensions(self, load_all_extensions: bool = False) -> Dict[str, ModuleType]:
+    def _load_extensions(self, load_all_extensions: bool = False) -> dict[str, ModuleType]:
         """Discover all extensions, validate correct naming and load its setup function"""
-        plugins: Dict[str, ModuleType] = {}
-        for name in self._discover_plugin_packages(load_all_extensions):
+        plugins: dict[str, ModuleType] = {}
+        enabled_extensions: list[str] = self._discover_plugin_packages(load_all_extensions)
+        LOGGER.info("Enabled extensions: %s", ", ".join(enabled_extensions))
+        for name in enabled_extensions:
             try:
                 module = self._load_extension(name)
                 assert name.startswith(f"{EXTENSION_NAMESPACE}.")
@@ -209,7 +237,7 @@ class InmantaBootloader(object):
 
     # Extension loading Phase II: collect slices
     def _collect_slices(
-        self, extensions: Dict[str, ModuleType], only_register_environment_settings: bool = False
+        self, extensions: dict[str, ModuleType], only_register_environment_settings: bool = False
     ) -> ApplicationContext:
         """
         Call the setup function on all extensions and let them register their slices in the ApplicationContext.
@@ -228,5 +256,41 @@ class InmantaBootloader(object):
         """
         Load all slices in the server
         """
-        exts: Dict[str, ModuleType] = self._load_extensions(load_all_extensions)
-        return self._collect_slices(exts, only_register_environment_settings)
+        exts: dict[str, ModuleType] = self._load_extensions(load_all_extensions)
+        ctx: ApplicationContext = self._collect_slices(exts, only_register_environment_settings)
+        self.feature_manager = ctx.get_feature_manager()
+        return ctx
+
+    async def wait_for_db(self, db_wait_time: int) -> None:
+        """Wait for the database to be up by attempting to connect at intervals.
+
+        :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
+        """
+
+        start_time = asyncio.get_event_loop().time()
+
+        # Retrieve database connection settings from the configuration
+        db_settings = {
+            "host": config.db_host.get(),
+            "port": config.db_port.get(),
+            "user": config.db_username.get(),
+            "password": config.db_password.get(),
+            "database": config.db_name.get(),
+        }
+        while True:
+            try:
+                # Attempt to create a database connection
+                conn = await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
+                LOGGER.info("Successfully connected to the database.")
+                await conn.close(timeout=5)  # close the connection
+                return
+            except asyncio.TimeoutError:
+                LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
+            except Exception:
+                LOGGER.info("Waiting for database to be up.", exc_info=True)
+            # Check if the maximum wait time has been exceeded
+            if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
+                LOGGER.error("Timed out waiting for the database to be up.")
+                raise Exception("Database connection timeout after %d seconds." % db_wait_time)
+            # Sleep for a second before retrying
+            await asyncio.sleep(1)

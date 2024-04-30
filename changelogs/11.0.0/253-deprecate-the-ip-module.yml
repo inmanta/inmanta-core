@@ -1,0 +1,7 @@
+description: Deprecate the ip module.
+issue-nr: 253
+issue-repo: ip
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  deprecation-note: "The ``ip`` module has been deprecated. All its functionality is now available in the ``std`` module."

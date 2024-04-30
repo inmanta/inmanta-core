@@ -48,20 +48,20 @@
 
     * **End-to-end**: Inmanta Service Orchestrator ensures end-to-end consistency, higher flexibility and a shorter time to cash by enabling end-to-end automation of all service delivery aspects:
 
-    * Multi-domain: designed to interact across physical and virtual domains, such as WAN, edge, access network, NFV, cloud, containers, and datacenter.
-    * Holistic: A single, unifying automation solution, providing service orchestration, network orchestration, NFV orchestration (NFVO), as well as generic VNF management (gVNFM), cloud orchestration and configuration management. No other automation tools required.
-    * Full lifecyle: Manage advanced service lifecycle, covering creation, on-boarding, provisioning, modification, scaling, upgrading and decommissioning.
+      * Multi-domain: designed to interact across physical and virtual domains, such as WAN, edge, access network, NFV, cloud, containers, and datacenter.
+      * Holistic: A single, unifying automation solution, providing service orchestration, network orchestration, NFV orchestration (NFVO), as well as generic VNF management (gVNFM), cloud orchestration and configuration management. No other automation tools required.
+      * Full lifecyle: Manage advanced service lifecycle, covering creation, on-boarding, provisioning, modification, scaling, upgrading and decommissioning.
 
     * **Intent-based programmability**: Inmanta optimizes service development and maintenance for telecom operators and service providers through its unifying, model-driven methodology for intent-based orchestration.
 
-    * Inmanta's powerful domain-specific language (DSL) simplifies service creation and management, and is based on infrastructure as code (IaC) principles to provide a unified way to automate multi-domain and multi-vendor services. The embedded DSL enables the development of modular building blocks that make abstraction of low-level details, enabling re-usability across use cases.
-    * Inmanta's intent-based programmability provides out-of-the-box self-healing, safe roll-back, detailed dry run and seamless service upgrades for enhanced stability and resilience.
+      * Inmanta's powerful domain-specific language (DSL) simplifies service creation and management, and is based on infrastructure as code (IaC) principles to provide a unified way to automate multi-domain and multi-vendor services. The embedded DSL enables the development of modular building blocks that make abstraction of low-level details, enabling re-usability across use cases.
+      * Inmanta's intent-based programmability provides out-of-the-box self-healing, safe roll-back, detailed dry run and seamless service upgrades for enhanced stability and resilience.
 
     * **Vendor agnostic**: Inmanta Service Orchestrator is truly open and vendor agnostic for all network layers, domains and OSS/BSS. Service providers can integrate with 3rd party solutions as well as a wide range of open-source technologies to build a best-in-class, all-encompassing solution.
 
-    * Interoperability through pluggable adapters and open APIs
-    * API-ification of orchestrated services to easily plug services into the OSS/BSS environment
-    * Support for brownfield environments by fine-grained roll-out
+      * Interoperability through pluggable adapters and open APIs
+      * API-ification of orchestrated services to easily plug services into the OSS/BSS environment
+      * Support for brownfield environments by fine-grained roll-out
 
     The Inmanta Service Orchestrator product is based on mature technology backed by 15+ years of research and interaction with companies offering telecom and cloud services.
 
@@ -82,7 +82,6 @@
     reference/index
     troubleshooting
     changelogs
-
 
 PDF version
 -----------

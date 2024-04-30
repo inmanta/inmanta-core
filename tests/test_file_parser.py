@@ -15,8 +15,8 @@
 
     Contact: code@inmanta.com
 """
+
 import os
-from typing import List
 
 from pkg_resources import Requirement
 
@@ -40,7 +40,7 @@ dep
         fd.write(content)
 
     expected_requirements = ["test==1.2.3", "other-dep~=2.0.0", "third-dep<5.0.0", "splitteddep", "Capital"]
-    requirements: List[Requirement] = RequirementsTxtParser().parse(requirements_txt_file)
+    requirements: list[Requirement] = RequirementsTxtParser().parse(requirements_txt_file)
     assert requirements == [Requirement.parse(r) for r in expected_requirements]
     requirements_as_str = RequirementsTxtParser.parse_requirements_as_strs(requirements_txt_file)
     assert requirements_as_str == expected_requirements

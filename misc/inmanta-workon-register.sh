@@ -79,6 +79,160 @@ EOF
     __inmanta_workon_activate "$inmanta_env" "$env_id" "$envs_dir"
 }
 
+function __store_old_config {
+    #  Store config before activation to be later restored in __restore_old_config during deactivation
+
+    # Store INMANTA_CONFIG_ENVIRONMENT
+    if [ -n "${INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
+        _OLD_INMANTA_CONFIG_ENVIRONMENT="${INMANTA_CONFIG_ENVIRONMENT:-}"
+    fi
+    # Store pip configuration
+    if [ -n "${PIP_PRE:-}" ] ; then
+        _OLD_INMANTA_CONFIG_PIP_PRE="${PIP_PRE:-}"
+    fi
+
+    if [ -n "${PIP_INDEX_URL:-}" ] ; then
+        _OLD_INMANTA_CONFIG_PIP_INDEX_URL="${PIP_INDEX_URL:-}"
+    fi
+
+    if [ -n "${PIP_EXTRA_INDEX_URL:-}" ] ; then
+        _OLD_INMANTA_CONFIG_PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL:-}"
+    fi
+
+    if [ -n "${PIP_CONFIG_FILE:-}" ] ; then
+        _OLD_INMANTA_CONFIG_PIP_CONFIG_FILE="${PIP_CONFIG_FILE:-}"
+    fi
+
+    return 0
+}
+
+function __restore_old_config {
+    # Reset the config in the state it was before activation (saved in __store_old_pip_config)
+
+    if [ -n "${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
+        # Another env was active prior to inmanta-workon call: restore INMANTA_CONFIG_ENVIRONMENT to its old value
+        INMANTA_CONFIG_ENVIRONMENT="${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}"
+        export INMANTA_CONFIG_ENVIRONMENT
+        unset _OLD_INMANTA_CONFIG_ENVIRONMENT
+    else
+        unset INMANTA_CONFIG_ENVIRONMENT
+    fi
+
+    # Restore pip configuration
+    if [ -n "${_OLD_INMANTA_CONFIG_PIP_PRE:-}" ] ; then
+        PIP_PRE="${_OLD_INMANTA_CONFIG_PIP_PRE:-}"
+        export PIP_PRE
+        unset _OLD_INMANTA_CONFIG_PIP_PRE
+    else
+        unset PIP_PRE
+    fi
+
+    if [ -n "${_OLD_INMANTA_CONFIG_PIP_INDEX_URL:-}" ] ; then
+        PIP_INDEX_URL="${_OLD_INMANTA_CONFIG_PIP_INDEX_URL:-}"
+        export PIP_INDEX_URL
+        unset _OLD_INMANTA_CONFIG_PIP_INDEX_URL
+    else
+        unset PIP_INDEX_URL
+    fi
+
+    if [ -n "${_OLD_INMANTA_CONFIG_PIP_EXTRA_INDEX_URL:-}" ] ; then
+        PIP_EXTRA_INDEX_URL="${_OLD_INMANTA_CONFIG_PIP_EXTRA_INDEX_URL:-}"
+        export PIP_EXTRA_INDEX_URL
+        unset _OLD_INMANTA_CONFIG_PIP_EXTRA_INDEX_URL
+    else
+        unset PIP_EXTRA_INDEX_URL
+    fi
+
+    if [ -n "${_OLD_INMANTA_CONFIG_PIP_CONFIG_FILE:-}" ] ; then
+        PIP_CONFIG_FILE="${_OLD_INMANTA_CONFIG_PIP_CONFIG_FILE:-}"
+        export PIP_CONFIG_FILE
+        unset _OLD_INMANTA_CONFIG_PIP_CONFIG_FILE
+    else
+        unset PIP_CONFIG_FILE
+    fi
+
+    return 0
+}
+
+
+function __get_pip_config {
+    python_script=$(cat << END
+from inmanta.module import Project, ProjectConfigurationWarning
+import warnings
+warnings.filterwarnings("error", category=ProjectConfigurationWarning)
+try:
+    project=Project('.', autostd=False)
+except ProjectConfigurationWarning:
+    exit(1)
+pip_cfg=project.metadata.pip.model_dump()
+for k in ['pre','index_url','use_system_config']:
+    print(pip_cfg[k]) if pip_cfg[k] is not None else print('')
+print(' '.join(pip_cfg['extra_index_url']))
+END
+)
+
+    result=$("$INMANTA_WORKON_PYTHON" -c "${python_script}")
+
+    if [ ! "$?" -eq 0 ]; then
+        echo "WARNING: Invalid project.yml pip configuration" >&2
+        return 1
+    fi
+
+    echo "$result"
+    return 0
+}
+
+function __set_pip_config {
+    declare pre
+    declare index_url
+    declare extra_index_url
+    declare use_system_config
+
+    pip_config="$(__get_pip_config)" || return 0
+
+    mapfile -t arrIN <<< "$pip_config"
+    pre=${arrIN[0]}
+    index_url=${arrIN[1]}
+    use_system_config=${arrIN[2]}
+    extra_index_url=${arrIN[3]}
+
+    if [ "$use_system_config" == "False" ] ; then
+        if [ -z "$index_url" ] ; then
+            # Do not override any config because unsetting the config and the index urls might lead to PyPi being used, which is worse than keeping the config
+            echo "WARNING: Cannot use project.yml pip configuration: pip.use-system-config is False, but no index is defined in the pip.index-url section of the project.yml" >&2
+            return 0
+        fi
+        # Override values set in the config
+        PIP_INDEX_URL="${index_url:-}"
+        export PIP_INDEX_URL
+
+        PIP_EXTRA_INDEX_URL="${extra_index_url:-}"
+        export PIP_EXTRA_INDEX_URL
+
+        PIP_PRE="${pre:-}"
+        export PIP_PRE
+
+        # Make sure we disable the config
+        PIP_CONFIG_FILE="/dev/null"
+        export PIP_CONFIG_FILE
+    else
+        if [ -n "${index_url:-}" ] ; then
+            PIP_INDEX_URL="${index_url:-}"
+            export PIP_INDEX_URL
+        fi
+        if [ -n "${pre:-}" ] ; then
+            PIP_PRE="${pre:-}"
+            export PIP_PRE
+        fi
+        # Append to existing extra indexes
+        if [ -n "${extra_index_url:-}" ] ; then
+            PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL:+${PIP_EXTRA_INDEX_URL} }${extra_index_url}"
+            export PIP_EXTRA_INDEX_URL
+        fi
+    fi
+
+    return 0
+}
 
 function __inmanta_workon_environments_dir {
     # Writes the path to the server's environments directory to stdout
@@ -144,6 +298,12 @@ function __inmanta_workon_list {
 
 
 function __inmanta_workon_activate {
+    # Check user
+    declare current_user=$(whoami)
+    if [[ "${current_user}" != "root" && "${current_user}" != ${INMANTA_USER:-inmanta} ]]; then
+        echo "WARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be able to run pip install or inmanta project install)." >&2
+    fi
+
     # Activates the environment's venv and registers the deactivate function
 
     declare env_name="$1"
@@ -168,10 +328,20 @@ function __inmanta_workon_activate {
     declare -F deactivate > /dev/null && deactivate
     # store PS1 before sourcing activate because we don't care about virtualenv's modifications
     declare OLD_PS1="$PS1"
+
+    # store config before activation
+    __store_old_config
+    __set_pip_config
+
+    export INMANTA_CONFIG_ENVIRONMENT=$env_id
+
     source "$activate"
     export PS1="($env_name) $OLD_PS1"
 
+
     eval 'inmanta () { python3 -m inmanta.app "$@"; }' # workaround for #4259
+
+    echo "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed." >&2
     __inmanta_workon_register_deactivate
 }
 
@@ -182,22 +352,28 @@ function __inmanta_workon_register_deactivate {
     # Save the deactivate function from virtualenv under a different name
     declare virtualenv_deactivate
     virtualenv_deactivate=$(declare -f deactivate | sed 's/deactivate/virtualenv_deactivate/g')
+
     eval "$virtualenv_deactivate"
     unset -f deactivate > /dev/null 2>&1
 
+
     # Replace the deactivate() function with a wrapper.
     eval 'deactivate () {
+
         declare inmanta_env_dir=$(dirname "$VIRTUAL_ENV")
         declare user=${INMANTA_USER:-inmanta}
 
         # Call the original function.
         virtualenv_deactivate "$1"
+
         unset -f inmanta >/dev/null 2>&1
         # no need to restore PS1 because virtualenv_deactivate already does that
 
+        __restore_old_config
+
         ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)
         if [ -n "$ownership_issues" ]; then
-            echo "WARNING: Some files in the environment are not owned by the $user user. To fix this, run \`find '\''$inmanta_env_dir'\'' ! -user '\''$user'\'' -exec chown '\''$user'\'':'\''$user'\'' {} \;\` as root." >&2
+            echo "WARNING: Some files in the environment are not owned by the $user user. To fix this, run \`chown -R $user:$user '\''$inmanta_env_dir'\''\` as root." >&2
         fi
 
         if [ ! "$1" = "nondestructive" ]; then

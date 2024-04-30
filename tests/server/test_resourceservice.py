@@ -15,8 +15,10 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import uuid
+from datetime import timezone
 
 import pytest
 
@@ -160,6 +162,134 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     # Finish deployment r1
     await resource_deployer.deployment_finished(rvid=rvid_r1_v1, action_id=action_id)
 
+    # request 3
+    # only two exist
+    result = await agent._client.resources_status(
+        tid=environment,
+        version=version,
+        rids=["std::File[agent1,path=/etc/file2]", "std::File[agent1,path=/etc/file3]", "std::File[agent1,path=/etc/file4]"],
+    )
+    assert result.code == 200
+    assert result.result["data"] == {
+        "std::File[agent1,path=/etc/file2]": "deployed",
+        "std::File[agent1,path=/etc/file3]": "deployed",
+    }
+
+    result = await agent._client.resources_status(
+        tid=environment, version=version, rids=["std::File[agent1,path=/etc/file2]", "Resource WITH invalid id"]
+    )
+    assert result.code == 400
+    assert result.result["message"] == "Invalid request: Invalid id for resource Resource WITH invalid id"
+
+
+async def test_events_api_endpoints_increment(server, client, environment, clienthelper, agent, resource_deployer):
+    """
+    Test whether the `get_resource_events` and the `resource_did_dependency_change`
+    endpoints behave as expected. Also test the exclude_change parameter for get_resource_events
+    """
+    rid = r"""exec::Run[agent1,command=sh -c "git _%\/ clone \"https://codis.git\"  && chown -R centos:centos "]"""
+    rid_r1 = ResourceIdStr(rid)
+    rid_r2 = ResourceIdStr("std::File[agent1,path=/etc/file2]")
+    rid_r3 = ResourceIdStr("std::File[agent1,path=/etc/file3]")
+
+    async def put_version() -> tuple[ResourceVersionIdStr, ResourceVersionIdStr, ResourceVersionIdStr]:
+        version = await clienthelper.get_version()
+        # a name that is hard to parse
+        rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1},v={version}")
+        rvid_r2_v1 = ResourceVersionIdStr(f"{rid_r2},v={version}")
+        rvid_r3_v1 = ResourceVersionIdStr(f"{rid_r3},v={version}")
+        resources = [
+            {"path": "/etc/file1", "id": rvid_r1_v1, "requires": [rvid_r2_v1, rvid_r3_v1], "purged": False, "send_event": True},
+            {"path": "/etc/file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": True},
+            {"path": "/etc/file3", "id": rvid_r3_v1, "requires": [], "purged": False, "send_event": True},
+        ]
+
+        await clienthelper.put_version_simple(resources, version)
+        result = await client.release_version(
+            environment,
+            version,
+            push=False,
+        )
+        assert result.code == 200
+
+        result = await client.release_version(
+            environment,
+            version,
+            push=False,
+        )
+        # ensure we can only do it once
+        assert result.code == 409
+
+        return rvid_r1_v1, rvid_r2_v1, rvid_r3_v1
+
+    rvid_r1_v1, rvid_r2_v1, rvid_r3_v1 = await put_version()
+
+    # Perform deployment
+    await resource_deployer.deploy_resource(rvid=rvid_r2_v1)
+    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, status=const.ResourceState.failed)
+    action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
+
+    # Verify that events exist
+    result = await agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
+    assert result.code == 200
+    assert len(result.result["data"]) == 2
+
+    # Finish first deployment
+    await resource_deployer.deployment_finished(rvid=rvid_r1_v1, action_id=action_id)
+
+    print("pre event", datetime.datetime.now(timezone.utc))
+    # Make events: deploy r2 and r3
+    await resource_deployer.deploy_resource(rvid=rvid_r2_v1, change=const.Change.updated)
+    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, change=const.Change.updated)
+    print("post event", datetime.datetime.now(timezone.utc))
+
+    rvid_r1_v2, rvid_r2_v2, rvid_r3_v2 = await put_version()
+
+    # Start new deployment r1
+    action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v2)
+
+    # Assert we find the events
+    result = await agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v2)
+    assert result.code == 200
+    assert len(result.result["data"]) == 2
+    assert len(result.result["data"][rid_r2]) == 2
+    # incremental deploy
+    assert result.result["data"][rid_r2][0]["action"] == const.ResourceAction.deploy
+    assert result.result["data"][rid_r2][0]["status"] == const.ResourceState.deployed
+    assert result.result["data"][rid_r2][0]["change"] == const.Change.nochange
+    # actual deploy
+    assert result.result["data"][rid_r2][1]["action"] == const.ResourceAction.deploy
+    assert result.result["data"][rid_r2][1]["status"] == const.ResourceState.deployed
+    assert result.result["data"][rid_r2][1]["change"] == const.Change.updated
+    assert len(result.result["data"][rid_r3]) == 2
+    # incremental deploy
+    assert result.result["data"][rid_r3][0]["action"] == const.ResourceAction.deploy
+    assert result.result["data"][rid_r3][0]["status"] == const.ResourceState.deployed
+    assert result.result["data"][rid_r3][0]["change"] == const.Change.nochange
+    # actual deploy
+    assert result.result["data"][rid_r3][1]["action"] == const.ResourceAction.deploy
+    assert result.result["data"][rid_r3][1]["status"] == const.ResourceState.deployed
+    assert result.result["data"][rid_r3][1]["change"] == const.Change.updated
+
+    # Assert we find the events excluding the nochange changes
+    result = await agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v2, exclude_change=const.Change.nochange)
+    assert result.code == 200
+    assert len(result.result["data"]) == 2
+    assert len(result.result["data"][rid_r2]) == 1
+
+    assert result.result["data"][rid_r2][0]["action"] == const.ResourceAction.deploy
+    assert result.result["data"][rid_r2][0]["status"] == const.ResourceState.deployed
+    assert result.result["data"][rid_r2][0]["change"] == const.Change.updated
+
+    assert len(result.result["data"][rid_r3]) == 1
+
+    assert result.result["data"][rid_r3][0]["action"] == const.ResourceAction.deploy
+    assert result.result["data"][rid_r3][0]["status"] == const.ResourceState.deployed
+    assert result.result["data"][rid_r3][0]["change"] == const.Change.updated
+
+    # Finish deployment r1
+    await resource_deployer.deployment_finished(rvid=rvid_r1_v2, action_id=action_id)
+
 
 async def test_events_api_endpoints_events_across_versions(server, client, environment, clienthelper, agent, resource_deployer):
     """
@@ -272,8 +402,10 @@ async def test_last_non_deploying_status_field_on_resource(
                             The old one (resource_action_update) or the new one (deployment_endpoint).
     """
     version = await clienthelper.get_version()
-    rvid_r1_v1 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
-    rvid_r2_v1 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file2],v={version}")
+    rid_r1 = "std::File[agent1,path=/etc/file1]"
+    rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1},v={version}")
+    rid_r2 = "std::File[agent1,path=/etc/file2]"
+    rvid_r2_v1 = ResourceVersionIdStr(f"{rid_r2},v={version}")
     resources = [
         {"path": "/etc/file1", "id": rvid_r1_v1, "requires": [], "purged": False, "send_event": False},
         {"path": "/etc/file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": False},
@@ -288,10 +420,14 @@ async def test_last_non_deploying_status_field_on_resource(
     ) -> None:
         db_resources = await data.Resource.get_list(environment=environment)
         rvid_to_resources = {res.resource_version_id: res for res in db_resources}
+
+        db_resource_state = await data.ResourcePersistentState.get_list(environment=environment)
+        rid_to_resource_state = {res.resource_id: res for res in db_resource_state}
+
         assert rvid_to_resources[rvid_r1_v1].status is r1_status
-        assert rvid_to_resources[rvid_r1_v1].last_non_deploying_status is r1_last_non_deploying_status
+        assert rid_to_resource_state[rid_r1].last_non_deploying_status is r1_last_non_deploying_status
         assert rvid_to_resources[rvid_r2_v1].status is r2_status
-        assert rvid_to_resources[rvid_r2_v1].last_non_deploying_status is r2_last_non_deploying_status
+        assert rid_to_resource_state[rid_r2].last_non_deploying_status is r2_last_non_deploying_status
 
     async def start_deployment(rvid: ResourceVersionIdStr) -> uuid.UUID:
         if endpoint_to_use == "deployment_endpoint":

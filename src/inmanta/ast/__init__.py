@@ -21,6 +21,7 @@ from abc import abstractmethod
 from functools import lru_cache
 from typing import Dict, List, Optional, Union
 
+from inmanta import warnings
 from inmanta.ast import export
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
@@ -32,12 +33,17 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast.entity import Entity
     from inmanta.ast.statements import Statement  # noqa: F401
     from inmanta.ast.statements.define import DefineEntity, DefineImport  # noqa: F401
     from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.compiler import Compiler
     from inmanta.execute.runtime import DelayedResultVariable, ExecutionContext, Instance, ResultVariable  # noqa: F401
     from inmanta.plugins import PluginException
+
+
+class TypeDeprecationWarning(InmantaWarning):
+    pass
 
 
 class Location(export.Exportable):
@@ -142,7 +148,34 @@ class Range(Location):
         return False
 
 
-class Locatable(object):
+class AnchorTarget:
+    """AnchorTarget is used purely at the periphery of the compiler"""
+
+    __slots__ = ("location", "docstring")
+
+    def __init__(
+        self,
+        location: Location,
+        docstring: Optional[str] = None,
+    ) -> None:
+        """
+        Create a new AnchorTarget instance.
+        :param location: the location of the target of the anchor
+        :param docstring: the docstring attached to the target
+        """
+        self.location = location
+        self.docstring = docstring
+
+
+class WithComment:
+    """
+    Mixin class for AST nodes that can have a comment attached to them.
+    """
+
+    comment: Optional[str] = None
+
+
+class Locatable:
     __slots__ = ("_location",)
 
     def __init__(self) -> None:
@@ -152,7 +185,7 @@ class Locatable(object):
         assert location is not None and location.lnr > 0
         self._location = location
 
-    def get_location(self) -> Location:
+    def get_location(self) -> Optional[Location]:
         assert self._location is not None
         return self._location
 
@@ -165,7 +198,7 @@ class Locatable(object):
     location = property(get_location, set_location)
 
 
-class LocatableString(object):
+class LocatableString:
     """
     A string with an attached source location.
 
@@ -201,7 +234,7 @@ class LocatableString(object):
         return self.value
 
 
-class Anchor(object):
+class Anchor:
     def __init__(self, range: Range) -> None:
         self.range = range
 
@@ -212,7 +245,7 @@ class Anchor(object):
         return self.range
 
     @abstractmethod
-    def resolve(self) -> Location:
+    def resolve(self) -> Optional[AnchorTarget]:
         raise NotImplementedError()
 
 
@@ -222,25 +255,47 @@ class TypeReferenceAnchor(Anchor):
         self.namespace = namespace
         self.type = type
 
-    def resolve(self) -> Location:
+    def resolve(self) -> Optional[AnchorTarget]:
         t = self.namespace.get_type(self.type)
-        return t.get_location()
+        location = t.get_location()
+        docstring = t.comment if isinstance(t, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
 
 
-class AttributeReferenceAnchor(Anchor):
-    def __init__(self, range: Range, namespace: "Namespace", type: LocatableString, attribute: str) -> None:
-        Anchor.__init__(self, range=range)
-        self.namespace = namespace
+class TypeAnchor(Anchor):
+    """Reference to a resolved type"""
+
+    def __init__(self, reference: LocatableString, type: "Type") -> None:
+        """
+        :param reference: the location we are referencing from
+        :param type: the type that is being referenced
+        """
+        Anchor.__init__(self, range=reference.get_location())
         self.type = type
+        self.type.get_location()
+
+    def resolve(self) -> Optional[AnchorTarget]:
+        t = self.type
+        location = t.get_location()
+        docstring = t.comment if isinstance(t, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
+
+
+class AttributeAnchor(Anchor):
+    def __init__(self, range: Range, attribute: "Attribute") -> None:
+        Anchor.__init__(self, range=range)
         self.attribute = attribute
 
-    def resolve(self) -> Location:
-        instancetype = self.namespace.get_type(self.type)
-        # type check impossible atm due to import loop
-        # assert isinstance(instancetype, Entity)
-        entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
-        assert entity_attribute is not None
-        return entity_attribute.get_location()
+    def resolve(self) -> Optional[AnchorTarget]:
+        location = self.attribute.get_location()
+        docstring = self.attribute.comment if isinstance(self.attribute, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
 
 
 class Namespaced(Locatable):
@@ -282,7 +337,7 @@ class Namespace(Namespaced):
         self.__parent = parent
         self.__children = {}  # type: Dict[str,Namespace]
         self.defines_types = {}  # type: Dict[str,NamedType]
-        self.visible_namespaces: Dict[str, Import]
+        self.visible_namespaces: dict[str, Import]
         if self.__parent is not None:
             self.visible_namespaces = {self.get_full_name(): MockImport(self)}
             self.__parent.add_child(self)
@@ -321,16 +376,16 @@ class Namespace(Namespaced):
                 raise DuplicateException(ns, self.visible_namespaces[name], "Two import statements have the same name")
         self.visible_namespaces[name] = ns
 
+    def lookup_namespace(self, name: str) -> Import:
+        if name not in self.visible_namespaces:
+            raise NotFoundException(None, name, f"Namespace {name} not found.\nTry importing it with `import {name}`")
+        return self.visible_namespaces[name]
+
     def lookup(self, name: str) -> "Union[Type, ResultVariable]":
         if "::" not in name:
             return self.get_scope().direct_lookup(name)
-
         parts = name.rsplit("::", 1)
-
-        if parts[0] not in self.visible_namespaces:
-            raise NotFoundException(None, name, "Variable %s not found" % parts[0])
-
-        return self.visible_namespaces[parts[0]].target.get_scope().direct_lookup(parts[1])
+        return self.lookup_namespace(parts[0]).target.get_scope().direct_lookup(parts[1])
 
     def get_type(self, typ: LocatableString) -> "Type":
         name: str = str(typ)
@@ -344,8 +399,10 @@ class Namespace(Namespaced):
                 else:
                     raise TypeNotFoundException(typ, ns)
             else:
-                raise TypeNotFoundException(typ, self)
+                raise MissingImportException(typ, self, parts, str(self.location.file))
         elif name in self.primitives:
+            if name == "number":
+                warnings.warn(TypeDeprecationWarning("Type 'number' is deprecated, use 'float' or 'int' instead"))
             return self.primitives[name]
         else:
             cns = self  # type: Optional[Namespace]
@@ -353,6 +410,7 @@ class Namespace(Namespaced):
                 if name in cns.defines_types:
                     return cns.defines_types[name]
                 cns = cns.get_parent()
+
             raise TypeNotFoundException(typ, self)
 
     def get_name(self) -> str:
@@ -468,7 +526,7 @@ class Namespace(Namespaced):
         name_parts = fqtn.split("::")
         return self.get_root()._get_ns(name_parts)
 
-    def _get_ns(self, ns_parts: List[str]) -> "Optional[Namespace]":
+    def _get_ns(self, ns_parts: list[str]) -> "Optional[Namespace]":
         """
         Return the namespace indicated by the parts list. Each element of
         the array represents a level in the namespace hierarchy.
@@ -483,8 +541,8 @@ class Namespace(Namespaced):
                 return None
             return child._get_ns(ns_parts[1:])
 
-    @lru_cache()
-    def to_path(self) -> List[str]:
+    @lru_cache
+    def to_path(self) -> list[str]:
         """
         Return a list with the namespace path elements in it.
         """
@@ -528,7 +586,7 @@ class CompilerException(Exception, export.Exportable):
         """Make a string representation of this particular exception"""
         location = self.get_location()
         if location is not None:
-            return "%s (%s)" % (self.get_message(), location)
+            return f"{self.get_message()} ({location})"
         else:
             return self.get_message()
 
@@ -560,7 +618,7 @@ class CompilerException(Exception, export.Exportable):
         module: Optional[str] = self.__class__.__module__
         name: str = self.__class__.__qualname__
         return export.Error(
-            type=name if module is None else "%s.%s" % (module, name),
+            type=name if module is None else f"{module}.{name}",
             message=self.get_message(),
             location=location.export() if location is not None else None,
         )
@@ -592,8 +650,13 @@ class RuntimeException(CompilerException):
     def format(self) -> str:
         """Make a string representation of this particular exception"""
         if self.stmt is not None:
-            return "%s (reported in %s (%s))" % (self.get_message(), self.stmt, self.get_location())
-        return super(RuntimeException, self).format()
+            return f"{self.get_message()} (reported in {self.stmt} ({self.get_location()}))"
+        return super().format()
+
+
+class InvalidCompilerState(RuntimeException):
+    def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
+        super().__init__(stmt, "Invalid compiler state, this likely indicates a bug in the compiler. Details: %s" % msg)
 
 
 class HyphenException(RuntimeException):
@@ -626,7 +689,7 @@ class TypeNotFoundException(RuntimeException):
     """Exception raised when a type is referenced that does not exist"""
 
     def __init__(self, type: LocatableString, ns: Namespace) -> None:
-        RuntimeException.__init__(self, stmt=None, msg="could not find type %s in namespace %s" % (type, ns))
+        RuntimeException.__init__(self, stmt=None, msg=f"could not find type {type} in namespace {ns}")
         self.type = type
         self.ns = ns
         self.set_location(type.get_location())
@@ -635,10 +698,43 @@ class TypeNotFoundException(RuntimeException):
         return 20
 
 
+class MissingImportException(TypeNotFoundException):
+    """Exception raised when a referenced type's module is missing from the namespace"""
+
+    def __init__(
+        self, type: LocatableString, ns: Namespace, parts: Optional[list[str]] = None, file: Optional[str] = None
+    ) -> None:
+        suggest_importing: str = ""
+        suggest_file = ""
+        if file:
+            suggest_file = f" in {file}"
+        if parts:
+            suggest_importing = f".\nTry importing the module with `import {parts[0]}`{suggest_file}"
+        super().__init__(type, ns)
+        self.msg += suggest_importing
+
+
+class AmbiguousTypeException(TypeNotFoundException):
+    """Exception raised when a type is referenced that does not exist"""
+
+    def __init__(self, type: LocatableString, candidates: list["Entity"]) -> None:
+        candidates = sorted(candidates, key=lambda x: x.get_full_name())
+        RuntimeException.__init__(
+            self,
+            stmt=None,
+            msg="Could not determine namespace for type %s. %d possible candidates exists: [%s]."
+            " To resolve this, use the fully qualified name instead of the short name."
+            % (type, len(candidates), ", ".join([x.get_full_name() for x in candidates])),
+        )
+        self.candidates = candidates
+        self.type = type
+        self.set_location(type.get_location())
+
+
 def stringify_exception(exn: Exception) -> str:
     if isinstance(exn, CompilerException):
         return str(exn)
-    return "%s: %s" % (exn.__class__.__name__, str(exn))
+    return f"{exn.__class__.__name__}: {exn}"
 
 
 @stable_api
@@ -653,7 +749,7 @@ class ExternalException(RuntimeException):
 
         self.__cause__ = cause
 
-    def get_causes(self) -> List[CompilerException]:
+    def get_causes(self) -> list[CompilerException]:
         return []
 
     def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
@@ -687,7 +783,7 @@ class ExplicitPluginException(ExternalException):
         module: Optional[str] = self.__cause__.__class__.__module__
         name: str = self.__cause__.__class__.__qualname__
         return export.Error(
-            type=name if module is None else "%s.%s" % (module, name),
+            type=name if module is None else f"{module}.{name}",
             message=self.__cause__.message,
             location=location.export() if location is not None else None,
             category=export.ErrorCategory.plugin,
@@ -708,7 +804,7 @@ class WrappingRuntimeException(RuntimeException):
 
         self.__cause__ = cause  # type: CompilerException
 
-    def get_causes(self) -> List[CompilerException]:
+    def get_causes(self) -> list[CompilerException]:
         return [self.__cause__]
 
     def importantance(self) -> int:
@@ -722,7 +818,7 @@ class AttributeException(WrappingRuntimeException):
 
     def __init__(self, stmt: "Locatable", instance: "Instance", attribute: str, cause: RuntimeException) -> None:
         WrappingRuntimeException.__init__(
-            self, stmt=stmt, msg="Could not set attribute `%s` on instance `%s`" % (attribute, str(instance)), cause=cause
+            self, stmt=stmt, msg=f"Could not set attribute `{attribute}` on instance `{instance}`", cause=cause
         )
         self.attribute = attribute
         self.instance = instance
@@ -733,7 +829,7 @@ class OptionalValueException(RuntimeException):
 
     def __init__(self, instance: "Instance", attribute: "Attribute") -> None:
         RuntimeException.__init__(
-            self, instance, "Optional variable accessed that has no value (attribute `%s` of `%s`)" % (attribute, instance)
+            self, None, f"Optional variable accessed that has no value (attribute `{attribute}` of `{instance}`)"
         )
         self.instance = instance
         self.attribute = attribute
@@ -774,7 +870,7 @@ class CycleException(TypingException):
     """Exception raised when a type is its own parent (type cycle)"""
 
     def __init__(self, first_type: "DefineEntity", final_name: str) -> None:
-        super(CycleException, self).__init__(first_type, "")
+        super().__init__(first_type, "")
         self.types = []  # type: List[DefineEntity]
         self.complete = False
         self.final_name = final_name
@@ -811,7 +907,7 @@ class DoubleSetException(RuntimeException):
         self.variable: "ResultVariable" = variable
         self.newvalue = newvalue  # type: object
         self.newlocation = newlocation
-        msg = "value set twice:\n\told value: %s\n\t\tset at %s\n\tnew value: %s\n\t\tset at %s\n" % (
+        msg = "value set twice:\n\told value: {}\n\t\tset at {}\n\tnew value: {}\n\t\tset at {}\n".format(
             self.variable.value,
             self.variable.location,
             self.newvalue,
@@ -853,7 +949,7 @@ class DuplicateException(TypingException):
         self.other = other
 
     def format(self) -> str:
-        return "%s (original at (%s)) (duplicate at (%s))" % (self.get_message(), self.location, self.other.get_location())
+        return f"{self.get_message()} (original at ({self.location})) (duplicate at ({self.other.get_location()}))"
 
     def importantance(self) -> int:
         return 40
@@ -866,11 +962,11 @@ class CompilerError(Exception):
 class MultiException(CompilerException):
     """A single exception collecting multiple CompilerExceptions"""
 
-    def __init__(self, others: List[CompilerException]) -> None:
+    def __init__(self, others: list[CompilerException]) -> None:
         CompilerException.__init__(self, "")
         self.others = others
 
-    def get_causes(self) -> List[CompilerException]:
+    def get_causes(self) -> list[CompilerException]:
         def sortkey(item: CompilerException):
             location = item.get_location()
             if not location:

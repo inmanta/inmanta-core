@@ -16,8 +16,6 @@
     Contact: code@inmanta.com
 """
 
-from typing import List, Set
-
 import pytest
 
 from compiler.dataflow.conftest import create_instance, get_dataflow_node
@@ -35,7 +33,7 @@ from inmanta.execute.dataflow import (
 
 def test_dataflow_reference_nodes(graph: DataflowGraph) -> None:
     x: AssignableNodeReference = get_dataflow_node(graph, "x")
-    x_nodes: List[AssignableNode] = list(x.nodes())
+    x_nodes: list[AssignableNode] = list(x.nodes())
     assert len(x_nodes) == 1
     assert isinstance(x, DirectNodeReference)
     assert x_nodes[0] == x.node
@@ -54,14 +52,14 @@ def test_dataflow_attribute_reference_nodes(graph: DataflowGraph) -> None:
     y_n.assign(ValueNode(42).reference(), Statement(), graph)
 
     x_n: AssignableNodeReference = get_dataflow_node(graph, "x.n")
-    x_n_nodes: List[AssignableNode] = list(x_n.nodes())
+    x_n_nodes: list[AssignableNode] = list(x_n.nodes())
     assert len(x_n_nodes) == 1
     assert x_n_nodes[0] == y.node.instance_assignments[0].rhs.node().get_attribute("n")
 
 
 def test_dataflow_simple_leaf(graph) -> None:
     x: AssignableNodeReference = get_dataflow_node(graph, "x")
-    leaves: List[AssignableNode] = list(x.leaf_nodes())
+    leaves: list[AssignableNode] = list(x.leaf_nodes())
     assert isinstance(x, DirectNodeReference)
     assert leaves == [x.node]
 
@@ -74,7 +72,7 @@ def test_dataflow_variable_chain_leaf(graph: DataflowGraph) -> None:
     x.assign(y, Statement(), graph)
     y.assign(z, Statement(), graph)
 
-    leaves: Set[AssignableNode] = set(x.leaf_nodes())
+    leaves: set[AssignableNode] = set(x.leaf_nodes())
     assert isinstance(z, DirectNodeReference)
     assert leaves == {z.node}
 
@@ -89,7 +87,7 @@ def test_dataflow_variable_tree_leaves(graph: DataflowGraph, value_node: Node) -
     y.assign(z, Statement(), graph)
     y.assign(value_node.reference(), Statement(), graph)
 
-    leaves: Set[AssignableNode] = set(x.leaf_nodes())
+    leaves: set[AssignableNode] = set(x.leaf_nodes())
     assert isinstance(y, DirectNodeReference)
     assert isinstance(z, DirectNodeReference)
     assert leaves == {y.node, z.node}
@@ -104,7 +102,7 @@ def test_dataflow_variable_loop_leaves(graph: DataflowGraph) -> None:
     y.assign(z, Statement(), graph)
     z.assign(x, Statement(), graph)
 
-    leaves: Set[AssignableNode] = set(x.leaf_nodes())
+    leaves: set[AssignableNode] = set(x.leaf_nodes())
     assert isinstance(x, DirectNodeReference)
     assert isinstance(y, DirectNodeReference)
     assert isinstance(z, DirectNodeReference)
@@ -123,7 +121,7 @@ def test_dataflow_variable_loop_with_external_assignment_leaves(graph: DataflowG
     u: AssignableNodeReference = get_dataflow_node(graph, "u")
     y.assign(u, Statement(), graph)
 
-    leaves: Set[AssignableNode] = set(x.leaf_nodes())
+    leaves: set[AssignableNode] = set(x.leaf_nodes())
     assert isinstance(u, DirectNodeReference)
     assert leaves == {u.node}
 
@@ -139,7 +137,7 @@ def test_dataflow_variable_loop_with_value_assignment_leaves(graph: DataflowGrap
 
     y.assign(ValueNode(42).reference(), Statement(), graph)
 
-    leaves: Set[AssignableNode] = set(x.leaf_nodes())
+    leaves: set[AssignableNode] = set(x.leaf_nodes())
     assert isinstance(x, DirectNodeReference)
     assert isinstance(y, DirectNodeReference)
     assert isinstance(z, DirectNodeReference)

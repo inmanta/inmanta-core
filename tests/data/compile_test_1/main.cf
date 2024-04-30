@@ -21,8 +21,8 @@ end
 
 implement OS using none
 
-OS os [1] -- [0:] Host host
-OS member [0:] -- [0:1] OS family
+Host.os [1] -- OS.host [0:]
+OS.member [0:] -- OS.family [0:1]
 
 entity ManagedDevice:
     """

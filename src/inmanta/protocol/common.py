@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import enum
 import gzip
 import importlib
@@ -26,47 +27,27 @@ import re
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Coroutine, Iterable, MutableMapping
 from datetime import datetime
 from enum import Enum
+from functools import partial
 from inspect import Parameter
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    ClassVar,
-    Coroutine,
-    Dict,
-    Generic,
-    Iterable,
-    List,
-    MutableMapping,
-    Optional,
-    Set,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    cast,
-    get_type_hints,
-)
+from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
-import jwt
 import pydantic
 import typing_inspect
-from pydantic.error_wrappers import ValidationError
+from pydantic import ValidationError
 from pydantic.main import create_model
 from tornado import web
 
-from inmanta import config as inmanta_config
 from inmanta import const, execute, types, util
-from inmanta.data.model import BaseModel, validator_timezone_aware_timestamps
+from inmanta.data.model import BaseModel, DateTimeNormalizerModel
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
+from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes, StrictNonIntBool
-
-from . import exceptions
+from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
 
 if TYPE_CHECKING:
     from .endpoints import CallTarget
@@ -85,14 +66,14 @@ UTF8_CHARSET = "charset=UTF-8"
 HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
 
 
-class ArgOption(object):
+class ArgOption:
     """
     Argument options to transform arguments before dispatch
     """
 
     def __init__(
         self,
-        getter: Callable[[Any, Dict[str, str]], Coroutine[Any, Any, Any]],
+        getter: Callable[[Any, dict[str, str]], Coroutine[Any, Any, Any]],
         # Type is Any to Any because it transforms from method to handler but in the current typing there is no link
         header: Optional[str] = None,
         reply_header: bool = True,
@@ -108,16 +89,19 @@ class ArgOption(object):
         self.getter = getter
 
 
-class Request(object):
+class Request:
     """
     A protocol request
     """
 
-    def __init__(self, url: str, method: str, headers: Dict[str, str], body: Optional[JsonType]) -> None:
+    def __init__(self, url: str, method: str, headers: dict[str, str], body: Optional[JsonType]) -> None:
         self._url = url
         self._method = method
         self._headers = headers
         self._body = body
+        # Reply ID is used to send back the result
+        # If None, no reply is expected
+        #  i.e. this call will immediately return, potentially even before the request is dispatched
         self._reply_id: Optional[uuid.UUID] = None
 
     @property
@@ -129,7 +113,7 @@ class Request(object):
         return self._url
 
     @property
-    def headers(self) -> Dict[str, str]:
+    def headers(self) -> dict[str, str]:
         return self._headers
 
     @property
@@ -166,10 +150,10 @@ class Request(object):
         return req
 
 
-T = TypeVar("T", bound=Union[None, ArgumentTypes])
+T_co = TypeVar("T_co", bound=Union[None, ArgumentTypes], covariant=True)
 
 
-class ReturnValue(Generic[T]):
+class ReturnValue(Generic[T_co]):
     """
     An object that handlers can return to provide a response to a method call.
     """
@@ -178,12 +162,12 @@ class ReturnValue(Generic[T]):
         self,
         status_code: int = 200,
         headers: MutableMapping[str, str] = {},
-        response: Optional[T] = None,
+        response: Optional[T_co] = None,
         content_type: str = JSON_CONTENT,
-        links: Optional[Dict[str, str]] = None,
+        links: Optional[dict[str, str]] = None,
     ) -> None:
         self._status_code = status_code
-        self._warnings: List[str] = []
+        self._warnings: list[str] = []
         self._headers = headers
         self._headers[CONTENT_TYPE] = content_type
         self._content_type = content_type
@@ -212,7 +196,7 @@ class ReturnValue(Generic[T]):
 
     def _get_with_envelope(self, envelope_key: str) -> ReturnTypes:
         """Get the body with an envelope specified"""
-        response: Dict[str, Any] = {}
+        response: dict[str, Any] = {}
         response[envelope_key] = self._response
 
         if len(self._warnings):
@@ -237,7 +221,7 @@ class ReturnValue(Generic[T]):
         else:
             return self._get_with_envelope(envelope_key)
 
-    def add_warnings(self, warnings: List[str]) -> None:
+    def add_warnings(self, warnings: list[str]) -> None:
         self._warnings.extend(warnings)
 
     def __repr__(self) -> str:
@@ -247,7 +231,7 @@ class ReturnValue(Generic[T]):
         return repr(self)
 
 
-class Response(object):
+class Response:
     """
     A response object of a call
     """
@@ -286,14 +270,14 @@ class InvalidPathException(Exception):
     """This exception is raised when a path definition is invalid."""
 
 
-class UrlPath(object):
+class UrlPath:
     """Class to handle manipulation of method paths"""
 
     def __init__(self, path: str) -> None:
         self._path = path
         self._vars = self._parse_path()
 
-    def _parse_path(self) -> List[str]:
+    def _parse_path(self) -> list[str]:
         if self._path[0] != "/":
             raise InvalidPathException(f"{self._path} should start with a /")
 
@@ -309,7 +293,7 @@ class UrlPath(object):
     def path(self) -> str:
         return self._path
 
-    def generate_path(self, variables: Dict[str, str]) -> str:
+    def generate_path(self, variables: dict[str, str]) -> str:
         """Create a path with all variables substituted"""
         path = self._path
         for var in self._vars:
@@ -327,37 +311,39 @@ class UrlPath(object):
 
         return path
 
+    def has_path_variable(self, var_name: str) -> bool:
+        """
+        Return True iff the given var_name is a path parameter of this UrlPath.
+        """
+        return var_name in self._vars
+
 
 class InvalidMethodDefinition(Exception):
     """This exception is raised when the definition of a method is invalid."""
 
 
 VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
-VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNonIntBool, datetime, bytes)
+VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime, bytes, pydantic.AnyUrl)
 
 
-class MethodArgumentsBaseModel(pydantic.BaseModel):
-
-    _normalize_timestamps: ClassVar[classmethod] = pydantic.validator("*", allow_reuse=True)(
-        validator_timezone_aware_timestamps
-    )
-
-
-class MethodProperties(object):
+class MethodProperties:
     """
     This class stores the information from a method definition
     """
 
-    methods: Dict[str, List["MethodProperties"]] = defaultdict(list)
+    methods: dict[str, list["MethodProperties"]] = defaultdict(list)
 
     @classmethod
     def register_method(cls, properties: "MethodProperties") -> None:
-        """Register new method properties. Multiple properties on a method is supported but versions have to be unique."""
-        current_list = [x.api_version for x in cls.methods[properties.function.__name__]]
-        if properties.api_version in current_list:
+        """
+        Register new method properties. Multiple properties on a method is supported but the (URL, API version) combination has
+        to be unique.
+        """
+        current_list = [(x.path, x.api_version) for x in cls.methods[properties.function.__name__]]
+        if (properties.path, properties.api_version) in current_list:
             raise Exception(
                 f"Method {properties.function.__name__} already has a "
-                f"method definition for api version {properties.api_version}"
+                f"method definition for api path {properties.path} and API version {properties.api_version}"
             )
 
         cls.methods[properties.function.__name__].append(properties)
@@ -368,19 +354,20 @@ class MethodProperties(object):
         path: str,
         operation: str,
         reply: bool,
-        arg_options: Dict[str, ArgOption],
+        arg_options: dict[str, ArgOption],
         timeout: Optional[int],
         server_agent: bool,
         api: Optional[bool],
         agent_server: bool,
         validate_sid: Optional[bool],
-        client_types: List[const.ClientType],
+        client_types: list[const.ClientType],
         api_version: int,
         api_prefix: str,
         envelope: bool,
         typed: bool = False,
         envelope_key: str = const.ENVELOPE_KEY,
         strict_typing: bool = True,
+        enforce_auth: bool = True,
         varkw: bool = False,
     ) -> None:
         """
@@ -403,8 +390,11 @@ class MethodProperties(object):
         :param typed: Is the method definition typed or not
         :param envelope_key: The envelope key to use
         :param strict_typing: If true, does not allow `Any` when validating argument types
+        :param enforce_auth: When set to true authentication is enforced on this endpoint. When set to false, authentication is
+                             not enforced, even if auth is enabled.
         :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
                       responsible for the validation.
+        :param reply: If False, this is a fire-and-forget query: we will not wait for any result, just deliver the call
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -413,6 +403,7 @@ class MethodProperties(object):
             validate_sid = agent_server and not api
 
         self._path = UrlPath(path)
+        self.path = path
         self._operation = operation
         self._reply = reply
         self._arg_options = arg_options
@@ -427,6 +418,7 @@ class MethodProperties(object):
         self._envelope = envelope
         self._envelope_key = envelope_key
         self._strict_typing = strict_typing
+        self._enforce_auth = enforce_auth
         self.function = function
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
@@ -437,7 +429,7 @@ class MethodProperties(object):
         # validate client types
         for ct in self._client_types:
             if ct not in [client_type for client_type in const.ClientType]:
-                raise InvalidMethodDefinition("Invalid client type %s specified for function %s" % (ct, function))
+                raise InvalidMethodDefinition(f"Invalid client type {ct} specified for function {function}")
 
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()
@@ -447,7 +439,11 @@ class MethodProperties(object):
         """Does the method allow for a variable number of key/value arguments."""
         return self._varkw
 
-    def validate_arguments(self, values: Dict[str, Any]) -> Dict[str, Any]:
+    @property
+    def enforce_auth(self) -> bool:
+        return self._enforce_auth
+
+    def validate_arguments(self, values: dict[str, Any]) -> dict[str, Any]:
         """
         Validate methods arguments. Values is a dict with key/value pairs for the arguments (similar to kwargs). This method
         validates and converts types if required (e.g. str to int). The returns value has the correct typing to dispatch
@@ -455,19 +451,19 @@ class MethodProperties(object):
         """
         try:
             out = self.argument_validator(**values)
-            return {f: getattr(out, f) for f in out.__fields__.keys()}
+            return {f: getattr(out, f) for f in out.model_fields.keys()}
         except ValidationError as e:
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
             raise BadRequest(error_msg, {"validation_errors": e.errors()})
 
-    def arguments_to_pydantic(self) -> Type[pydantic.BaseModel]:
+    def arguments_to_pydantic(self) -> type[pydantic.BaseModel]:
         """
         Convert the method arguments to a pydantic model that allows to validate a message body with pydantic
         """
         sig = inspect.signature(self.function)
 
-        def to_tuple(param: Parameter) -> Tuple[object, Optional[object]]:
+        def to_tuple(param: Parameter) -> tuple[object, Optional[object]]:
             if param.annotation is Parameter.empty:
                 return (Any, param.default if param.default is not Parameter.empty else None)
             if param.default is not Parameter.empty:
@@ -478,7 +474,7 @@ class MethodProperties(object):
         return create_model(
             f"{self.function.__name__}_arguments",
             **{param.name: to_tuple(param) for param in sig.parameters.values() if param.name != self._varkw_name},
-            __base__=MethodArgumentsBaseModel,
+            __base__=DateTimeNormalizerModel,
         )
 
     def arguments_in_url(self) -> bool:
@@ -539,12 +535,12 @@ class MethodProperties(object):
 
         self._validate_return_type(type_hints["return"], strict=self.strict_typing)
 
-    def _validate_return_type(self, arg_type: Type, *, strict: bool = True) -> None:
+    def _validate_return_type(self, arg_type: type, *, strict: bool = True) -> None:
         """Validate the return type"""
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
 
-        def is_return_value_type(arg_type: Type) -> bool:
+        def is_return_value_type(arg_type: type) -> bool:
             if typing_inspect.is_generic_type(arg_type):
                 origin = typing_inspect.get_origin(arg_type)
                 assert origin is not None  # Make mypy happy
@@ -568,7 +564,7 @@ class MethodProperties(object):
             self._validate_type_arg(arg, arg_type, allow_none_type=True, strict=strict)
 
     def _validate_type_arg(
-        self, arg: str, arg_type: Type, *, strict: bool = True, allow_none_type: bool = False, in_url: bool = False
+        self, arg: str, arg_type: type, *, strict: bool = True, allow_none_type: bool = False, in_url: bool = False
     ) -> None:
         """Validate the given type arg recursively
 
@@ -595,16 +591,12 @@ class MethodProperties(object):
 
         if typing_inspect.is_union_type(arg_type):
             # Make sure there is only one list and one dict in the union, otherwise we cannot process the arguments
-            cnt: Dict[str, int] = defaultdict(lambda: 0)
+            cnt: dict[str, int] = defaultdict(int)
             for sub_arg in typing_inspect.get_args(arg_type, evaluate=True):
                 self._validate_type_arg(arg, sub_arg, strict=strict, allow_none_type=allow_none_type, in_url=in_url)
 
                 if typing_inspect.is_generic_type(sub_arg):
-                    # there is a difference between python 3.6 and >=3.7
-                    if hasattr(sub_arg, "__name__"):
-                        cnt[sub_arg.__name__] += 1
-                    else:
-                        cnt[sub_arg._name] += 1
+                    cnt[sub_arg.__name__] += 1
 
             for name, n in cnt.items():
                 if n > 1:
@@ -621,7 +613,8 @@ class MethodProperties(object):
             args = typing_inspect.get_args(arg_type, evaluate=True)
             if len(args) == 0:
                 raise InvalidMethodDefinition(
-                    f"Type {arg_type} of argument {arg} must be have a subtype plain List, Dict or Literal is not allowed."
+                    f"Type {arg_type} of argument {arg} must have a type parameter:"
+                    " non-parametrized List, Dict or Literal is not allowed."
                 )
             elif is_literal_type:  # A generic Literal
                 if not all(isinstance(a, Enum) for a in args):
@@ -666,7 +659,7 @@ class MethodProperties(object):
         else:
             valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])
             raise InvalidMethodDefinition(
-                f"Type {arg_type.__name__} of argument {arg} must be a either {valid_types} or a List of these types or a "
+                f"Type {arg_type.__name__} of argument {arg} must be one of {valid_types} or a List of these types or a "
                 "Dict with str keys and values of these types."
             )
 
@@ -675,12 +668,12 @@ class MethodProperties(object):
         return self._operation
 
     @property
-    def arg_options(self) -> Dict[str, ArgOption]:
+    @stable_api
+    def arg_options(self) -> dict[str, ArgOption]:
         return self._arg_options
 
     @property
     def timeout(self) -> Optional[int]:
-
         return self._timeout
 
     @property
@@ -696,7 +689,7 @@ class MethodProperties(object):
         return self._reply
 
     @property
-    def client_types(self) -> List[const.ClientType]:
+    def client_types(self) -> list[const.ClientType]:
         return self._client_types
 
     @property
@@ -715,12 +708,14 @@ class MethodProperties(object):
     def api_version(self) -> int:
         return self._api_version
 
+    @stable_api
     def get_long_method_description(self) -> Optional[str]:
         """
         Return the full description present in the docstring of the method, excluding the first paragraph.
         """
         return self._parsed_docstring.long_description
 
+    @stable_api
     def get_short_method_description(self) -> Optional[str]:
         """
         Return the first paragraph of the description present in the docstring of the method.
@@ -764,7 +759,7 @@ class MethodProperties(object):
         except Exception:
             return 500
 
-    def get_description_foreach_http_status_code(self) -> Dict[int, str]:
+    def get_description_foreach_http_status_code(self) -> dict[int, str]:
         """
         This method return a mapping from the HTTP status code to
         the associated description specified in the docstring using
@@ -782,11 +777,11 @@ class MethodProperties(object):
         for raise_statement in self._parsed_docstring.raises:
             exception_name = raise_statement.type_name
             status_code = self._get_http_status_code_for_exception(exception_name)
-            result[status_code] = raise_statement.description
+            result[status_code] = raise_statement.description if raise_statement.description is not None else ""
 
         return result
 
-    def get_call_headers(self) -> Set[str]:
+    def get_call_headers(self) -> set[str]:
         """
         Returns the set of headers required to create call
         """
@@ -806,19 +801,19 @@ class MethodProperties(object):
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
         return url + self._path.generate_regex_path()
 
-    def get_call_url(self, msg: Dict[str, str]) -> str:
+    def get_call_url(self, msg: dict[str, str]) -> str:
         """
         Create a calling url for the client
         """
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
         return url + self._path.generate_path({k: parse.quote(str(v), safe="") for k, v in msg.items()})
 
-    def build_call(self, args: List[object], kwargs: Dict[str, object] = {}) -> Request:
+    def build_call(self, args: list[object], kwargs: dict[str, object] = {}) -> Request:
         """
         Build a call from the given arguments. This method returns the url, headers, and body for the call.
         """
         # create the message
-        msg: Dict[str, Any] = dict(kwargs)
+        msg: dict[str, Any] = dict(kwargs)
 
         # map the argument in arg to names
         argspec = inspect.getfullargspec(self.function)
@@ -866,14 +861,29 @@ class MethodProperties(object):
         return Request(url=url, method=self.operation, headers=headers, body=body)
 
     def _encode_dict_for_get(
-        self, query_param_name: str, query_param_value: Dict[str, Union[Any, List[Any]]]
-    ) -> Dict[str, str]:
+        self, query_param_name: str, query_param_value: dict[str, Union[Any, list[Any]]]
+    ) -> dict[str, str]:
         """Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.abc=1&param.cd=2"""
         sub_dict = {f"{query_param_name}.{key}": value for key, value in query_param_value.items()}
         return sub_dict
 
+    @stable_api
+    def get_openapi_parameter_type_for(self, param_name: str) -> Optional[openapi_model.ParameterType]:
+        """
+        Return the openapi ParameterType for the parameter with the given param_name or None when the parameter
+        with the given name is not an OpenAPI parameter (but a RequestBodyParameter for example).
+        """
+        if param_name in self.arg_options and self.arg_options[param_name].header:
+            return openapi_model.ParameterType.header
+        elif self._path.has_path_variable(param_name):
+            return openapi_model.ParameterType.path
+        elif self.arguments_in_url():
+            return openapi_model.ParameterType.query
+        else:
+            return None
 
-class UrlMethod(object):
+
+class UrlMethod:
     """
     This class holds the method definition together with the API (url, method) information
 
@@ -924,7 +934,7 @@ class UrlMethod(object):
 
 
 # Util functions
-def custom_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
+def custom_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, util.JSONSerializable]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta
     """
@@ -932,10 +942,10 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
         return const.UNKNOWN_STRING
 
     # handle common python types
-    return util.api_boundary_json_encoder(o)
+    return util.api_boundary_json_encoder(o, tz_aware)
 
 
-def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
+def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[list[str]]) -> tuple[int, JsonType]:
     if value is None:
         value = {}
     if warnings:
@@ -945,13 +955,13 @@ def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[Lis
     return code, value
 
 
-def json_encode(value: ReturnTypes) -> str:
+def json_encode(value: object, tz_aware: bool = True) -> str:
     """Our json encode is able to also serialize other types than a dict."""
     # see json_encode in tornado.escape
-    return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
+    return json.dumps(value, default=partial(custom_json_encoder, tz_aware=tz_aware)).replace("</", "<\\/")
 
 
-def gzipped_json(value: JsonType) -> Tuple[bool, Union[bytes, str]]:
+def gzipped_json(value: JsonType) -> tuple[bool, Union[bytes, str]]:
     json_string = json_encode(value)
     if len(json_string) < web.GZipContentEncoding.MIN_LENGTH:
         return False, json_string
@@ -971,73 +981,8 @@ def shorten(msg: str, max_len: int = 10) -> str:
     return msg[0 : max_len - 3] + "..."
 
 
-def encode_token(
-    client_types: List[str], environment: Optional[str] = None, idempotent: bool = False, expire: Optional[float] = None
-) -> str:
-    cfg = inmanta_config.AuthJWTConfig.get_sign_config()
-    if cfg is None:
-        raise Exception("No JWT signing configuration available.")
-
-    payload: Dict[str, Any] = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
-
-    if not idempotent:
-        payload["iat"] = int(time.time())
-
-        if cfg.expire > 0:
-            payload["exp"] = int(time.time() + cfg.expire)
-        elif expire is not None:
-            payload["exp"] = int(time.time() + expire)
-
-    if environment is not None:
-        payload[const.INMANTA_URN + "env"] = environment
-
-    return jwt.encode(payload, cfg.key, cfg.algo)
-
-
-def decode_token(token: str) -> Dict[str, str]:
-    try:
-        # First decode the token without verification
-        header = jwt.get_unverified_header(token)
-        payload = jwt.decode(token, options={"verify_signature": False})
-    except Exception:
-        raise exceptions.Forbidden("Unable to decode provided JWT bearer token.")
-
-    if "iss" not in payload:
-        raise exceptions.Forbidden("Issuer is required in token to validate.")
-
-    cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
-    if cfg is None:
-        raise exceptions.Forbidden("Unknown issuer for token")
-
-    alg = header["alg"].lower()
-    if alg == "hs256":
-        key = cfg.key
-    elif alg == "rs256":
-        if "kid" not in header:
-            raise exceptions.Forbidden("A kid is required for RS256")
-        kid = header["kid"]
-        if kid not in cfg.keys:
-            raise exceptions.Forbidden(
-                "The kid provided in the token does not match a known key. Check the jwks_uri or try "
-                "restarting the server to load any new keys."
-            )
-
-        key = cfg.keys[kid]
-    else:
-        raise exceptions.Forbidden("Algorithm %s is not supported." % alg)
-
-    try:
-        payload = dict(jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]))
-        ct_key = const.INMANTA_URN + "ct"
-        payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
-    except Exception as e:
-        raise exceptions.Forbidden(*e.args)
-
-    return payload
-
-
 @stable_api
-class Result(object):
+class Result:
     """
     A result of a method call
     """
@@ -1088,7 +1033,7 @@ class Result(object):
         self._callback = fnc
 
 
-class SessionManagerInterface(object):
+class SessionManagerInterface:
     """
     An interface for a sessionmanager
     """

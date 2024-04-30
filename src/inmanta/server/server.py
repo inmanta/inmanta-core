@@ -15,24 +15,24 @@
 
     Contact: code@inmanta.com
 """
+
+import asyncio
 import json
 import logging
 import os
 import uuid
-from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
+from typing import TYPE_CHECKING, Optional, Union, cast
 
 from tornado import routing, web
 
-from inmanta import data
+from inmanta import config, data
 from inmanta.const import ApiDocsFormat
 from inmanta.data.model import FeatureStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, handle, methods, methods_v2
 from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
 from inmanta.protocol.openapi.converter import OpenApiConverter
 from inmanta.protocol.openapi.model import OpenAPI
-from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
-from inmanta.server import config as opt
-from inmanta.server import protocol
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT, protocol
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
@@ -49,30 +49,33 @@ class Server(protocol.ServerSlice):
     information
     """
 
-    _server_storage: Dict[str, str]
+    _server_storage: dict[str, str]
     compiler: "CompilerService"
     _server: protocol.Server
+
+    # The number of seconds after which the call to the get_status() endpoint of a server slice should time out.
+    GET_SERVER_STATUS_TIMEOUT: int = 1
 
     def __init__(self) -> None:
         super().__init__(name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_COMPILER]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
         self._server = server
-        self._server_storage: Dict[str, str] = self.check_storage()
+        self._server_storage: dict[str, str] = self.check_storage()
         self.compiler: "CompilerService" = cast("CompilerService", server.get_slice(SLICE_COMPILER))
         self._handlers.append(routing.Rule(routing.PathMatches(r"/dashboard"), web.RedirectHandler, dict(url=r"/console")))
         self._handlers.append(
             routing.Rule(routing.PathMatches(r"/dashboard/(.*)"), web.RedirectHandler, dict(url=r"/console/{0}"))
         )
 
-    def check_storage(self) -> Dict[str, str]:
+    def check_storage(self) -> dict[str, str]:
         """
         Check if the server storage is configured and ready to use.
         """
@@ -83,13 +86,12 @@ class Server(protocol.ServerSlice):
                 os.mkdir(directory)
             return directory
 
-        state_dir = opt.state_dir.get()
+        state_dir = config.state_dir.get()
         server_state_dir = os.path.join(state_dir, "server")
         dir_map = {"server": _ensure_directory_exist(state_dir, "server")}
-        dir_map["files"] = _ensure_directory_exist(server_state_dir, "files")
         dir_map["environments"] = _ensure_directory_exist(server_state_dir, "environments")
         dir_map["agents"] = _ensure_directory_exist(server_state_dir, "agents")
-        dir_map["logs"] = _ensure_directory_exist(opt.log_dir.get())
+        dir_map["logs"] = _ensure_directory_exist(config.log_dir.get())
         return dir_map
 
     @handle(methods.notify_change_get, env="id")
@@ -128,15 +130,30 @@ class Server(protocol.ServerSlice):
                 "Is inmanta installed? Use setuptools install or setuptools dev to install."
             )
 
-        slices = []
-        for slice_name, slice in self._server.get_slices().items():
+        async def collect_for_slice(slice_name: str, slice: protocol.ServerSlice) -> SliceStatus:
             try:
-                slices.append(SliceStatus(name=slice_name, status=await slice.get_status()))
+                return SliceStatus(
+                    name=slice_name,
+                    status=await asyncio.wait_for(slice.get_status(), self.GET_SERVER_STATUS_TIMEOUT),
+                )
+            except asyncio.TimeoutError:
+                return SliceStatus(
+                    name=slice_name,
+                    status={
+                        "error": f"timeout on data collection for {slice_name}, "
+                        "consult the server log for additional information"
+                    },
+                )
             except Exception:
                 LOGGER.error(
-                    f"The following error occured while trying to determine the status of slice {slice_name}",
+                    f"The following error occurred while trying to determine the status of slice {slice_name}",
                     exc_info=True,
                 )
+                return SliceStatus(name=slice_name, status={"error": "An unexpected error occurred, reported to server log"})
+
+        slices = await asyncio.gather(
+            *(collect_for_slice(slice_name, slice) for slice_name, slice in self._server.get_slices().items())
+        )
 
         response = StatusResponse(
             product=product_metadata.product,

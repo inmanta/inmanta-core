@@ -1,0 +1,8 @@
+---
+description: Added documentation on how to perform an upgrade in-place.
+issue-nr: 393
+issue-repo: inmanta-service-orchestrator
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

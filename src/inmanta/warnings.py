@@ -18,8 +18,9 @@
 
 import logging
 import warnings
+from collections.abc import Mapping
 from enum import Enum
-from typing import Dict, List, Literal, Mapping, Optional, TextIO, Type, Union
+from typing import Literal, Optional, TextIO, Union
 
 
 class InmantaWarning(Warning):
@@ -70,16 +71,16 @@ class WarningOption:
     would add a rule to ignore Inmanta warnings but leave other warning's behaviour as is.
     """
 
-    def __init__(self, name: str, options: Dict[Union[str, bool], WarningRule]) -> None:
+    def __init__(self, name: str, options: dict[Union[str, bool], WarningRule]) -> None:
         self.name: str = name
-        self.options: Dict[Union[str, bool], WarningRule] = options
+        self.options: dict[Union[str, bool], WarningRule] = options
 
     def apply(self, option: Union[str, bool]) -> None:
         """
         Apply the warning rule tied to the given option.
         """
         if option not in self.options:
-            raise Exception("Illegal option %s for %s" % (option, self.name))
+            raise Exception(f"Illegal option {option} for {self.name}")
         rule: WarningRule = self.options[option]
         rule.apply()
 
@@ -91,7 +92,7 @@ class WarningsManager:
 
     # List of warning options with a rule tied to each possible option value.
     # Options are applied left to right so general options should come before specific ones.
-    options: List[WarningOption] = [
+    options: list[WarningOption] = [
         WarningOption(
             "default",
             {
@@ -134,7 +135,7 @@ class WarningsManager:
     def _showwarning(
         cls,
         message: Union[str, Warning],
-        category: Type[Warning],
+        category: type[Warning],
         filename: str,
         lineno: int,
         file: Optional[TextIO] = None,
@@ -152,7 +153,7 @@ class WarningsManager:
         """
         # implementation based on warnings._showwarnmsg_impl and logging._showwarning
         if issubclass(category, InmantaWarning):
-            text = "%s: %s" % (category.__name__, message)
+            text = f"{category.__name__}: {message}"
             logger = logging.getLogger("inmanta.warnings")
         else:
             text: str = warnings.formatwarning(

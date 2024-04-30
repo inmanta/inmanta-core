@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import argparse
 import logging
 import os
@@ -22,10 +23,11 @@ import socket
 import subprocess
 import sys
 import time
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Optional
 
 from inmanta import config, const, module, postgresproc, protocol
 from inmanta.config import Config
+from inmanta.protocol import Result
 from inmanta.types import JsonType
 from inmanta.util import get_free_tcp_port
 
@@ -43,7 +45,7 @@ class FinishedException(Exception):
     """
 
 
-class Deploy(object):
+class Deploy:
     _data_path: str
     _project_path: str
     _server_proc: subprocess.Popen
@@ -64,7 +66,7 @@ class Deploy(object):
 
     def _check_result(self, result: protocol.Result, fatal: bool = True) -> protocol.Result:
         """Check the result of a call protocol call. If the result is not 200, issue an error"""
-        if result.code != 200:
+        if result.code != 200 and not result.result:
             msg = f"Server request failed with code {result.code} and result {result.result}"
             LOGGER.error(msg)
 
@@ -140,7 +142,8 @@ host=localhost
             sys.executable,
             "-m",
             "inmanta.app",
-            "-vvv",
+            "--log-file-level",
+            "DEBUG",
             "-c",
             server_config,
             "--config-dir",
@@ -160,7 +163,7 @@ host=localhost
                 try:
                     s.connect(("localhost", int(self._server_port)))
                     return True
-                except (IOError, socket.error):
+                except OSError:
                     time.sleep(0.25)
             finally:
                 s.close()
@@ -185,16 +188,16 @@ host=localhost
     def _create_project(self, project_name: str) -> Optional[str]:
         LOGGER.debug("Creating project %s", project_name)
         result = self._client.create_project(project_name)
-        if result.code != 200:
+        if result.code != 200 or not result.result:
             LOGGER.error("Unable to create project %s", project_name)
             return None
 
-        return result.result["project"]["id"]
+        return str(result.result["project"]["id"])
 
     def _create_environment(self, project_id: str, environment_name: str) -> Optional[str]:
         LOGGER.debug("Creating environment %s in project %s", environment_name, project_id)
         result = self._client.create_environment(project_id=project_id, name=environment_name)
-        if result.code != 200:
+        if result.code != 200 or not result.result:
             LOGGER.error("Unable to create environment %s", environment_name)
             return None
 
@@ -207,16 +210,16 @@ host=localhost
 
         return env_id
 
-    def _latest_version(self, environment_id: str) -> Optional[int]:
-        result = self._client.list_versions(tid=environment_id)
+    def _latest_version_instance(self, environment_id: str) -> Optional[JsonType]:
+        result: Result = self._client.list_versions(tid=environment_id)
         if result.code != 200:
             LOGGER.error("Unable to get all version of environment %s", environment_id)
             return None
 
-        if "versions" in result.result and len(result.result["versions"]) > 0:
-            versions: List[int] = [x["version"] for x in result.result["versions"]]
-            sorted(versions)
-            return versions[0]
+        if result.result and "versions" in result.result and len(result.result["versions"]) > 0:
+            version = result.result["versions"][0]
+            assert isinstance(version, dict)  # mypy
+            return version
 
         return None
 
@@ -248,7 +251,7 @@ host=localhost
 
         # get project id
         projects = self._client.list_projects()
-        if projects.code != 200:
+        if projects.code != 200 or not projects.result:
             LOGGER.error("Unable to retrieve project listing from the server")
             return False
 
@@ -265,7 +268,7 @@ host=localhost
 
         # get or create the environment
         environments = self._client.list_environments()
-        if environments.code != 200:
+        if environments.code != 200 or not environments.result:
             LOGGER.error("Unable to retrieve environments from server")
             return False
 
@@ -288,7 +291,7 @@ host=localhost
         if not os.path.islink(server_env) or os.readlink(server_env) != full_path:
             if os.path.exists(server_env):
                 os.unlink(server_env)
-            os.symlink(full_path, server_env)
+            os.symlink(src=full_path, dst=server_env)
 
         return True
 
@@ -316,7 +319,7 @@ host=localhost
 
         return True
 
-    def export(self) -> bool:
+    def export(self, main_file: str) -> bool:
         """
         Export a version to the embedded server
         """
@@ -333,6 +336,8 @@ host=localhost
             "localhost",
             "--server_port",
             str(self._server_port),
+            "-f",
+            main_file,
         ]
 
         sub_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -352,21 +357,32 @@ host=localhost
         return True
 
     def deploy(self, dry_run: bool, report: bool = True) -> None:
-        version = self._latest_version(self._environment_id)
-        LOGGER.info("Latest version for created environment is %s", version)
-        if version is None:
+        version_instance = self._latest_version_instance(self._environment_id)
+
+        if version_instance is None:
             return
+
+        version: int = version_instance["version"]
+        LOGGER.info("Latest version for created environment is %s", version)
 
         # release the version!
         if not dry_run:
-            self._check_result(
-                self._client.release_version(
-                    tid=self._environment_id,
-                    id=version,
-                    push=True,
-                    agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+            if not version_instance["released"]:
+                self._check_result(
+                    self._client.release_version(
+                        tid=self._environment_id,
+                        id=version,
+                        push=True,
+                        agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+                    )
                 )
-            )
+            else:
+                self._check_result(
+                    self._client.deploy(
+                        tid=self._environment_id,
+                        agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+                    )
+                )
             if report:
                 self.progress_deploy_report(version)
 
@@ -376,9 +392,9 @@ host=localhost
             if report:
                 self.progress_dryrun_report(dryrun_id)
 
-    def _get_deploy_stats(self, version: int) -> Tuple[int, int, Dict[str, str]]:
+    def _get_deploy_stats(self, version: int) -> tuple[int, int, dict[str, str]]:
         version_result = self._client.get_version(tid=self._environment_id, id=version)
-        if version_result.code != 200:
+        if version_result.code != 200 or not version_result.result:
             LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
             return (0, 0, {})
 
@@ -396,7 +412,7 @@ host=localhost
 
     def progress_deploy_report(self, version: int) -> None:
         print("Starting deploy")
-        current_ready: Set[str] = set()
+        current_ready: set[str] = set()
         total = 0
         deployed = -1
         while total > deployed:
@@ -412,17 +428,17 @@ host=localhost
                 sys.stdout.flush()
 
             for res in new:
-                print("%s - %s" % (res, ready[res]))
+                print(f"{res} - {ready[res]}")
 
             print("[%d / %d]" % (deployed, total))
             time.sleep(1)
 
         print("Deploy ready")
 
-    def _get_dryrun_status(self, dryrun_id: str) -> Tuple[int, int, JsonType]:
+    def _get_dryrun_status(self, dryrun_id: str) -> tuple[int, int, JsonType]:
         result = self._client.dryrun_report(self._environment_id, dryrun_id)
 
-        if result.code != 200:
+        if result.code != 200 or not result.result:
             raise Exception("Unable to get dryrun report")
 
         data = result.result["dryrun"]
@@ -431,7 +447,7 @@ host=localhost
     def progress_dryrun_report(self, dryrun_id: str) -> None:
         print("Starting dryrun")
 
-        current_ready: Set[str] = set()
+        current_ready: set[str] = set()
         todo = 1
         while todo > 0:
             # if we already printed progress, move cursor one line up
@@ -441,12 +457,12 @@ host=localhost
 
             total, todo, ready = self._get_dryrun_status(dryrun_id)
 
-            ready_keys: Set[str] = set(ready.keys())
+            ready_keys: set[str] = set(ready.keys())
             new = ready_keys - current_ready
             current_ready = ready_keys
 
             for res in new:
-                changes: Dict[str, Tuple[str, str]] = ready[res]["changes"]
+                changes: dict[str, tuple[str, str]] = ready[res]["changes"]
                 if len(changes) == 0:
                     print("%s - no changes" % res)
                 else:
@@ -454,7 +470,7 @@ host=localhost
                     for field, values in changes.items():
                         if field == "hash":
                             diff_result = self._client.diff(a=values[0], b=values[1])
-                            if diff_result.code == 200:
+                            if diff_result.code == 200 and diff_result.result:
                                 print("  - content:")
                                 diff_value = diff_result.result
                                 print("    " + "    ".join(diff_value["diff"]))
@@ -471,7 +487,7 @@ host=localhost
         raise FinishedException()
 
     def run(self) -> None:
-        self.export()
+        self.export(main_file=self._options.main_file)
         self.deploy(dry_run=self._options.dryrun)
 
     def stop(self) -> None:
@@ -486,3 +502,7 @@ host=localhost
 
         if hasattr(self, "_postgresproc"):
             self._postgresproc.stop()
+
+        # ensure children are down
+        if hasattr(self, "_server_proc"):
+            self._server_proc.wait(20)

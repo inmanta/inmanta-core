@@ -16,8 +16,6 @@
     Contact: code@inmanta.com
 """
 
-from typing import Dict
-
 import pytest
 
 import inmanta.compiler as compiler
@@ -30,11 +28,11 @@ def test_implement_parents(snippetcompiler, parents: bool):
     snippetcompiler.setup_for_snippet(
         """
 entity Parent:
-    number n
+    int n
 end
 
 entity Child extends Parent:
-    number m
+    int m
 end
 
 implement Parent using p
@@ -65,7 +63,7 @@ x = Child()
     instance = x.get_value()
     assert isinstance(instance, Instance)
 
-    expected_attrs: Dict[str, int] = {"n": 0 if parents else 1, "m": 0}
+    expected_attrs: dict[str, int] = {"n": 0 if parents else 1, "m": 0}
     for name, value in expected_attrs.items():
         attr: Typeorvalue = instance.lookup(name)
         assert isinstance(attr, ResultVariable)

@@ -1,0 +1,7 @@
+description: "Made `is defined` have progress potential until it receives its first value"
+change-type: patch
+sections:
+  minor-improvement: "Improved compiler reasoning on resolving `is defined` for empty lists"
+destination-branches:
+  - master
+  - iso6

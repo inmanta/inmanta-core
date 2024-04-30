@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import uuid
@@ -49,10 +50,12 @@ async def test_get_facts(resource_container, client, clienthelper, environment, 
     assert result.code == 503
 
     env_uuid = uuid.UUID(env_id)
-    params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-    while len(params) < 3:
+
+    async def has_params():
         params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-        await asyncio.sleep(0.1)
+        return len(params) >= 3
+
+    await retry_limited(has_params, 5)
 
     result = await client.get_param(env_id, "key1", resource_id_wov)
     assert result.code == 200
@@ -80,10 +83,12 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
     assert result.code == 503
 
     env_uuid = uuid.UUID(environment)
-    params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-    while len(params) < 3:
+
+    async def wait_for_three_params():
         params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-        await asyncio.sleep(0.1)
+        return len(params) >= 3
+
+    await retry_limited(wait_for_three_params, 10)
 
     result = await client.get_param(environment, "key1", resource_id_wov)
     assert result.code == 200
@@ -273,15 +278,20 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
 
     await agent.stop()
 
-    LogSequence(caplog, allow_errors=False, ignore=["tornado.access"]).contains(
-        "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
-    ).contains("inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact").contains(
-        "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
-    ).contains(
-        "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
-    ).contains(
-        "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
-    ).no_more_errors()
+    def wait_until_log_records_are_available() -> bool:
+        try:
+            log_sequence = LogSequence(caplog, allow_errors=False, ignore=["tornado.access"])
+            for i in range(5):
+                log_sequence = log_sequence.contains("inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact")
+            log_sequence.no_more_errors()
+        except AssertionError:
+            return False
+        else:
+            return True
+
+    # The get_parameter() API calls from the server to the agent are executed asynchronously with respect the
+    # get_param() API calls done from the test case to the server. Here we wait until all log records are available.
+    await retry_limited(wait_until_log_records_are_available, timeout=10)
 
 
 async def test_purged_resources(resource_container, client, clienthelper, server, environment, agent, no_agent_backoff):
@@ -371,6 +381,17 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     assert result.code == 200
     assert len(result.result["parameters"]) == 4
 
+    # Create version 3 to be able to delete version 2
+    version = await clienthelper.get_version()
+    assert version == 3
+
+    await clienthelper.put_version_simple([], version)
+
+    result = await client.release_version(
+        environment, version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
+    assert result.code == 200
+
     # Remove version 2
     result = await client.delete_version(tid=environment, id=2)
     assert result.code == 200
@@ -423,4 +444,4 @@ async def test_get_fact_no_code(resource_container, client, clienthelper, enviro
     log_entry = result["logs"][0]
     assert log_entry["action"] == "getfact"
     assert log_entry["status"] == "unavailable"
-    assert "Failed to load" in log_entry["messages"][0]["msg"]
+    assert "Unable to deserialize" in log_entry["messages"][0]["msg"]

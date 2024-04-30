@@ -15,12 +15,12 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import json
 import logging
 import uuid
 from operator import itemgetter
-from typing import List, Tuple
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -46,6 +46,7 @@ async def env_with_logs(client, server, environment: str):
             total=1,
             released=i != 1 and i != 9,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         cm_time_idx += 1
         await cm.insert()
@@ -63,7 +64,6 @@ async def env_with_logs(client, server, environment: str):
             environment=uuid.UUID(environment),
             resource_version_id=f"{resource_id_a},v={i}",
             status=const.ResourceState.deployed,
-            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
             attributes={"path": "/etc/file2"},
         )
         await res1.insert()
@@ -72,7 +72,6 @@ async def env_with_logs(client, server, environment: str):
             environment=uuid.UUID(environment),
             resource_version_id=f"std::Directory[agent1,path=/tmp/dir2],v={i}",
             status=const.ResourceState.deployed,
-            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
             attributes={"path": "/etc/dir2"},
         )
         await res2.insert()
@@ -177,7 +176,7 @@ def log_messages(resource_log_objects):
         ("timestamp", "ASC"),
     ],
 )
-async def test_resource_logs_paging(server, client, order_by_column, order, env_with_logs: Tuple[str, List[datetime.datetime]]):
+async def test_resource_logs_paging(server, client, order_by_column, order, env_with_logs: tuple[str, list[datetime.datetime]]):
     """Test querying resource logs with paging, using different sorting parameters."""
     environment, msg_timings = env_with_logs
 
@@ -207,7 +206,7 @@ async def test_resource_logs_paging(server, client, order_by_column, order, env_
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page
@@ -300,7 +299,6 @@ async def test_filter_validation(server, client, filter, expected_status, env_wi
 
 
 async def test_log_without_kwargs(server, client, environment: str):
-
     await data.ConfigurationModel(
         environment=uuid.UUID(environment),
         version=1,
@@ -308,13 +306,13 @@ async def test_log_without_kwargs(server, client, environment: str):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     ).insert()
 
     res1 = data.Resource.new(
         environment=uuid.UUID(environment),
         resource_version_id=f"{resource_id_a},v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res1.insert()
@@ -323,7 +321,6 @@ async def test_log_without_kwargs(server, client, environment: str):
         environment=uuid.UUID(environment),
         resource_version_id="std::Directory[agent1,path=/tmp/dir2],v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res2.insert()
@@ -357,7 +354,6 @@ async def test_log_without_kwargs(server, client, environment: str):
 
 
 async def test_log_nested_kwargs(server, client, environment: str):
-
     await data.ConfigurationModel(
         environment=uuid.UUID(environment),
         version=1,
@@ -365,13 +361,13 @@ async def test_log_nested_kwargs(server, client, environment: str):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     ).insert()
 
     res1 = data.Resource.new(
         environment=uuid.UUID(environment),
         resource_version_id=f"{resource_id_a},v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res1.insert()
@@ -380,7 +376,6 @@ async def test_log_nested_kwargs(server, client, environment: str):
         environment=uuid.UUID(environment),
         resource_version_id="std::Directory[agent1,path=/tmp/dir2],v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res2.insert()

@@ -1,0 +1,8 @@
+description: "Expanded project's package repo documentation with a note about the risk of using multiple package repos and dependency confusion attacks."
+change-type: patch
+sections:
+  minor-improvement: "{{description}}"
+destination-branches:
+  - master
+  - iso6
+  - iso5

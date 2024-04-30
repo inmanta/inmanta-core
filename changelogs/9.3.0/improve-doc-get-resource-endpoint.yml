@@ -1,0 +1,6 @@
+---
+description: Improve the documentation of the `api/v1/resource/<id>` endpoint and return a clear error message if the given id is not a valid resource version id.
+change-type: patch
+destination-branches: [master, iso6, iso5]
+sections:
+  minor-improvement: "{{description}}"

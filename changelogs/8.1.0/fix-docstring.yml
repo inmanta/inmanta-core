@@ -1,0 +1,6 @@
+description: Fixed SourceInfo docstring
+change-type: patch
+destination-branches:
+  - master
+  - iso6
+  - iso5

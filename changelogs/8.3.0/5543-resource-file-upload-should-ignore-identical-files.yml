@@ -1,0 +1,8 @@
+description: The stat_file API endpoint now returns a list with no duplicates.
+change-type: patch
+destination-branches:
+  - master
+  - iso6
+  - iso5
+sections:
+  bugfix: "Fix issue that may cause the first export for an environment to fail when files with identical content are present."

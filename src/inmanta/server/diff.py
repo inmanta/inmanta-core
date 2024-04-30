@@ -17,7 +17,7 @@
 """
 
 import json
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
 from inmanta import resources
 from inmanta.data.model import AttributeDiff, ResourceDiff, ResourceDiffStatus, ResourceIdStr
@@ -91,7 +91,7 @@ class Attribute:
 
 
 class Resource:
-    def __init__(self, resource_id: ResourceIdStr, attributes: Dict[str, object]) -> None:
+    def __init__(self, resource_id: ResourceIdStr, attributes: dict[str, object]) -> None:
         self.resource_id = resource_id
         self._attributes = {name: Attribute(name, value) for name, value in attributes.items() if name != "version"}
 
@@ -145,19 +145,19 @@ class Resource:
 
 
 class Version:
-    def __init__(self, resources: Dict[ResourceIdStr, Resource]) -> None:
+    def __init__(self, resources: dict[ResourceIdStr, Resource]) -> None:
         self._resources = resources
 
-    def get_resource_set(self) -> Set[ResourceIdStr]:
+    def get_resource_set(self) -> set[ResourceIdStr]:
         """The names of the resources in this version"""
         return set(self._resources.keys())
 
-    def generate_diff(self, other: "Version", include_unmodified: bool = False) -> List[ResourceDiff]:
+    def generate_diff(self, other: "Version", include_unmodified: bool = False) -> list[ResourceDiff]:
         """Compare this version with another: check which resources are added, removed and modified.
         The other version is considered to be the original."""
         our_set = self.get_resource_set()
         other_set = other.get_resource_set()
-        result: List[ResourceDiff] = []
+        result: list[ResourceDiff] = []
 
         added = list(our_set - other_set)
         removed = list(other_set - our_set)
@@ -177,10 +177,10 @@ class Version:
 
 
 def generate_diff(
-    from_version_resources: Dict[ResourceIdStr, Resource],
-    to_version_resources: Dict[ResourceIdStr, Resource],
+    from_version_resources: dict[ResourceIdStr, Resource],
+    to_version_resources: dict[ResourceIdStr, Resource],
     include_unmodified: bool = False,
-) -> List[ResourceDiff]:
+) -> list[ResourceDiff]:
     """Generate a diff of two sets of resources, describing what has changed between them
 
     :param from_version_resources: The resources that are considered the starting point for comparison

@@ -1,0 +1,4 @@
+---
+description: Fix race condition in the `resource_action_consistency_check` method.
+change-type: patch
+destination-branches: [master, iso6, iso5]

@@ -1,0 +1,6 @@
+---
+description: Fix test case that breaks when run on a machine with a different default timestamp.
+issue-nr: 6051
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]

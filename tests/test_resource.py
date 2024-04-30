@@ -59,7 +59,6 @@ def test_fields_parent_type():
 
 
 def test_resource_base(snippetcompiler):
-
     import inmanta.resources
 
     @resource("__config__::XResource", agent="agent", id_attribute="key")
@@ -98,7 +97,6 @@ def test_resource_base(snippetcompiler):
 
 
 def test_resource_base_with_method_key(snippetcompiler):
-
     import inmanta.resources
 
     @resource("__config__::XResource", agent="agent", id_attribute="key")
@@ -135,7 +133,6 @@ def test_resource_base_with_method_key(snippetcompiler):
 
 
 def test_resource_with_keyword(snippetcompiler):
-
     import inmanta.resources
 
     @resource("__config__::YResource", agent="agent", id_attribute="key")
@@ -173,7 +170,6 @@ def test_resource_with_keyword(snippetcompiler):
 
 
 def test_resource_with_private_method(snippetcompiler):
-
     import inmanta.resources
 
     @resource("__config__::YResource", agent="agent", id_attribute="key")
@@ -233,7 +229,6 @@ def test_object_to_id(snippetcompiler):
 
 
 def test_resource_invalid_agent_name_annotation():
-
     import inmanta.resources
 
     with pytest.raises(ResourceException):

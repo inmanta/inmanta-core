@@ -5,8 +5,9 @@
     :contact: code@inmanta.com
     :license: Inmanta EULA
 """
+
 import os
-from typing import Optional, Tuple
+from typing import Optional
 from uuid import UUID
 
 import inmanta_plugins.lsm.allocation as lsm
@@ -36,7 +37,7 @@ class PGServiceIdAllocator(ExternalServiceIdAllocator[T]):
         """Close connection"""
         self.conn.close()
 
-    def _get_value_from_result(self, result: Optional[Tuple[T]]) -> Optional[T]:
+    def _get_value_from_result(self, result: Optional[tuple[T]]) -> Optional[T]:
         if result and result[0]:
             return result[0]
         return None

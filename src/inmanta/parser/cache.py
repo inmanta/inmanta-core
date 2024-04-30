@@ -15,13 +15,14 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import os
-from typing import List, Optional
+from typing import Optional
 
 from inmanta.ast import Namespace
 from inmanta.ast.statements import Statement
-from inmanta.const import CF_CACHE_DIR
+from inmanta.const import CF_CACHE_DIR, LogLevel
 from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 from inmanta.util import get_compiler_version
 
@@ -31,7 +32,7 @@ LOGGER = logging.getLogger(__name__)
 class CacheEnvelope:
     """Every cached file gets the exact modification time of the file it is caching, to have cheap, accurate invalidation"""
 
-    def __init__(self, timestamp: float, statements: List[Statement]) -> None:
+    def __init__(self, timestamp: float, statements: list[Statement]) -> None:
         self.timestamp = timestamp
         self.statements = statements
 
@@ -68,7 +69,7 @@ class CacheManager:
         # get file name without extension
         filepart = os.path.basename(filename).rsplit(".", maxsplit=1)[0]
         # make filename with compiler version specific extension
-        filename = f"{filepart}.{get_compiler_version().replace('.','_')}.cfc"
+        filename = f"{filepart}.{get_compiler_version().replace('.', '_')}.cfc"
 
         # construct final path
         return os.path.join(cache_folder, filename)
@@ -84,7 +85,7 @@ class CacheManager:
     def detach_from_project(self) -> None:
         self.root_cache_dir = None
 
-    def un_cache(self, namespace: Namespace, filename: str) -> Optional[List[Statement]]:
+    def un_cache(self, namespace: Namespace, filename: str) -> Optional[list[Statement]]:
         if not self.cache_enabled.get():
             # cache not enabled
             return None
@@ -113,10 +114,14 @@ class CacheManager:
                 return result.statements
         except Exception:
             self.failures += 1
-            LOGGER.warning("Compile cache loading failure, ignoring cache entry for %s", filename, exc_info=True)
+            LOGGER.warning(
+                "Compile cache loading failure, ignoring cache entry for %s",
+                filename,
+                exc_info=LOGGER.isEnabledFor(LogLevel.DEBUG.to_int),
+            )
             return None
 
-    def cache(self, namespace: Namespace, filename: str, statements: List[Statement]) -> None:
+    def cache(self, namespace: Namespace, filename: str, statements: list[Statement]) -> None:
         if not self.cache_enabled.get():
             # cache not enabled
             return
@@ -129,7 +134,11 @@ class CacheManager:
             with open(cache_filename, "wb") as fh:
                 ASTPickler(fh, protocol=4).dump(cache_entry)
         except Exception:
-            LOGGER.warning("Compile cache failure, failed to cache statements for %s", filename, exc_info=True)
+            LOGGER.warning(
+                "Compile cache failure, failed to cache statements for %s",
+                filename,
+                exc_info=LOGGER.isEnabledFor(LogLevel.DEBUG.to_int),
+            )
 
     def reset_stats(self) -> None:
         self.hits = 0

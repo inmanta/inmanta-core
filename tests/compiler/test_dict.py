@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import pytest
 
 import inmanta.compiler as compiler
@@ -175,7 +176,7 @@ def test_bad_map_lookup(snippetcompiler):
         b = {"c" : 3}
         c=b["a"]
         """,
-        "key a not found in dict, options are [c] (reported in c = b['a'] ({dir}/main.cf:3))",
+        "key a not found in dict, options are [c] (reported in b['a'] ({dir}/main.cf:3))",
     )
 
 
@@ -219,8 +220,8 @@ def test_constructor_kwargs(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
-    number n
-    number m
+    int n
+    int m
     string str
 end
 
@@ -245,7 +246,7 @@ def test_2003_constructor_kwargs_default(snippetcompiler, override: bool):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
-    number v = 0
+    int v = 0
 end
 
 implement Test using std::none
@@ -282,8 +283,8 @@ def test_constructor_kwargs_index_match(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
-    number n
-    number m
+    int n
+    int m
     string str
 end
 
@@ -309,8 +310,8 @@ def test_indexlookup_kwargs(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
-    number n
-    number m
+    int n
+    int m
     string str
 end
 
@@ -341,8 +342,8 @@ end
 implement Collection using std::none
 
 entity Test:
-    number n
-    number m
+    int n
+    int m
     string str
 end
 
@@ -392,7 +393,7 @@ dict_4 = {"ə": 4}
 dict_4_bis = {"\\u0259":41}
 
 value = "itp"
-dict_5 = {"\{\{not interpolation\}\}": "interpolation {{value}}"}
+dict_5 = {"\\{\\{not interpolation\\}\\}": "interpolation {{value}}"}
 dict_6 = {r'{{value}}': "not interpolation"}
     """  # NOQA W605
     )

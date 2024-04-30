@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump execnet from 2.0.0 to 2.0.2
+destination-branches:
+- master
+sections: {}

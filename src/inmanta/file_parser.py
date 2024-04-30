@@ -15,8 +15,8 @@
 
     Contact: code@inmanta.com
 """
+
 import os
-from typing import List
 
 from pkg_resources import Requirement
 
@@ -40,7 +40,7 @@ class PreservativeYamlParser:
     @classmethod
     def parse(cls, filename: str) -> CommentedMap:
         parser = cls._get_parser()
-        with open(filename, "r", encoding="utf-8") as fd:
+        with open(filename, encoding="utf-8") as fd:
             return parser.load(fd)
 
     @classmethod
@@ -56,19 +56,19 @@ class RequirementsTxtParser:
     """
 
     @classmethod
-    def parse(cls, filename: str) -> List[Requirement]:
+    def parse(cls, filename: str) -> list[Requirement]:
         """
         Get all the requirements in `filename` as a list of `Requirement` instances.
         """
         return [Requirement.parse(r) for r in cls.parse_requirements_as_strs(filename)]
 
     @classmethod
-    def parse_requirements_as_strs(cls, filename: str) -> List[str]:
+    def parse_requirements_as_strs(cls, filename: str) -> list[str]:
         """
         Get all the requirements in `filename` as a list of strings.
         """
         if os.path.exists(filename):
-            with open(filename, "r", encoding="utf-8") as fd:
+            with open(filename, encoding="utf-8") as fd:
                 requirements_txt_content = fd.read()
                 req_lines = [x.strip() for x in requirements_txt_content.split("\n") if len(x.strip()) > 0]
                 req_lines = cls._remove_comments(req_lines)
@@ -88,7 +88,7 @@ class RequirementsTxtParser:
 
         result = ""
         line_continuation_buffer = ""
-        with open(filename, "r", encoding="utf-8") as fd:
+        with open(filename, encoding="utf-8") as fd:
             for line in fd.readlines():
                 if line_continuation_buffer:
                     line_continuation_buffer += line
@@ -108,7 +108,7 @@ class RequirementsTxtParser:
         return result
 
     @classmethod
-    def _remove_comments(cls, lines: List[str]) -> List[str]:
+    def _remove_comments(cls, lines: list[str]) -> list[str]:
         """
         This method removes elements from the given list that only include comments. If the element
         combines a comment with a version constraint, the comment part is removed from the element.
@@ -127,7 +127,7 @@ class RequirementsTxtParser:
         return result
 
     @classmethod
-    def _remove_line_continuations(cls, lines: List[str]) -> List[str]:
+    def _remove_line_continuations(cls, lines: list[str]) -> list[str]:
         """
         Join two different list elements together if they are separated by a line continuation token.
 

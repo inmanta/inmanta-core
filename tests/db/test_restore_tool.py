@@ -15,13 +15,13 @@
 
     Contact: code@inmanta.com
 """
+
 from asyncpg import Connection
 
 from db.common import PGRestore
 
 
 async def test_pg_restore(hard_clean_db, hard_clean_db_post, postgresql_client: Connection):
-
     inp = r"""
 CREATE TABLE public.agent (
     environment uuid NOT NULL,

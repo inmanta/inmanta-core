@@ -1,0 +1,4 @@
+description: Add get_resource_type_count_for_latest_version to get the count for each resource_type over all resources in the model's latest version.
+issue-nr: 5933
+change-type: minor
+destination-branches: [master, iso6]

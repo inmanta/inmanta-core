@@ -1,0 +1,5 @@
+description: Fix bug in `inmanta module update` when requirements.txt contains additional constraints
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"

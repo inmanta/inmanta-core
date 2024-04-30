@@ -1,0 +1,7 @@
+description: "Compiler: refactored ResultCollector propagation and fixed bug in list comprehension gradual execution"
+change-type: patch
+sections:
+  bugfix: Fixed compiler bug where list comprehensions result in a ListModifiedAfterFreeze exception when the value expression is a constructor
+destination-branches:
+  - master
+  - iso6

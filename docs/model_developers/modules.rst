@@ -280,7 +280,7 @@ Setting up the dev environment
 ##############################
 To set up the development environment for a project, activate your development Python environment and
 install the project with ``inmanta project install``. To set up the environment for a single v2 module,
-run ``inmanta module install -e`` instead.
+run ``pip install -e .`` instead.
 
 The following subsections explain any additional steps you need to take if you want to make changes
 to one of the dependent modules as well.
@@ -295,7 +295,7 @@ v2 modules
 ----------
 All other modules are v2 and have been installed by ``inmanta project install`` into the active Python
 environment. If you want to be able to make changes to one of these modules, the easiest way is to
-check out the module repo separately and run ``inmanta module install -e <path>`` on it, overwriting the published
+check out the module repo separately and run ``pip install -e <path>`` on it, overwriting the published
 package that was installed previously. This will install the module in editable form: any changes you make
 to the checked out files will be picked up by the compiler. You can also do this prior to installing the
 project, in which case the pre-installed module will remain installed in editable form when you install
@@ -329,3 +329,47 @@ for supplying the agents with the appropriate ``inmanta_plugins`` packages.
 The only exception to this rule is when using the ``inmanta export`` command. It exports a project and all its modules'
 ``inmanta_plugins`` packages to the orchestrator server. When this method is used, the orchestrator does not install any modules
 from the Python package repository but instead contains all Python code as present in the local Python environment.
+
+.. _setting_up_pip_index_authentication:
+
+
+Configure the Inmanta server to install modules from a private python package repository
+----------------------------------------------------------------------------------------
+
+V2 modules can be installed from a Python package repository that requires authentication. This section explains how the Inmanta server should be configured to install v2 modules from such a Python package repository.
+
+Create a file named ``/var/lib/inmanta/.netrc`` in the orchestrator's file system.
+Add the following content to the file:
+
+.. code-block:: text
+
+  machine <hostname of the private repository>
+  login <username>
+  password <password>
+
+For more information see the doc about `pip authentication <https://pip.pypa.io/en/stable/topics/authentication/>`_.
+
+You will also need to specify the url of the repository in the ``project.yml`` file of your project (See: :ref:`specify_location_pip`).
+
+By following the previous steps, the Inmanta server will be able to install modules from a private Python package repository.
+
+
+Inter-module dependencies
+#########################
+
+The plugins code of a module mod-a can have a dependency on the plugins code of another V2 module mod-b. When doing this,
+care should be taken that the module(s) you depend on, do not define any resources or providers. Otherwise the
+python environment of the agent can get corrupt in the following way:
+
+1. The configuration model (in the project or one of the modules) constructs resources from both modules
+   mod-a and mod-b.
+2. mod-a-1.0 and mod-b-1.0 are exported: The exporter exports the x.py file to the server and the agent puts
+   the x.py file in its code directory.
+3. The configuration model is changed to only construct resources from module mod-a.
+4. mod-a-1.0 is exported again. mod-b-1.0 is no longer exported because it doesn't have any resources.
+   The x.py file still exists in the agent code directory.
+5. A new version of module mod-b (mod-b-2.0) is released and included in the project. The project is re-exported:
+   mod-a-1.0 is exported again, mod-b-2.0 is not (again because it doesn't have any resources). The old x.py file still
+   exists in the agent code directory. It is loaded by the agent instead of the one from mod-b-2.0.
+
+This issue will be resolved by a restart of the agent process.

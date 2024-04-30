@@ -16,8 +16,6 @@
     Contact: code@inmanta.com
 """
 
-from typing import List
-
 import pytest
 
 import inmanta.ast.type as inmanta_type
@@ -31,11 +29,11 @@ def test_dataflow_model_implementation_assignment_from_self(dataflow_test_helper
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
+    int n
 end
 
 entity B:
-    number n
+    int n
 end
 
 A.b [1] -- B
@@ -65,7 +63,7 @@ b -> x . b
         """,
     )
     dataflow_test_helper.verify_leaves({"b.n": {"x.n"}})
-    leaves: List[AssignableNode] = list(get_dataflow_node(dataflow_test_helper.get_graph(), "b.n").leaf_nodes())
+    leaves: list[AssignableNode] = list(get_dataflow_node(dataflow_test_helper.get_graph(), "b.n").leaf_nodes())
     assert len(leaves) == 1
     assert len(leaves[0].value_assignments) == 1
     assert leaves[0].value_assignments[0].rhs.node.value == 42

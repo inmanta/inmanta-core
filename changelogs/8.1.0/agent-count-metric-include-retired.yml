@@ -1,0 +1,5 @@
+description: Revert exclusion of retired agents in the agent count metric
+change-type: patch
+destination-branches:
+  - master
+  - iso6

@@ -1,0 +1,6 @@
+description: A proper inmanta warning is now displayed when an invalid escape sequence is detected in a regular string or a multi-line string.
+issue-nr: 5091
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

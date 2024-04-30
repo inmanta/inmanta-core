@@ -15,11 +15,15 @@
 
     Contact: code@inmanta.com
 """
-from typing import List, Optional
+
+import logging
+import re
+from typing import Optional
 
 import pytest
 
-from inmanta.module import ModuleRepoType, ProjectMetadata, RelationPrecedenceRule
+from inmanta.module import ModuleRepoType, Project, ProjectConfigurationWarning, ProjectMetadata, RelationPrecedenceRule
+from utils import assert_no_warning
 
 
 @pytest.mark.parametrize(
@@ -73,9 +77,106 @@ def test_relation_precedence_policy_parsing(
     if valid:
         assert expected_precedence_rule is not None
         project_metadata = ProjectMetadata(name="test", relation_precedence_policy=[precedence_rule])
-        relation_precedence_rules: List[RelationPrecedenceRule] = project_metadata.get_relation_precedence_rules()
+        relation_precedence_rules: list[RelationPrecedenceRule] = project_metadata.get_relation_precedence_rules()
         assert len(relation_precedence_rules) == 1
         assert relation_precedence_rules[0] == expected_precedence_rule
     else:
         with pytest.raises(ValueError):
             ProjectMetadata(name="test", relation_precedence_policy=[precedence_rule])
+
+
+def test_no_module_path(tmp_path, caplog):
+    with caplog.at_level(logging.WARNING):
+        with (tmp_path / "project.yml").open("w") as fh:
+            fh.write(
+                """
+    name: testproject
+    downloadpath: libs
+    pip:
+        index_url: https://pypi.org/simple
+    """
+            )
+
+        Project(tmp_path, autostd=False)
+    assert_no_warning(caplog)
+
+
+def test_deprecation_warning_repo_of_type_package(tmp_path):
+    with pytest.warns(
+        ProjectConfigurationWarning,
+        match=re.escape(
+            "Setting a pip index through the `repo.url` option with "
+            "type `package` in the project.yml file is no longer supported and will be ignored. "
+            "Please set the pip index url through the `pip.index_url` option instead."
+        ),
+    ):
+        with (tmp_path / "project.yml").open("w") as fh:
+            fh.write(
+                """
+    name: testproject
+    downloadpath: libs
+    repo:
+       - url: https://pypi.org/simple
+         type: package
+    pip:
+        index_url: https://pypi.org/simple
+    """
+            )
+
+        Project(tmp_path, autostd=False)
+
+
+@pytest.mark.parametrize("use_system_config, value", [(True, True), (True, False), (False, False)])
+def test_pip_config(tmp_path, caplog, use_system_config, value):
+    """
+    Verify that "use_config_file" can be specified in a project.yml file but that it isn't mandatory
+    If it is not specified, verify that the default value "False" is used in the project.
+    """
+    pip_config_file = """
+    pip:
+        index_url: https://pypi.org/simple
+
+    """
+    pip_config_file += (
+        f"""
+        use_system_config: {value}
+        """
+        if use_system_config
+        else ""
+    )
+    with caplog.at_level(logging.WARNING):
+        with (tmp_path / "project.yml").open("w") as fh:
+            fh.write(
+                f"""
+    name: testproject
+    downloadpath: libs
+    {pip_config_file}
+    """
+            )
+    project = Project(tmp_path, autostd=False)
+    assert_no_warning(caplog)
+    assert project.metadata.pip.use_system_config == value
+
+
+def test_pip_config_warnings(tmp_path):
+    """
+    Verify that a bad config produces warnings
+    """
+    pip_config_file = """
+    pip:
+        index_ur: https://pypi.org/simple
+
+    """
+
+    with (tmp_path / "project.yml").open("w") as fh:
+        fh.write(
+            f"""
+    name: testproject
+    downloadpath: libs
+    {pip_config_file}
+    """
+        )
+    with pytest.warns(
+        ProjectConfigurationWarning, match=re.escape("Found unexpected configuration value 'pip.index_ur' in 'project.yml'")
+    ):
+        Project(tmp_path, autostd=False)

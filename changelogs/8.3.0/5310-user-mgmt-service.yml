@@ -1,0 +1,7 @@
+description: Add the user management service
+issue-nr: 5310
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  feature: "{{description}}"
+

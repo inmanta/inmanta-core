@@ -1,0 +1,6 @@
+---
+description: Added changelog handling to the `inmanta module release` command.
+issue-nr: 5202
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]

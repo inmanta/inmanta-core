@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump types-pyyaml from 6.0.12.5 to 6.0.12.6
+destination-branches:
+- master
+- iso6
+sections: {}

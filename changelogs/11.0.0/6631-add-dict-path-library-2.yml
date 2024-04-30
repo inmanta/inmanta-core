@@ -1,0 +1,6 @@
+---
+description: Add the typing-extensions dependency
+issue-nr: 6631
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]

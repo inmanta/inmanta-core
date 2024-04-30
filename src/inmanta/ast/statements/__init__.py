@@ -15,20 +15,25 @@
 
     Contact: code@inmanta.com
 """
+
+from collections import abc
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from itertools import chain
-from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Optional
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     Anchor,
     DirectExecuteException,
+    Locatable,
     Location,
     Named,
     Namespace,
     Namespaced,
     OptionalValueException,
     RuntimeException,
+    WithComment,
 )
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
@@ -48,7 +53,7 @@ from inmanta.execute.runtime import (
 if TYPE_CHECKING:
     from inmanta.ast.assign import SetAttribute  # noqa: F401
     from inmanta.ast.blocks import BasicBlock  # noqa: F401
-    from inmanta.ast.type import NamedType  # noqa: F401
+    from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.ast.variables import Reference  # noqa: F401
 
 
@@ -61,8 +66,8 @@ class Statement(Namespaced):
 
     def __init__(self) -> None:
         Namespaced.__init__(self)
-        self.namespace = None  # type: Namespace
-        self.anchors = []  # type: List[Anchor]
+        self.namespace: Namespace = None
+        self.anchors: list[Anchor] = []
         self.lexpos: Optional[int] = None
 
     def get_namespace(self) -> "Namespace":
@@ -74,7 +79,8 @@ class Statement(Namespaced):
     def get_location(self) -> Location:
         return self.location
 
-    def get_anchors(self) -> List[Anchor]:
+    def get_anchors(self) -> list[Anchor]:
+        """Should only be called after normalization (DynamicStatement) or evaluation (DefinitionStatement)."""
         return self.anchors
 
     def nested_blocks(self) -> Iterator["BasicBlock"]:
@@ -116,16 +122,9 @@ class DynamicStatement(Statement):
     def normalize(self) -> None:
         raise NotImplementedError()
 
-    def requires(self) -> List[str]:
-        """List of all variable names used by this statement"""
-        raise NotImplementedError()
-
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
         raise NotImplementedError()
-
-    def execute_direct(self, requires: Dict[object, object]) -> object:
-        raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
     def declared_variables(self) -> Iterator[str]:
         """
@@ -135,18 +134,27 @@ class DynamicStatement(Statement):
 
 
 class RequiresEmitStatement(DynamicStatement):
+    """
+    Statements that execute in two stages based on their requirements. These statements have a well defined set of
+    names/variables they require before they can execute. When these are emitted, they schedule their own execution to continue
+    as soon as the requirements are met.
+    If a RequiresEmitStatement does not appear as a top-level statement in a block but as a child of another statement, instead
+    of being emitted, its requirements may be requested through `requires_emit`. These should then be used to schedule `execute`
+    when the requirements are met.
+    """
+
     __slots__ = ()
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Emits this statement by scheduling its promises and scheduling a unit to wait on its requirements. Injects the
-        schedulred promise objects in the waiter's requires in order to pass it on to the execute method.
+        scheduled promise objects in the waiter's requires in order to pass it on to the execute method.
         """
         target = ResultVariable()
         reqs = self.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self)
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
         """
         Returns a dict of the result variables required for execution. Names are an opaque identifier. May emit statements to
         break execution is smaller segments.
@@ -156,17 +164,7 @@ class RequiresEmitStatement(DynamicStatement):
         """
         return self._requires_emit_promises(resolver, queue)
 
-    def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
-    ) -> Dict[object, VariableABC]:
-        """
-        Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
-        resultcollector as a listener to result variables.
-        When this method is called, the caller must make sure to eventually call `execute` as well.
-        """
-        return self.requires_emit(resolver, queue)
-
-    def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+    def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
         """
         Acquires eager promises this statement is responsible for and returns them, wrapped in a variable, in a requires dict.
         Returns an empty dict if no promises were acquired (for performance reasons).
@@ -180,7 +178,7 @@ class RequiresEmitStatement(DynamicStatement):
         """
         return [promise.schedule(self, resolver, queue) for promise in self.get_own_eager_promises()]
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         execute the statement, give the values provided in the requires dict.
         These values correspond to the values requested via requires_emit
@@ -188,7 +186,7 @@ class RequiresEmitStatement(DynamicStatement):
         self._fulfill_promises(requires)
         return None
 
-    def _fulfill_promises(self, requires: Dict[object, object]) -> None:
+    def _fulfill_promises(self, requires: dict[object, object]) -> None:
         """
         Given a requires dict, fulfills this statements dynamic promises
         """
@@ -205,10 +203,54 @@ class RequiresEmitStatement(DynamicStatement):
 class AttributeAssignmentLHS:
     instance: "Reference"
     attribute: str
+    type_hint: Optional["Type"] = None
 
 
 class ExpressionStatement(RequiresEmitStatement):
     __slots__ = ()
+
+    def requires(self) -> list[str]:
+        """
+        List of all variable names used by this statement. Artifact from the past, hardly used anymore.
+        """
+        raise NotImplementedError()
+
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
+        """
+        Execute this expression in a static context without any scheduling, returning the expression's result.
+
+        Used by typedefs to force immediate evaluation.
+
+        :param requires: A dictionary mapping names to values.
+        """
+        raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
+
+    def as_constant(self) -> object:
+        """
+        Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
+
+        It is very similar to self.execute_direct({}) with the difference that:
+         - This method can be called prior to normalization
+         - It is expected to not have side effects (e.g. call plugins, construct entities, ....)
+
+        Because it is more restrictive, it can be called during the typing stage more safely
+
+        Used for constant propagation and default values
+        """
+        raise RuntimeException(None, "%s is not a constant" % self)
+
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
+    ) -> dict[object, VariableABC]:
+        """
+        Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
+        resultcollector as a listener to result variables.
+        When this method is called, the caller must make sure to eventually call `execute` as well.
+
+        Composite statements (e.g. conditional expression) will pass result collectors to their children rather than
+        report to them themselves.
+        """
+        return {**self.requires_emit(resolver, queue), (self, ResultCollector): WrappedValueVariable(resultcollector)}
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         """
@@ -219,11 +261,26 @@ class ExpressionStatement(RequiresEmitStatement):
         """
         raise NotImplementedError()
 
-    def as_constant(self) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
-        Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
+        Execute the expression and return the value it resolves to without performing any of the associated steps like
+        fulfilling promises or notifying result collectors.
         """
-        raise RuntimeException(None, "%s is not a constant" % self)
+        raise NotImplementedError()
+
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        """
+        Execute the expression and return the value it resolves to.
+        The requires dict contains the resolved values of the variables that were requested via requires_emit.
+        """
+        super().execute(requires, resolver, queue)
+        # resolve expression, then notify result collectors before returning
+        result: object = self._resolve(requires, resolver, queue)
+        resultcollector: Optional[ResultCollector] = requires.get((self, ResultCollector), None)
+        # `result is None` represents the absence of a result, not the `null` DSL value
+        if result is not None and resultcollector is not None:
+            resultcollector.receive_result_flatten(result, self.location)
+        return result
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         """
@@ -232,25 +289,25 @@ class ExpressionStatement(RequiresEmitStatement):
         raise NotImplementedError()
 
 
-class Resumer(ExpressionStatement):
+class Resumer(Locatable):
     """
     Resume on a set of requirement variables' values when they become ready (i.e. they are complete).
     """
 
     __slots__ = ()
 
-    def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
+    def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         pass
 
 
-class RawResumer(ExpressionStatement):
+class RawResumer(Locatable):
     """
     Resume on a set of requirement variables when they become ready (i.e. they are complete).
     """
 
     __slots__ = ()
 
-    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
+    def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         pass
 
 
@@ -300,7 +357,7 @@ class VariableReferenceHook(RawResumer):
                 self,
             )
 
-    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
+    def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Fetches the variable when it's available and calls variable resumer.
         """
@@ -324,9 +381,7 @@ class VariableReferenceHook(RawResumer):
                 instance: object = self.instance.execute(instance_requires, resolver, queue)
 
                 if isinstance(instance, list):
-                    raise RuntimeException(
-                        self, "can not get attribute %s, %s is not an entity but a list" % (self.name, instance)
-                    )
+                    raise RuntimeException(self, f"can not get attribute {self.name}, {instance} is not an entity but a list")
                 if not isinstance(instance, Instance):
                     raise RuntimeException(
                         self,
@@ -347,19 +402,16 @@ class VariableReferenceHook(RawResumer):
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
     def __str__(self) -> str:
-        return "%s.%s" % (self.instance, self.name)
+        return f"{self.instance}.{self.name}"
 
     def __repr__(self) -> str:
-        return "%s(%r, %s, %r, propagate_unset=%r)" % (
-            self.__class__.__name__,
-            self.instance,
-            self.name,
-            self.variable_resumer,
-            self.propagate_unset,
+        return (
+            f"{self.__class__.__name__}({self.instance!r}, "
+            f"{self.name}, {self.variable_resumer!r}, propagate_unset={self.propagate_unset!r})"
         )
 
 
@@ -472,25 +524,29 @@ class ReferenceStatement(ExpressionStatement):
 
     __slots__ = ("children",)
 
-    def __init__(self, children: List[ExpressionStatement]) -> None:
+    def __init__(self, children: Sequence[ExpressionStatement]) -> None:
         ExpressionStatement.__init__(self)
         self.children: Sequence[ExpressionStatement] = children
-        self.anchors.extend((anchor for e in self.children for anchor in e.get_anchors()))
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
-        for c in self.children:
-            c.normalize()
+        for child in self.children:
+            child.normalize()
+            self.anchors.extend(child.get_anchors())
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), *(subexpr.get_all_eager_promises() for subexpr in self.children))
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         return [req for v in self.children for req in v.requires()]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
-        requires.update({rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()})
-        return requires
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
+        try:
+            requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
+            requires.update({rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()})
+            return requires
+        except RuntimeException as e:
+            e.set_statement(self, False)
+            raise e
 
 
 class AssignStatement(DynamicStatement):
@@ -504,12 +560,13 @@ class AssignStatement(DynamicStatement):
         DynamicStatement.__init__(self)
         self.lhs: Optional["Reference"] = lhs
         self.rhs: ExpressionStatement = rhs
-        if lhs is not None:
-            self.anchors.extend(lhs.get_anchors())
-        self.anchors.extend(rhs.get_anchors())
 
     def normalize(self) -> None:
         self.rhs.normalize()
+        if self.lhs is not None:
+            self.lhs.normalize()
+            self.anchors.extend(self.lhs.get_anchors())
+        self.anchors.extend(self.rhs.get_anchors())
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(
@@ -518,7 +575,7 @@ class AssignStatement(DynamicStatement):
             self.rhs.get_all_eager_promises(),
         )
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         out = self.lhs.requires() if self.lhs is not None else []  # type : List[str]
         out.extend(self.rhs.requires())  # type : List[str]
         return out
@@ -546,14 +603,13 @@ class Literal(ExpressionStatement):
             return repr(self.value).lower()
         return repr(self.value)
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         return []
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return self.value
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         return self.value
 
     def as_constant(self) -> object:
@@ -572,18 +628,15 @@ class DefinitionStatement(Statement):
         Statement.__init__(self)
 
 
-class TypeDefinitionStatement(DefinitionStatement, Named):
-    comment: Optional[str]
-
+class TypeDefinitionStatement(DefinitionStatement, Named, WithComment):
     def __init__(self, namespace: Namespace, name: str) -> None:
         DefinitionStatement.__init__(self)
         self.name = name
         self.namespace = namespace
         self.fullName = namespace.get_full_name() + "::" + str(name)
         self.type = None  # type: NamedType
-        self.comment = None
 
-    def register_types(self) -> Tuple[str, "NamedType"]:
+    def register_types(self) -> tuple[str, "NamedType"]:
         self.namespace.define_type(self.name, self.type)
         return (self.fullName, self.type)
 

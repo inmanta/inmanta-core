@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump furo from 2023.5.20 to 2023.7.26
+destination-branches:
+- master
+sections: {}

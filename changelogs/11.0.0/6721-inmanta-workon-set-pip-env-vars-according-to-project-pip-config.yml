@@ -1,0 +1,9 @@
+description: >
+  Set the ``PIP_PRE``, ``PIP_INDEX_URL`` and ``PIP_EXTRA_INDEX_URL`` pip env vars
+  according to the project.yml pip config when activating an inmanta environment
+  with the ``inmanta-workon`` command.
+issue-nr: 6721
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"

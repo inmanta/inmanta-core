@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import contextlib
 import textwrap
 
@@ -282,15 +283,7 @@ def test_relation_implicit_inverse_on_plain_attribute(snippetcompiler) -> None:
 
         A(b=B())
         """,
-        textwrap.dedent(
-            """
-            Could not set attribute `b` on instance `__config__::A (instantiated at {dir}/main.cf:12)` (reported in Construct(A) ({dir}/main.cf:12))
-            caused by:
-              Attempting to assign constructor of type __config__::B to attribute that is not a relation attribute: b on __config__::A (instantiated at {dir}/main.cf:12) (reported in Construct(B) ({dir}/main.cf:12))
-            """.lstrip(  # noqa: E501
-                "\n"
-            ).rstrip()
-        ),
+        "Can not assign a value of type B to a variable of type int (reported in Construct(B) ({dir}/main.cf:12))",
     )
 
 
@@ -314,16 +307,8 @@ def test_relation_implicit_inverse_on_different_entity_type(snippetcompiler) -> 
 
         A(b=B())
         """,
-        textwrap.dedent(
-            """
-            Could not set attribute `b` on instance `__config__::A (instantiated at {dir}/main.cf:13)` (reported in Construct(A) ({dir}/main.cf:13))
-            caused by:
-              Invalid Constructor call:
-            \t* Missing relation 'a'. The relation __config__::B.a is part of an index. (reported in Construct(B) ({dir}/main.cf:13))
-            """.lstrip(  # noqa: E501
-                "\n"
-            ).rstrip()
-        ),
+        "Can not assign a value of type __config__::B to a variable "
+        "of type __config__::C (reported in Construct(B) ({dir}/main.cf:13))",
     )
 
 

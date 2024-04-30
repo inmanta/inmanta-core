@@ -15,10 +15,11 @@
 
     Contact: code@inmanta.com
 """
+
 import inspect
 from collections import abc
 from itertools import chain
-from typing import List, Type, TypeVar
+from typing import TypeVar
 
 import utils
 from inmanta.ast import Anchor, LocatableString, Location, Range
@@ -108,7 +109,7 @@ def test_slots_ast():
 T = TypeVar("T", bound=Statement)
 
 
-def create_instance(cls: Type[T]) -> T:
+def create_instance(cls: type[T]) -> T:
     """
     Create a dummy instance of a class. Assumes the class does not have keyword-only arguments for its constructor.
     """
@@ -141,7 +142,7 @@ class DummyArgument:
     def __iter__(self) -> abc.Iterator["DummyArgument"]:
         return iter(())
 
-    def get_anchors(self) -> List[Anchor]:
+    def get_anchors(self) -> list[Anchor]:
         return []
 
     def get_location(self) -> Location:

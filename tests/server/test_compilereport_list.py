@@ -15,9 +15,12 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
+import itertools
 import json
 import uuid
+from collections import abc
 from operator import itemgetter
 
 import pytest
@@ -25,6 +28,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
 from inmanta.server.config import get_bind_port
+from inmanta.util import parse_timestamp
 
 
 def compile_ids(compile_objects):
@@ -53,7 +57,8 @@ async def env_with_compile_reports(client, environment):
             do_export=bool(i % 3),
             force_update=False,
             metadata={"meta": 42} if i % 2 else None,
-            environment_variables={"TEST_ENV_VAR": True} if i % 2 else None,
+            requested_environment_variables={"TEST_ENV_VAR": "True"} if i % 2 else {},
+            used_environment_variables={"TEST_ENV_VAR": "True"} if i % 2 else None,
             success=i != 0,
             handled=True,
             version=i,
@@ -101,7 +106,7 @@ async def test_compile_reports_paging(server, client, env_with_compile_reports, 
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page
@@ -163,6 +168,14 @@ async def test_compile_reports_paging(server, client, env_with_compile_reports, 
     assert len(result.result["data"]) == 6
     assert compile_ids(result.result["data"]) == all_compile_ids_in_expected_order
 
+    env_vars: abc.Mapping[str, str] = {"TEST_ENV_VAR": "True"}
+
+    for c, expected in zip(
+        result.result["data"],
+        itertools.cycle((env_vars, {}) if order == "ASC" else ({}, env_vars)),
+    ):
+        assert c["environment_variables"] == expected
+
     assert result.result["metadata"] == {"total": 6, "before": 0, "after": 0, "page_size": 6}
 
 
@@ -212,15 +225,15 @@ async def test_compile_reports_filters(server, client, env_with_compile_reports)
     )
     assert result.code == 200
     assert len(result.result["data"]) == 3
-    assert datetime.datetime.strptime(result.result["data"][0]["requested"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    ) == compile_requested_timestamps[4].astimezone(datetime.timezone.utc)
-    assert datetime.datetime.strptime(result.result["data"][1]["requested"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    ) == compile_requested_timestamps[5].astimezone(datetime.timezone.utc)
-    assert datetime.datetime.strptime(result.result["data"][2]["requested"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    ) == compile_requested_timestamps[6].astimezone(datetime.timezone.utc)
+    assert parse_timestamp(result.result["data"][0]["requested"]) == compile_requested_timestamps[4].astimezone(
+        datetime.timezone.utc
+    )
+    assert parse_timestamp(result.result["data"][1]["requested"]) == compile_requested_timestamps[5].astimezone(
+        datetime.timezone.utc
+    )
+    assert parse_timestamp(result.result["data"][2]["requested"]) == compile_requested_timestamps[6].astimezone(
+        datetime.timezone.utc
+    )
 
 
 @pytest.mark.parametrize(

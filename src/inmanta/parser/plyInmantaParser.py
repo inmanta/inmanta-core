@@ -15,20 +15,32 @@
 
     Contact: code@inmanta.com
 """
+
+import functools
 import logging
 import re
-import warnings
-from itertools import accumulate
-from typing import Iterator, List, Optional, Tuple, Union
+import string
+from collections import abc
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Optional, Union
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
 
-from inmanta.ast import LocatableString, Location, Namespace, Range
+from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
 from inmanta.ast.statements import ExpressionStatement, Literal, Statement
-from inmanta.ast.statements.assign import CreateDict, CreateList, IndexLookup, MapLookup, ShortIndexLookup, StringFormat
+from inmanta.ast.statements.assign import (
+    CreateDict,
+    CreateList,
+    IndexLookup,
+    MapLookup,
+    ShortIndexLookup,
+    StringFormat,
+    StringFormatV2,
+)
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import (
     DefineAttribute,
@@ -41,10 +53,10 @@ from inmanta.ast.statements.define import (
     DefineTypeConstraint,
     TypeDeclaration,
 )
-from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, WrappedKwargs
+from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, ListComprehension, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning, plyInmantaLex
+from inmanta.parser import InvalidNamespaceAccess, ParserException, plyInmantaLex
 from inmanta.parser.cache import CacheManager
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
@@ -52,20 +64,26 @@ from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
 LOGGER = logging.getLogger()
 
-
 file = "NOFILE"
 namespace: Optional[Namespace] = None
 
 precedence = (
+    # precedence rule for productions that should eagerly shift new tokens as long as they remain feasible
+    # e.g. prefer one statement `x = 1 not in []` over two statements `x = 1` and `not in []`
+    ("nonassoc", "LOW"),
+    ("nonassoc", "MATCHING"),
+    ("nonassoc", "REGEX"),
     ("right", ","),
     ("nonassoc", ":"),
     ("nonassoc", "?"),
     ("left", "OR"),
     ("left", "AND"),
     ("left", "CMP_OP"),
+    ("left", "PLUS_OP", "MINUS_OP"),
+    ("left", "*", "DIVISION_OP", "%"),
+    ("left", "DOUBLE_STAR"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
-    ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY", "NS_REF", "VAR_REF", "MAP_LOOKUP"),
     ("left", "CID", "ID"),
     ("left", "(", "["),
     ("left", "MLS"),
@@ -120,8 +138,15 @@ def p_main(p: YaccProduction) -> None:
     p[0] = v
 
 
+# low-precedence production that consumes no tokens, has two use cases:
+# - use its low precedence compared to other tokens to prefer one production over another (especially relevant for recursion)
+# - simple placeholder to unify multiple similar rules with optional tokens under one production
+def p_empty(p: YaccProduction) -> None:
+    "empty : %prec LOW"
+
+
 def p_main_head(p: YaccProduction) -> None:
-    "head : %prec EMPTY"
+    "head : empty"
     p[0] = None
 
 
@@ -154,11 +179,6 @@ def p_top_stmt(p: YaccProduction) -> None:
     p[0] = p[1]
 
 
-def p_empty(p: YaccProduction) -> None:
-    "empty : %prec EMPTY"
-    pass
-
-
 #######################
 # IMPORT
 #######################
@@ -185,7 +205,7 @@ def p_stmt(p: YaccProduction) -> None:
     """statement : assign
     | for
     | if
-    | expression"""
+    | expression empty"""
     p[0] = p[1]
 
 
@@ -494,56 +514,6 @@ def p_block(p: YaccProduction) -> None:
 
 
 # RELATION
-def p_relation_deprecated(p: YaccProduction) -> None:
-    "relation : class_ref ID multi REL multi class_ref ID"
-    if not (p[4] == "--"):
-        LOGGER.warning(
-            "DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" % (p[4], Location(file, p.lineno(4)))
-        )
-    p[0] = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
-    attach_lnr(p, 2)
-    deprecated_relation_warning(p)
-
-
-def p_relation_deprecated_comment(p: YaccProduction) -> None:
-    "relation : class_ref ID multi REL multi class_ref ID MLS"
-    if not (p[4] == "--"):
-        LOGGER.warning(
-            "DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" % (p[4], Location(file, p.lineno(4)))
-        )
-    rel = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
-    rel.comment = str(p[8])
-    p[0] = rel
-    attach_lnr(p, 2)
-    deprecated_relation_warning(p)
-
-
-def deprecated_relation_warning(p: YaccProduction) -> None:
-    def format_multi(multi: Tuple[int, Optional[int]]) -> str:
-        values: Tuple[str, str] = tuple(v if v is not None else "" for v in multi)
-        return "[%s:%s]" % values if values[0] != values[1] else "[%s]" % values[0]
-
-    warnings.warn(
-        SyntaxDeprecationWarning(
-            p[0].location,
-            None,
-            "The relation definition syntax"
-            " `{entity_left} {attr_left_on_right} {multi_left} {rel} {multi_right} {entity_right} {attr_right_on_left}`"
-            " is deprecated. Please use"
-            " `{entity_left}.{attr_right_on_left} {multi_right} -- {entity_right}.{attr_left_on_right} {multi_left}`"
-            " instead.".format(
-                entity_left=p[1],
-                attr_left_on_right=p[2],
-                multi_left=format_multi(p[3]),
-                rel=p[4],
-                multi_right=format_multi(p[5]),
-                entity_right=p[6],
-                attr_right_on_left=p[7],
-            ),
-        ),
-    )
-
-
 def p_relation_outer_comment(p: YaccProduction) -> None:
     "relation : relation_def MLS"
     rel = p[1]
@@ -552,7 +522,7 @@ def p_relation_outer_comment(p: YaccProduction) -> None:
 
 
 def p_relation_outer(p: YaccProduction) -> None:
-    "relation : relation_def %prec RELATION_DEF"
+    "relation : relation_def empty"
     p[0] = p[1]
 
 
@@ -604,7 +574,7 @@ def p_multi_4(p: YaccProduction) -> None:
 
 
 def p_typedef_outer(p: YaccProduction) -> None:
-    """typedef : typedef_inner %prec TYPEDEF_INNER"""
+    """typedef : typedef_inner empty"""
     p[0] = p[1]
 
 
@@ -619,6 +589,13 @@ def p_typedef_1(p: YaccProduction) -> None:
     """typedef_inner : TYPEDEF ID AS ns_ref MATCHING expression"""
     assert namespace
     p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[6])
+    attach_lnr(p, 2)
+
+
+def p_typedef_regex(p: YaccProduction) -> None:
+    """typedef_inner : TYPEDEF ID AS ns_ref REGEX"""
+    assert namespace
+    p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[5])
     attach_lnr(p, 2)
 
 
@@ -644,13 +621,15 @@ def p_expression(p: YaccProduction) -> None:
     """expression : boolean_expression
     | constant
     | function_call
-    | var_ref %prec VAR_REF
+    | var_ref empty
     | constructor
     | list_def
+    | list_comprehension
     | map_def
-    | map_lookup %prec MAP_LOOKUP
+    | map_lookup empty
     | index_lookup
-    | conditional_expression"""
+    | conditional_expression
+    | arithmetic_expression"""
     p[0] = p[1]
 
 
@@ -671,6 +650,12 @@ def p_boolean_expression(p: YaccProduction) -> None:
     attach_lnr(p, 2)
 
 
+def p_boolean_expression_not_in(p: YaccProduction) -> None:
+    """boolean_expression : expression NOT IN expression"""
+    p[0] = Not(In(p[1], p[4]))
+    attach_lnr(p, 2)
+
+
 def p_boolean_expression_not(p: YaccProduction) -> None:
     """boolean_expression : NOT expression"""
     p[0] = Not(p[2])
@@ -687,6 +672,21 @@ def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
     """boolean_expression : ID IS DEFINED"""
     p[0] = IsDefined(None, p[1])
     attach_lnr(p)
+
+
+def p_arithmetic_expression(p: YaccProduction) -> None:
+    """arithmetic_expression : expression PLUS_OP expression
+    | expression MINUS_OP expression
+    | expression DIVISION_OP expression
+    | expression '*' expression
+    | expression '%' expression
+    | expression DOUBLE_STAR expression
+    """
+    operator = Operator.get_operator_class(str(p[2]))
+    if operator is None:
+        raise ParserException(p[1].location, str(p[2]), f"Invalid operator {str(p[2])}")
+    p[0] = operator(p[1], p[3])
+    attach_lnr(p, 2)
 
 
 def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:
@@ -710,7 +710,7 @@ def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:
 
 
 def p_operand(p: YaccProduction) -> None:
-    """operand : expression"""
+    """operand : expression empty"""
     p[0] = p[1]
 
 
@@ -741,8 +741,76 @@ def p_function_call_err_dot(p: YaccProduction) -> None:
 
 def p_list_def(p: YaccProduction) -> None:
     "list_def : '[' operand_list ']'"
-    p[0] = CreateList(p[2])
+    node = CreateList(p[2])
+    try:
+        node = Literal(node.as_constant())
+    except RuntimeException:
+        # Can't shortcut
+        pass
+
+    p[0] = node
+
     attach_lnr(p, 1)
+
+
+@dataclass
+class ForSpecifier:
+    variable: LocatableString
+    iterable: ExpressionStatement
+    guard: Optional[ExpressionStatement] = None
+
+
+def p_list_comprehension(p: YaccProduction) -> None:
+    "list_comprehension : '[' expression list_comprehension_for list_comprehension_guard ']'"
+
+    def create_list_comprehension(value_expression: ExpressionStatement, for_specifier: ForSpecifier) -> ListComprehension:
+        result: ListComprehension = ListComprehension(
+            value_expression, for_specifier.variable, for_specifier.iterable, for_specifier.guard
+        )
+        line_nb_token: int = 1
+        result.location = Location(file, p.lineno(line_nb_token))
+        result.namespace = namespace
+        result.lexpos = p.lexpos(line_nb_token)
+        return result
+
+    # for-specifiers in reverse order
+    loops: abc.Sequence[ForSpecifier] = p[3]
+    loops[0].guard = p[4]
+    # `[z for y in x.y for z in y.z if y > 0 if z > 0]` is syntactic sugar for
+    # `[[z for z in y.z if y > 0 and z > 0] for y in x.y]`, loops = [(z, y.z), (y, x.y)]
+    p[0] = functools.reduce(
+        lambda acc, for_spec: create_list_comprehension(value_expression=acc, for_specifier=for_spec),
+        loops,
+        p[2],
+    )
+
+
+def p_list_comprehension_for_empty(p: YaccProduction) -> None:
+    "list_comprehension_for_empty : empty"
+    p[0] = []  # list[ForSpecifier]
+
+
+def p_list_comprehension_for(p: YaccProduction) -> None:
+    """list_comprehension_for : FOR ID IN expression list_comprehension_for_empty
+    | FOR ID IN expression list_comprehension_for"""
+    p[0] = p[5]  # list[ForSpecifier]
+    # for-specifiers in reverse order
+    p[0].append(ForSpecifier(variable=p[2], iterable=p[4]))
+
+
+def p_list_comprehension_guard_empty(p: YaccProduction) -> None:
+    "list_comprehension_guard : empty"
+    p[0] = None
+
+
+def p_list_comprehension_guard(p: YaccProduction) -> None:
+    "list_comprehension_guard : IF expression list_comprehension_guard"
+    if p[3] is None:
+        p[0] = p[2]
+    else:
+        # `if x if y` is syntactic sugar for `if x and y`
+        p[0] = And(p[2], p[3])
+        attach_lnr(p, 1)
 
 
 def p_r_string_dict_key(p: YaccProduction) -> None:
@@ -759,7 +827,8 @@ def p_string_dict_key(p: YaccProduction) -> None:
         raise ParserException(
             p[1].location,
             str(p[1]),
-            "String interpolation is not supported in dictionary keys. Use raw string to use a key containing double curly brackets",  # NOQA E501
+            "String interpolation is not supported in dictionary keys. "
+            "Use raw string to use a key containing double curly brackets",
         )
     p[0] = p[1]
 
@@ -782,7 +851,16 @@ def p_pair_list_empty(p: YaccProduction) -> None:
 
 def p_map_def(p: YaccProduction) -> None:
     "map_def : '{' pair_list '}'"
+
+    # the constructor does duplicate check
     p[0] = CreateDict(p[2])
+    try:
+        # if we can, shortcut to a constant
+        p[0] = Literal({k: v.as_constant() for k, v in p[2]})
+    except RuntimeException:
+        # Can't shortcut
+        pass
+
     attach_lnr(p, 1)
 
 
@@ -847,6 +925,69 @@ def p_constant_string(p: YaccProduction) -> None:
     attach_lnr(p)
 
 
+def p_constant_fstring(p: YaccProduction) -> None:
+    "constant : FSTRING"
+    formatter = string.Formatter()
+
+    # formatter.parse returns an iterable of tuple (literal_text, field_name, format_spec, conversion)
+    parsed: abc.Sequence[tuple[str, Optional[str], Optional[str], Optional[str]]]
+    try:
+        parsed = list(formatter.parse(str(p[1])))
+    except ValueError as e:
+        raise ParserException(p[1].location, str(p[1]), f"Invalid f-string: {e}")
+
+    start_lnr = p[1].location.lnr
+    start_char_pos = p[1].location.start_char + 2  # FSTRING tokens begin with `f"` or `f'` of length 2
+
+    locatable_matches: list[tuple[str, LocatableString]] = []
+
+    def locate_match(
+        match: tuple[str, Optional[str], Optional[str], Optional[str]], start_char_pos: int, end_char: int
+    ) -> None:
+        """
+        Associates a parsed field name with a locatable string
+        """
+        assert match[1]  # make mypy happy
+        range: Range = Range(p[1].location.file, start_lnr, start_char_pos, start_lnr, end_char)
+        locatable_string = LocatableString(match[1], range, p[1].lexpos, p[1].namespace)
+        locatable_matches.append((match[1], locatable_string))
+
+    for match in parsed:
+        if not match[1]:
+            # Happens when the format string ends with literal text (and not a replacement field): we're done parsing.
+            break
+        literal_text_len = len(match[0])
+        field_name_len = len(match[1])
+        brackets_length = 1 if field_name_len else 0
+        start_char_pos += literal_text_len + brackets_length
+        end_char = start_char_pos + field_name_len
+
+        locate_match(match, start_char_pos, end_char)
+        start_char_pos += field_name_len
+
+        if match[2]:
+            # A format specifier was provided
+            start_char_pos += 1  # Account for the ":" character
+            sub_parsed: Iterable[tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(match[2])
+            for submatch in sub_parsed:
+                if not submatch[1]:
+                    # Happens when the format string ends with literal text (and not a replacement field): we're done parsing.
+                    break
+                literal_text_len = len(submatch[0])
+                inner_field_name_len = len(submatch[1])
+                inner_brackets_len = 1 if inner_field_name_len else 0
+                start_char_pos += literal_text_len + inner_brackets_len
+                end_char = start_char_pos + inner_field_name_len
+
+                locate_match(submatch, start_char_pos, end_char)
+                start_char_pos += inner_field_name_len + inner_brackets_len
+
+        start_char_pos += brackets_length
+
+    p[0] = StringFormatV2(str(p[1]), convert_to_references(locatable_matches))
+    attach_from_string(p)
+
+
 def p_constant_rstring(p: YaccProduction) -> None:
     "constant : RSTRING"
     p[0] = Literal(str(p[1]))
@@ -864,7 +1005,7 @@ format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
 def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal, StringFormat]:
-    matches: List[re.Match[str]] = list(format_regex_compiled.finditer(str(string_ast)))
+    matches: list[re.Match[str]] = list(format_regex_compiled.finditer(str(string_ast)))
     if len(matches) == 0:
         return Literal(str(string_ast))
 
@@ -873,7 +1014,7 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
     whole_string = str(string_ast)
     mls_offset: int = 3 if mls else 1  # len(""")  or len(') or len(")
 
-    def char_count_to_lnr_char(position: int) -> Tuple[int, int]:
+    def char_count_to_lnr_char(position: int) -> tuple[int, int]:
         # convert in-string position to lnr/charcount
         before = whole_string[0:position]
         lines = before.count("\n")
@@ -882,54 +1023,87 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
         else:
             return start_lnr + lines, position - before.rindex("\n")
 
-    locatable_matches: List[Tuple[str, LocatableString]] = []
+    locatable_matches: list[tuple[str, LocatableString]] = []
     for match in matches:
         start_line, start_char = char_count_to_lnr_char(match.start(2))
         end_line, end_char = char_count_to_lnr_char(match.end(2))
         range: Range = Range(string_ast.location.file, start_line, start_char, end_line, end_char)
         locatable_string = LocatableString(match[2], range, string_ast.lexpos, string_ast.namespace)
         locatable_matches.append((match[1], locatable_string))
-    return create_string_format(string_ast, locatable_matches)
+
+    return StringFormat(str(string_ast), convert_to_references(locatable_matches))
 
 
-def create_string_format(format_string: LocatableString, variables: List[Tuple[str, LocatableString]]) -> StringFormat:
+def convert_to_references(variables: list[tuple[str, LocatableString]]) -> list[tuple["Reference", str]]:
     """
-    Create a string interpolation statement. This function assumes that the variables of a match are on the same line.
+    This function is used in a context of string formatting. It expects variables that are part of a single line
+    format string and converts them to a format that can be processed by StringFormat (for regular
+    string interpolation) or by StringFormatV2 (for f-string formatting).
 
-    :param format_string: the LocatableString as it was received by get_string_ast_node()
-    :param variables: A list of tuples where each tuple is a combination of a string and LocatableString
-                        The string is the match containing the {{}} (ex: {{a.b}}) and the LocatableString is composed of
-                        just the variables and the range for those variables.
-                        (ex. LocatableString("a.b", range(a.b), lexpos, namespace))
+    :param variables: A list of tuples where each tuple is a combination of a string and LocatableString.
+        For regular string interpolation:
+            - The string is the match containing the {{}} (ex: {{a.b}})
+            - The LocatableString is composed of just the variables and the range for those variables.
+            (ex. LocatableString("a.b", range(a.b), lexpos, namespace))
+
+        For f-strings:
+            - The string is the plain variable name without brackets (ex: 'a.b') and including any potential whitespaces.
+            - The LocatableString is the same as for regular string interpolation
+    :returns: A tuple where all LocatableString have been converted to Reference. These references are cleaned up of any
+        potential whitespace character. The matching str holding the variable name is left untouched i.e. will still contain
+        potential whitespace characters.
     """
+
+    def normalize(variable: str, locatable: LocatableString, offset: int = 0) -> LocatableString:
+        """
+        Strip a variable of potential whitespaces and compute the locatable string.
+        :param variable: String representation for a plain variable or composite part of a variable
+            including potential whitespace.
+        :param locatable: LocatableString associated to this variable.
+        :param offset: Used when normalizing a subpart of a composite variable (e.g. 'a.b.c') to track where the current
+            subpart starts.
+        """
+        start_char = locatable.location.start_char + offset
+        end_char = start_char + len(variable)
+
+        variable_left_trim = variable.lstrip()
+        left_spaces: int = len(variable) - len(variable_left_trim)
+        variable_full_trim = variable_left_trim.rstrip()
+        right_spaces: int = len(variable_left_trim) - len(variable_full_trim)
+
+        range: Range = Range(
+            locatable.location.file,
+            locatable.location.lnr,
+            start_char + left_spaces,
+            locatable.location.lnr,
+            end_char - right_spaces,
+        )
+        return LocatableString(variable_full_trim, range, locatable.lexpos, locatable.namespace)
+
     assert namespace
-    _vars = []
+    _vars: list[tuple[Reference, str]] = []
     for match, var in variables:
         var_name: str = str(var)
-        var_parts: List[str] = var_name.split(".")
-        start_char = var.location.start_char
-        end_char = start_char + len(var_parts[0])
-        range: Range = Range(var.location.file, var.location.lnr, start_char, var.location.lnr, end_char)
-        ref_locatable_string = LocatableString(var_parts[0], range, var.lexpos, var.namespace)
+        var_parts: list[str] = var_name.split(".")
+
+        ref_locatable_string: LocatableString = normalize(var_parts[0], var)
+
         ref = Reference(ref_locatable_string)
         ref.location = ref_locatable_string.location
         ref.namespace = namespace
         if len(var_parts) > 1:
-            attribute_offsets: Iterator[int] = accumulate(
-                var_parts[1:], lambda acc, part: acc + len(part) + 1, initial=end_char + 1
-            )
-            for attr, char_offset in zip(var_parts[1:], attribute_offsets):
-                range_attr: Range = Range(
-                    var.location.file, var.location.lnr, char_offset, var.location.lnr, char_offset + len(attr)
-                )
-                attr_locatable_string: LocatableString = LocatableString(attr, range_attr, var.lexpos, var.namespace)
+            offset = len(var_parts[0]) + 1
+            for attr in var_parts[1:]:
+                attr_locatable_string: LocatableString = normalize(attr, var, offset=offset)
                 ref = AttributeReference(ref, attr_locatable_string)
-                ref.location = range_attr
+                ref.location = attr_locatable_string.location
                 ref.namespace = namespace
+                offset += len(attr) + 1
+            # For a composite variable e.g. 'a.b.c', we only add the reference to the innermost attribute (e.g. 'c')
             _vars.append((ref, match))
         else:
             _vars.append((ref, match))
-    return StringFormat(str(format_string), _vars)
+    return _vars
 
 
 def p_constant_list(p: YaccProduction) -> None:
@@ -955,8 +1129,8 @@ def p_constants_collect(p: YaccProduction) -> None:
 
 
 def p_wrapped_kwargs(p: YaccProduction) -> None:
-    "wrapped_kwargs : '*' '*' operand"
-    p[0] = WrappedKwargs(p[3])
+    "wrapped_kwargs : DOUBLE_STAR operand"
+    p[0] = WrappedKwargs(p[2])
     attach_lnr(p, 1)
 
 
@@ -1046,12 +1220,12 @@ def p_operand_list_term(p: YaccProduction) -> None:
 
 
 def p_operand_list_term_2(p: YaccProduction) -> None:
-    "operand_list : %prec OPERAND_LIST"
+    "operand_list : empty"
     p[0] = []
 
 
 def p_var_ref(p: YaccProduction) -> None:
-    "var_ref : attr_ref %prec VAR_REF"
+    "var_ref : attr_ref empty"
     p[0] = p[1]
 
 
@@ -1062,7 +1236,7 @@ def p_attr_ref(p: YaccProduction) -> None:
 
 
 def p_var_ref_2(p: YaccProduction) -> None:
-    "var_ref : ns_ref %prec NS_REF"
+    "var_ref : ns_ref empty"
     p[0] = Reference(p[1])
     attach_from_string(p, 1)
 
@@ -1080,7 +1254,7 @@ def p_class_ref_direct(p: YaccProduction) -> None:
 
 def p_class_ref(p: YaccProduction) -> None:
     "class_ref : ns_ref SEP CID"
-    p[0] = "%s::%s" % (str(p[1]), p[3])
+    p[0] = f"{str(p[1])}::{p[3]}"
     merge_lnr_to_string(p, 1, 3)
 
 
@@ -1091,7 +1265,7 @@ def p_class_ref_err_dot(p: YaccProduction) -> None:
     cid: LocatableString = p[3]
     assert namespace
     full_string: LocatableString = LocatableString(
-        "%s.%s" % (var_str, cid),
+        f"{var_str}.{cid}",
         expand_range(var_str.location, cid.location),
         var_str.lexpos,
         namespace,
@@ -1123,7 +1297,7 @@ def p_class_ref_list_term_err(p: YaccProduction) -> None:
 
 def p_ns_ref(p: YaccProduction) -> None:
     "ns_ref : ns_ref SEP ID"
-    p[0] = "%s::%s" % (p[1], p[3])
+    p[0] = f"{p[1]}::{p[3]}"
     merge_lnr_to_string(p, 1, 3)
 
 
@@ -1173,7 +1347,7 @@ lexer = plyInmantaLex.lexer
 parser = yacc.yacc()
 
 
-def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement]:
+def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statement]:
     """Actual parsing code"""
     global file
     file = tfile
@@ -1184,7 +1358,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statem
     lexer.begin("INITIAL")
 
     if content is None:
-        with open(tfile, "r", encoding="utf-8") as myfile:
+        with open(tfile, encoding="utf-8") as myfile:
             data = myfile.read()
             if len(data) == 0:
                 return []
@@ -1207,7 +1381,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statem
 cache_manager = CacheManager()
 
 
-def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> List[Statement]:
+def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> list[Statement]:
     statements = cache_manager.un_cache(namespace, filename)
     if statements is not None:
         return statements

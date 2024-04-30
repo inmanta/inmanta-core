@@ -15,10 +15,10 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import json
 import uuid
-from typing import Dict
 
 import pytest
 
@@ -39,6 +39,7 @@ async def env_with_versions(environment):
             total=1,
             released=i != 1,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -46,7 +47,7 @@ async def env_with_versions(environment):
 async def create_resource_in_multiple_versions(
     environment: uuid.UUID,
     path: str,
-    version_attributes_map: Dict[int, Dict[str, object]],
+    version_attributes_map: dict[int, dict[str, object]],
     agent: str = "internal",
     resource_type: str = "std::File",
     status: ResourceState = ResourceState.deployed,
@@ -58,7 +59,6 @@ async def create_resource_in_multiple_versions(
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
             attributes={**attributes, **{"path": path}},
             status=status,
-            last_deploy=datetime.datetime.now(),
         )
         await res.insert()
 

@@ -1,0 +1,3 @@
+description: Remove the change entries related to the initial attempt at a centralized pip config framework.
+change-type: patch
+destination-branches: [master]

@@ -21,7 +21,7 @@ In this guide we start simple and manage a 3-node CLOS network with a spine and 
 Prerequisites
 _________________________
 
-**Python version 3.9**, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
+**Python version 3.11**, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
 
 1. `Install Docker <https://docs.docker.com/install/>`_.
 2. `Install Containerlab <https://containerlab.dev/install/>`_.
@@ -60,11 +60,11 @@ This folder contains a **project.yml**, which looks like this:
     copyright: 2022 Inmanta
     modulepath: libs
     downloadpath: libs
-    repo:
-    - type: package
-        url: https://packages.inmanta.com/public/quickstart/python/simple/
-    install_mode: release
-    requires:
+    pip:
+      index_url: url: https://packages.inmanta.com/public/quickstart/python/simple/
+
+
+
 
 
 - The ``modulepath`` setting defines that modules will be stored in ``libs`` directory.
@@ -95,6 +95,7 @@ Go to the `SR Linux` folder and then `containerlab` to spin-up the containers:
 .. code-block:: sh
 
     cd examples/Networking/SR\ Linux/containerlab
+    sudo docker pull ghcr.io/nokia/srlinux:latest
     sudo clab deploy -t topology.yml
 
 `Containerlab` will spin-up:
@@ -135,7 +136,7 @@ In order to connect to `SR Linux` containers, there are two options:
     docker exec -it clab-srlinux-leaf2 sr_cli
 
 
-2. Using SSH (username and password is `admin`):
+2. Using SSH (username `admin` and password `NokiaSrl1!`):
 
 .. code-block:: sh
 
@@ -208,7 +209,7 @@ The first option, ``inmanta-cli``, will automatically create a ``.inmanta`` file
 If you have chosen the second option, the Web Console, you need to copy the environment ID for later use, either:
 
  - from the URL, e.g. ec05d6d9-25a4-4141-a92f-38e24a12b721 from the http://172.30.0.3:8888/console/desiredstate?env=ec05d6d9-25a4-4141-a92f-38e24a12b721.
- - or by clicking on the gear icon on the top right of the Web Console, then click on Environment, scroll down all the way to the bottom of the page and copy the environment ID.
+ - or by clicking on the `Settings` pane, then in the `Environment` tab, scroll down all the way to the bottom of the page and copy the environment ID.
 
 
 Configuring SR Linux
@@ -255,7 +256,7 @@ Let's have a look at the partial configuration model:
         mgmt_ip = "172.30.0.210",
         yang_credentials = yang::Credentials(
             username = "admin",
-            password = "admin"
+            password = "NokiaSrl1!"
         )
     )
 

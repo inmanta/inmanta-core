@@ -1,0 +1,6 @@
+description: Make agent use project pip config
+issue-nr: 6517
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "Input validation of the put_version api endpoint is now more strict"

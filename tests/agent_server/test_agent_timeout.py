@@ -15,9 +15,11 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 
+import inmanta.agent.config
 from agent_server.conftest import get_agent
 from inmanta import config
 from utils import get_resource, log_index, retry_limited
@@ -36,7 +38,8 @@ async def test_agent_disconnect(resource_container, environment, server, client,
     result = await client.release_version(environment, version, False)
     assert result.code == 200
 
-    agent = await get_agent(server, environment, "agent1")
+    inmanta.agent.config.agent_names.set("agent1")
+    agent = await get_agent(server, environment, hostname=None)
     async_finalizer.add(agent.stop)
 
     await asyncio.wait_for(server.stop(), timeout=15)

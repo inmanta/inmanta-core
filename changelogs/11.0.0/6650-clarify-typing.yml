@@ -1,0 +1,4 @@
+description: Clarify the typing of the discovered resources
+change-type: patch
+destination-branches: [master]
+

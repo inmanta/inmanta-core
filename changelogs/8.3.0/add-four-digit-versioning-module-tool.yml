@@ -1,0 +1,6 @@
+---
+description: Add support for four digit versioning for `inmanta module release`.
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

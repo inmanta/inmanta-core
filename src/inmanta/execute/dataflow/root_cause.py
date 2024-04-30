@@ -15,8 +15,9 @@
 
     Contact: code@inmanta.com
 """
+
+from collections.abc import Iterable
 from itertools import chain
-from typing import FrozenSet, Iterable, Set
 
 from inmanta.execute.dataflow import AssignableNode, AttributeNode, AttributeNodeReference
 
@@ -28,9 +29,9 @@ class UnsetRootCauseAnalyzer:
     """
 
     def __init__(self, nodes: Iterable[AttributeNode]) -> None:
-        self.nodes: FrozenSet[AttributeNode] = frozenset(nodes)
+        self.nodes: frozenset[AttributeNode] = frozenset(nodes)
 
-    def root_causes(self) -> Set[AttributeNode]:
+    def root_causes(self) -> set[AttributeNode]:
         """
         Returns the root causes from this instances' set of attribute nodes. An attribute node c
         is defined as the cause for an other attribute node n iff c being unset leads to n
@@ -73,11 +74,11 @@ class UnsetRootCauseAnalyzer:
         _assignment_step, _child_attribute_step and _parent_instance_step respectively.
         """
         # Actual found roots
-        roots: Set[AttributeNode] = set(())
+        roots: set[AttributeNode] = set()
         # Actual roots that we have to filter out
-        ignore_roots: Set[AssignableNode] = set(())
+        ignore_roots: set[AssignableNode] = set()
         # Any node of which the roots are already in the roots set
-        seen: Set[AssignableNode] = set(())
+        seen: set[AssignableNode] = set()
 
         def has_root(node: AssignableNode) -> bool:
             """
@@ -97,16 +98,14 @@ class UnsetRootCauseAnalyzer:
 
             # Find any root for this equivalence
             n_has_root = any(
-                (
-                    has_root(subnode)
-                    for peernode in node.equivalence.nodes
-                    for subnode in chain(
-                        self._assignment_step(peernode),
-                        self._parent_instance_step(peernode),
-                        self._child_attribute_step(peernode),
-                    )
-                    if subnode not in node.equivalence.nodes
+                has_root(subnode)
+                for peernode in node.equivalence.nodes
+                for subnode in chain(
+                    self._assignment_step(peernode),
+                    self._parent_instance_step(peernode),
+                    self._child_attribute_step(peernode),
                 )
+                if subnode not in node.equivalence.nodes
             )
 
             # This equivalence is done
@@ -133,7 +132,7 @@ class UnsetRootCauseAnalyzer:
 
         return roots
 
-    def _assignment_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
+    def _assignment_step(self, node: AssignableNode) -> frozenset[AssignableNode]:
         """
         Performs one propagation step according to rule 2:
             is_cause(c, x) <- exists y: is_cause(c, y) and is_cause(y, x)
@@ -141,7 +140,7 @@ class UnsetRootCauseAnalyzer:
         """
         return frozenset(node for assignment in node.assignable_assignments for node in assignment.rhs.nodes())
 
-    def _child_attribute_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
+    def _child_attribute_step(self, node: AssignableNode) -> frozenset[AssignableNode]:
         """
         Performs one propagation step according to rule 3:
             is_cause(c, x) <- exists i : is_index_attr(x, i) and is_cause(c, x.i)
@@ -154,7 +153,7 @@ class UnsetRootCauseAnalyzer:
             for index_attribute in instance_assignment.rhs.top_node().get_index_attributes()
         )
 
-    def _parent_instance_step(self, node: AssignableNode) -> FrozenSet[AssignableNode]:
+    def _parent_instance_step(self, node: AssignableNode) -> frozenset[AssignableNode]:
         """
         Performs one propagation step according to rule 4:
             is_cause(c, x) <- exists y, z : `x = y.z` in graph and is_cause(c, y)

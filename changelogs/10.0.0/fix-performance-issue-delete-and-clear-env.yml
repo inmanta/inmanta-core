@@ -1,0 +1,8 @@
+---
+description: Improve the performance of the API endpoints that clear or delete an environment.
+issue-nr: 6373
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"

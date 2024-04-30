@@ -1,0 +1,7 @@
+description: Added namespace inference to nested constructors
+issue-nr: 4028
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  feature: "{{description}}"
+

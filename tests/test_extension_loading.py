@@ -15,13 +15,15 @@
 
     Contact: code@inmanta.com
 """
+
 import importlib
 import logging
 import os
 import sys
+from collections.abc import Generator
 from contextlib import contextmanager
 from functools import partial
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 import yaml
@@ -47,7 +49,7 @@ from utils import log_contains
 
 @contextmanager
 def splice_extension_in(name: str) -> Generator[Any, Any, None]:
-    """Context manager to all extensions in tests/data/{name}/inmanta_ext/ to the interpreter and unload them again"""
+    """Context manager to load all extensions in tests/data/{name}/inmanta_ext/ to the interpreter and unload them again"""
     oldpath = sys.path
     try:
         sys.path = sys.path + [os.path.join(os.path.dirname(__file__), "data", name)]
@@ -60,10 +62,9 @@ def splice_extension_in(name: str) -> Generator[Any, Any, None]:
 
 def test_discover_and_load():
     with splice_extension_in("test_module_path"):
-
         config.server_enabled_extensions.set("testplugin")
 
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
         print("plugins: ", ibl._discover_plugin_packages())
 
         assert "inmanta_ext.testplugin" in ibl._discover_plugin_packages()
@@ -81,23 +82,30 @@ def test_discover_and_load():
 
 def test_phase_1(caplog):
     with splice_extension_in("test_module_path"):
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
 
         config.server_enabled_extensions.set("testplugin,noext")
 
-        all = ibl._load_extensions()
+        with caplog.at_level(logging.INFO):
+            all = ibl._load_extensions()
 
-        assert "testplugin" in all
-        assert all["testplugin"] == inmanta_ext.testplugin.extension
+            assert "testplugin" in all
+            assert all["testplugin"] == inmanta_ext.testplugin.extension
 
-        log_contains(caplog, "inmanta.server.bootloader", logging.WARNING, "Could not load extension inmanta_ext.noext")
+            log_contains(
+                caplog,
+                "inmanta.server.bootloader",
+                logging.INFO,
+                "Enabled extensions: inmanta_ext.testplugin, inmanta_ext.noext, inmanta_ext.core",
+            )
+            log_contains(caplog, "inmanta.server.bootloader", logging.WARNING, "Could not load extension inmanta_ext.noext")
 
 
 def test_phase_2():
     with splice_extension_in("test_module_path"):
         import inmanta_ext.testplugin.extension
 
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
         all = {"testplugin": inmanta_ext.testplugin.extension}
 
         ctx = ibl._collect_slices(all)
@@ -136,7 +144,7 @@ def test_phase_3():
 
 def test_end_to_end():
     with splice_extension_in("test_module_path"):
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
 
         config.server_enabled_extensions.set("testplugin")
 
@@ -149,7 +157,7 @@ def test_end_to_end_2():
     with splice_extension_in("bad_module_path"):
         config.server_enabled_extensions.set("badplugin")
 
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
         all = ibl._load_extensions()
         print(all)
         assert "badplugin" in all
@@ -163,7 +171,7 @@ async def test_startup_failure(async_finalizer, server_config):
     with splice_extension_in("bad_module_path"):
         config.server_enabled_extensions.set("badplugin")
 
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
         async_finalizer.add(partial(ibl.stop, timeout=15))
         with pytest.raises(Exception) as e:
             await ibl.start()
@@ -180,7 +188,7 @@ def test_load_and_filter(caplog):
     caplog.set_level(logging.INFO)
 
     with splice_extension_in("test_module_path"):
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
 
         plugin_pkgs = ibl._discover_plugin_packages()
         assert "inmanta_ext.core" in plugin_pkgs
@@ -235,11 +243,15 @@ async def test_custom_feature_manager(
     with splice_extension_in("test_module_path"):
         state_dir = str(tmp_path)
         port = str(unused_tcp_port_factory())
+
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
+
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "password", pg_password)
         config.Config.set("database", "connection_timeout", str(1))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -251,7 +263,7 @@ async def test_custom_feature_manager(
         config.Config.set("server", "bind-address", "127.0.0.1")
         config.server_enabled_extensions.set("testfm")
 
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
         async_finalizer.add(partial(ibl.stop, timeout=15))
         await ibl.start()
         server = ibl.restserver
@@ -267,6 +279,6 @@ async def test_register_setting() -> None:
     Test registering a new setting.
     """
     with splice_extension_in("test_load_env_setting"):
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
         ibl.load_slices(load_all_extensions=True, only_register_environment_settings=True)
         assert "test" in data.Environment._settings

@@ -16,8 +16,7 @@
     Contact: code@inmanta.com
 """
 
-
-from typing import Optional, Set
+from typing import Optional
 
 import pytest
 
@@ -143,7 +142,7 @@ def test_dataflow_tentative_attribute_propagation(graph: DataflowGraph) -> None:
     x_a_n: AssignableNodeReference = get_dataflow_node(graph, "x.a.n")
     x_a_n.assign(ValueNode(42).reference(), Statement(), graph)
 
-    def assert_tentative_a_n(var: AssignableNode, values: Optional[Set[int]] = None) -> None:
+    def assert_tentative_a_n(var: AssignableNode, values: Optional[set[int]] = None) -> None:
         if values is None:
             values = {42}
         instance: Optional[InstanceNode] = var.equivalence.tentative_instance

@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-import asyncio
+
 import json
 import logging
 import uuid
@@ -29,7 +29,7 @@ from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
 logger = logging.getLogger("inmanta.test.dryrun")
 
 
-async def test_dryrun_and_deploy(server, client, resource_container, environment):
+async def test_dryrun_and_deploy(server, client, resource_container, environment, async_finalizer):
     """
     dryrun and deploy a configuration model
 
@@ -41,6 +41,7 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
 
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     await agent.add_end_point_name("agent1")
+    async_finalizer(agent.stop)
     await agent.start()
 
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -116,10 +117,10 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     assert result.code == 200
 
     mod_db = await data.ConfigurationModel.get_version(uuid.UUID(environment), version)
-    undep = await mod_db.get_undeployable()
+    undep = mod_db.get_undeployable()
     assert undep == ["test::Resource[agent2,key=key4]"]
 
-    undep = await mod_db.get_skipped_for_undeployable()
+    undep = mod_db.get_skipped_for_undeployable()
     assert undep == ["test::Resource[agent2,key=key5]", "test::Resource[agent2,key=key6]"]
 
     # request a dryrun
@@ -133,9 +134,11 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(environment, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 10)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(environment, dry_run_id)
@@ -178,8 +181,6 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     actions = await data.ResourceAction.get_list()
     assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.undefined]) == 1
     assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.skipped_for_undefined]) == 2
-
-    await agent.stop()
 
 
 async def test_dryrun_failures(resource_container, server, agent, client, environment, clienthelper):
@@ -230,9 +231,11 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(env_id, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 10)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(env_id, dry_run_id)
@@ -262,7 +265,7 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     log_entry = result["logs"][0]
     assert log_entry["action"] == "dryrun"
     assert log_entry["status"] == "unavailable"
-    assert "Failed to load" in log_entry["messages"][0]["msg"]
+    assert "Unable to deserialize" in log_entry["messages"][0]["msg"]
 
     await agent.stop()
 
@@ -300,9 +303,11 @@ async def test_dryrun_scale(resource_container, server, client, environment, age
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(env_id, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 10)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(env_id, dry_run_id)
@@ -421,10 +426,11 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
     assert result.code == 200
 
     mod_db = await data.ConfigurationModel.get_version(uuid.UUID(environment), version)
-    undep = await mod_db.get_undeployable()
+    assert mod_db is not None
+    undep = mod_db.get_undeployable()
     assert undep == ["test::Resource[agent2,key=key4]"]
 
-    undep = await mod_db.get_skipped_for_undeployable()
+    undep = mod_db.get_skipped_for_undeployable()
     assert undep == ["test::Resource[agent2,key=key5]", "test::Resource[agent2,key=key6]"]
 
     result = await client.dryrun_trigger(uuid.uuid4(), version)

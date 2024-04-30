@@ -15,17 +15,16 @@
 
     Contact: code@inmanta.com
 """
-from typing import Iterable
+
+from collections.abc import Iterable
 
 from inmanta.stable_api import stable_api
 
 
-class AnyType(object):
+class AnyType:
     """
     Supertype for objects that are an instance of all types
     """
-
-    pass
 
 
 @stable_api
@@ -43,7 +42,7 @@ class Unknown(AnyType):
         return iter([])
 
 
-class NoneValue(object):
+class NoneValue:
     def __eq__(self, other: object) -> bool:
         return isinstance(other, NoneValue)
 

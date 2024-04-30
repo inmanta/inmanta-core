@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+import textwrap
+
 import pytest
 
 import inmanta.compiler as compiler
@@ -150,16 +152,16 @@ entity Test:
 end
 implement Test using std::none
 test = Test()
-if %s:
+if {}:
     test.field = "if_branche"
-elif %s:
+elif {}:
     test.field = "elif1_branche"
-elif %s:
+elif {}:
     test.field = "elif2_branche"
 else:
     test.field = "else_branche"
 end
-            """ % (
+            """.format(
         if_value,
         elif1_value,
         elif2_value,
@@ -392,7 +394,7 @@ def test_1804_false_and_condition(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
-    number n
+    int n
 end
 implement A using std::none
 
@@ -445,13 +447,14 @@ end
 def test_1808_non_boolean_condition_direct_exec(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
-typedef mytype as string matching self in ["a", "b"] or null
+typedef mytype as string matching self in ["a","b"] or null
 entity A:
     mytype myvalue = "x"
 end
 implement A using std::none
         """,
-        "Invalid right hand value `null`: `or` expects a boolean (reported in ((self in ['a','b']) or null) ({dir}/main.cf:2))",
+        "Invalid right hand value `null`: `or` expects a boolean "
+        "(reported in ((self in ['a', 'b']) or null) ({dir}/main.cf:2))",
     )
 
 
@@ -462,7 +465,7 @@ str = "some_string"
 if not str:
 end
         """,
-        "Invalid value `some_string`: `not` expects a boolean (reported in If ({dir}/main.cf:3))",
+        "Invalid value `some_string`: `not` expects a boolean (reported in Not(str) ({dir}/main.cf:3))",
     )
 
 
@@ -597,3 +600,108 @@ A(y = A())
         """
     )
     compiler.do_compile()
+
+
+def test_conditional_expression_gradual(snippetcompiler) -> None:
+    """
+    Verify that conditional expressions are executed gradually.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            entity A: end
+            A.others [0:] -- A
+            implement A using std::none
+
+            # gradual execution of iterable
+            a = A()
+            b = A(others=true ? a.others : "unreachable")
+            a.others += A()
+            if b.others is defined:
+                # this seems like bad practice, but it should work as long as the list comprehension is executed gradually.
+                a.others += A()
+            end
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()
+
+
+def test_if_statement_unknown(snippetcompiler) -> None:
+    """
+    Verify behavior of the if statement with regards to unknown values.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
+            import tests
+
+            entity Assert:
+                bool success
+            end
+            implement Assert using std::none
+            assert = Assert(success=true)
+
+            if tests::unknown():
+                assert.success = false
+            else:
+                assert.success = false
+            end
+
+            if tests::unknown() == true:
+                assert.success = false
+            else:
+                assert.success = false
+            end
+
+            if tests::unknown() == false:
+                assert.success = false
+            else:
+                assert.success = false
+            end
+            """
+        )
+    )
+    compiler.do_compile()
+
+
+def test_conditional_expression_unknown(snippetcompiler) -> None:
+    """
+    Verify behavior of the conditional expression with regards to unknown values.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
+            import tests
+
+            assert = true
+            assert = std::is_unknown(tests::unknown() ? true : false)
+            assert = std::is_unknown(true ? tests::unknown() : false)
+            assert = std::is_unknown(false ? true : tests::unknown())
+
+            # branch should not be executed
+            entity Contradiction: end
+            implementation contradict for Contradiction:
+                x = 0 x = 1
+            end
+            implement Contradiction using contradict
+
+            assert = std::is_unknown(tests::unknown() ? Contradiction() : Contradiction())
+            """
+        )
+    )
+    compiler.do_compile()
+
+
+def test_if_inline_error_1(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+x = 1
+std::print(x ? "test" : "no test")
+        """,
+        "Invalid value `1`: the condition for a conditional expression must be a "
+        "boolean expression (reported in x ? 'test' : 'no test' "
+        "({dir}/main.cf:3:12))",
+    )

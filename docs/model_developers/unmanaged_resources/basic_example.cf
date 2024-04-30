@@ -1,0 +1,17 @@
+import ip
+
+entity InterfaceDiscovery extends std::DiscoveryResource:
+    """
+    A discovery resource that discovers interfaces on a specific host.
+
+    :attr name_filter: If not null, only discover interfaces for which the name matches this regular expression.
+                       Otherwise discover all the interfaces on the host.
+    """
+    string? name_filter = null
+end
+
+InterfaceDiscovery.host [1] -- ip::Host
+
+index InterfaceDiscovery(host)
+
+implement InterfaceDiscovery using parents, std::none

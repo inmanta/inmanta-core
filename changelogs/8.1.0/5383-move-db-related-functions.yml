@@ -1,0 +1,8 @@
+---
+description: Moved the `do_clean_hard` and `postgres_get_custom_types` functions and the `PGRestore` and the `AsyncSingleton` classes to the `inmanta.db.util` module. This way it can be used from other Inmanta extensions.
+issue-nr: 5383
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  deprecation-note: "The `do_clean_hard` and `postgres_get_custom_types` functions and the `PGRestore` and `AsyncSingleton` classes in respectively `inmanta_tests.conftest` and `inmanta_tests.db.common` were moved to the `inmanta.db.util` module. The `do_clean_hard` function is available in the `inmanta.db.util` module under the name `clear_database`. These functions and classes will be removed from their original location in a future major release (>=ISO7)."

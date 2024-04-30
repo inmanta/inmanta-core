@@ -1,0 +1,6 @@
+description: Create asyncio event loops explicitly when starting agent or server
+issue-nr: 5389
+change-type: patch
+destination-branches:
+  - master
+  - iso6

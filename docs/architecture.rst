@@ -47,7 +47,7 @@ the deploy is complete. No specific setup is required. To deploy the current mod
    inmanta deploy
 
 
-The all-in-one deployment is ideal of testing, development and one-off deployments. State related to orchestration is stored
+The all-in-one deployment is ideal for testing, development and one-off deployments. State related to orchestration is stored
 locally in data/deploy.
 
 .. _push-to-server:
@@ -64,10 +64,10 @@ machine. This gives faster feedback to developers, but makes the compilation les
 collaboration.
 
 Both the developer machine and the server need to have Inmanta installed. To compile and export models to the server from the
-developer machine a `.inmanta` file is required in the project directory (where you find the main.cf and the project.yaml file)
+developer machine a ``.inmanta`` file is required in the project directory (where you find the main.cf and the project.yaml file)
 to connect the compiler with the server.
 
-Create a `.inmanta` file in the project directory and include the following configuration::
+Create a ``.inmanta`` file in the project directory and include the following configuration::
 
     [config]
     environment=$ENV_ID

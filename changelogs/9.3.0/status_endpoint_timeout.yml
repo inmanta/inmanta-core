@@ -1,0 +1,6 @@
+description: Ensure status endpoint returns after 100ms
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
+

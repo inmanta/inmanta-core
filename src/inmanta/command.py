@@ -16,18 +16,18 @@
     Contact: code@inmanta.com
 """
 
-
 import argparse
-from typing import Callable, Dict, List, Optional
+from collections import abc
+from typing import Callable, Optional
 
 FunctionType = Callable[[argparse.Namespace], None]
-ParserConfigType = Callable[[argparse.ArgumentParser], None]
+ParserConfigType = Callable[[argparse.ArgumentParser, abc.Sequence[argparse.ArgumentParser]], None]
 
 
 class CLIException(Exception):
     def __init__(self, *args: str, exitcode: int) -> None:
         self.exitcode = exitcode
-        super(CLIException, self).__init__(*args)
+        super().__init__(*args)
 
 
 class ShowUsageException(Exception):
@@ -36,12 +36,12 @@ class ShowUsageException(Exception):
     """
 
 
-class Commander(object):
+class Commander:
     """
     This class handles commands
     """
 
-    __command_functions: Dict[str, Dict[str, object]] = {}
+    __command_functions: dict[str, dict[str, object]] = {}
 
     @classmethod
     def add(
@@ -51,7 +51,8 @@ class Commander(object):
         help_msg: str,
         parser_config: Optional[ParserConfigType],
         require_project: bool = False,
-        aliases: List[str] = [],
+        aliases: list[str] = [],
+        add_verbose_flag: bool = True,
     ) -> None:
         """
         Add a new export function
@@ -65,6 +66,7 @@ class Commander(object):
             "parser_config": parser_config,
             "require_project": require_project,
             "aliases": aliases,
+            "add_verbose_flag": add_verbose_flag,
         }
 
     config = None
@@ -77,16 +79,18 @@ class Commander(object):
         cls.__command_functions = {}
 
     @classmethod
-    def commands(cls) -> Dict[str, Dict[str, object]]:
+    def commands(cls) -> dict[str, dict[str, object]]:
         """
         Return a list of commands
         """
         return cls.__command_functions
 
 
-class command(object):  # noqa: N801
+class command:  # noqa: N801
     """
     A decorator that registers an export function
+
+    :param add_verbose_flag: Set this to false to prevent automatically adding the verbose option to the registered command.
     """
 
     def __init__(
@@ -95,17 +99,21 @@ class command(object):  # noqa: N801
         help_msg: str,
         parser_config: Optional[ParserConfigType] = None,
         require_project: bool = False,
-        aliases: List[str] = [],
+        aliases: list[str] = [],
+        add_verbose_flag: bool = True,
     ) -> None:
         self.name = name
         self.help = help_msg
         self.require_project = require_project
         self.parser_config = parser_config
         self.aliases = aliases
+        self.add_verbose_flag = add_verbose_flag
 
     def __call__(self, function: FunctionType) -> FunctionType:
         """
         The wrapping
         """
-        Commander.add(self.name, function, self.help, self.parser_config, self.require_project, self.aliases)
+        Commander.add(
+            self.name, function, self.help, self.parser_config, self.require_project, self.aliases, self.add_verbose_flag
+        )
         return function

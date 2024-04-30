@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump email-validator from 2.0.0.post1 to 2.0.0.post2
+destination-branches:
+- master
+sections: {}

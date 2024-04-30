@@ -1,0 +1,8 @@
+description: Fixed bug in LazyBooleanOperator eager promise calculation with big performance impact
+change-type: patch
+sections:
+  bugfix: Fixed compiler bug that could lead to performance issues for deeply nested boolean operators
+destination-branches:
+  - master
+  - iso6
+  - iso5

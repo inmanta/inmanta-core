@@ -18,8 +18,10 @@
 
 import asyncio
 import os
+import re
 import shutil
 import sys
+import textwrap
 from asyncio import subprocess
 
 import py
@@ -31,6 +33,7 @@ from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
 from inmanta.const import VersionState
+from utils import v1_module_from_template
 
 
 def app(args):
@@ -66,13 +69,15 @@ async def install_project(python_env: env.PythonEnvironment, project_dir: py.pat
         *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(project_dir)
     )
     try:
-        await asyncio.wait_for(process.communicate(), timeout=30)
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
         (stdout, stderr) = await process.communicate()
         print(stdout.decode())
         print(stderr.decode())
         raise e
+
+    assert process.returncode == 0, f"{stdout}\n\n{stderr}"
 
 
 def test_help(inmanta_config, capsys):
@@ -441,3 +446,131 @@ async def test_export_invalid_argument_combination() -> None:
 
     assert process.returncode == 1
     assert "The --delete-resource-set option should always be used together with the --partial option" in stderr.decode("utf-8")
+
+
+@pytest.mark.parametrize("set_keep_logger_names_option", [True, False])
+async def test_logger_name_in_compiler_exporter_output(
+    server,
+    environment: str,
+    tmpvenv_active_inherit: env.VirtualEnv,
+    modules_dir: str,
+    tmpdir,
+    monkeypatch,
+    set_keep_logger_names_option: bool,
+) -> None:
+    """
+    This test case verifies that the logger name mentioned in the log of the compile/export command is correct. Namely:
+
+    * compiler: For log lines produced by the compiler.
+    * exporter: For log lines produced by the exporter.
+    * <name-of-module>: For log lines produced by a specific module and the name of the logger was set to __name__.
+    """
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    mod_name = "mymod"
+    libs_dir = os.path.join(tmpdir, "libs")
+    v1_module_from_template(
+        source_dir=v1_template_path,
+        dest_dir=os.path.join(libs_dir, mod_name),
+        new_name=mod_name,
+        new_content_init_cf="",
+        new_content_init_py=textwrap.dedent(
+            """
+                from inmanta.plugins import plugin
+                import logging
+
+                LOGGER = logging.getLogger(__name__)
+
+                @plugin
+                def test_plugin():
+                    LOGGER.info("test")
+            """,
+        ),
+    )
+
+    path_project_yml_file = tmpdir.join("project.yml")
+    path_project_yml_file.write(
+        textwrap.dedent(
+            f"""
+                name: testproject
+                modulepath: {libs_dir}
+                downloadpath: {libs_dir}
+                repo: https://github.com/inmanta/
+            """
+        )
+    )
+
+    path_main_cf = tmpdir.join("main.cf")
+    path_main_cf.write(
+        textwrap.dedent(
+            """
+                import mymod
+                mymod::test_plugin()
+            """
+        )
+    )
+
+    await install_project(python_env=tmpvenv_active_inherit, project_dir=tmpdir)
+
+    # Compile command
+    args = [
+        tmpvenv_active_inherit.python_path,
+        "-m",
+        "inmanta.app",
+        "-vvv",
+        *(["--keep-logger-names"] if set_keep_logger_names_option else []),
+        "compile",
+    ]
+    process = await subprocess.create_subprocess_exec(
+        *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, cwd=tmpdir
+    )
+    try:
+        (stdout, _) = await asyncio.wait_for(process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    stdout = stdout.decode("utf-8")
+    assert process.returncode == 0, f"Process ended with bad return code, got {process.returncode} (expected 0): {stdout}"
+    if set_keep_logger_names_option:
+        assert "inmanta.compiler         DEBUG   Starting compile" in stdout
+        assert "inmanta_plugins.mymod    INFO    test" in stdout
+    else:
+        assert "compiler       DEBUG   Starting compile" in stdout
+        assert "mymod          INFO    test" in stdout
+
+    # Export command
+    server_port = Config.get("client_rest_transport", "port")
+    server_host = Config.get("client_rest_transport", "host", "localhost")
+    args = [
+        tmpvenv_active_inherit.python_path,
+        "-m",
+        "inmanta.app",
+        "-vvv",
+        *(["--keep-logger-names"] if set_keep_logger_names_option else []),
+        "export",
+    ]
+    args.extend(["--server_port", str(server_port)])
+    args.extend(["--server_address", str(server_host)])
+    args.extend(["-e", environment])
+
+    process = await subprocess.create_subprocess_exec(
+        *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, cwd=tmpdir
+    )
+    try:
+        (stdout, _) = await asyncio.wait_for(process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    stdout = stdout.decode("utf-8")
+    assert process.returncode == 0, f"Process ended with bad return code, got {process.returncode} (expected 0): {stdout}"
+    if set_keep_logger_names_option:
+        assert "inmanta.compiler         DEBUG   Starting compile" in stdout
+        assert "inmanta_plugins.mymod    INFO    test" in stdout
+        assert re.search("inmanta.export[ ]+INFO[ ]+Committed resources with version 1", stdout)
+    else:
+        assert re.search("^compiler[ ]*DEBUG[ ]+Starting compile", stdout)
+        assert "mymod          INFO    test" in stdout
+        assert re.search("\nexporter[ ]+INFO[ ]+Committed resources with version 1", stdout)

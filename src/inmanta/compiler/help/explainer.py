@@ -15,10 +15,12 @@
 
     Contact: code@inmanta.com
 """
+
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import Generic, List, Mapping, Optional, Sequence, Set, Type, TypeVar
+from collections.abc import Mapping, Sequence
+from typing import Generic, Optional, TypeVar
 
 from jinja2 import Environment, PackageLoader
 
@@ -32,13 +34,13 @@ from inmanta.module import ModuleV2InV1PathException
 def bold(content: Optional[str] = None) -> str:
     if content is None:
         return "\033[1m"
-    return "\033[1m{0}\033[0m".format(content)
+    return f"\033[1m{content}\033[0m"
 
 
 def underline(content: Optional[str] = None) -> str:
     if content is None:
         return "\033[4m"
-    return "\033[4m{0}\033[0m".format(content)
+    return f"\033[4m{content}\033[0m"
 
 
 def noformat(content: Optional[str] = None) -> str:
@@ -55,8 +57,8 @@ class ExplainerABC(ABC):
     """
 
     @abstractmethod
-    def explain(self, problem: CompilerException) -> List[str]:
-        ...
+    def explain(self, problem: CompilerException) -> list[str]:
+        pass
 
 
 Explainable = TypeVar("Explainable", bound=CompilerException)
@@ -69,15 +71,15 @@ class Explainer(Generic[Explainable], ExplainerABC, ABC):
     Concrete subclasses must not be generic in the exception type because this would break explainable checking.
     """
 
-    explainable_type: Type[Explainable]
+    explainable_type: type[Explainable]
 
-    def explain(self, problem: CompilerException) -> List[str]:
+    def explain(self, problem: CompilerException) -> list[str]:
         """
         Returns a list of explanations for this exception. If neither the exception or any of its causes (recursively)
         is explainable by this explainer, returns an empty list.
         """
-        allcauses: Set[CompilerException] = set()
-        work: List[CompilerException] = [problem]
+        allcauses: set[CompilerException] = set()
+        work: list[CompilerException] = [problem]
         while work:
             w = work.pop()
             allcauses.add(w)
@@ -105,7 +107,7 @@ class JinjaExplainer(Explainer[Explainable], ABC):
 
     def get_template(self, problem: Explainable) -> str:
         path = os.path.join(os.path.dirname(__file__), self.template)
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             return fh.read()
 
     def do_explain(self, problem: Explainable) -> str:
@@ -129,14 +131,14 @@ class ModifiedAfterFreezeExplainer(JinjaExplainer[ModifiedAfterFreezeException])
     Explainer for ModifiedAfterFreezeException.
     """
 
-    explainable_type: Type[ModifiedAfterFreezeException] = ModifiedAfterFreezeException
+    explainable_type: type[ModifiedAfterFreezeException] = ModifiedAfterFreezeException
 
     def __init__(self) -> None:
         super().__init__("modified_after_freeze.j2")
 
     def build_reverse_hint(self, problem: ModifiedAfterFreezeException) -> str:
         if isinstance(problem.stmt, AssignStatement):
-            return "%s.%s = %s" % (
+            return "{}.{} = {}".format(
                 problem.stmt.rhs.pretty_print(),
                 problem.attribute.get_name(),
                 problem.stmt.lhs.pretty_print(),
@@ -149,7 +151,7 @@ class ModifiedAfterFreezeExplainer(JinjaExplainer[ModifiedAfterFreezeException])
                 attr_rhs = "?"
             else:
                 attr_rhs = problem.stmt.get_attributes()[attr].pretty_print()
-            return "%s.%s = %s" % (attr_rhs, problem.attribute.get_name(), problem.stmt.pretty_print())
+            return f"{attr_rhs}.{problem.attribute.get_name()} = {problem.stmt.pretty_print()}"
 
     def get_arguments(self, problem: ModifiedAfterFreezeException) -> Mapping[str, object]:
         return {
@@ -169,7 +171,7 @@ class ModuleV2InV1PathExplainer(JinjaExplainer[ModuleV2InV1PathException]):
     Explainer for ModuleV2InV1PathException
     """
 
-    explainable_type: Type[ModuleV2InV1PathException] = ModuleV2InV1PathException
+    explainable_type: type[ModuleV2InV1PathException] = ModuleV2InV1PathException
 
     def __init__(self) -> None:
         super().__init__("module_v2_in_v1_path.j2")
@@ -189,7 +191,7 @@ class IndexCollisionExplainer(JinjaExplainer[IndexCollisionException]):
     Explainer for IndexCollisionException
     """
 
-    explainable_type: Type[IndexCollisionException] = IndexCollisionException
+    explainable_type: type[IndexCollisionException] = IndexCollisionException
 
     def __init__(self) -> None:
         super().__init__("index_collision.j2")
@@ -212,7 +214,7 @@ class ExplainerFactory:
     def get_explainers(self) -> Sequence[ExplainerABC]:
         return [ModifiedAfterFreezeExplainer(), ModuleV2InV1PathExplainer(), IndexCollisionExplainer()]
 
-    def explain(self, problem: CompilerException) -> List[str]:
+    def explain(self, problem: CompilerException) -> list[str]:
         return [explanation for explainer in self.get_explainers() for explanation in explainer.explain(problem)]
 
     def explain_and_format(self, problem: CompilerException, plain: bool = True) -> Optional[str]:

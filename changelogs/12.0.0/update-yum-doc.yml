@@ -1,0 +1,6 @@
+description: update yum doc
+change-type: patch
+destination-branches:
+  - master
+  - iso7
+  - iso6

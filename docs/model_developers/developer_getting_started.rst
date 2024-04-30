@@ -22,18 +22,18 @@ Install VS Code and Inmanta extension
 
 The developer setup is based on VSCode with the Inmanta extension.
 
-In order to install VS Code, you can refer to `this <https://code.visualstudio.com/learn/get-started/basics>`_ page.
+In order to install VS Code, you can refer to `this <https://code.visualstudio.com/learn/get-started/basics>`__ page.
 
 Inmanta's extension in VS Code marketplace can be found `here <https://marketplace.visualstudio.com/items?itemName=inmanta.inmanta>`_.
 
-Further information about Inmanta VS Code extension is available on `this <https://github.com/inmanta/vscode-inmanta>`_ page.
+Further information about Inmanta VS Code extension is available on `this <https://github.com/inmanta/vscode-inmanta>`__ page.
 
 
 Setting up Python virtual environments
 ########################################
 
 For every project that you work on, we recommend using a new virtual environment.
-If you are unfamiliar with venv's, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`_ page.
+If you are unfamiliar with venv's, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`__ page.
 
 To create a virtual environment:
 
@@ -164,17 +164,17 @@ Becomes:
 
 **Please note, code completion and navigation work on modules that are imported in the** ``main.cf`` **file**.
 
-V2 module source
-================
+Pip index for V2 modules and V1 modules' dependencies
+=====================================================
 
-Add the pip index where your modules are hosted to ``project.yml`` as a repo of type ``package``.
+Add the pip index where your modules and dependencies are hosted to ``project.yml`` in the ``pip.index-url`` :ref:`section<specify_location_pip>`.
 For example, for modules hosted on PyPi:
 
 .. code-block:: yaml
 
-    repo:
-        - url: https://pypi.org/simple
-          type: package
+    pip:
+        index-url: https://pypi.org/simple/
+
 
 
 Setting up a module
@@ -205,7 +205,7 @@ For a v2 module, use the v2 cookiecutter template, then install the module:
 
     pip install cookiecutter
     cookiecutter https://github.com/inmanta/inmanta-module-template.git
-    inmanta module install -e ./<module-name>
+    pip install -e ./<module-name>
 
 This will install a Python package with the name ``inmanta-module-<module-name>`` in the active environment.
 

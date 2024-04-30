@@ -1,0 +1,7 @@
+description: 'Compiler: for consistency reasons, the for loop body will no longer be executed for "Unknown" values'
+change-type: patch
+sections:
+  other-note: "{{description}}"
+destination-branches:
+  - master
+  - iso6

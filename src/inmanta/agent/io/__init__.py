@@ -15,11 +15,12 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import re
 import typing
 import urllib
-from typing import Dict, Optional
+from typing import Optional
 
 from inmanta.agent.cache import AgentCache
 
@@ -32,7 +33,7 @@ if typing.TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def parse_agent_uri(uri: str) -> typing.Tuple[str, Dict[str, Optional[str]]]:
+def parse_agent_uri(uri: str) -> tuple[str, dict[str, Optional[str]]]:
     """
     Parse an agent uri and return the settings
 
@@ -40,7 +41,7 @@ def parse_agent_uri(uri: str) -> typing.Tuple[str, Dict[str, Optional[str]]]:
     :return: (scheme, config)
     """
     parts = urllib.parse.urlparse(uri)
-    config: Dict[str, Optional[str]] = {}
+    config: dict[str, Optional[str]] = {}
     scheme = "local"
 
     if parts.query != "":
@@ -67,7 +68,7 @@ def parse_agent_uri(uri: str) -> typing.Tuple[str, Dict[str, Optional[str]]]:
     return scheme, config
 
 
-def _get_io_class(scheme: str) -> typing.Type[local.IOBase]:
+def _get_io_class(scheme: str) -> type[local.IOBase]:
     """
     Get an IO instance.
     """

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import base64
 import logging
 import typing
@@ -37,7 +38,6 @@ class MockSessionClient(SessionClient):
         self._version_match = VersionMatch.highest
         self.return_code = return_code
         self.content = content
-        pass
 
     def get_file(self, hash_id):
         content = b""

@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 """
 This module enables tracking of object construction.
 
@@ -35,7 +34,7 @@ if TYPE_CHECKING:
     from inmanta.execute.runtime import Instance
 
 
-class Tracker(object):
+class Tracker:
     def get_next(self) -> "List[Tracker]":
         return []
 

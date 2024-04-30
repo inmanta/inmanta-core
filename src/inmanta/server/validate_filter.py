@@ -15,13 +15,14 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import Callable, Optional, TypeVar
 
 import dateutil
 import more_itertools
-from pydantic import BaseModel, ValidationError, validator
+from pydantic import BaseModel, ValidationError, field_validator
 
 from inmanta import const
 from inmanta.data import DateRangeConstraint, QueryFilter, QueryType, RangeConstraint, RangeOperator
@@ -34,25 +35,11 @@ class InvalidFilter(Exception):
         self.message = message
 
 
-def parse_single_value(v: object) -> object:
-    """
-    Transform list values to their single element value.
-    """
-    if isinstance(v, list):
-        return more_itertools.one(
-            v,
-            too_short=ValueError("Empty filter provided"),
-            too_long=ValueError(f"Multiple values provided for filter: {v}"),
-        )
-
-    return v
-
-
 def parse_range_value_to_date(single_constraint: str, value: str) -> datetime.datetime:
     try:
         datetime_obj: datetime.datetime = dateutil.parser.isoparse(value)
     except ValueError:
-        raise ValueError("Invalid range constraint %s: '%s' is not a valid datetime" % (single_constraint, value))
+        raise ValueError(f"Invalid range constraint {single_constraint}: '{value}' is not a valid datetime")
     else:
         return datetime_obj if datetime_obj.tzinfo is not None else datetime_obj.replace(tzinfo=datetime.timezone.utc)
 
@@ -61,7 +48,7 @@ def parse_range_value_to_int(single_constraint: str, value: str) -> int:
     try:
         return int(value)
     except ValueError:
-        raise ValueError("Invalid range constraint %s: '%s' is not an integer" % (single_constraint, value))
+        raise ValueError(f"Invalid range constraint {single_constraint}: '{value}' is not an integer")
 
 
 S = TypeVar("S", int, datetime.datetime)
@@ -69,23 +56,21 @@ S = TypeVar("S", int, datetime.datetime)
 
 def get_range_operator_parser(
     parse_value_to_type: Callable[[str, str], S]
-) -> Callable[[object, object], Optional[List[Tuple[RangeOperator, S]]]]:
-    def parse_range_operator(v: object) -> Optional[List[Tuple[RangeOperator, S]]]:
+) -> Callable[[object, object], Optional[list[tuple[RangeOperator, S]]]]:
+    def parse_range_operator(v: object) -> Optional[list[tuple[RangeOperator, S]]]:
         """
         Transform list of "<lt|le|gt|ge>:<x>" constraint specifiers to typed objects.
         """
 
-        def transform_single(single: str, parse_value_to_type: Callable[[str, str], S]) -> Tuple[RangeOperator, S]:
-            split: List[str] = single.split(":", maxsplit=1)
+        def transform_single(single: str, parse_value_to_type: Callable[[str, str], S]) -> tuple[RangeOperator, S]:
+            split: list[str] = single.split(":", maxsplit=1)
             if len(split) != 2:
                 raise ValueError("Invalid range constraint %s, expected '<lt|le|gt|ge>:<x>`" % single)
             operator: RangeOperator
             try:
                 operator = RangeOperator.parse(split[0])
             except ValueError:
-                raise ValueError(
-                    "Invalid range operator %s in constraint %s, expected one of lt, le, gt, ge" % (split[0], single)
-                )
+                raise ValueError(f"Invalid range operator {split[0]} in constraint {single}, expected one of lt, le, gt, ge")
             bound = parse_value_to_type(single, split[1])
             return (operator, bound)
 
@@ -113,18 +98,30 @@ class Filter(ABC, BaseModel):
     # Pydantic doesn't support Generic BaseModels on python 3.6
 
     @abstractmethod
-    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+    def to_query_type(self) -> Optional[tuple[QueryType, object]]:
         """Get the value of the filter with the correct query type"""
-        pass
 
 
 class BooleanEqualityFilter(Filter):
     """Represents a valid boolean which should be handled as an equality filter"""
 
-    field: Optional[bool]
-    validate_field: classmethod = validator("field", pre=True, allow_reuse=True)(parse_single_value)
+    field: Optional[bool] = None
 
-    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+    @field_validator("field", mode="before")
+    @classmethod
+    def extract_field_from_list(cls, v: object) -> object:
+        """
+        Transform list values to their single element value.
+        """
+        if isinstance(v, list):
+            return more_itertools.one(
+                v,
+                too_short=ValueError("Empty filter provided"),
+                too_long=ValueError(f"Multiple values provided for filter: {v}"),
+            )
+        return v
+
+    def to_query_type(self) -> Optional[tuple[QueryType, object]]:
         if self.field is not None:
             return (QueryType.EQUALS, self.field)
         return None
@@ -133,7 +130,7 @@ class BooleanEqualityFilter(Filter):
 class BooleanIsNotNullFilter(BooleanEqualityFilter, Filter):
     """Represents a valid boolean which should be handled as an IS_NOT_NULL filter"""
 
-    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+    def to_query_type(self) -> Optional[tuple[QueryType, object]]:
         if self.field is not None:
             return (QueryType.IS_NOT_NULL, None) if self.field else (QueryType.EQUALS, None)
         return None
@@ -142,28 +139,28 @@ class BooleanIsNotNullFilter(BooleanEqualityFilter, Filter):
 class DateRangeFilter(Filter):
     """Represents a valid date range constraint which should be handled as a range filter"""
 
-    field: Optional[DateRangeConstraint]
+    field: Optional[DateRangeConstraint] = None
 
-    @validator("field", pre=True)
+    @field_validator("field", mode="before")
     @classmethod
-    def parse_requested(cls, v: object) -> Optional[List[Tuple[RangeOperator, datetime.datetime]]]:
+    def parse_requested(cls, v: object) -> Optional[list[tuple[RangeOperator, datetime.datetime]]]:
         return get_range_operator_parser(parse_range_value_to_date)(v)
 
-    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+    def to_query_type(self) -> Optional[tuple[QueryType, object]]:
         if self.field:
             return (QueryType.RANGE, self.field)
         return None
 
 
 class IntRangeFilter(Filter):
-    field: Optional[RangeConstraint]
+    field: Optional[RangeConstraint] = None
 
-    @validator("field", pre=True)
+    @field_validator("field", mode="before")
     @classmethod
-    def parse_field(cls, v: object) -> Optional[List[Tuple[RangeOperator, int]]]:
+    def parse_field(cls, v: object) -> Optional[list[tuple[RangeOperator, int]]]:
         return get_range_operator_parser(parse_range_value_to_int)(v)
 
-    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+    def to_query_type(self) -> Optional[tuple[QueryType, object]]:
         if self.field:
             return (QueryType.RANGE, self.field)
         return None
@@ -172,9 +169,9 @@ class IntRangeFilter(Filter):
 class ContainsPartialFilter(Filter):
     """Represents a valid string list constraint which should be handled as a partial containment filter"""
 
-    field: Optional[List[str]]
+    field: Optional[list[str]] = None
 
-    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+    def to_query_type(self) -> Optional[tuple[QueryType, object]]:
         if self.field:
             return (QueryType.CONTAINS_PARTIAL, self.field)
         return None
@@ -183,9 +180,9 @@ class ContainsPartialFilter(Filter):
 class ContainsFilter(Filter):
     """Represents a valid string list constraint which should be handled as a containment filter"""
 
-    field: Optional[List[str]]
+    field: Optional[list[str]] = None
 
-    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+    def to_query_type(self) -> Optional[tuple[QueryType, object]]:
         if self.field:
             return (QueryType.CONTAINS, self.field)
         return None
@@ -195,11 +192,11 @@ class CombinedContainsFilterResourceState(Filter):
     """Represents a valid ReleasedResourceState constraint,
     which handles the filters as contains or not contains filters based on their values"""
 
-    field: Optional[Dict[QueryType, List[ReleasedResourceState]]]
+    field: Optional[dict[QueryType, list[ReleasedResourceState]]] = None
 
-    @validator("field", pre=True)
+    @field_validator("field", mode="before")
     @classmethod
-    def parse_field(cls, v: object) -> Optional[Dict[QueryType, ReleasedResourceState]]:
+    def parse_field(cls, v: object) -> Optional[dict[QueryType, ReleasedResourceState]]:
         if v is None:
             return None
         if isinstance(v, list) and all(isinstance(x, str) for x in v):
@@ -220,7 +217,7 @@ class CombinedContainsFilterResourceState(Filter):
 
         raise ValueError(f"value is not a valid list of resource state constraints: {str(v)}")
 
-    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+    def to_query_type(self) -> Optional[tuple[QueryType, object]]:
         if self.field:
             return (QueryType.COMBINED, self.field)
         return None
@@ -230,9 +227,9 @@ class ContainsFilterResourceAction(Filter):
     """Represents a valid ResourceAction list constraint which should be handled as a containment filter"""
 
     # Pydantic doesn't support Generic models on python 3.6
-    field: Optional[List[const.ResourceAction]]
+    field: Optional[list[const.ResourceAction]] = None
 
-    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+    def to_query_type(self) -> Optional[tuple[QueryType, object]]:
         if self.field:
             return (QueryType.CONTAINS, self.field)
         return None
@@ -241,9 +238,9 @@ class ContainsFilterResourceAction(Filter):
 class LogLevelFilter(Filter):
     """Represents a valid LogLevel constraint which is considered to be the minimal log level"""
 
-    field: Optional[const.LogLevel]
+    field: Optional[const.LogLevel] = None
 
-    @validator("field", pre=True)
+    @field_validator("field", mode="before")
     @classmethod
     def _field_single(cls, v: object) -> object:
         """
@@ -262,12 +259,12 @@ class LogLevelFilter(Filter):
                 raise ValueError(f"{v} is not a valid log level")
         return v
 
-    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+    def to_query_type(self) -> Optional[tuple[QueryType, object]]:
         if self.field is not None:
             return (QueryType.CONTAINS, self._get_log_levels_for_filter(self.field))
         return None
 
-    def _get_log_levels_for_filter(self, minimal_log_level: const.LogLevel) -> List[str]:
+    def _get_log_levels_for_filter(self, minimal_log_level: const.LogLevel) -> list[str]:
         return [level.value for level in const.LogLevel if level.to_int >= minimal_log_level.to_int]
 
 
@@ -278,11 +275,11 @@ class FilterValidator(ABC):
 
     @property
     @abstractmethod
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         """A dictionary that determines the mapping between the allowed filters and how they should be parsed and validated"""
         raise NotImplementedError()
 
-    def process_filters(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
         """
         Processes filters and returns a structured query filter object.
 
@@ -290,7 +287,7 @@ class FilterValidator(ABC):
         """
         if filter is None:
             return {}
-        query: Dict[str, QueryFilter] = {}
+        query: dict[str, QueryFilter] = {}
         for filter_name, filter_class in self.allowed_filters.items():
             try:
                 # Validate the provided filter value with pydantic,

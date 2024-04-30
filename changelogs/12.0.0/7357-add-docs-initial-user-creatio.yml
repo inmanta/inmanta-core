@@ -1,0 +1,8 @@
+---
+description: Add documentation on how to create the initial user when using the built-in authentication provider.
+issue-nr: 7357
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso7, iso6]
+sections:
+  minor-improvement: "{{description}}"

@@ -1,0 +1,6 @@
+---
+description: Ensure that the value of the `compile_rate` metric aggregates to zero instead of None when no compiles were done for that time interval.
+issue-nr: 5452
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]

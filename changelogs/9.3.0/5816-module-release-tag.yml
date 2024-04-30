@@ -1,0 +1,7 @@
+description: The 'inmanta module release' command now outputs the release tag
+issue-nr: 5816
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
+

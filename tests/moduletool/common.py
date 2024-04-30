@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import os
 import subprocess
 from subprocess import CalledProcessError
@@ -22,6 +23,7 @@ from typing import Optional
 
 import yaml
 
+import ruamel.yaml
 from inmanta.config import Config
 from inmanta.module import InstallMode, Project
 from inmanta.moduletool import ModuleTool
@@ -52,7 +54,8 @@ def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mod
                 """
 modulepath: libs
 downloadpath: libs
-repo: %s"""
+repo: %s
+"""
                 % reporoot
             )
 
@@ -62,7 +65,7 @@ repo: %s"""
             projectfile.write("\nrequires:")
             for req in deps:
                 if req[1] is not None:
-                    projectfile.write("\n    - {} {}".format(req[0], req[1]))
+                    projectfile.write(f"\n    - {req[0]} {req[1]}")
 
         projectfile.write("\n")
 
@@ -99,9 +102,67 @@ def add_file(modpath, file, content, msg, version=None, dev=False, tag=True):
         os.chdir(old_cwd)
 
 
+def add_requires(
+    modpath: str, deps: list[tuple[str, str]], commit_msg: str, version: str, dev: bool = False, tag: bool = True
+) -> None:
+    """
+    Add the version requirements of dependencies in a module's YAML file and adds the import to the .cf file.
+    Performs a git commit and tags the commit with the specified version.
+
+    :param modpath: The path to the module.
+    :param deps: A list of tuples, each containing a dependency name and its corresponding version specification.
+    :param commit_msg: The commit message to use
+    :param version: The version to tag the commit with
+    :param dev: A flag indicating whether this is a development version. Default is False.
+    :param tag: A flag indicating whether to tag the commit. Default is True.
+    """
+    mainfile = "module.yml"
+    file_path = os.path.join(modpath, mainfile)
+    yaml = ruamel.yaml.YAML()
+
+    with open(file_path) as file:
+        data = yaml.load(file)
+
+    # Ensure 'requires' field exists and is a list
+    if "requires" not in data:
+        data["requires"] = []
+
+    # Prepare a dictionary to hold the latest version requirement for each module
+    requires_dict = {item.strip().split()[0]: item for item in data["requires"]}
+
+    # Update the dictionary with the new version requirements
+    for module, version_spec in deps:
+        requires_dict[module] = f"{module} {version_spec}"
+
+    # Convert the dictionary back to a list
+    data["requires"] = list(requires_dict.values())
+
+    # Write the updated data back to the file
+    with open(file_path, "w") as file:
+        yaml.dump(data, file)
+
+    model = os.path.join(modpath, "model")
+
+    init_file_path = os.path.join(model, "_init.cf")
+    with open(init_file_path, encoding="utf-8") as projectfile:
+        existing_content = projectfile.read()
+
+    import_statements = "\n".join(f"import {module}" for module, _ in deps)
+    updated_content = f"{import_statements}\n{existing_content}"
+
+    with open(init_file_path, "w", encoding="utf-8") as projectfile:
+        projectfile.write(updated_content)
+
+    old_cwd = os.getcwd()
+    os.chdir(modpath)
+    subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
+    ModuleTool().commit(commit_msg, version=version, dev=dev, commit_all=True, tag=tag)
+    os.chdir(old_cwd)
+
+
 def add_file_and_compiler_constraint(modpath, file, content, msg, version, compiler_version):
     cfgfile = os.path.join(modpath, "module.yml")
-    with open(cfgfile, "r", encoding="utf-8") as fd:
+    with open(cfgfile, encoding="utf-8") as fd:
         cfg = yaml.safe_load(fd)
 
     cfg["compiler_version"] = compiler_version
@@ -186,7 +247,7 @@ def clone_repo(source_dir: str, repo_name: str, destination_dir: str, tag: Optio
     return os.path.join(destination_dir, repo_name)
 
 
-class BadModProvider(object):
+class BadModProvider:
     def __init__(self, parent, badname):
         self.parent = parent
         self.badname = badname

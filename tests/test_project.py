@@ -15,12 +15,14 @@
 
     Contact: code@inmanta.com
 """
+
 import base64
 import logging
 import os
 import uuid
+from collections import defaultdict
 from pathlib import Path
-from typing import Dict, cast
+from typing import cast
 
 import pytest
 
@@ -78,6 +80,46 @@ async def test_project_api_v1(client):
     # get non existing environment
     response = await client.get_environment(uuid.uuid4())
     assert response.code == 404
+
+
+async def test_project_api_v2_project_list_ordering(client_v2):
+    """
+    Creates a few projects with several environments each.
+    Check that they are ordered by ascending (project_name, environment_name)
+    """
+
+    project_environments_map: dict[str, list[str]] = defaultdict(list)
+
+    for project_n in range(3):
+        project_name: str = f"test-project-{project_n}"
+        result = await client_v2.project_create(project_name)
+        assert result.code == 200
+        assert "data" in result.result
+        assert "id" in result.result["data"]
+
+        project_id: uuid.UUID = result.result["data"]["id"]
+        project_environments_map[project_name] = []
+
+        for environment_n in range(3):
+            env_name: str = f"test-env-{environment_n}"
+            result = await client_v2.environment_create(project_id=project_id, name=env_name)
+            assert result.code == 200
+            project_environments_map[project_name].append(env_name)
+
+    result = await client_v2.project_list()
+    assert result.code == 200
+    assert "data" in result.result
+    assert len(result.result["data"]) == 3
+    for i in range(3):
+        assert len(result.result["data"][i]["environments"]) == 3
+
+    # Make sure results are sorted according to project name...
+    assert sorted(project_environments_map.keys()) == [result.result["data"][i]["name"] for i in range(3)]
+
+    # ... and according to env name within each project
+    for project_n, key_value_pair in enumerate(sorted(project_environments_map.items())):
+        project_id, env_id_list = key_value_pair
+        assert sorted(env_id_list) == [env["name"] for env in result.result["data"][project_n]["environments"]]
 
 
 async def test_project_api_v2(client_v2):
@@ -145,7 +187,7 @@ async def test_project_api_v2(client_v2):
 
     # Create a duplicate environment
     result = await client_v2.environment_create(project_id=project_id, name="dev")
-    assert result.code == 500
+    assert result.code == 400
 
     # Modify a non existing environment
     result = await client_v2.environment_modify(id=uuid.uuid4(), name="dev")
@@ -170,10 +212,6 @@ async def test_project_api_v2(client_v2):
 
     result = await client_v2.environment_delete(id=uuid.uuid4())
     assert result.code == 404
-
-    # Decommission
-    result = await client_v2.environment_decommission(id=env1_id)
-    assert result.code == 200
 
 
 async def test_modify_environment_project(client_v2):
@@ -269,6 +307,31 @@ async def test_env_api(client):
     assert len(result.result["environments"]) == 0
 
 
+async def test_create_env_same_name(client):
+    result = await client.create_project("env-test")
+    assert result.code == 200
+    assert "project" in result.result
+    assert "id" in result.result["project"]
+    project_id = result.result["project"]["id"]
+
+    result = await client.create_environment(project_id=project_id, name="dev1")
+    assert result.code == 200
+
+    result = await client.create_environment(project_id=project_id, name="dev2")
+    assert result.code == 200
+    env_id = result.result["environment"]["id"]
+
+    # try to create a new env with the same name as an existing one
+    result = await client.create_environment(project_id=project_id, name="dev1")
+    assert result.code == 400
+    assert f"Project with id={project_id} already has an environment with name dev1" in result.result["message"]
+
+    # try to rename an existing env using a name that is already used.
+    result = await client.modify_environment(id=env_id, name="dev1")
+    assert result.code == 400
+    assert f"Project with id={project_id} already has an environment with name dev1" in result.result["message"]
+
+
 async def test_project_cascade(client):
     result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
@@ -357,10 +420,6 @@ async def test_environment_listener(server, client_v2, caplog):
     result = await client_v2.environment_delete(id=uuid.uuid4())
     assert result.code == 404
 
-    # Decommission
-    result = await client_v2.environment_decommission(id=env1_id)
-    assert result.code == 200
-
     # Clear
     result = await client_v2.environment_clear(id=env1_id)
     assert result.code == 200
@@ -402,7 +461,7 @@ def test_project_load_install(snippetcompiler_clean, install: bool) -> None:
 
 
 @pytest.fixture
-def environment_icons() -> Dict[str, str]:
+def environment_icons() -> dict[str, str]:
     icon_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "icon")
     icon_names = ["logo.jpeg", "logo.png", "logo.svg", "logo.webp"]
     icon_dict = {}
@@ -411,7 +470,7 @@ def environment_icons() -> Dict[str, str]:
     return icon_dict
 
 
-async def test_environment_icon_description(client_v2, environment_icons: Dict[str, str]):
+async def test_environment_icon_description(client_v2, environment_icons: dict[str, str]):
     """Test creating an environment with an icon and description"""
 
     result = await client_v2.project_create("dev-project")
@@ -525,7 +584,7 @@ async def test_environment_icon_description(client_v2, environment_icons: Dict[s
     assert result.code == 400
 
 
-async def test_environment_icon_with_details_only(client_v2, environment_icons: Dict[str, str]):
+async def test_environment_icon_with_details_only(client_v2, environment_icons: dict[str, str]):
     """Test that the icon for an environment is only returned when explicitly requested"""
     result = await client_v2.project_create("dev-project")
     assert result.code == 200

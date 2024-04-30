@@ -1,0 +1,4 @@
+description: Add missing migration script.
+issue-nr: 6549
+change-type: patch
+destination-branches: [master, iso6]

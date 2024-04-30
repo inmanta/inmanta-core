@@ -16,7 +16,7 @@ Glossary
         one or more :term:`environment` such as development, integration and production.
 
     environment
-        Each environment represents a target infrastructure that inmanta manages. At least
+        Each environment represents a target infrastructure that inmanta manages. At least one
         environment is required, but often multiple environments of the same infrastructure are
         available such as development, integration and testing.
 
@@ -38,7 +38,7 @@ Glossary
         A resource needs to have a unique identifier in an environment. This identifier needs to be
         derived from attributes of the resource. This ensures that the orchestrator can (co-)manage
         existing resources and allows quick recovery of the orchestrator in failure conditions. This
-        unique identifier is consists of multiple fields. For example,
+        unique identifier consists of multiple fields. For example,
         ``std::File[vm1,path="/etc/motd"]`` This id contains the type of the resource, the name of
         the :term:`agent` and the unique id with its value for this resource. The resource designer
         determines how this id is derived.
@@ -49,7 +49,7 @@ Glossary
         * The second field is the name of the agent that manages/groups the resource. For example:
           the name of the machine on  which the file is defined ``vm1``
         * The third field is the identifying attribute and the value of this attribute. For example:
-          the ``path`` of the file uniquely idenfies a file on a machine.
+          the ``path`` of the file uniquely identifies a file on a machine.
 
     module
         A :term:`configuration model` consists of multiple configuration modules. A module provides
@@ -121,10 +121,10 @@ Glossary
         A resource in an infrastructure may have multiple properties that are not managed by Inmanta
         but their value is required as input in the configuration or for reporting purposes.
         :term:`handlers<handler>` take care of extracting these facts and reporting them back to the
-        server.
+        server. More information in the :ref:`using facts<Using facts>` section.
 
     infrastructure
-        That what Inmanta manages. This could be virtual machines with resources in these virtual
+        This is what Inmanta manages. This could be virtual machines with resources in these virtual
         machines. Physical servers and their os. Containers or resources at a cloud provider without
         any servers (e.g. "serverless")
 
@@ -133,3 +133,6 @@ Glossary
         computer data centers through machine-readable definition files, rather than physical
         hardware configuration or interactive configuration tools.* Inmanta achieves this by using a
         desired state configuration model that is entirely expressed in code.
+
+    expert feature
+        A feature that is stable, but requires great care and/or knowledge to use properly.

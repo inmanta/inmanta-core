@@ -15,10 +15,11 @@
 
     Contact: code@inmanta.com
 """
+
 import inmanta.compiler as compiler
 
 
-def test_doc_string_on_new_relation(snippetcompiler):
+def test_doc_string_on_relation_unidir(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity File:
@@ -42,11 +43,9 @@ def test_doc_string_on_relation(snippetcompiler):
         """
 entity File:
 end
-
 entity Host:
 end
-
-File file [1] -- [0:] Host host
+File.host [0:] -- Host.file [1]
 \"""
 Each file needs to be associated with a host
 \"""

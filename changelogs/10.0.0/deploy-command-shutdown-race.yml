@@ -1,0 +1,5 @@
+description: Ensure child processes are awaited by the deploy command
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

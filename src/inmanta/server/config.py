@@ -18,21 +18,9 @@
 
 import logging
 import warnings
+from typing import Optional
 
-from inmanta.config import (
-    Config,
-    Option,
-    is_bool,
-    is_float,
-    is_int,
-    is_list,
-    is_map,
-    is_str,
-    is_str_opt,
-    is_time,
-    log_dir,
-    state_dir,
-)
+from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +30,15 @@ LOGGER = logging.getLogger(__name__)
 # Database
 #############################
 
+db_wait_time = Option(
+    "database",
+    "wait_time",
+    0,
+    "For how long the server should wait for the DB to be up before starting. "
+    "If set to 0, the server won't wait for the DB. "
+    "If set to a negative value, the server will wait forever.",
+    is_time,
+)
 db_host = Option("database", "host", "localhost", "Hostname or IP of the postgresql server", is_str)
 db_port = Option("database", "port", 5432, "The port of the postgresql server", is_int)
 db_name = Option("database", "name", "inmanta", "The name of the database on the postgresql server", is_str)
@@ -51,7 +48,7 @@ db_connection_pool_min_size = Option(
     "database", "connection_pool_min_size", 10, "Number of connections the pool will be initialized with", is_int
 )
 db_connection_pool_max_size = Option(
-    "database", "connection_pool_max_size", 10, "Max number of connections in the pool", is_int
+    "database", "connection_pool_max_size", 70, "Max number of connections in the pool", is_int
 )
 db_connection_timeout = Option("database", "connection_timeout", 60, "Connection timeout in seconds", is_float)
 
@@ -119,7 +116,18 @@ def get_bind_port() -> int:
         return Config.get("server_rest_transport", "port", 8888)
 
 
+server_tz_aware_timestamps = Option(
+    "server",
+    "tz_aware_timestamps",
+    True,
+    "Whether the server should return timezone aware timestamps. "
+    "If False, the server will serialize timestamps in a time zone naive way (in implicit UTC). "
+    "If True, timestamps are serialized as time zone aware objects.",
+    is_bool,
+)
+
 server_enable_auth = Option("server", "auth", False, "Enable authentication on the server API", is_bool)
+server_auth_method = Option("server", "auth_method", "oidc", "The authentication method to use: oidc or database", is_str)
 
 server_ssl_key = Option(
     "server", "ssl_key_file", None, "Server private key to use for this server Leave blank to disable SSL", is_str_opt
@@ -129,7 +137,15 @@ server_ssl_cert = Option(
     "server", "ssl_cert_file", None, "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt
 )
 
-server_ssl_ca_cert: Option[str] = Option(
+
+def ssl_enabled():
+    """Is ssl enabled on the server, given the current server config"""
+    ssl_key: Optional[str] = server_ssl_key.get()
+    ssl_cert: Optional[str] = server_ssl_cert.get()
+    return ssl_key is not None and ssl_cert is not None
+
+
+server_ssl_ca_cert = Option(
     "server",
     "ssl_ca_cert_file",
     None,
@@ -140,7 +156,7 @@ server_ssl_ca_cert: Option[str] = Option(
 )
 
 server_fact_expire = Option(
-    "server", "fact-expire", 3600, "After how many seconds will discovered facts/parameters expire", is_time
+    "server", "fact-expire", 3600, "After how many seconds will discovered facts/parameters expire.", is_time
 )
 
 
@@ -188,7 +204,7 @@ server_purge_version_interval = Option(
     "purge-versions-interval",
     3600,
     """The number of seconds between version purging,
-                                          see :inmanta.config:option:`server.available-versions-to-keep`""",
+                                          see :inmanta.environment-settings:setting:`available_versions_to_keep`.""",
     is_time,
 )
 
@@ -197,7 +213,7 @@ server_compiler_report_retention = Option(
     "compiler-report-retention",
     604800,
     """The server regularly cleans up old compiler reports.
-    This options specifies the number of seconds to keep old compiler reports for. The default is seven days""",
+    This options specifies the number of seconds to keep old compiler reports for. The default is seven days.""",
     is_time,
 )
 
@@ -224,21 +240,11 @@ server_wait_after_param = Option(
 
 agent_timeout = Option("server", "agent-timeout", 30, "Time before an agent is considered to be offline", is_time)
 
-server_delete_currupt_files = Option(
-    "server",
-    "delete_currupt_files",
-    True,
-    "The server logs an error when it detects a file got corrupted. When set to true, the "
-    "server will also delete the file, so on subsequent compiles the missing file will be "
-    "recreated.",
-    is_bool,
-)
-
 server_purge_resource_action_logs_interval = Option(
     "server", "purge-resource-action-logs-interval", 3600, "The number of seconds between resource-action log purging", is_time
 )
 
-server_resource_action_log_prefix = Option(
+server_resource_action_log_prefix: Option[str] = Option(
     "server",
     "resource_action_log_prefix",
     "resource-actions-",
@@ -246,10 +252,10 @@ server_resource_action_log_prefix = Option(
     is_str,
 )
 
-server_enabled_extensions = Option(
+server_enabled_extensions: Option[list[str]] = Option(
     "server",
     "enabled_extensions",
-    "",
+    list,
     "A list of extensions the server must load. Core is always loaded."
     "If an extension listed in this list is not available, the server will refuse to start.",
     is_list,
@@ -265,9 +271,9 @@ server_access_control_allow_origin = Option(
 )
 
 
-def default_hangtime() -> str:
+def default_hangtime() -> int:
     """:inmanta.config:option:`server.agent-timeout` *3/4"""
-    return str(int(agent_timeout.get() * 3 / 4))
+    return int(agent_timeout.get() * 3 / 4)
 
 
 agent_hangtime = Option(

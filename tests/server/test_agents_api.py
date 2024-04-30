@@ -15,11 +15,12 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import json
 import uuid
 from operator import itemgetter
-from typing import Dict, List, Optional
+from typing import Optional
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -28,6 +29,7 @@ from inmanta import data
 from inmanta.agent import reporting
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.config import get_bind_port
+from inmanta.util import parse_timestamp
 
 
 @pytest.fixture
@@ -111,7 +113,7 @@ async def test_agent_list_filters(client, environment: str, env_with_agents: Non
     assert len(result.result["data"]) == 1
 
 
-def agent_names(agents: List[Dict[str, str]]) -> List[str]:
+def agent_names(agents: list[dict[str, str]]) -> list[str]:
     return [agent["name"] for agent in agents]
 
 
@@ -131,9 +133,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
         if not agent["last_failover"]:
             agent["last_failover"] = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
         else:
-            agent["last_failover"] = datetime.datetime.strptime(agent["last_failover"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-                tzinfo=datetime.timezone.utc
-            )
+            agent["last_failover"] = parse_timestamp(agent["last_failover"])
     all_agents_in_expected_order = sorted(all_agents, key=itemgetter(order_by_column, "name"), reverse=order == "DESC")
     all_agent_names_in_expected_order = agent_names(all_agents_in_expected_order)
 
@@ -153,7 +153,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page

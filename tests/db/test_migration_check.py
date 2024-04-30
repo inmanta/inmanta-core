@@ -15,8 +15,8 @@
 
     Contact: code@inmanta.com
 """
+
 from pathlib import Path
-from typing import List
 
 
 def test_migration_check():
@@ -28,24 +28,24 @@ def test_migration_check():
     inmanta_dir: Path = Path(__file__).parent.parent.parent.absolute()
 
     versions_folder: Path = inmanta_dir / "src" / "inmanta" / "db" / "versions"
-    versions: List[Path] = list(versions_folder.glob("v" + "[0-9]" * 9 + ".py"))  # Migration files have format vYYYYMMDDN.py
+    versions: list[Path] = list(versions_folder.glob("v" + "[0-9]" * 9 + ".py"))  # Migration files have format vYYYYMMDDN.py
     latest_version: Path = sorted(versions)[-1]
 
     migration_tests_folder: Path = inmanta_dir / "tests" / "db" / "migration_tests"
     dumps_folder: Path = migration_tests_folder / "dumps"
 
-    dumps: List[Path] = list(dumps_folder.glob("v" + "[0-9]" * 9 + ".sql"))  # Dumps have format vYYYYMMDDN.sql
+    dumps: list[Path] = list(dumps_folder.glob("v" + "[0-9]" * 9 + ".sql"))  # Dumps have format vYYYYMMDDN.sql
     latest_dump: Path = sorted(dumps)[-1]
 
     assert latest_version.stem == latest_dump.stem
 
     # Make sure the following lines have been removed from the dump:
-    forbidden_strings: List[str] = [
+    forbidden_strings: list[str] = [
         "SELECT pg_catalog.set_config('search_path', '', false);",
         "SET default_table_access_method = heap;",
     ]
 
-    with open(latest_dump, "r") as fh:
+    with open(latest_dump) as fh:
         for line_no, line in enumerate(fh.readlines(), start=1):
             if line.startswith("--"):
                 continue
@@ -54,7 +54,7 @@ def test_migration_check():
                     f"Line '{line}' was found in dump {latest_dump} L{line_no}. Please remove or comment out this line."
                 )
 
-    migration_tests: List[Path] = sorted(migration_tests_folder.glob("test_v*" + latest_dump.stem + ".py"))
+    migration_tests: list[Path] = sorted(migration_tests_folder.glob("test_v*" + latest_dump.stem + ".py"))
     if not migration_tests:
         raise Exception(
             f"No migration test to version {latest_dump.stem} was found in {migration_tests_folder}. Please add such a test."

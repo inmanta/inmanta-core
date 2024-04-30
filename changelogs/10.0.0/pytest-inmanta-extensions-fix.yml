@@ -1,0 +1,5 @@
+description: "pytest-inmanta-extensions: require exact same version for core"
+change-type: patch
+destination-branches:
+  - master
+  - iso6

@@ -32,7 +32,7 @@ For example:
 Setup guide
 -----------
 
-#. To install influxdb, follow the instructions found at `docs.influxdata.com <https://docs.influxdata.com/influxdb/v1.7/introduction/installation#installing-influxdb-oss>`_.
+#. To install influxdb, follow the instructions found at `docs.influxdata.com <https://docs.influxdata.com/influxdb/v1.7/introduction/install/#installing-influxdb-oss>`_.
 #. Create a database to send the data to:
 
     .. code-block:: sh

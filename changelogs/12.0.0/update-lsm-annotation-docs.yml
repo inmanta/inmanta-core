@@ -1,0 +1,5 @@
+description: Update lsm annotation documentation
+change-type: patch
+destination-branches:
+  - master
+  - iso7

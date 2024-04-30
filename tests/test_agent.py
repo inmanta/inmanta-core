@@ -23,7 +23,7 @@ import uuid
 
 import pytest
 
-from inmanta import config, protocol
+from inmanta import config, data, protocol
 from inmanta.agent import Agent, reporting
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange
@@ -93,11 +93,14 @@ async def async_started_agent(server_config):
     config.Config.set("config", "use_autostart_agent_map", "true")
 
     env_id = uuid.uuid4()
-    a = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
-    await a.add_end_point_name("agent1")
+    a = Agent(hostname="node1", environment=env_id, agent_map=None, code_loader=False)
     task = asyncio.ensure_future(a.start())
     yield a
     task.cancel()
+    while not task.done():
+        # The CancelledError is only thrown on the next invocation of the event loop.
+        # Wait until the cancellation has finished.
+        await asyncio.sleep(0)
 
 
 @pytest.fixture(scope="function")
@@ -105,7 +108,7 @@ async def startable_server(server_config):
     """
     This fixture returns the bootloader of a server which is not yet started.
     """
-    bootloader = InmantaBootloader()
+    bootloader = InmantaBootloader(configure_logging=True)
     yield bootloader
     try:
         await bootloader.stop(timeout=15)
@@ -136,6 +139,16 @@ async def test_agent_cannot_retrieve_autostart_agent_map(async_started_agent, st
 
     # Create environment
     result = await client.create_environment(project_id=project_id, name="dev", environment_id=async_started_agent.environment)
+    assert result.code == 200
+
+    # set agent in agent map
+    result = await client.get_setting(tid=async_started_agent.environment, id=data.AUTOSTART_AGENT_MAP)
+    assert result.code == 200
+    result = await client.set_setting(
+        tid=async_started_agent.environment,
+        id=data.AUTOSTART_AGENT_MAP,
+        value={"agent1": "localhost"} | result.result["value"],
+    )
     assert result.code == 200
 
     # Assert agent managed to establish session with the server
@@ -187,20 +200,3 @@ async def test_hostname(server, environment, agent_factory):
     # When both are set, the constructor takes precedence
     agent3 = await agent_factory(hostname="node3", environment=env_id)
     assert list(agent3.get_end_point_names()) == ["node3"]
-
-
-async def test_update_agent_map(server, environment, agent_factory):
-    """
-    If the URI of an enabled agent changes, it should still be enabled after the change
-    """
-    env_id = uuid.UUID(environment)
-    agent_map = {"node1": "localhost"}
-
-    agent1 = await agent_factory(hostname="node1", environment=env_id, agent_map=agent_map)
-    assert agent1.agent_map == agent_map
-
-    agent1.unpause("node1")
-
-    await agent1._update_agent_map({"node1": "localhost2"})
-
-    assert agent1._instances["node1"].is_enabled()

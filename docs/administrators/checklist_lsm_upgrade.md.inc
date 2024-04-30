@@ -5,9 +5,8 @@
 
 # Pre-Upgrade steps:
 
-1. Verify that environment safety setting are on (this should always be the case)
+1. Verify that environment safety settings are on (this should always be the case)
 
-   * [ ] `purge_on_delete = False`
    * [ ] `protected_environment = True`
 
 2. Temporarily disable auto_deploy

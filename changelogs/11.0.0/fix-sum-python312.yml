@@ -1,0 +1,5 @@
+description: "Fixed some tests for Python 3.12 by not relying on Python's built-in sum function"
+change-type: patch
+destination-branches:
+  - master
+  - iso6

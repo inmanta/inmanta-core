@@ -15,20 +15,22 @@
 
     Contact: code@inmanta.com
 """
-from typing import Any, Dict, Mapping, MutableMapping, Optional, cast
 
-from inmanta.protocol.common import JSON_CONTENT, ReturnValue, T
+from collections.abc import Mapping, MutableMapping
+from typing import Any, Optional, cast
+
+from inmanta.protocol.common import JSON_CONTENT, ReturnValue, T_co
 from inmanta.types import ArgumentTypes, ReturnTypes
 
 
-class ReturnValueWithMeta(ReturnValue[T]):
+class ReturnValueWithMeta(ReturnValue[T_co]):
     def __init__(
         self,
         status_code: int = 200,
         headers: MutableMapping[str, str] = {},
-        response: Optional[T] = None,
+        response: Optional[T_co] = None,
         content_type: str = JSON_CONTENT,
-        links: Optional[Dict[str, str]] = None,
+        links: Optional[dict[str, str]] = None,
         metadata: Optional[Mapping[str, ArgumentTypes]] = None,
     ) -> None:
         super().__init__(status_code, headers, response, content_type, links)
@@ -36,7 +38,7 @@ class ReturnValueWithMeta(ReturnValue[T]):
 
     def _get_with_envelope(self, envelope_key: str) -> ReturnTypes:
         """Get the body with an envelope specified"""
-        response = cast(Dict[str, Any], super()._get_with_envelope(envelope_key))
+        response = cast(dict[str, Any], super()._get_with_envelope(envelope_key))
         if self.metadata:
             if response.get("metadata"):
                 response["metadata"].update(self.metadata)
@@ -48,7 +50,7 @@ class ReturnValueWithMeta(ReturnValue[T]):
         """Get the body without an envelope specified"""
         response = super()._get_without_envelope()
         if self.metadata:
-            if isinstance(response, Dict):
+            if isinstance(response, dict):
                 if response.get("metadata"):
                     response["metadata"].update(self.metadata)
                 else:

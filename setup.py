@@ -3,35 +3,37 @@ from os import path
 
 requires = [
     "asyncpg~=0.25",
+    "build~=1.0",
     "click-plugins~=1.0",
     # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
     "click>=8.0,<8.2",
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
-    "crontab~=0.23",
-    "cryptography>=36,<39",
+    "crontab>=0.23,<2.0",
+    "cryptography>=36,<43",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
-    "docstring-parser>=0.10,<0.16",
-    "email-validator~=1.0",
-    "execnet~=1.0",
-    "importlib_metadata>=4,<6",
+    "docstring-parser>=0.10,<0.17",
+    "email-validator>=1,<3",
+    "execnet>=1,<2",
+    "importlib_metadata>=4,<8",
     "jinja2~=3.0",
-    "more-itertools>=8,<10",
-    "netifaces~=0.11",
-    "packaging>=21.3,<23.0",
+    "more-itertools>=8,<11",
+    # leave upper bound floating for fast-moving and extremely stable packaging
+    "packaging>=21.3",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
-    # Exclude pre-release due to https://github.com/samuelcolvin/pydantic/issues/3546
-    "pydantic~=1.0,!=1.9.0a1",
+    "pydantic~=2.5",
     "pyformance~=0.4",
     "PyJWT~=2.0",
+    "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
+    "setuptools",
     "texttable~=1.0",
     "tornado~=6.0",
-    "typing_inspect~=0.7",
-    "build~=0.7",
+    # lower bound because of ilevkivskyi/typing_inspect#100
+    "typing_inspect~=0.9",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
 ]
@@ -42,11 +44,13 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "8.0.1"
+# This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
+# (See the bumpversion.cfg file for relevant locations).
+version = "13.0.0"
 
 setup(
     version=version,
-    python_requires=">=3.9",  # also update classifiers
+    python_requires=">=3.11",  # also update classifiers
     # Meta data
     name="inmanta-core",
     description="Inmanta deployment tool",
@@ -63,7 +67,7 @@ setup(
         "Operating System :: POSIX :: Linux",
         "Topic :: System :: Systems Administration",
         "Topic :: Utilities",
-        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.11",
     ],
     keywords="orchestrator orchestration configurationmanagement",
     project_urls={
@@ -89,6 +93,7 @@ setup(
         "console_scripts": [
             "inmanta-cli = inmanta.main:main",
             "inmanta = inmanta.app:app",
+            "inmanta-initial-user-setup = inmanta.user_setup:main",
         ],
     },
 )

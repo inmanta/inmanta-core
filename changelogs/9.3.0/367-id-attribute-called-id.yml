@@ -1,0 +1,7 @@
+description: In a future release it will not be possible anymore to use a resource with an id_attribute called id
+issue-nr: 367
+issue-repo: pytest-inmanta
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  deprecation-note: "{{description}}"

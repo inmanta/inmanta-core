@@ -1,0 +1,6 @@
+---
+description: Add support to cleanup old environment metrics using the `environment_metrics_retention` environment setting.
+issue-nr: 5130
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]

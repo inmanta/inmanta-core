@@ -1,0 +1,5 @@
+description: "Report failure cause for some assertion failures"
+change-type: patch
+destination-branches:
+  - master
+  - iso6

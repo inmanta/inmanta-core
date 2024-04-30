@@ -15,11 +15,11 @@
 
     Contact: code@inmanta.com
 """
+
 import json
 import uuid
 from datetime import datetime
 from operator import itemgetter
-from typing import List
 from uuid import UUID
 
 import pytest
@@ -48,16 +48,17 @@ async def env_with_resources(server, client):
             total=1,
             released=i != 1,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
-    async def create_resource(agent: str, path: str, resource_type: str, versions: List[int], environment: UUID = env.id):
+    async def create_resource(agent: str, path: str, resource_type: str, versions: list[int], environment: UUID = env.id):
         for version in versions:
             key = f"{resource_type}[{agent},path={path}]"
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-                attributes={"path": path, "v": version},
+                attributes={"path": path, "v": version, "version": version},
                 status=ResourceState.deployed,
             )
             await res.insert()
@@ -80,6 +81,7 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     await create_resource("agent1", "/tmp/file7", "std::File", [3], environment=env2.id)
@@ -178,7 +180,7 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page
@@ -272,10 +274,10 @@ async def test_versioned_resource_details(server, client, env_with_resources):
     resource_id = result.result["data"][0]["resource_id"]
     result = await client.versioned_resource_details(env_with_resources.id, version=2, rid=resource_id)
     assert result.code == 200
-    assert result.result["data"]["attributes"] == {"path": "/etc/file1", "v": 2}
+    assert result.result["data"]["attributes"] == {"path": "/etc/file1", "v": 2, "version": 2}
     result = await client.versioned_resource_details(env_with_resources.id, version=3, rid=resource_id)
     assert result.code == 200
-    assert result.result["data"]["attributes"] == {"path": "/etc/file1", "v": 3}
+    assert result.result["data"]["attributes"] == {"path": "/etc/file1", "v": 3, "version": 3}
     result = await client.versioned_resource_details(env_with_resources.id, version=4, rid=resource_id)
     assert result.code == 404
 

@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-pyyaml from 6.0.12.11 to 6.0.12.12
+destination-branches:
+- master
+sections: {}

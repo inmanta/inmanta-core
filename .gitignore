@@ -55,6 +55,13 @@ docs/moduleguides
 docs/inmanta.pdf
 docs/_static/*.pdf
 docs/_static/*.png
+!docs/_static/architecture.png
+!docs/_static/inmanta-logo.png
+docs/lsm/*.png
+docs/lsm/*.pdf
+docs/model_developers/images/*.png
+docs/model_developers/images/*.pdf
+!docs/model_developers/images/dataflow_graphic_service.png
 
 # Mypy
 .mypy
@@ -66,6 +73,9 @@ mypy_output.txt
 coverage
 .mypy-baseline
 .mypy-tmp
+
+# flake8
+flake8-report.txt
 
 # Duplicate Files for text_common package, copied by tests_common/copy_files_from_core.py
 tests_common/src/inmanta_tests/conftest.py
@@ -82,7 +92,9 @@ build-result
 _build
 logs
 
+# Documentation
 docs/reference/openapi.json
+
 
 # Ignore modules_v2 python package repo cache
 tests/data/modules_v2.cache

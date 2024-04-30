@@ -16,8 +16,9 @@
     Contact: code@inmanta.com
 """
 
+from collections.abc import Iterable
 from itertools import chain
-from typing import Iterable, List, Optional
+from typing import Optional
 
 from inmanta.ast import Locatable, NotFoundException
 from inmanta.ast.statements import Statement
@@ -47,11 +48,11 @@ class DataTraceRenderer:
         return "\n".join(cls._render_reference(node_ref, tree_root=True)) + "\n"
 
     @classmethod
-    def _render_reference(cls, node_ref: AssignableNodeReference, tree_root: bool = False) -> List[str]:
+    def _render_reference(cls, node_ref: AssignableNodeReference, tree_root: bool = False) -> list[str]:
         """
         Renders the data trace for all nodes a reference refers to.
         """
-        result: List[str] = []
+        result: list[str] = []
         if tree_root:
             result.append(repr(node_ref))
         if isinstance(node_ref, AttributeNodeReference):
@@ -65,7 +66,7 @@ class DataTraceRenderer:
         return result
 
     @classmethod
-    def _render_node(cls, node: AssignableNode) -> List[str]:
+    def _render_node(cls, node: AssignableNode) -> list[str]:
         """
         Renders the data trace for an assignable node. Shows information about:
             - the node's parent instance, if it is an attribute node
@@ -79,9 +80,9 @@ class DataTraceRenderer:
         :param tree_root: indicates whether this node is the root of the data trace tree. Behaviour for non-root nodes is
             slightly different in order to prevent output duplication.
         """
-        result: List[str] = []
+        result: list[str] = []
         result += cls._render_equivalence(node.equivalence)
-        assignments: List[Assignment] = list(
+        assignments: list[Assignment] = list(
             chain(
                 node.equivalence.external_assignable_assignments(),
                 node.equivalence.instance_assignments(),
@@ -91,7 +92,7 @@ class DataTraceRenderer:
         nb_assignments: int = len(assignments)
         for i, assignment in enumerate(assignments):
             last: bool = i == nb_assignments - 1
-            subblock: List[str] = []
+            subblock: list[str] = []
 
             subblock += cls._render_assignment(assignment)
             subblock += cls._render_implementation_context(assignment.context)
@@ -114,14 +115,14 @@ class DataTraceRenderer:
         return prefix + line
 
     @classmethod
-    def _prefix(cls, prefix: str, lines: Iterable[str]) -> List[str]:
+    def _prefix(cls, prefix: str, lines: Iterable[str]) -> list[str]:
         """
         Prefixes lines.
         """
         return [cls._prefix_line(prefix, line) for line in lines]
 
     @classmethod
-    def _branch(cls, lines: List[str], last: Optional[bool] = False) -> List[str]:
+    def _branch(cls, lines: list[str], last: Optional[bool] = False) -> list[str]:
         """
         Renders a branch in the tree.
 
@@ -131,19 +132,19 @@ class DataTraceRenderer:
             return []
         branch_prefix: str = ("└" if last else "├") + "── "
         block_prefix: str = (" " if last else "│") + " " * 3
-        result: List[str] = cls._prefix(branch_prefix, lines[0:1])
+        result: list[str] = cls._prefix(branch_prefix, lines[0:1])
         result += cls._prefix(block_prefix, lines[1:])
         return result
 
     @classmethod
-    def _indent(cls, lines: Iterable[str]) -> List[str]:
+    def _indent(cls, lines: Iterable[str]) -> list[str]:
         """
         Indents lines.
         """
         return cls._prefix(" " * 4, lines)
 
     @classmethod
-    def _render_implementation_context(cls, context: DataflowGraph) -> List[str]:
+    def _render_implementation_context(cls, context: DataflowGraph) -> list[str]:
         """
         Renders information about the dynamic implementation context, if it exists.
         """
@@ -152,7 +153,7 @@ class DataTraceRenderer:
             context.resolver.lookup("self")
         except NotFoundException:
             return []
-        result: List[str] = []
+        result: list[str] = []
         var_node: AssignableNodeReference = context.resolver.get_dataflow_node("self")
         if (
             isinstance(var_node, VariableNodeReference)
@@ -165,14 +166,14 @@ class DataTraceRenderer:
         return result
 
     @classmethod
-    def _render_constructor(cls, instance: InstanceNode) -> List[str]:
+    def _render_constructor(cls, instance: InstanceNode) -> list[str]:
         """
         Renders information about the construction of an instance node:
             - constructor statement
             - lexical position
             - dynamic context it lives in, if any
         """
-        result: List[str] = []
+        result: list[str] = []
         if instance.responsible is not None:
             result += [
                 "CONSTRUCTED BY `%s`" % instance.responsible.pretty_print(),
@@ -183,13 +184,13 @@ class DataTraceRenderer:
         return result
 
     @classmethod
-    def _render_instance(cls, instance: InstanceNode) -> List[str]:
+    def _render_instance(cls, instance: InstanceNode) -> list[str]:
         """
         Renders information about an instance node:
             - construction information
             - index matches and their construction information
         """
-        result: List[str] = []
+        result: list[str] = []
         result += cls._render_constructor(instance)
         for index_node in instance.get_all_index_nodes():
             if index_node is instance:
@@ -199,14 +200,14 @@ class DataTraceRenderer:
                 "INDEX MATCH: `%s`" % index_node,
             ]
 
-            subblock: List[str] = []
+            subblock: list[str] = []
             subblock += cls._render_constructor(index_node)
 
             result += cls._indent(subblock)
         return result
 
     @classmethod
-    def _render_assignment(cls, assignment: Assignment) -> List[str]:
+    def _render_assignment(cls, assignment: Assignment) -> list[str]:
         """
         Renders information about an assignment in the dataflow graph.
         """
@@ -218,7 +219,7 @@ class DataTraceRenderer:
         ]
 
     @classmethod
-    def _render_equivalence(cls, equivalence: Equivalence) -> List[str]:
+    def _render_equivalence(cls, equivalence: Equivalence) -> list[str]:
         """
         Renders information about an equivalence unless trivial. Shows the equivalence's members and the responsible
         assignments.
@@ -233,9 +234,11 @@ class DataTraceRenderer:
                         for resp_loc in sorted(
                             (
                                 (
-                                    assignment.responsible.pretty_print()
-                                    if isinstance(assignment.responsible, Statement)
-                                    else str(assignment.responsible),
+                                    (
+                                        assignment.responsible.pretty_print()
+                                        if isinstance(assignment.responsible, Statement)
+                                        else str(assignment.responsible)
+                                    ),
                                     str(assignment.responsible.get_location()),
                                 )
                                 for assignment in equivalence.interal_assignments()

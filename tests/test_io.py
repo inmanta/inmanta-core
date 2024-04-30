@@ -291,7 +291,7 @@ def test_run_pythonpath(io, tmpdir):
     """Test to see if the python path of the venv is removed for the subprocess
     See issue #2676
     """
-    venv = env.VirtualEnv(tmpdir)
+    venv = env.VirtualEnv(os.path.abspath(tmpdir))
     venv.use_virtual_env()
 
     result = io.run("env")

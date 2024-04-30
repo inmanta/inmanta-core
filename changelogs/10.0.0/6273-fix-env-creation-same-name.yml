@@ -1,0 +1,4 @@
+description: trying to create an environment with a name that is already used will now return a code 400.
+issue-nr: 6273
+change-type: patch
+destination-branches: [master, iso6, iso5]

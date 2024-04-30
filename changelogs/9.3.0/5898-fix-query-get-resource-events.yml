@@ -1,0 +1,8 @@
+---
+description: 'Fix bug that makes the handler fail with the exception `PostgresSyntaxError: trailing junk after parameter at or near "$3A"` when running against PostgreSQL 15.'
+issue-nr: 5898
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6, iso5]
+sections:
+  minor-improvement: "{{description}}"

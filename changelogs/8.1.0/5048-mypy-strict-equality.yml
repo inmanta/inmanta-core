@@ -1,0 +1,8 @@
+description: "Enabled mypy's `strict_equality` option"
+change-type: patch
+issue-nr: 5380
+sections:
+  bugfix: Fixed cycle detection in experimental relation precedence policy
+destination-branches:
+  - master
+  - iso6

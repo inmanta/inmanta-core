@@ -1,0 +1,7 @@
+---
+description: Fix a bug where numbers where cast to int instead of float
+change-type: patch
+destination-branches: [master]
+sections:
+  bugfix: "{{description}}"
+

@@ -19,8 +19,7 @@ relationship. The code snippet below rewrite the above-mentioned example using t
     :language: inmanta
     :caption: main.cf
 
-Note, that the Router entity also defines an index on the name attribute. The presence of this index is not optional
-as will be explained later on in this document.
+Note, that the Router entity also defines an index on the name attribute.
 
 Modelling embedded entities
 ###########################
@@ -56,15 +55,16 @@ The following constraints should be satisfied for each embedded entity defined i
 * The embedded entity must inherit from :inmanta:entity:`lsm::EmbeddedEntity`.
 * When a bidirectional relationship is used between the embedding entity and the embedded entity, the variable name
   referencing the embedding entity should start with an underscore (See code snippet below).
-* When a bidirectional relationship is used, the arity of the relationship towards the embedding entity should be 1.
+* When a bidirectional relationship is used, the arity of the relationship towards the embedding entity should be 0 or 1.
 * Relation attributes, where the other side is an embedded entity, should be prefixed with an underscore when the
   relation should not be included in the service definition.
-* The embedded entity must define at least one index that can be used to uniquely identify an embedded entity in a
-  relationship. More information regarding this is available in Section
-  :ref:`Attribute modifiers on a relationship<attribute_modifiers>`.
+* An index must be defined on an embedded entity if the relationship towards that embedded entity has an upper arity
+  larger than one. This index is used to uniquely identify an embedded entity in a relationship. More information
+  regarding this is available in section
+  :ref:`Attribute modifiers on a relationship<attribute_modifiers_on_a_relationship>`.
 * When an embedded entity is defined with the attribute modifier ``__r__``, all sub-attributes of that embedded
   entity need to have the attribute modifier set to read-only as well. More information regarding attribute modifiers
-  on embedded entities is available in Section :ref:`Attribute modifiers on a relationship<attribute_modifiers>`.
+  on embedded entities is available in section :ref:`Attribute modifiers on a relationship<attribute_modifiers_on_a_relationship>`.
 
 
 The following code snippet gives an example of a bidirectional relationship to an embedded entity. Note that the name
@@ -107,16 +107,19 @@ modifiers on relationships:
 In order to enforce the above-mentioned attribute modifiers, the inmanta server needs to be able to determine whether
 the embedded entities, provided in an attribute update, are an update of an existing embedded entity or a new
 embedded entity is being created. For that reason, each embedded entity needs to define the set of attributes that
-uniquely identify the embedded entity. This set of attributes is defined via an index on the embedded entity. The index
-should satisfy the following constraints:
+uniquely identify the embedded entity if the upper arity of the relationship is larger than one. This set of
+attributes is defined via an index on the embedded entity. The index should satisfy the following constraints:
 
 * At least one non-relational attribute should be included in the index.
 * Each non-relational attribute, part of the index, is exposed via the north-bound API (i.e. the name of the attribute
   doesn't start with an underscore).
 * The index can include no other relational attributes except for the relation to the embedding entity.
 
+The attributes that uniquely identify an embedded entity can never be updated. As such, they cannot have the
+attribute modifier ``__rwplus__``.
+
 If multiple indices are defined on the embedded entity that satisfy the above-mentioned constraints, one index needs
-to be selected explicitly by defining the ``string[]? __lsm_key_attributes`` attributes in the embedded entity. The
+to be selected explicitly by defining the ``string[]? __lsm_key_attributes`` attribute in the embedded entity. The
 default value of this attribute should contain all the attributes of the index that should be used to uniquely identify
 the embedded entity.
 
@@ -130,8 +133,11 @@ to uniquely identify the embedded entity.
     :language: inmanta
     :caption: main.cf
 
-The attributes that uniquely identify an embedded entity can never be updated. As such, they cannot have the
-attribute modifier ``__rwplus__``.
+If the upper arity of the relationship towards an embedded entity is one, it's not required to define an
+index on the embedded entity. In that case, the embedded entity will always have the same identity, no matter what the
+values of its attributes are. This means that there will be no difference in behavior whether the attribute modifier is
+set to ``rw`` or ``rw+``. If an index is defined on the embedded entity, the attribute modifiers will be enforced in
+the same way as for relationships with an upper arity larger than one.
 
 
 .. _legacy_no_strict_modifier_enforcement:
@@ -139,7 +145,7 @@ attribute modifier ``__rwplus__``.
 Legacy: Embedded entities without strict modifier enforcement
 #############################################################
 
-When the ``strict_modifier_enforcement`` flag is disabled on a service entity binding, the attributes modifiers defined
+When the ``strict_modifier_enforcement`` flag is disabled on a service entity binding, the attribute modifiers defined
 on embedded entities are not enforced recursively. In that case, only the attribute modifiers defined on top-level
 service attributes are enforced. The following meaning applies to attribute modifiers associated with top-level
 relational attributes to embedded entities:

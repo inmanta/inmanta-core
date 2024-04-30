@@ -19,14 +19,16 @@
 import abc
 import json
 from abc import ABC
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Dict, Generic, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast
+from typing import Generic, Optional, TypeVar, Union, cast
 from urllib import parse
 from urllib.parse import quote
 from uuid import UUID
 
 from asyncpg import Record
 
+import inmanta.data
 from inmanta import data
 from inmanta.data import (
     APILIMIT,
@@ -37,6 +39,7 @@ from inmanta.data import (
     ConfigurationModel,
     DatabaseOrderV2,
     DesiredStateVersionOrder,
+    DiscoveredResourceOrder,
     FactOrder,
     InvalidQueryParameter,
     InvalidSort,
@@ -46,10 +49,11 @@ from inmanta.data import (
     Parameter,
     ParameterOrder,
     QueryFilter,
+    Resource,
     ResourceAction,
     ResourceHistoryOrder,
     ResourceLogOrder,
-    ResourceOrder,
+    ResourceStatusOrder,
     SimpleQueryBuilder,
     VersionedResourceOrder,
     model,
@@ -70,6 +74,7 @@ from inmanta.data.model import (
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
+from inmanta.server import config as opt
 from inmanta.server.validate_filter import (
     BooleanEqualityFilter,
     BooleanIsNotNullFilter,
@@ -84,8 +89,8 @@ from inmanta.server.validate_filter import (
     InvalidFilter,
     LogLevelFilter,
 )
-from inmanta.types import SimpleTypes
-from inmanta.util import datetime_utc_isoformat
+from inmanta.types import JsonType, SimpleTypes
+from inmanta.util import datetime_iso_format
 
 T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrderV2)
 T_DTO = TypeVar("T_DTO", bound=BaseModel)
@@ -143,7 +148,7 @@ class PagingMetadata:
         self.after = after
         self.page_size = page_size
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         return {
             "total": self.total,
             "before": self.before,
@@ -161,11 +166,22 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         last_id: Optional[PRIMITIVE_SQL_TYPES] = None,
         start: Optional[PRIMITIVE_SQL_TYPES] = None,
         end: Optional[PRIMITIVE_SQL_TYPES] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> None:
+        """
+        All boundary values for paging are exclusive, i.e. the returned page will contain only values strictly larger/smaller
+        than the boundary value. "start", "first", "end" and "last" are poorly named: they imply to be ordering-aware, while
+        they're actually only about the requested page containing "larger" or "smaller" values respectively, regardless of
+        the requested order.
+
+        :param first_id: secondary boundary value for min bound. If not None, boundary is `> (start, first_id)`.
+        :param last_id: secondary boundary value for max bound. If not None, boundary is `< (end, last_id)`.
+        :param start: primary boundary value for min bound. If first_id is None, boundary is `> start`.
+        :param end: primary boundary value for max bound. If last_id is None, boundary is `< end`.
+        """
         self.limit = self.validate_limit(limit)
         self.raw_filter = filter or {}
-        self.filter: Dict[str, QueryFilter] = self.process_filters(filter)
+        self.filter: dict[str, QueryFilter] = self.process_filters(filter)
         self.order = order
         self.requested_page_boundaries = RequestedPagingBoundaries(start, end, first_id, last_id)
         self.requested_page_boundaries.validate()
@@ -177,15 +193,14 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         e.g. "/api/v2/resource"
         """
-        pass
 
-    def get_extra_url_parameters(self) -> Dict[str, str]:
+    def get_extra_url_parameters(self) -> dict[str, str]:
         """
         Return additional URL query parameters required to construct the paging links
         """
         return {}
 
-    async def get_data(self) -> Tuple[Sequence[T_DTO], Optional[PagingBoundaries]]:
+    async def get_data(self) -> tuple[Sequence[T_DTO], Optional[PagingBoundaries]]:
         query_builder = self.get_base_query()
 
         # In this method, we use `data.Resource`
@@ -202,7 +217,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         sql_query, values = query_builder.build()
 
         records = await data.Resource.select_query(sql_query, values, no_obj=True)
-
         dtos = self.construct_dtos(records)
 
         paging_boundaries = None
@@ -215,7 +229,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         Convert the sequence of records into a sequence of DTO's
         """
-        pass
 
     @abc.abstractmethod
     def get_base_query(self) -> SimpleQueryBuilder:
@@ -224,15 +237,20 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         Must contain select, from and where clause if specific filtering is required
         """
-        pass
+
+    def get_base_query_for_page_count(self) -> SimpleQueryBuilder:
+        """
+        Override this method to use a different query than returned by get_base_query()
+        to calculate the page count for a certain page.
+        """
+        return self.get_base_query()
 
     @property
     @abc.abstractmethod
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         """
         Return the specification of the allowed filters, see FilterValidator
         """
-        pass
 
     def clip_to_page(self, query_builder: SimpleQueryBuilder) -> SimpleQueryBuilder:
         """
@@ -297,7 +315,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         either from the PagingBoundaries if we have a valid page,
         or from the RequestedPagingBoundaries if we got an empty page
         """
-        query_builder = self.get_base_query()
+        query_builder = self.get_base_query_for_page_count()
 
         query_builder = query_builder.filter(
             *data.BaseDocument.get_composed_filter_with_query_types(
@@ -351,7 +369,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         sql_query, values = query_builder.build()
         result = await data.Resource.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
+        result = cast(list[Record], result)
         if not result:
             raise InvalidQueryParameter("Could not determine page bounds")
         return PagingMetadata(
@@ -366,13 +384,13 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         dtos: Sequence[T_DTO],
         paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries],
         meta: PagingMetadata,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """
         Construct the paging links
         """
         links = {}
 
-        url_query_params: Dict[str, Optional[Union[SimpleTypes, List[str]]]] = {
+        url_query_params: dict[str, Optional[Union[SimpleTypes, list[str]]]] = {
             "limit": self.limit,
             "sort": str(self.order),
         }
@@ -389,8 +407,8 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             def value_to_string(value: Union[str, int, UUID, datetime]) -> str:
                 if isinstance(value, datetime):
                     # Accross API boundaries, all naive datetime instances are assumed UTC.
-                    # Returns ISO timestamp implicitly in UTC.
-                    return datetime_utc_isoformat(value, naive_utc=True)
+                    # Returns ISO timestamp.
+                    return datetime_iso_format(value, tz_aware=opt.server_tz_aware_timestamps.get())
                 return str(value)
 
             def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:
@@ -439,7 +457,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         return limit
 
 
-class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
+class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
     def __init__(
         self,
         env: data.Environment,
@@ -448,12 +466,12 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         last_id: Optional[ResourceVersionIdStr] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "resource_type.desc",
         deploy_summary: bool = False,
     ) -> None:
         super().__init__(
-            order=ResourceOrder.parse_from_string(sort),
+            order=ResourceStatusOrder.parse_from_string(sort),
             limit=limit,
             first_id=first_id,
             last_id=last_id,
@@ -464,8 +482,30 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         self.environment = env
         self.deploy_summary = deploy_summary
 
+        # Rewrite the filter to special case orphan handling
+        # We handle the non-orphan case by changing the query, so we don't need the filter
+        # This doesn't affect the paging links, as they use the raw filter
+
+        status_filter_type, status_filter_fields = self.filter.get("status", (None, {}))
+        assert status_filter_type is None or status_filter_type == inmanta.data.QueryType.COMBINED
+        assert isinstance(status_filter_fields, dict)
+        self.drop_orphans = "orphaned" in status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []) or (
+            "orphaned" not in status_filter_fields.get(inmanta.data.QueryType.CONTAINS, ["orphaned"])
+        )
+
+        if self.drop_orphans:
+            # clean filter for orphans
+            try:
+                status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []).remove("orphaned")
+                if not status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []):
+                    del status_filter_fields[inmanta.data.QueryType.NOT_CONTAINS]
+                if not status_filter_fields:
+                    del self.filter["status"]
+            except ValueError:
+                pass
+
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "resource_type": ContainsPartialFilter,
             "agent": ContainsPartialFilter,
@@ -476,72 +516,75 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
     def get_base_url(self) -> str:
         return "/api/v2/resource"
 
-    def get_extra_url_parameters(self) -> Dict[str, str]:
+    def get_extra_url_parameters(self) -> dict[str, str]:
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        def subquery_latest_version_for_single_resource(higher_than: Optional[str]) -> str:
-            """
-            Returns a subquery to select a single row from a resource table:
-                - for the first resource id higher than the given boundary
-                - the highest (released) version for which a resource with this id exists
-
-            :param higher_than: If given, the subquery selects the first resource id higher than this value (may be a column).
-                If not given, the subquery selects the first resource id, period.
-            """
-            higher_than_condition: str = f"AND r.resource_id > {higher_than}" if higher_than is not None else ""
-            return f"""
-                SELECT
-                    r.resource_id,
-                    r.attributes,
-                    r.resource_type,
-                    r.agent,
-                    r.resource_id_value,
-                    r.model,
-                    r.environment,
-                    (
-                        CASE WHEN (SELECT r.model < latest_version.version FROM latest_version)
-                            THEN 'orphaned' -- use the CTE to check the status
-                            ELSE r.status::text
-                        END
-                    ) as status
-                FROM resource r
-                JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
-                WHERE r.environment = $1 AND cm.released = TRUE {higher_than_condition}
-                ORDER BY resource_id, model DESC
-                LIMIT 1
-            """
-
-        query_builder = SimpleQueryBuilder(
+        new_query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
             prelude=f"""
-                /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
-                /* The latest_version CTE finds the maximum released version number in the environment */
-                WITH RECURSIVE latest_version AS (
+               WITH latest_version AS (
                     SELECT MAX(public.configurationmodel.version) as version
                     FROM public.configurationmodel
                     WHERE public.configurationmodel.released=TRUE AND environment=$1
-                ),
-                /*
-                emulate a loose (or skip) index scan (https://wiki.postgresql.org/wiki/Loose_indexscan):
-                1 resource_id at a time, select the latest (released) version it exists in.
-                */
-                cte AS (
-                    /* Initial row for recursion: select relevant version for first resource */
-                    ( {subquery_latest_version_for_single_resource(higher_than=None)} )
-                    UNION ALL
-                    SELECT next_r.*
-                    FROM cte curr_r
-                    CROSS JOIN LATERAL (
-                        /* Recurse: select relevant version for next resource (one higher in the sort order than current) */
-                        {subquery_latest_version_for_single_resource(higher_than="curr_r.resource_id")}
-                    ) next_r
+                ), versioned_resource_state AS (
+                    SELECT
+                        rps.*,
+                        CASE
+                            -- try the cheap, trivial option first because the lookup has a big performance impact
+                            WHEN EXISTS (
+                                SELECT 1
+                                FROM resource AS r
+                                WHERE r.environment = rps.environment AND r.resource_id = rps.resource_id AND r.model = (
+                                    SELECT version FROM latest_version
+                                )
+                            ) THEN (SELECT version FROM latest_version)
+                            -- only if the resource does not exist in the latest released version, search for the latest
+                            -- version it does exist in
+                            ELSE (
+                                SELECT MAX(r.model)
+                                FROM resource AS r
+                                JOIN configurationmodel AS m
+                                    ON r.environment = m.environment AND r.model = m.version AND m.released = TRUE
+                                WHERE r.environment = rps.environment AND r.resource_id = rps.resource_id
+                            )
+                        END AS version
+                    FROM resource_persistent_state AS rps
+                    WHERE rps.environment = $1
+                ), result AS (
+                    SELECT
+                        rps.resource_id,
+                        r.attributes,
+                        rps.resource_type,
+                        rps.agent,
+                        rps.resource_id_value,
+                        r.model,
+                        rps.environment,
+                        (
+                            CASE
+                                WHEN r.model < (SELECT version FROM latest_version)
+                                    THEN 'orphaned'
+                                WHEN (r.status = 'deploying')
+                                    THEN r.status::text
+                                ELSE
+                                    rps.last_non_deploying_status::text
+                            END
+                        ) as status
+                    FROM versioned_resource_state AS rps
+            -- LEFT join for trivial `COUNT(*)`. Not applicable when filtering orphans because left table contains orphans.
+                    {'' if self.drop_orphans else 'LEFT'} JOIN resource AS r
+                        ON r.environment = rps.environment
+                          AND r.resource_id = rps.resource_id
+           -- shortcut the version selection to the latest one iff we wish to exclude orphans
+           -- => no per-resource MAX required + wider index application
+                          AND r.model = {'(SELECT version FROM latest_version)' if self.drop_orphans else 'rps.version'}
+                    WHERE rps.environment = $1
                 )
             """,
-            from_clause="FROM cte r",
+            from_clause="FROM result AS r",
             values=[self.environment.id],
         )
-        return query_builder
+        return new_query_builder
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.LatestReleasedResource]:
         dtos: Sequence[LatestReleasedResource] = [
@@ -553,6 +596,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 requires=json.loads(resource["attributes"]).get("requires", []),
             )
             for resource in records
+            if resource["attributes"]  # filter out bad joins
         ]
         return dtos
 
@@ -563,7 +607,7 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
         environment: data.Environment,
         version: int,
         limit: Optional[int] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "resource_type.desc",
         first_id: Optional[ResourceVersionIdStr] = None,
         last_id: Optional[ResourceVersionIdStr] = None,
@@ -587,7 +631,7 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
         return f"/api/v2/desiredstate/{self.version}"
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "resource_type": ContainsPartialFilter,
             "agent": ContainsPartialFilter,
@@ -620,7 +664,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
         self,
         environment: data.Environment,
         limit: Optional[int] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "resource_type.desc",
         first_id: Optional[UUID] = None,
         last_id: Optional[UUID] = None,
@@ -639,7 +683,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "requested": DateRangeFilter,
             "success": BooleanEqualityFilter,
@@ -654,8 +698,9 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
         query_builder = SimpleQueryBuilder(
             select_clause="""SELECT id, remote_id, environment, requested,
                             started, completed, do_export, force_update,
-                            metadata, environment_variables, success, version,
-                            partial, removed_resource_sets, exporter_plugin,
+                            metadata, requested_environment_variables, used_environment_variables,
+                            mergeable_environment_variables,
+                            success, version, partial, removed_resource_sets, exporter_plugin,
                             notify_failed_compile, failed_compile_message""",
             from_clause=f" FROM {data.Compile.table_name()}",
             filter_statements=["environment = $1"],
@@ -677,7 +722,11 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 do_export=compile["do_export"],
                 force_update=compile["force_update"],
                 metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
-                environment_variables=json.loads(compile["environment_variables"]) if compile["environment_variables"] else {},
+                environment_variables=(
+                    json.loads(compile["used_environment_variables"]) if compile["used_environment_variables"] else None
+                ),
+                requested_environment_variables=json.loads(compile["requested_environment_variables"]),
+                mergeable_environment_variables=json.loads(compile["mergeable_environment_variables"]),
                 partial=compile["partial"],
                 removed_resource_sets=compile["removed_resource_sets"],
                 exporter_plugin=compile["exporter_plugin"],
@@ -693,7 +742,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
         self,
         environment: data.Environment,
         limit: Optional[int] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "resource_type.desc",
         start: Optional[int] = None,
         end: Optional[int] = None,
@@ -710,7 +759,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "version": IntRangeFilter,
             "date": DateRangeFilter,
@@ -735,9 +784,11 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                 version=desired_state["version"],
                 date=desired_state["date"],
                 total=desired_state["total"],
-                labels=[DesiredStateLabel(name=desired_state["type"], message=desired_state["message"])]
-                if desired_state["type"] and desired_state["message"]
-                else [],
+                labels=(
+                    [DesiredStateLabel(name=desired_state["type"], message=desired_state["message"])]
+                    if desired_state["type"] and desired_state["message"]
+                    else []
+                ),
                 status=desired_state["status"],
             )
             for desired_state in records
@@ -769,11 +820,11 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
         self.rid = rid
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {}
 
     def get_base_url(self) -> str:
-        return f"/api/v2/resource/{quote(self.rid,safe='')}/history"
+        return f"/api/v2/resource/{quote(self.rid, safe='')}/history"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
@@ -794,11 +845,12 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
                   WHERE resource.environment = $1 AND resource_id = $2 AND cm.released = TRUE
                 )
             """,
-            select_clause="SELECT attribute_hash, date, attributes",
+            select_clause="SELECT attribute_hash, date, attributes, model",
             from_clause="""
             FROM (SELECT
                     attribute_hash,
                     min(date) as date,
+                    min(model) as model,
                         (SELECT distinct on (attribute_hash) attributes
                             FROM resourcewithsequenceids
                             WHERE resourcewithsequenceids.attribute_hash = rs.attribute_hash
@@ -813,11 +865,20 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
         return query_builder
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[ResourceHistory]:
+        def get_attributes(record: Record) -> JsonType:
+            attributes = json.loads(record["attributes"])
+            if "version" not in attributes:
+                # Due to a bug, the version field has always been present in the attributes dictionary.
+                # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+                # version field is present in the attributes dictionary served out via the API.
+                attributes["version"] = record["model"]
+            return attributes
+
         return [
             ResourceHistory(
                 resource_id=self.rid,
                 attribute_hash=record["attribute_hash"],
-                attributes=json.loads(record["attributes"]),
+                attributes=get_attributes(record),
                 date=record["date"],
                 requires=[Id.parse_id(rid).resource_str() for rid in json.loads(record["attributes"]).get("requires", [])],
             )
@@ -832,7 +893,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
         rid: ResourceIdStr,
         limit: Optional[int] = None,
         sort: str = "resource_type.desc",
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
     ) -> None:
@@ -849,7 +910,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
         self.rid = rid
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "minimal_log_level": LogLevelFilter,
             "timestamp": DateRangeFilter,
@@ -857,7 +918,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
             "action": ContainsFilterResourceAction,
         }
 
-    def process_filters(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
         # Change the api names of the filters to the names used internally in the database
         query = super().process_filters(filter)
         if query.get("minimal_log_level"):
@@ -872,21 +933,36 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
         return f"/api/v2/resource/{parse.quote(self.rid, safe='')}/logs"
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the % and _
-        # characters in the query
-        resource_id = self.rid.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
         query_builder = SimpleQueryBuilder(
-            select_clause="SELECT action_id, action, timestamp, unnested_message",
-            from_clause=f"""
-            FROM
-                    (SELECT action_id, action, (unnested_message ->> 'timestamp')::timestamptz as timestamp,
-                    unnested_message ->> 'level' as level,
-                    unnested_message ->> 'msg' as msg,
-                    unnested_message
-                    FROM {ResourceAction.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = $1 AND rvid LIKE $2 ESCAPE '#') unnested
+            prelude=f"""
+                -- Get all resource action in the given environment for the given resource_id
+                WITH actions AS (
+                    SELECT  ra.*
+                    FROM {Resource.table_name()} AS r INNER JOIN resourceaction_resource AS rr ON (
+                                                          r.environment=rr.environment
+                                                          AND r.resource_id=rr.resource_id
+                                                          AND r.model=rr.resource_version
+                                                      )
+                                                      INNER JOIN {ResourceAction.table_name()} AS ra ON (
+                                                          rr.resource_action_id=ra.action_id
+                                                      )
+                    WHERE r.environment=$1 AND r.resource_id=$2
+                )
             """,
-            values=[self.environment.id, resource_id],
+            select_clause="SELECT action_id, action, timestamp, unnested_message",
+            from_clause="""
+            FROM
+                (
+                    SELECT action_id,
+                           action,
+                           (unnested_message ->> 'timestamp')::timestamptz AS timestamp,
+                           unnested_message ->> 'level' AS level,
+                           unnested_message ->> 'msg' AS msg,
+                           unnested_message
+                    FROM actions, unnest(messages) AS unnested_message
+                ) AS unnested
+            """,
+            values=[self.environment.id, self.rid],
         )
         return query_builder
 
@@ -918,7 +994,7 @@ class FactsView(DataView[FactOrder, Fact]):
         last_id: Optional[UUID] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> None:
         super().__init__(
             order=FactOrder.parse_from_string(sort),
@@ -932,10 +1008,11 @@ class FactsView(DataView[FactOrder, Fact]):
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "name": ContainsPartialFilter,
             "resource_id": ContainsPartialFilter,
+            "expires": BooleanEqualityFilter,
         }
 
     def get_base_url(self) -> str:
@@ -976,7 +1053,7 @@ class NotificationsView(DataView[NotificationOrder, model.Notification]):
         last_id: Optional[UUID] = None,
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> None:
         super().__init__(
             order=NotificationOrder.parse_from_string(sort),
@@ -990,7 +1067,7 @@ class NotificationsView(DataView[NotificationOrder, model.Notification]):
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "title": ContainsPartialFilter,
             "message": ContainsPartialFilter,
@@ -1037,7 +1114,7 @@ class ParameterView(DataView[ParameterOrder, model.Parameter]):
         last_id: Optional[UUID] = None,
         start: Optional[Union[str, datetime]] = None,
         end: Optional[Union[str, datetime]] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> None:
         super().__init__(
             order=ParameterOrder.parse_from_string(sort),
@@ -1051,7 +1128,7 @@ class ParameterView(DataView[ParameterOrder, model.Parameter]):
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "name": ContainsPartialFilter,
             "source": ContainsPartialFilter,
@@ -1094,7 +1171,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         end: Optional[Union[datetime, bool, str]] = None,
         first_id: Optional[str] = None,
         last_id: Optional[str] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> None:
         super().__init__(
             order=AgentOrder.parse_from_string(sort),
@@ -1108,14 +1185,14 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "name": ContainsPartialFilter,
             "process_name": ContainsPartialFilter,
             "status": ContainsFilter,
         }
 
-    def process_filters(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
         out_filter = super().process_filters(filter)
         # name is ambiguous, qualify
         if "name" in out_filter:
@@ -1164,3 +1241,141 @@ class AgentView(DataView[AgentOrder, model.Agent]):
             )
             for agent in records
         ]
+
+
+class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResource]):
+    def __init__(
+        self,
+        environment: data.Environment,
+        limit: Optional[int] = None,
+        sort: str = "discovered_resource_id.asc",
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> None:
+        super().__init__(
+            order=DiscoveredResourceOrder.parse_from_string(sort),
+            limit=limit,
+            first_id=None,
+            last_id=None,
+            start=start,
+            end=end,
+            filter=None,
+        )
+        self.environment = environment
+
+    @property
+    def allowed_filters(self) -> dict[str, type[Filter]]:
+        """
+        Return the specification of the allowed filters, see FilterValidator
+        """
+        return {}
+
+    def get_base_url(self) -> str:
+        return "/api/v2/discovered"
+
+    def get_base_query(self) -> SimpleQueryBuilder:
+        query_builder = SimpleQueryBuilder(
+            select_clause="SELECT environment, discovered_resource_id, values",
+            from_clause=f" FROM {data.DiscoveredResource.table_name()}",
+            filter_statements=["environment = $1"],
+            values=[self.environment.id],
+        )
+        return query_builder
+
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
+        return [
+            model.DiscoveredResource(
+                discovered_resource_id=res["discovered_resource_id"],
+                values=json.loads(res["values"]),
+            ).model_dump()
+            for res in records
+        ]
+
+
+class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
+    """
+    A query builder that applies any filters and the LIMIT statement to the prelude query rather than the outer query.
+    The outer query may use the table name "prelude" to refer to the inner query.
+    """
+
+    def __init__(
+        self,
+        prelude_query_builder: SimpleQueryBuilder,
+        select_clause: Optional[str] = None,
+        from_clause: Optional[str] = None,
+        db_order: Optional[DatabaseOrderV2] = None,
+        backward_paging: bool = False,
+    ) -> None:
+        super().__init__(
+            select_clause=select_clause,
+            from_clause=from_clause,
+            filter_statements=None,
+            values=None,
+            db_order=db_order,
+            limit=None,
+            backward_paging=backward_paging,
+            prelude=None,
+        )
+        self._prelude_query_builder = prelude_query_builder
+
+    @property
+    def offset(self) -> int:
+        """The current offset of the values to be used for filter statements"""
+        return len(self.values) + len(self._prelude_query_builder.values) + 1
+
+    def build(self) -> tuple[str, list[object]]:
+        prelude_query, prelude_values = self._prelude_query_builder.build()
+        prelude_query_in_with_block = f"WITH prelude AS ({prelude_query})"
+        delegate: SimpleQueryBuilder = SimpleQueryBuilder(
+            select_clause=self.select_clause,
+            from_clause=self._from_clause,
+            filter_statements=self._prelude_query_builder.filter_statements + self.filter_statements,
+            values=self._prelude_query_builder.values + self.values,
+            db_order=self.db_order,
+            limit=None,
+            backward_paging=self.backward_paging,
+            prelude=prelude_query_in_with_block,
+        )
+        full_query, values_full = delegate.build()
+        return full_query, prelude_values
+
+    def select(self, select_clause: str) -> "PreludeBasedFilteringQueryBuilder":
+        """Set the select clause of the query"""
+        return PreludeBasedFilteringQueryBuilder(
+            select_clause=select_clause,
+            from_clause=self._from_clause,
+            db_order=self.db_order,
+            backward_paging=self.backward_paging,
+            prelude_query_builder=self._prelude_query_builder,
+        )
+
+    def from_clause(self, from_clause: str) -> "PreludeBasedFilteringQueryBuilder":
+        """Set the from clause of the query"""
+        return PreludeBasedFilteringQueryBuilder(
+            select_clause=self.select_clause,
+            from_clause=from_clause,
+            db_order=self.db_order,
+            backward_paging=self.backward_paging,
+            prelude_query_builder=self._prelude_query_builder,
+        )
+
+    def order_and_limit(
+        self, db_order: DatabaseOrderV2, limit: Optional[int] = None, backward_paging: bool = False
+    ) -> "PreludeBasedFilteringQueryBuilder":
+        """Set the order and limit of the query"""
+        return PreludeBasedFilteringQueryBuilder(
+            select_clause=self.select_clause,
+            from_clause=self._from_clause,
+            db_order=db_order,
+            backward_paging=backward_paging,
+            prelude_query_builder=self._prelude_query_builder.order_and_limit(db_order, limit, backward_paging),
+        )
+
+    def filter(self, filter_statements: list[str], values: list[object]) -> "PreludeBasedFilteringQueryBuilder":
+        return PreludeBasedFilteringQueryBuilder(
+            select_clause=self.select_clause,
+            from_clause=self._from_clause,
+            db_order=self.db_order,
+            backward_paging=self.backward_paging,
+            prelude_query_builder=self._prelude_query_builder.filter(filter_statements, values),
+        )

@@ -1,0 +1,6 @@
+---
+description: Add connection parameter to some methods in the database layer.
+issue-nr: 1279
+issue-repo: inmanta-lsm
+change-type: minor
+destination-branches: [master, iso6]

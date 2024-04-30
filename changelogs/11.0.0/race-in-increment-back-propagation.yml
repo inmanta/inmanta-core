@@ -1,0 +1,5 @@
+description: "No longer update the increment when the agent pulls (this is now done when a new version is released), to prevent race with #6486."
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"

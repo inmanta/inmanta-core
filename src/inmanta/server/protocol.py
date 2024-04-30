@@ -15,23 +15,24 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import socket
 import time
 import uuid
 from collections import defaultdict
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
+from collections.abc import Sequence
+from datetime import timedelta
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
 import importlib_metadata
 from tornado import gen, queues, routing, web
-from tornado.ioloop import IOLoop
 
 import inmanta.protocol.endpoints
-from inmanta import config as inmanta_config
 from inmanta import tracing
 from inmanta.data.model import ExtensionStatus
-from inmanta.protocol import Client, common, endpoints, handle, methods
+from inmanta.protocol import Client, Result, common, endpoints, handle, methods
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
@@ -60,7 +61,7 @@ class ServerStartFailure(Exception):
 
 class SliceStartupException(ServerStartFailure):
     def __init__(self, slice_name: str, cause: Exception):
-        super(SliceStartupException, self).__init__()
+        super().__init__()
         self.__cause__ = cause
         self.in_slice = slice_name
 
@@ -79,7 +80,7 @@ class ReturnClient(Client):
         self.session = session
 
     async def _call(
-        self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
+        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
     ) -> common.Result:
         with tracing.tracer.start_as_current_span(f"return_rpc.{method_properties.function.__name__}"):
             call_spec = method_properties.build_call(args, kwargs)
@@ -98,10 +99,9 @@ class ReturnClient(Client):
 class Server(endpoints.Endpoint):
     def __init__(self, connection_timout: int = 120) -> None:
         super().__init__("server")
-        self._slices: Dict[str, ServerSlice] = {}
-        self._slice_sequence: Optional[List[ServerSlice]] = None
-        self._handlers: List[routing.Rule] = []
-        self.token: Optional[str] = inmanta_config.Config.get(self.id, "token", None)
+        self._slices: dict[str, ServerSlice] = {}
+        self._slice_sequence: Optional[list[ServerSlice]] = None
+        self._handlers: list[routing.Rule] = []
         self.connection_timout = connection_timout
         self.sessions_handler = SessionManager()
         self.add_slice(self.sessions_handler)
@@ -117,7 +117,7 @@ class Server(endpoints.Endpoint):
         self._slices[slice.name] = slice
         self._slice_sequence = None
 
-    def get_slices(self) -> Dict[str, "ServerSlice"]:
+    def get_slices(self) -> dict[str, "ServerSlice"]:
         return self._slices
 
     def get_slice(self, name: str) -> "ServerSlice":
@@ -131,8 +131,8 @@ class Server(endpoints.Endpoint):
 
     id = property(get_id)
 
-    def _order_slices(self) -> List["ServerSlice"]:
-        edges: Dict[str, Set[str]] = defaultdict(set)
+    def _order_slices(self) -> list["ServerSlice"]:
+        edges: dict[str, set[str]] = defaultdict(set)
 
         for slice in self.get_slices().values():
             edges[slice.name].update(slice.get_dependencies())
@@ -199,7 +199,7 @@ class Server(endpoints.Endpoint):
             return
         self.running = False
 
-        await super(Server, self).stop()
+        await super().stop()
 
         order = list(reversed(self._get_slice_sequence()))
 
@@ -212,7 +212,7 @@ class Server(endpoints.Endpoint):
             await endpoint.stop()
 
 
-class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
+class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | None]):
     """
     Base class for server extensions offering zero or more api endpoints
 
@@ -237,7 +237,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         super().__init__()
 
         self._name: str = name
-        self._handlers: List[routing.Rule] = []
+        self._handlers: list[routing.Rule] = []
         self._sched = Scheduler(f"server slice {name}")
         # is shutdown in progress?
         self._stopping: bool = False
@@ -260,7 +260,6 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
         Dependencies are up (if present) prior to invocation of this call
         """
-        pass
 
     async def prestop(self) -> None:
         """
@@ -288,26 +287,31 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
         This method `blocks` until the slice is down
         """
-        await super(ServerSlice, self).stop()
+        await super().stop()
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """List of names of slices that must be started before this one."""
         return []
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         """List of names of slices that must be started after this one."""
         return []
 
     # internal API towards extension framework
     name = property(lambda self: self._name)
 
-    def get_handlers(self) -> List[routing.Rule]:
+    def get_handlers(self) -> list[routing.Rule]:
         """Get the list of"""
         return self._handlers
 
     # utility methods for extensions developers
     def schedule(
-        self, call: TaskMethod, interval: int = 60, initial_delay: Optional[float] = None, cancel_on_stop: bool = True
+        self,
+        call: TaskMethod,
+        interval: float = 60,
+        initial_delay: Optional[float] = None,
+        cancel_on_stop: bool = True,
+        quiet_mode: bool = False,
     ) -> None:
         """
         Schedule a task repeatedly with a given interval. Tasks with the same call and the same schedule are considered the
@@ -315,8 +319,10 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
         :param interval: The interval between executions of the task.
         :param initial_delay: The delay to execute the task for the first time. If not set, interval is used.
+        :quiet_mode: Set to true to disable logging the recurring notification that the action is being called. Use this to
+        avoid polluting the server log for very frequent actions.
         """
-        self._sched.add_action(call, IntervalSchedule(float(interval), initial_delay), cancel_on_stop)
+        self._sched.add_action(call, IntervalSchedule(interval, initial_delay), cancel_on_stop, quiet_mode)
 
     def schedule_cron(self, call: TaskMethod, cron: str, cancel_on_stop: bool = True) -> None:
         """
@@ -380,7 +386,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
             return None
 
     @classmethod
-    def get_extension_statuses(cls, slices: List["ServerSlice"]) -> List[ExtensionStatus]:
+    def get_extension_statuses(cls, slices: list["ServerSlice"]) -> list[ExtensionStatus]:
         result = {}
         for server_slice in slices:
             ext_status = server_slice.get_extension_status()
@@ -388,20 +394,20 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
                 result[ext_status.name] = ext_status
         return list(result.values())
 
-    async def get_status(self) -> Dict[str, ArgumentTypes]:
+    async def get_status(self) -> dict[str, ArgumentTypes]:
         """
         Get the status of this slice.
         """
         return {}
 
-    def define_features(self) -> List["Feature[object]"]:
+    def define_features(self) -> list["Feature[object]"]:
         """Return a list of feature that this slice offers"""
         return []
 
 
-class Session(object):
+class Session:
     """
-    An environment that segments agents connected to the server
+    An environment that segments agents connected to the server. Should only be created in a context with a running event loop.
     """
 
     def __init__(
@@ -411,7 +417,7 @@ class Session(object):
         hang_interval: int,
         timout: int,
         tid: uuid.UUID,
-        endpoint_names: Set[str],
+        endpoint_names: set[str],
         nodename: str,
         disable_expire_check: bool = False,
     ) -> None:
@@ -419,15 +425,18 @@ class Session(object):
         self._interval = hang_interval
         self._timeout = timout
         self._sessionstore: SessionManager = sessionstore
-        self._seen: float = time.time()
-        self._callhandle = None
+        self._seen: float = time.monotonic()
+        self._callhandle: Optional[asyncio.TimerHandle] = None
         self.expired: bool = False
 
+        self.last_dispatched_call: float = 0
+        self.dispatch_delay = 0.01  # keep at least 10 ms between dispatches
+
         self.tid: uuid.UUID = tid
-        self.endpoint_names: Set[str] = endpoint_names
+        self.endpoint_names: set[str] = endpoint_names
         self.nodename: str = nodename
 
-        self._replies: Dict[uuid.UUID, asyncio.Future] = {}
+        self._replies: dict[uuid.UUID, asyncio.Future] = {}
 
         # Disable expiry in certain tests
         if not disable_expire_check:
@@ -439,12 +448,13 @@ class Session(object):
     def check_expire(self) -> None:
         if self.expired:
             LOGGER.exception("Tried to expire session already expired")
-        ttw = self._timeout + self._seen - time.time()
+        now = time.monotonic()
+        ttw = self._timeout + self._seen - now
         if ttw < 0:
-            expire_coroutine = self.expire(self._seen - time.time())
+            expire_coroutine = self.expire(self._seen - now)
             self._sessionstore.add_background_task(expire_coroutine)
         else:
-            self._callhandle = IOLoop.current().call_later(ttw, self.check_expire)
+            self._callhandle = asyncio.get_running_loop().call_later(ttw, self.check_expire)
 
     def get_id(self) -> uuid.UUID:
         return self._sid
@@ -456,11 +466,11 @@ class Session(object):
             return
         self.expired = True
         if self._callhandle is not None:
-            IOLoop.current().remove_timeout(self._callhandle)
+            self._callhandle.cancel()
         await self._sessionstore.expire(self, timeout)
 
-    def seen(self, endpoint_names: Set[str]) -> None:
-        self._seen = time.time()
+    def seen(self, endpoint_names: set[str]) -> None:
+        self._seen = time.monotonic()
         self.endpoint_names = endpoint_names
 
     async def _handle_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
@@ -475,40 +485,44 @@ class Session(object):
         except asyncio.TimeoutError:
             LOGGER.warning(log_message)
 
-    def put_call(self, call_spec: common.Request, timeout: int = 10) -> asyncio.Future:
-        future = asyncio.Future()
-
+    def put_call(self, call_spec: common.Request, timeout: int = 10, expect_reply: bool = True) -> asyncio.Future:
         reply_id = uuid.uuid4()
+        future = asyncio.Future()
 
         LOGGER.debug("Putting call %s: %s %s for agent %s in queue", reply_id, call_spec.method, call_spec.url, self._sid)
 
-        call_spec.reply_id = reply_id
-        self._queue.put(call_spec)
-        self._sessionstore.add_background_task(
-            self._handle_timeout(
-                future,
-                timeout,
-                "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec.method, call_spec.url, self._sid),
+        if expect_reply:
+            call_spec.reply_id = reply_id
+            self._sessionstore.add_background_task(
+                self._handle_timeout(
+                    future,
+                    timeout,
+                    f"Call {reply_id}: {call_spec.method} {call_spec.url} for agent {self._sid} timed out.",
+                )
             )
-        )
-        self._replies[reply_id] = future
+            self._replies[reply_id] = future
+        else:
+            future.set_result({"code": 200, "result": None})
+        self._queue.put(call_spec)
 
         return future
 
-    async def get_calls(self, no_hang: bool) -> Optional[List[common.Request]]:
+    async def get_calls(self, no_hang: bool) -> Optional[list[common.Request]]:
         """
         Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
         fails.
         """
         try:
-            call_list: List[common.Request] = []
+            call_list: list[common.Request] = []
 
             if no_hang:
-                timeout = IOLoop.current().time() + 0.1
+                timeout = 0.1
             else:
-                timeout = IOLoop.current().time() + self._interval
-
-            call = await self._queue.get(timeout=timeout)
+                timeout = self._interval if self._interval > 0.1 else 0.1
+                # We choose to have a minimum of 0.1 as timeout as this is also the value used for no_hang.
+                # Furthermore, the timeout value cannot be zero as this causes an issue with Tornado:
+                # https://github.com/tornadoweb/tornado/issues/3271
+            call = await self._queue.get(timeout=timedelta(seconds=timeout))
             if call is None:
                 # aborting session
                 return None
@@ -547,8 +561,8 @@ class Session(object):
         self.abort()
 
 
-class SessionListener(object):
-    async def new_session(self, session: Session, endpoint_names_snapshot: Set[str]) -> None:
+class SessionListener:
+    async def new_session(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
         """
         Notify that a new session was created.
 
@@ -556,9 +570,8 @@ class SessionListener(object):
         :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
                                         method was called. This parameter provides a snapshot which will not change.
         """
-        pass
 
-    async def expire(self, session: Session, endpoint_names_snapshot: Set[str]) -> None:
+    async def expire(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
         """
         Notify that a session expired.
 
@@ -566,9 +579,8 @@ class SessionListener(object):
         :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
                                         method was called. This parameter provides a snapshot which will not change.
         """
-        pass
 
-    async def seen(self, session: Session, endpoint_names_snapshot: Set[str]) -> None:
+    async def seen(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
         """
         Notify that a heartbeat was received for an existing session.
 
@@ -576,7 +588,6 @@ class SessionListener(object):
         :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
                                         method was called. This parameter provides a snapshot which will not change.
         """
-        pass
 
 
 # Internals
@@ -584,27 +595,27 @@ class TransportSlice(ServerSlice):
     """Slice to manage the listening socket"""
 
     def __init__(self, server: Server) -> None:
-        super(TransportSlice, self).__init__(SLICE_TRANSPORT)
+        super().__init__(SLICE_TRANSPORT)
         self.server = server
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """All Slices with an http endpoint should depend on this one using :func:`get_dependened_by`"""
         return []
 
     async def start(self) -> None:
-        await super(TransportSlice, self).start()
+        await super().start()
         await self.server._transport.start(self.server.get_slices().values(), self.server._handlers)
 
     async def prestop(self) -> None:
-        await super(TransportSlice, self).prestop()
+        await super().prestop()
         LOGGER.debug("Stopping Server Rest Endpoint")
         await self.server._transport.stop()
 
     async def stop(self) -> None:
-        await super(TransportSlice, self).stop()
+        await super().stop()
         await self.server._transport.join()
 
-    async def get_status(self) -> Dict[str, ArgumentTypes]:
+    async def get_status(self) -> dict[str, ArgumentTypes]:
         def format_socket(sock: socket.socket) -> str:
             sname = sock.getsockname()
             return f"{sname[0]}:{sname[1]}"
@@ -629,7 +640,7 @@ class SessionManager(ServerSlice):
     A service that receives method calls over one or more transports
     """
 
-    __methods__: Dict[str, Tuple[str, Callable]] = {}
+    __methods__: dict[str, tuple[str, Callable]] = {}
 
     def __init__(self) -> None:
         super().__init__(SLICE_SESSION_MANAGER)
@@ -645,13 +656,13 @@ class SessionManager(ServerSlice):
         self.interval: int = interval
 
         # Session management
-        self._sessions: Dict[uuid.UUID, Session] = {}
+        self._sessions: dict[uuid.UUID, Session] = {}
         self._sessions_lock = asyncio.Lock()
 
         # Listeners
-        self.listeners: List[SessionListener] = []
+        self.listeners: list[SessionListener] = []
 
-    async def get_status(self) -> Dict[str, ArgumentTypes]:
+    async def get_status(self) -> dict[str, ArgumentTypes]:
         return {"hangtime": self.hangtime, "interval": self.interval, "sessions": len(self._sessions)}
 
     def add_listener(self, listener: SessionListener) -> None:
@@ -661,13 +672,13 @@ class SessionManager(ServerSlice):
         async with self._sessions_lock:
             # Keep the super call in the session_lock to make sure that no additional sessions are created
             # while the server is shutting down. This call sets the is_stopping() flag to true.
-            await super(SessionManager, self).prestop()
+            await super().prestop()
         # terminate all sessions cleanly
         for session in self._sessions.copy().values():
             await session.expire(0)
             session.abort()
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     def validate_sid(self, sid: uuid.UUID) -> bool:
@@ -675,7 +686,7 @@ class SessionManager(ServerSlice):
             sid = uuid.UUID(sid)
         return sid in self._sessions
 
-    async def get_or_create_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: Set[str], nodename: str) -> Session:
+    async def get_or_create_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: set[str], nodename: str) -> Session:
         if isinstance(sid, str):
             sid = uuid.UUID(sid)
 
@@ -695,8 +706,8 @@ class SessionManager(ServerSlice):
 
             return session
 
-    def new_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: Set[str], nodename: str) -> Session:
-        LOGGER.debug("New session with id %s on node %s for env %s with endpoints %s" % (sid, nodename, tid, endpoint_names))
+    def new_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: set[str], nodename: str) -> Session:
+        LOGGER.debug(f"New session with id {sid} on node {nodename} for env {tid} with endpoints {endpoint_names}")
         return Session(self, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
 
     async def expire(self, session: Session, timeout: float) -> None:
@@ -707,22 +718,31 @@ class SessionManager(ServerSlice):
             endpoint_names_snapshot = set(session.endpoint_names)
             await asyncio.gather(*[listener.expire(session, endpoint_names_snapshot) for listener in self.listeners])
 
-    def seen(self, session: Session, endpoint_names: Set[str]) -> None:
+    def seen(self, session: Session, endpoint_names: set[str]) -> None:
         LOGGER.debug("Seen session with id %s; endpoints: %s", session.get_id(), endpoint_names)
         session.seen(endpoint_names)
 
     @handle(methods.heartbeat, env="tid")
     async def heartbeat(
-        self, sid: uuid.UUID, env: "inmanta.data.Environment", endpoint_names: List[str], nodename: str, no_hang: bool = False
-    ) -> Union[int, Tuple[int, Dict[str, str]]]:
+        self, sid: uuid.UUID, env: "inmanta.data.Environment", endpoint_names: list[str], nodename: str, no_hang: bool = False
+    ) -> Union[int, tuple[int, dict[str, str]]]:
         LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
 
         session: Session = await self.get_or_create_session(sid, env.id, set(endpoint_names), nodename)
 
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
+
+        # keep a minimal timeout between sending out calls to allow them to batch up
+        now = time.monotonic()
+        wait_time = session.dispatch_delay - (now - session.last_dispatched_call)
+        if wait_time > 0:
+            await asyncio.sleep(wait_time)
+
         call_list = await session.get_calls(no_hang=no_hang)
+
         if call_list is not None:
             LOGGER.debug("Pushing %d method calls to node %s", len(call_list), nodename)
+            session.last_dispatched_call = time.monotonic()
             return 200, {"method_calls": call_list}
         else:
             LOGGER.debug("Heartbeat wait expired for %s, returning. (long poll)", nodename)
@@ -732,11 +752,11 @@ class SessionManager(ServerSlice):
     @handle(methods.heartbeat_reply)
     async def heartbeat_reply(
         self, sid: uuid.UUID, reply_id: uuid.UUID, data: JsonType
-    ) -> Union[int, Tuple[int, Dict[str, str]]]:
+    ) -> Union[int, tuple[int, dict[str, str]]]:
         try:
             env = self._sessions[sid]
             env.set_reply(reply_id, data)
             return 200
         except Exception:
-            LOGGER.warning("could not deliver agent reply with sid=%s and reply_id=%s" % (sid, reply_id), exc_info=True)
+            LOGGER.warning(f"could not deliver agent reply with sid={sid} and reply_id={reply_id}", exc_info=True)
             return 500

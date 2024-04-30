@@ -15,32 +15,37 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import datetime
 import logging
 import typing
 import uuid
 from asyncio import subprocess
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Optional
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
+from tornado.httpclient import AsyncHTTPClient
 
 from inmanta import config, data
 from inmanta.agent import Agent, agent
 from inmanta.agent import config as agent_config
+from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
-from inmanta.protocol import Result
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
+from inmanta.protocol import Result, handle, typedmethod
+from inmanta.protocol.common import ReturnValue
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, protocol
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager, SessionAction, SessionManager
-from inmanta.server.protocol import Session
+from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.protocol import ServerSlice, Session
 from utils import UNKWN, assert_equal_ish, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
 
-class Collector(object):
+class Collector:
     def __init__(self):
         self.values = []
 
@@ -65,12 +70,12 @@ async def api_call_future(*args, **kwargs) -> Result:
     return Result(200, "X")
 
 
-class MockSession(object):
+class MockSession:
     """
     An environment that segments agents connected to the server
     """
 
-    def __init__(self, sid, tid, endpoint_names: Set[str], nodename):
+    def __init__(self, sid, tid, endpoint_names: set[str], nodename):
         self._sid = sid
         self.tid = tid
         self.endpoint_names = endpoint_names
@@ -730,8 +735,8 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     await a.add_end_point_name("agent1")
-    await a.start()
     async_finalizer(a.stop)
+    await a.start()
 
     # Wait until session is created
     await retry_limited(lambda: (env_id, "agent1") in agentmanager.tid_endpoint_to_session, 10)
@@ -763,6 +768,7 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     await a.add_end_point_name("agent1")
     await a.start()
+    async_finalizer(a.stop)
 
     # Verify that session creation fails and server state is stays consistent
     await retry_limited(lambda: "Heartbeat failed" in caplog.text, 10)
@@ -788,9 +794,9 @@ async def test_agent_actions(server, client, async_finalizer):
     result = await client.create_environment(project_id=project_id, name="test2")
     env2_id = UUID(result.result["environment"]["id"])
 
-    env_to_agent_map: Dict[UUID, agent.Agent] = {}
+    env_to_agent_map: dict[UUID, agent.Agent] = {}
 
-    async def start_agent(env_id: UUID, agent_names: List[str]) -> None:
+    async def start_agent(env_id: UUID, agent_names: list[str]) -> None:
         for agent_name in agent_names:
             await data.Agent(environment=env_id, name=agent_name, paused=False).insert()
 
@@ -810,7 +816,7 @@ async def test_agent_actions(server, client, async_finalizer):
 
     await asyncio.gather(start_agent(env1_id, ["agent1", "agent2"]), start_agent(env2_id, ["agent1"]))
 
-    async def assert_agents_paused(expected_statuses: Dict[Tuple[UUID, str], bool]) -> None:
+    async def assert_agents_paused(expected_statuses: dict[tuple[UUID, str], bool]) -> None:
         async def _does_expected_status_match_actual_status() -> bool:
             for (env_id, agent_name), paused in expected_statuses.items():
                 # Check in-memory session state
@@ -910,7 +916,7 @@ async def test_agent_actions(server, client, async_finalizer):
         )
 
     # set up for halt test
-    async def assert_agents_halt_state(env_id: UUID, agents_running: Dict[str, bool], halted: bool) -> None:
+    async def assert_agents_halt_state(env_id: UUID, agents_running: dict[str, bool], halted: bool) -> None:
         """
         :param agents_running: dictionary of agents that were running before environment halting.
         """
@@ -985,12 +991,12 @@ async def test_agent_on_resume_actions(server, environment, client, agent_factor
     result = await client.agent_action(environment, name="agent2", action=AgentAction.pause.value)
     assert result.code == 200
 
-    async def assert_agents_on_resume_state(agent_states: Dict[str, Optional[bool]]) -> None:
+    async def assert_agents_on_resume_state(agent_states: dict[str, Optional[bool]]) -> None:
         for agent_name, on_resume in agent_states.items():
             agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
             assert agent_from_db.unpause_on_resume is on_resume
 
-    async def assert_agents_paused_state(agent_states: Dict[str, bool]) -> None:
+    async def assert_agents_paused_state(agent_states: dict[str, bool]) -> None:
         for agent_name, paused in agent_states.items():
             agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
             assert agent_from_db.paused is paused
@@ -1179,35 +1185,6 @@ async def test_failover_doesnt_make_paused_agent_primary(server, client, environ
     assert len(agentmanager.tid_endpoint_to_session) == 0
 
 
-async def test_add_internal_agent_when_missing_in_agent_map(server, environment, postgresql_client):
-    """
-    The internal agent should always be present in the autostart_agent_map. If it is not present, it is added when to
-    auto-started agent is started. This test case verifies this behavior.
-    """
-    # Ensure agent1
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-    env = await data.Environment.get_by_id(UUID(environment))
-    await agentmanager.ensure_agent_registered(env=env, nodename="agent1")
-
-    # Remove the internal agent from the autostart_agent_map
-    query = "UPDATE public.environment SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::jsonb), TRUE)"
-    await postgresql_client.execute(query, [data.AUTOSTART_AGENT_MAP], "{}")
-
-    # Assert internal agent not in autostart_agent_map
-    env = await data.Environment.get_by_id(UUID(environment))
-    autostart_agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
-    assert "internal" not in autostart_agent_map
-
-    # Start autostarted agent1
-    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-    await autostarted_agent_manager._ensure_agents(env=env, agents=["agent1"])
-
-    # Verify patch on autostart_agent_map
-    env = await data.Environment.get_by_id(UUID(environment))
-    autostart_agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
-    assert "internal" in autostart_agent_map
-
-
 async def test_error_handling_agent_fork(server, environment, monkeypatch):
     """
     Verifies resolution of issue: inmanta/inmanta-core#2777
@@ -1215,7 +1192,7 @@ async def test_error_handling_agent_fork(server, environment, monkeypatch):
     exception_message = "The start of the agent failed"
 
     async def _dummy_fork_inmanta(
-        self, args: List[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
+        self, args: list[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
     ) -> subprocess.Process:
         raise Exception(exception_message)
 
@@ -1235,7 +1212,6 @@ async def test_are_agents_active(server, client, environment, agent_factory) -> 
     Ensure that the `AgentManager.are_agents_active()` method returns True when an agent
     is in the up or the paused state.
     """
-    agent_config.use_autostart_agent_map.set("True")
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agent_name = "agent1"
     env_id = UUID(environment)
@@ -1300,3 +1276,127 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     assert "Started new agent with PID" not in caplog.text
     # Ensure no timeout happened
     assert "took too long to start" not in caplog.text
+
+
+async def test_auto_started_agent_log_in_debug_mode(server, environment):
+    """
+    Test the logging of an autostarted agent
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "test1": ""})
+
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agentmanager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+
+    await agentmanager.ensure_agent_registered(env, "test1")
+    await autostarted_agentmanager._ensure_agents(env, ["test1"])
+
+    logdir = Config.get("config", "log-dir")
+    log_file_path = f"{logdir}/agent-{environment}.log"  # Path to the log file
+
+    def log_contains_debug_line():
+        with open(log_file_path) as f:
+            log_content = f.read()
+        return "DEBUG    inmanta.protocol.endpoints Start transport for client agent" in log_content
+
+    await retry_limited(log_contains_debug_line, 10)
+
+
+async def test_heartbeat_different_session(server_pre_start, async_finalizer, caplog):
+    """
+    Verify that:
+      - if the max_clients is reached, the heartbeat will still work as it is in a different pool
+      - the max_clients option in the config changes the number of max_clients in a pool
+      - debug logs concerning 'max_clients limit reached' logged by Tornado, are logged as inmanta warnings.
+    """
+    caplog.set_level(logging.WARNING)
+    hanglock = asyncio.Event()
+
+    @typedmethod(
+        path="/test",
+        operation="GET",
+        client_types=["agent"],
+        agent_server=True,
+    )
+    def test_method(number: int) -> ReturnValue[int]:  # NOQA
+        """
+        api endpoint that never returns
+        """
+
+    class TestSlice(ServerSlice):
+        @handle(test_method)
+        async def test_method_implementation(self, number: int) -> ReturnValue[int]:  # NOQA
+            LOGGER.warning(f"HANG {number}")
+            await hanglock.wait()
+            return ReturnValue(response=number)
+
+    Config.set("agent_rest_transport", "max_clients", "1")
+
+    # This part is copied from the app.start_agent function. It needs to be called before the server starts.
+    # We need to be able to create an environment before we can create an agent which we can't do using the start_agent function
+    max_clients: int = Config.get("agent_rest_transport", "max_clients", "10")
+    AsyncHTTPClient.configure(None, max_clients=max_clients)
+
+    server = TestSlice(name="test_slice")
+
+    ibl = InmantaBootloader(configure_logging=True)
+    ctx = ibl.load_slices()
+
+    for mypart in ctx.get_slices():
+        ibl.restserver.add_slice(mypart)
+
+    ibl.restserver.add_slice(server)
+
+    await ibl.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(ibl.stop)
+
+    client = protocol.Client("client")
+
+    result = await client.create_project("project-test")
+    assert result.code == 200
+    proj_id = result.result["project"]["id"]
+
+    result = await client.create_environment(proj_id, "test", None, None)
+    assert result.code == 200
+    env_id = result.result["environment"]["id"]
+    environment = await data.Environment.get_by_id(uuid.UUID(env_id))
+
+    agent_manager = ibl.restserver.get_slice(SLICE_AGENT_MANAGER)
+
+    a = Agent(hostname="node1", environment=environment.id, agent_map={"agent1": "localhost"}, code_loader=False)
+    await a.add_end_point_name("agent1")
+    await a.add_end_point_name("agent1")
+
+    async_finalizer.add(a.stop)
+    await a.start()
+
+    # Wait until session is created
+    await retry_limited(lambda: len(agent_manager.sessions) == 1, 10)
+
+    # Have many connections in flight
+    hangers = asyncio.gather(*(a._client.test_method(i) for i in range(5)))
+    logging.warning("WAITING!")
+    assert not hangers.done()
+
+    def did_exceed_capacity():
+        msg = "max_clients limit reached, request queued. 1 active, 2 queued requests."
+        for record in caplog.records:
+            if msg in record.message:
+                if record.name == "inmanta.protocol.endpoints" and record.levelno == logging.WARNING:
+                    return True
+        return False
+
+    await retry_limited(did_exceed_capacity, 10)
+
+    caplog.set_level(logging.NOTSET)
+    caplog.clear()
+
+    def still_sending_heartbeats():
+        count = caplog.text.count("Level 3 sending heartbeat for")
+        return count > 2
+
+    await retry_limited(still_sending_heartbeats, 10)
+
+    hanglock.set()
+    await hangers

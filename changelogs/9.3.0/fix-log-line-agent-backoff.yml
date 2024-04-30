@@ -1,0 +1,6 @@
+---
+description: Make sure that the log line, that reports the time required for an agent to fetch its resources from the server, is reported as a floating point number instead of an integer.
+change-type: patch
+destination-branches: [master, iso6, iso5, iso4]
+sections:
+  bugfix: "{{description}}"

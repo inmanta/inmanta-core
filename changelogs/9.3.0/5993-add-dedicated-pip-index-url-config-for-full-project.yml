@@ -1,0 +1,4 @@
+description: Add dedicated project-wide pip index url configuration option to the project.yml.
+issue-nr: 5993
+change-type: minor
+destination-branches: [master, iso6]

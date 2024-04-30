@@ -1,0 +1,6 @@
+description: Fix wrong docker login instructions
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+    minor-improvement: "{{description}}"
+

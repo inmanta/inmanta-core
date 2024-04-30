@@ -1,0 +1,4 @@
+---
+description: Add IF NOT EXISTS to creation of index in database migration script.
+change-type: patch
+destination-branches: [master, iso6]

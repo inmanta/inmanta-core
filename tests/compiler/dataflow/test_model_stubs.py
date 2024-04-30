@@ -16,8 +16,6 @@
     Contact: code@inmanta.com
 """
 
-from typing import Dict, List
-
 import pytest
 
 import inmanta.ast.type as inmanta_type
@@ -36,8 +34,8 @@ from inmanta.execute.dataflow import (
 @pytest.mark.parametrize(
     "value_string,other_stmts",
     [
-        ("[1,2,3]", []),
-        ("{'a': 1}", []),
+        ("[1,2,a]", ["a=5"]),
+        ("{'a': a}", ["a=5"]),
         ("std::replace('Hello World?', '?', '!')", []),
         ("true or true", []),
         ("true and true", []),
@@ -49,7 +47,7 @@ from inmanta.execute.dataflow import (
             [
                 """
                 entity A:
-                    number n
+                    int n
                 end
 
                 index A(n)
@@ -69,7 +67,7 @@ from inmanta.execute.dataflow import (
         ("1 in [1]", []),
     ],
 )
-def test_dataflow_nodestub(dataflow_test_helper: DataflowTestHelper, value_string: str, other_stmts: List[str]) -> None:
+def test_dataflow_nodestub(dataflow_test_helper: DataflowTestHelper, value_string: str, other_stmts: list[str]) -> None:
     dataflow_test_helper.compile(
         """
 x = %s
@@ -80,7 +78,7 @@ x = %s
     graph: DataflowGraph = dataflow_test_helper.get_graph()
     x: AssignableNodeReference = get_dataflow_node(graph, "x")
     assert isinstance(x, VariableNodeReference)
-    assignments: List[Assignment] = list(x.node.assignments())
+    assignments: list[Assignment] = list(x.node.assignments())
     assert len(assignments) == 1
     assert isinstance(assignments[0].rhs, ValueNodeReference)
     assert isinstance(assignments[0].rhs.node, NodeStub)
@@ -93,7 +91,7 @@ typedef my_type as string matching /test/
         """,
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
-    types: Dict[str, inmanta_type.Type] = dataflow_test_helper.get_types()
+    types: dict[str, inmanta_type.Type] = dataflow_test_helper.get_types()
     type_string: str = "__config__::my_type"
     assert type_string in types
     my_type: inmanta_type.Type = types[type_string]

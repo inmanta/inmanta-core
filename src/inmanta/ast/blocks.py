@@ -15,22 +15,22 @@
 
     Contact: code@inmanta.com
 """
+
 import warnings
-from collections.abc import Set
+from collections.abc import Iterable, Iterator, Sequence, Set
 from itertools import chain
-from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Optional
 
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
 from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statement, StaticEagerPromise
 from inmanta.execute.runtime import QueueScheduler, Resolver
 
 if TYPE_CHECKING:
-
     from inmanta.execute.runtime import ExecutionContext
 
 
-class BasicBlock(object):
-    def __init__(self, namespace: Namespace, stmts: List[DynamicStatement] = []) -> None:
+class BasicBlock:
+    def __init__(self, namespace: Namespace, stmts: list[DynamicStatement] = []) -> None:
         self.__stmts = []  # type: List[DynamicStatement]
         self.__definition_stmts = []  # type: List[DefinitionStatement]
         self.__variables = []  # type: List[Tuple[str, Statement]]
@@ -40,10 +40,11 @@ class BasicBlock(object):
         for st in stmts:
             self.add(st)
 
-    def get_stmts(self) -> List[DynamicStatement]:
+    def get_stmts(self) -> list[DynamicStatement]:
         return self.__stmts
 
-    def get_anchors(self) -> List[Anchor]:
+    def get_anchors(self) -> list[Anchor]:
+        """Should only be called after normalization."""
         return [a for s in self.__stmts for a in s.get_anchors()]
 
     def add(self, stmt: DynamicStatement) -> None:
@@ -52,7 +53,7 @@ class BasicBlock(object):
     def add_definition(self, stmt: DefinitionStatement) -> None:
         self.__definition_stmts.append(stmt)
 
-    def get_variables(self) -> List[str]:
+    def get_variables(self) -> list[str]:
         """
         Returns a list of all variables declared in this block. Does not include variables declared in nested blocks.
         """
@@ -71,7 +72,7 @@ class BasicBlock(object):
             try:
                 s.normalize()
             except TypeNotFoundException as e:
-                e.set_statement(s)
+                e.set_statement(s, False)
                 raise e
         # not used yet
         # self.requires = set([require for s in self.__stmts for require in s.requires()])
@@ -103,7 +104,7 @@ class BasicBlock(object):
             try:
                 s.emit(resolver, queue)
             except RuntimeException as e:
-                e.set_statement(s)
+                e.set_statement(s, False)
                 raise e
 
     def warn_shadowed_variables(self) -> None:
@@ -127,8 +128,8 @@ class BasicBlock(object):
 
     def shadowed_variables(
         self,
-        surrounding_vars: Optional[Dict[str, FrozenSet[Locatable]]] = None,
-    ) -> Iterator[Tuple[str, FrozenSet[Locatable], FrozenSet[Locatable]]]:
+        surrounding_vars: Optional[dict[str, frozenset[Locatable]]] = None,
+    ) -> Iterator[tuple[str, frozenset[Locatable], frozenset[Locatable]]]:
         """
         Returns an iterator over variables shadowed in this block or its nested blocks.
         The elements are tuples of the variable name, a set of the shadowed locations
@@ -139,8 +140,8 @@ class BasicBlock(object):
             surrounding_vars = {}
         surrounding_vars = surrounding_vars.copy()
 
-        def merge_locatables(tuples: Iterable[Tuple[str, Locatable]]) -> Dict[str, FrozenSet[Locatable]]:
-            acc: Dict[str, FrozenSet[Locatable]] = {}
+        def merge_locatables(tuples: Iterable[tuple[str, Locatable]]) -> dict[str, frozenset[Locatable]]:
+            acc: dict[str, frozenset[Locatable]] = {}
             for var, loc in tuples:
                 if var not in acc:
                     acc[var] = frozenset(())

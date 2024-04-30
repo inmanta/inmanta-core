@@ -15,10 +15,10 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import os
 import uuid
-from typing import Dict
 
 import pytest
 
@@ -117,7 +117,7 @@ async def test_environment(server, client, cli, tmpdir):
 
     path_dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
     assert os.path.isfile(path_dot_inmanta_file)
-    with open(path_dot_inmanta_file, "r", encoding="utf-8") as f:
+    with open(path_dot_inmanta_file, encoding="utf-8") as f:
         file_content = f.read()
         assert f"environment={env_id}" in file_content
 
@@ -260,14 +260,14 @@ async def test_create_environment(tmpdir, server, client, cli):
     assert result.exit_code == 0
     assert os.path.exists(file_path)
 
-    with open(file_path, "r") as inmanta_file:
+    with open(file_path) as inmanta_file:
         file_content_0 = inmanta_file.read()
     ctime_0 = os.path.getctime(file_path)
 
     result = await cli.run("environment", "create", "-n", "test-env-1", "-p", "test", "--save", input="n")
     assert result.exit_code == 0
 
-    with open(file_path, "r") as inmanta_file:
+    with open(file_path) as inmanta_file:
         file_content_1 = inmanta_file.read()
 
     ctime_1 = os.path.getctime(file_path)
@@ -278,7 +278,7 @@ async def test_create_environment(tmpdir, server, client, cli):
     result = await cli.run("environment", "create", "-n", "test-env-2", "-p", "test", "--save", input="y")
     assert result.exit_code == 0
 
-    with open(file_path, "r") as inmanta_file:
+    with open(file_path) as inmanta_file:
         file_content_2 = inmanta_file.read()
 
     ctime_2 = os.path.getctime(file_path)
@@ -304,12 +304,12 @@ async def test_pause_agent(server, cli):
     await data.Agent(environment=env1.id, name="agent2", paused=False).insert()
     await data.Agent(environment=env2.id, name="agent3", paused=False).insert()
 
-    async def assert_agent_paused(env_id: uuid.UUID, expected_records: Dict[str, bool]) -> None:
+    async def assert_agent_paused(env_id: uuid.UUID, expected_records: dict[str, bool]) -> None:
         result = await cli.run("agent", "list", "-e", str(env_id))
         assert result.exit_code == 0
         output = result.stdout.replace(" ", "")
         assert "Agent|Environment|Paused" in output
-        for (agent_name, paused) in expected_records.items():
+        for agent_name, paused in expected_records.items():
             assert f"{agent_name}|{env_id}|{paused}" in output
 
     await assert_agent_paused(env_id=env1.id, expected_records=dict(agent1=False, agent2=False))

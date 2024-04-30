@@ -1,6 +1,6 @@
 [tool.black]
 line-length = 128
-target-version = ['py36', 'py37', 'py38']
+target-version = ['py311']
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -16,6 +16,33 @@ exclude = '''
   | dist
 )/
 '''
+
+[tool.mypy]
+plugins = [
+    'pydantic.mypy'
+]
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+follow_imports = 'silent'
+no_implicit_optional = true
+no_implicit_reexport = true
+show_error_codes = true
+strict_optional = true
+strict_equality = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_untyped_fields = true
 
 [tool.irt.build.python]
 hooks = { 'pre' = 'pre-build.sh' }
@@ -35,3 +62,7 @@ markers = [
     "db_restore_dump(dump): mark the db dump to restore. To be used in conjunction with the `migrate_db_from` fixture."
 ]
 log_format = "%(asctime)s.%(msecs)03d %(levelname)s %(message)s"
+
+[tool.coverage.run]
+parallel = true
+branch = false

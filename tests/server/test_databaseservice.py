@@ -15,12 +15,17 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
+import logging
+
+import pytest
+from asyncpg import Connection
 
 from inmanta import data
 from inmanta.server import config as opt
 from inmanta.server.services import databaseservice
-from utils import retry_limited
+from utils import log_contains, retry_limited
 
 
 async def test_agent_process_cleanup(server, environment, agent_factory):
@@ -40,3 +45,56 @@ async def test_agent_process_cleanup(server, environment, agent_factory):
     # Assert cleanup
     result = await data.AgentProcess.get_list()
     assert len(result) == 1
+
+
+@pytest.fixture(scope="function")
+async def set_pool_size_to_one():
+    """
+    Sets the database pool's max and min size to 1 and resets their prior values upon exiting.
+    """
+    save_min_size = opt.db_connection_pool_min_size.get()
+    save_max_size = opt.db_connection_pool_max_size.get()
+
+    opt.db_connection_pool_min_size.set("1")
+    opt.db_connection_pool_max_size.set("1")
+
+    yield
+
+    opt.db_connection_pool_min_size.set(str(save_min_size))
+    opt.db_connection_pool_max_size.set(str(save_max_size))
+
+
+async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):
+    """
+    Test the basic functionalities of the ExhaustedPoolWatcher class
+    """
+
+    def exhaustion_events_recorded() -> bool:
+        """
+        Returns true if some database exhaustion events have been recorded
+        """
+        n_events: int = database_slice._db_pool_watcher._exhausted_pool_events_count
+        return n_events > 0
+
+    with caplog.at_level(logging.WARNING, "inmanta.server.services.databaseservice"):
+        database_slice = server.get_slice(databaseservice.SLICE_DATABASE)
+
+        pool = database_slice._pool
+        assert pool is not None
+        connection: Connection = await pool.acquire()
+        try:
+            # Make sure _check_database_pool_exhaustion gets called (scheduled to run every 200ms)
+            # and records some exhaustion events.
+            await retry_limited(exhaustion_events_recorded, 1)
+        finally:
+            await connection.close()
+
+        # Call _report_database_pool_exhaustion manually (scheduled to run every 24h)
+        await database_slice._report_database_pool_exhaustion()
+
+        log_contains(
+            caplog,
+            "inmanta.server.services.databaseservice",
+            logging.WARNING,
+            "Database pool was exhausted",
+        )

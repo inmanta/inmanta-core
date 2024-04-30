@@ -1,0 +1,6 @@
+---
+description: The server now logs the enabled extensions when it starts.
+change-type: patch
+destination-branches: [master, iso6, iso5]
+sections:
+  minor-improvement: "{{description}}"

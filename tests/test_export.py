@@ -15,23 +15,26 @@
 
     Contact: code@inmanta.com
 """
+
 import json
 import logging
 import os
-import shutil
-from typing import Dict, List, Optional
+from typing import Optional
 
 import pytest
 
+import inmanta.resources
 from inmanta import config, const
 from inmanta.ast import CompilerException, ExternalException
 from inmanta.const import ResourceState
-from inmanta.data import Resource
+from inmanta.data import Environment, Resource
 from inmanta.export import DependencyCycleException
-from utils import LogSequence, v1_module_from_template
+from inmanta.server import SLICE_RESOURCE
+from inmanta.server.server import Server
+from utils import LogSequence
 
 
-async def assert_resource_set_assignment(environment, assignment: Dict[str, Optional[str]]) -> None:
+async def assert_resource_set_assignment(environment, assignment: dict[str, Optional[str]]) -> None:
     """
     Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
 
@@ -41,7 +44,7 @@ async def assert_resource_set_assignment(environment, assignment: Dict[str, Opti
     """
     resources = await Resource.get_resources_in_latest_version(environment=environment)
     assert len(resources) == len(assignment)
-    actual_assignment = {r.attributes["name"]: r.resource_set for r in resources}
+    actual_assignment = {r.attributes["key"]: r.resource_set for r in resources}
     assert actual_assignment == assignment
 
 
@@ -201,16 +204,23 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
     snippetcompiler.setup_for_snippet(
         """
             h = std::Host(name="test", os=std::linux)
-        """
+        """,
+        extra_index_url=["example.inmanta.com/index"],
     )
     await snippetcompiler.do_export_and_deploy()
 
     response = await client.list_versions(tid=environment)
     assert response.code == 200
     assert len(response.result["versions"]) == 1
+    assert response.result["versions"][0]["pip_config"] == {
+        "extra-index-url": ["example.inmanta.com/index"],
+        "index-url": None,
+        "pre": None,
+        "use-system-config": False,
+    }
 
 
-async def test_server_export(snippetcompiler, server, client, environment):
+async def test_server_export(snippetcompiler, server: Server, client, environment):
     snippetcompiler.setup_for_snippet(
         """
             h = std::Host(name="test", os=std::linux)
@@ -223,6 +233,21 @@ async def test_server_export(snippetcompiler, server, client, environment):
     assert result.code == 200
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1
+
+    version = result.result["versions"][0]["version"]
+    result = await client.get_version(tid=environment, id=result.result["versions"][0]["version"])
+    assert result.code == 200
+
+    for res in result.result["resources"]:
+        res["attributes"]["id"] = res["id"]
+        resource = inmanta.resources.Resource.deserialize(res["attributes"])
+        assert resource.version == resource.id.version == version
+
+    resources = await server.get_slice(SLICE_RESOURCE).get_resources_in_latest_version(
+        environment=await Environment.get_by_id(environment)
+    )
+
+    assert resources[0].attributes["version"] == version
 
 
 async def test_dict_export_server(snippetcompiler, server, client, environment):
@@ -371,7 +396,7 @@ x = exp::WrappedProxyTest(
     )
     snippetcompiler.do_export()
     tmp_file: str = os.path.join(snippetcompiler.project_dir, "dump.json")
-    with open(tmp_file, "r") as f:
+    with open(tmp_file) as f:
         export: dict = json.loads(f.read())
         my_dict: dict = {"dct": {"a": 1, "b": 2}}
         assert len(export) == 1
@@ -433,7 +458,8 @@ exp::Test3(
     )
 
 
-async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+@pytest.mark.parametrize("soft_delete", [True, False])
+async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent, soft_delete: bool) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
     """
@@ -441,55 +467,30 @@ async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environme
     async def export_model(
         model: str,
         partial_compile: bool,
-        resource_sets_to_remove: Optional[List[str]] = None,
+        resource_sets_to_remove: Optional[list[str]] = None,
     ) -> None:
-        init_py = """
-from inmanta.resources import (
-    Resource,
-    resource,
-)
-@resource("modulev1::Res", agent="name", id_attribute="name")
-class Res(Resource):
-    fields = ("name",)
-"""
-
-        module_name: str = "minimalv1module"
-        module_path: str = str(tmpdir.join("modulev1"))
-        if os.path.exists(module_path):
-            shutil.rmtree(module_path)
-        v1_module_from_template(
-            os.path.join(modules_dir, module_name),
-            module_path,
-            new_content_init_cf=model,
-            new_content_init_py=init_py,
-            new_name="modulev1",
-        )
-
         snippetcompiler.setup_for_snippet(
-            """
-    import modulev1
-            """,
-            add_to_module_path=[str(tmpdir)],
+            model,
+            extra_index_url=["example.inmanta.com/index"],
         )
         await snippetcompiler.do_export_and_deploy(
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            soft_delete=soft_delete,
         )
 
     # Full compile
     await export_model(
         model="""
-entity Res extends std::Resource:
-    string name
-end
-implement Res using std::none
-a = Res(name="the_resource_a")
-b = Res(name="the_resource_b")
-c = Res(name="the_resource_c")
-d = Res(name="the_resource_d")
-e = Res(name="the_resource_e")
-y = Res(name="the_resource_y")
-z = Res(name="the_resource_z")
+import test_resources
+
+a = test_resources::Resource(value="A", agent="A", key="the_resource_a")
+b = test_resources::Resource(value="A", agent="A", key="the_resource_b")
+c = test_resources::Resource(value="A", agent="A", key="the_resource_c")
+d = test_resources::Resource(value="A", agent="A", key="the_resource_d")
+e = test_resources::Resource(value="A", agent="A", key="the_resource_e")
+y = test_resources::Resource(value="A", agent="A", key="the_resource_y")
+z = test_resources::Resource(value="A", agent="A", key="the_resource_z")
 std::ResourceSet(name="resource_set_1", resources=[a,c])
 std::ResourceSet(name="resource_set_2", resources=[b])
 std::ResourceSet(name="resource_set_3", resources=[d, e])
@@ -512,15 +513,13 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
     # Partial compile
     await export_model(
         model="""
-    entity Res extends std::Resource:
-        string name
-    end
-    implement Res using std::none
-    a = Res(name="the_resource_a")
-    c2 = Res(name="the_resource_c2")
-    f = Res(name="the_resource_f")
+    import test_resources
+
+    a = test_resources::Resource(value="A", agent="A", key="the_resource_a")
+    c2 = test_resources::Resource(value="A", agent="A", key="the_resource_c2")
+    f = test_resources::Resource(value="A", agent="A", key="the_resource_f")
     # y is a shared resource, identical to the one in previous compile
-    y = Res(name="the_resource_y")
+    y = test_resources::Resource(value="A", agent="A", key="the_resource_y")
     # z is a shared resource not present in this model
     std::ResourceSet(name="resource_set_1", resources=[a,c2])
     std::ResourceSet(name="resource_set_4", resources=[f])
@@ -541,51 +540,92 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         },
     )
 
+    # Test soft_delete option
 
-async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+    model = """
+        import test_resources
+
+        g = test_resources::Resource(value="A", agent="A", key="the_resource_g")
+        std::ResourceSet(name="resource_set_5", resources=[g])
+
+        """
+    if not soft_delete:
+        with pytest.raises(
+            Exception,
+            match=(
+                "Invalid request: Following resource sets are present in the removed resource"
+                " sets and in the resources that are exported: {'resource_set_5'}"
+            ),
+        ):
+            await export_model(
+                model=model,
+                partial_compile=True,
+                resource_sets_to_remove=["resource_set_5"],
+            )
+
+    else:
+        await export_model(
+            model=model,
+            partial_compile=True,
+            resource_sets_to_remove=["resource_set_5"],
+        )
+        await assert_resource_set_assignment(
+            environment,
+            assignment={
+                "the_resource_a": "resource_set_1",
+                "the_resource_c2": "resource_set_1",
+                "the_resource_d": "resource_set_3",
+                "the_resource_e": "resource_set_3",
+                "the_resource_f": "resource_set_4",
+                "the_resource_g": "resource_set_5",  # Check it didn't get removed
+                "the_resource_y": None,
+                "the_resource_z": None,
+            },
+        )
+
+    response = await client.list_versions(tid=environment)
+    assert response.code == 200
+
+    # One of the 3 partial compiles is expected to fail when soft_delete is true:
+    assert len(response.result["versions"]) == 2 + soft_delete
+    last_version_nr = 0
+    expected_pip_config = {
+        "extra-index-url": ["example.inmanta.com/index"],
+        "index-url": None,
+        "pre": None,
+        "use-system-config": False,
+    }
+    for version in response.result["versions"]:
+        assert version["pip_config"] == expected_pip_config, f"failed for version: {version['version']}"
+        last_version_nr = version["version"]
+
+    # abusing this setup to test get_pip_config
+    response = await agent._client.get_pip_config(tid=environment, version=last_version_nr)
+    assert response.code == 200
+    assert response.result["data"] == expected_pip_config
+
+    response = await agent._client.get_pip_config(tid=environment, version=500)
+    assert response.code == 404
+
+
+async def test_resource_in_multiple_resource_sets(snippetcompiler, environment) -> None:
     """
     test that an error is raised if a resource is in multiple
     resource_sets
     """
-    init_cf = """
-entity Res extends std::Resource:
-    string name
-end
+    model = """
+import test_resources
 
-implement Res using std::none
-
-a = Res(name="the_resource_a")
+a = test_resources::Resource(value="A", agent="A", key="the_resource_a")
 std::ResourceSet(name="resource_set_1", resources=[a])
 std::ResourceSet(name="resource_set_2", resources=[a])
 """
-    init_py = """
-from inmanta.resources import (
-    Resource,
-    resource,
-)
-@resource("modulev1::Res", agent="name", id_attribute="name")
-class Res(Resource):
-    fields = ("name",)
-"""
-    module_name: str = "minimalv1module"
-    module_path: str = str(tmpdir.join("modulev1"))
-    v1_module_from_template(
-        os.path.join(modules_dir, module_name),
-        module_path,
-        new_content_init_cf=init_cf,
-        new_content_init_py=init_py,
-        new_name="modulev1",
-    )
-    snippetcompiler.setup_for_snippet(
-        """
-import modulev1
-        """,
-        add_to_module_path=[str(tmpdir)],
-    )
+
+    snippetcompiler.setup_for_snippet(model)
     with pytest.raises(CompilerException) as e:
         await snippetcompiler.do_export_and_deploy()
     assert str(e.value).startswith(
-        "resource 'modulev1::Res[the_resource_a,name=the_resource_a]' can not be part of multiple " "ResourceSets:"
+        "resource 'test_resources::Resource[A,key=the_resource_a]' can not be part of multiple " "ResourceSets:"
     )
 
 
@@ -613,7 +653,7 @@ implement std::Resource using std::none
     log_sequence.contains("inmanta.export", logging.WARNING, msg)
 
 
-async def test_empty_resource_set_removal(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+async def test_empty_resource_set_removal(snippetcompiler, environment) -> None:
     """
     When a partial compile is ran, the exporter should trigger a deletion of each ResourceSet, defined in the partial model,
     that doesn't have any resources associated
@@ -622,35 +662,10 @@ async def test_empty_resource_set_removal(snippetcompiler, modules_dir: str, tmp
     async def export_model(
         model: str,
         partial_compile: bool,
-        resource_sets_to_remove: Optional[List[str]] = None,
+        resource_sets_to_remove: Optional[list[str]] = None,
     ) -> None:
-        init_py = """
-from inmanta.resources import (
-    Resource,
-    resource,
-)
-@resource("modulev1::Res", agent="name", id_attribute="name")
-class Res(Resource):
-    fields = ("name",)
-"""
-
-        module_name: str = "minimalv1module"
-        module_path: str = str(tmpdir.join("modulev1"))
-        if os.path.exists(module_path):
-            shutil.rmtree(module_path)
-        v1_module_from_template(
-            os.path.join(modules_dir, module_name),
-            module_path,
-            new_content_init_cf=model,
-            new_content_init_py=init_py,
-            new_name="modulev1",
-        )
-
         snippetcompiler.setup_for_snippet(
-            """
-    import modulev1
-            """,
-            add_to_module_path=[str(tmpdir)],
+            model,
         )
         await snippetcompiler.do_export_and_deploy(
             partial_compile=partial_compile,
@@ -660,18 +675,14 @@ class Res(Resource):
     # Full compile
     await export_model(
         model="""
-entity Res extends std::Resource:
-    string name
-end
+import test_resources
 
-implement Res using std::none
-
-a = Res(name="the_resource_a")
-b = Res(name="the_resource_b")
-c = Res(name="the_resource_c")
-d = Res(name="the_resource_d")
-e = Res(name="the_resource_e")
-z = Res(name="the_resource_z")
+a = test_resources::Resource(value="A", agent="A", key="the_resource_a")
+b = test_resources::Resource(value="A", agent="A", key="the_resource_b")
+c = test_resources::Resource(value="A", agent="A", key="the_resource_c")
+d = test_resources::Resource(value="A", agent="A", key="the_resource_d")
+e = test_resources::Resource(value="A", agent="A", key="the_resource_e")
+z = test_resources::Resource(value="A", agent="A", key="the_resource_z")
 std::ResourceSet(name="resource_set_1", resources=[a,c])
 std::ResourceSet(name="resource_set_2", resources=[b])
 std::ResourceSet(name="resource_set_3", resources=[d, e])
@@ -693,15 +704,12 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
     # Partial compile
     await export_model(
         model="""
-    entity Res extends std::Resource:
-        string name
-    end
+    import test_resources
 
-    implement Res using std::none
 
-    a = Res(name="the_resource_a")
-    c2 = Res(name="the_resource_c2")
-    f = Res(name="the_resource_f")
+    a = test_resources::Resource(value="A", agent="A", key="the_resource_a")
+    c2 = test_resources::Resource(value="A", agent="A", key="the_resource_c2")
+    f = test_resources::Resource(value="A", agent="A", key="the_resource_f")
     std::ResourceSet(name="resource_set_1", resources=[a,c2])
     std::ResourceSet(name="resource_set_4", resources=[f])
     std::ResourceSet(name="resource_set_3", resources=[])
@@ -718,3 +726,26 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_z": None,
         },
     )
+
+
+def test_attribute_value_of_id_has_str_type(snippetcompiler):
+    """
+    Verify that the id.attribute_value field of resources emitted by the exporter have the type str.
+    Even if the type in the model is different.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        import testmodule_integer_id
+
+        testmodule_integer_id::Test(
+            id_attr=123,
+            agent="internal",
+        )
+        """
+    )
+    version, resource_dct = snippetcompiler.do_export()
+    resources = list(resource_dct.values())
+    assert len(resources) == 1
+    id_attribute_value = resources[0].id.attribute_value
+    assert isinstance(id_attribute_value, str)
+    assert id_attribute_value == "123"

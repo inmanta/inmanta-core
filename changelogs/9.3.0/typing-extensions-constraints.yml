@@ -1,0 +1,8 @@
+description: bumped pydantic and typing-inspect constraints for typing-extensions fixes
+issue-nr: 6021
+change-type: patch
+destination-branches:
+  - master
+  - iso6
+  - iso5
+  - iso4

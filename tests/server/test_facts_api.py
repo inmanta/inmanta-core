@@ -15,11 +15,12 @@
 
     Contact: code@inmanta.com
 """
+
 import json
 import uuid
 from datetime import datetime
 from operator import itemgetter
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -30,7 +31,7 @@ from inmanta.server.config import get_bind_port
 
 
 @pytest.fixture
-async def env_with_facts(environment, client) -> Tuple[str, List[str], List[str]]:
+async def env_with_facts(environment, client) -> tuple[str, list[str], list[str]]:
     env_id = uuid.UUID(environment)
     version = 1
     await data.ConfigurationModel(
@@ -40,6 +41,7 @@ async def env_with_facts(environment, client) -> Tuple[str, List[str], List[str]
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     ).insert()
 
     path = "/etc/file1"
@@ -70,7 +72,7 @@ async def env_with_facts(environment, client) -> Tuple[str, List[str], List[str]
         resource_id: Optional[str] = None,
         source: str = "fact",
         updated: Optional[datetime] = None,
-        metadata: Optional[Dict[str, str]] = None,
+        metadata: Optional[dict[str, str]] = None,
     ) -> uuid.UUID:
         param_id = uuid.uuid4()
         await data.Parameter(
@@ -82,6 +84,7 @@ async def env_with_facts(environment, client) -> Tuple[str, List[str], List[str]
             resource_id=resource_id,
             updated=updated,
             metadata=metadata,
+            expires=bool(resource_id),
         ).insert()
         return param_id
 
@@ -136,7 +139,7 @@ async def test_get_facts(client, env_with_facts):
     assert result.code == 404
 
 
-async def test_fact_list_filters(client, env_with_facts: Tuple[str, List[str], List[str]]):
+async def test_fact_list_filters(client, env_with_facts: tuple[str, list[str], list[str]]):
     environment, param_ids, resource_ids = env_with_facts
     result = await client.get_all_facts(
         environment,
@@ -196,7 +199,7 @@ async def test_facts_paging(server, client, order_by_column, order, env_with_fac
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page

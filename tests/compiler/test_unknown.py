@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+import textwrap
+
 import inmanta.compiler as compiler
 from inmanta.execute.util import Unknown
 
@@ -127,7 +129,42 @@ def test_unknown_type_in_relation(snippetcompiler):
         """
 foo::Entity.test [1] -- std::Entity
         """,
-        "could not find type foo::Entity in namespace __config__ ({dir}/main.cf:2:1)",
+        (
+            "could not find type foo::Entity in namespace __config__."
+            "\nTry importing the module with `import foo` in {dir}/main.cf ({dir}/main.cf:2:1)"
+        ),
+    )
+
+
+def test_suggest_importing_module(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    foo::name name
+end
+        """,
+        (
+            "could not find type foo::name in namespace __config__.\nTry importing the "
+            "module with `import foo` in {dir}/main.cf "
+            "(reported in Entity(Test) ({dir}/main.cf:3:5))"
+        ),
+    )
+
+
+def test_suggest_importing_module_nested(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+import tests::subpack
+
+entity A:
+    tests::subpack::submod::test test
+end
+    """,
+        (
+            "could not find type tests::subpack::submod::test in namespace __config__.\nTry importing the "
+            "module with `import tests::subpack::submod` in {dir}/main.cf "
+            "(reported in Entity(A) ({dir}/main.cf:5:5))"
+        ),
     )
 
 
@@ -156,3 +193,82 @@ def test_unknown_type_in_dicts(snippetcompiler):
 
     assert root.lookup("unknown_map_lookup").get_value()
     assert root.lookup("unknown_key_fetch").get_value()
+
+
+def test_unknown_equals(snippetcompiler) -> None:
+    """
+    Verify unknown behavior in the equals statement.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
+            import tests
+
+            assert = true
+
+            assert = std::is_unknown(true == tests::unknown())
+            assert = std::is_unknown(false == tests::unknown())
+            assert = std::is_unknown(tests::unknown() == true)
+            assert = std::is_unknown(tests::unknown() == false)
+            assert = std::is_unknown(tests::unknown() == tests::unknown())
+
+            assert = std::is_unknown(true != tests::unknown())
+            assert = std::is_unknown(false != tests::unknown())
+            assert = std::is_unknown(tests::unknown() != true)
+            assert = std::is_unknown(tests::unknown() != false)
+            assert = std::is_unknown(tests::unknown() != tests::unknown())
+            """
+        )
+    )
+    compiler.do_compile()
+
+
+def test_unknown_boolean_operators(snippetcompiler) -> None:
+    """
+    Verify unknown behavior with boolean operators
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
+            import tests
+
+            assert = true
+
+            assert = std::is_unknown(tests::unknown() or false)
+            # don't execute second statement because it conflicts with lazy operator semantics
+            assert = std::is_unknown(tests::unknown() or true)
+            assert = std::is_unknown(tests::unknown() and true)
+            assert = std::is_unknown(true and tests::unknown())
+            assert = std::is_unknown(not tests::unknown())
+
+            # for these two the result is trivially known
+            assert = true or tests::unknown()
+            assert = not (false and tests::unknown())
+            """
+        )
+    )
+    compiler.do_compile()
+
+
+def test_unknown_in(snippetcompiler) -> None:
+    """
+    Verify unknown behavior with the `in` statement
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
+            import tests
+
+            assert = true
+
+            assert = std::is_unknown(tests::unknown() in [1, 2, 3])
+            assert = std::is_unknown(tests::unknown() in [tests::unknown(), 2, 3])
+            assert = std::is_unknown(1 in [tests::unknown(), 2, 3])
+
+            # for these two the result is trivially known
+            assert = 1 in [1, 2, tests::unknown()]
+            assert = 3 in [tests::unknown(), 2, 3]
+            """
+        )
+    )
+    compiler.do_compile()

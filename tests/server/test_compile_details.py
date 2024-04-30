@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import uuid
 
@@ -22,7 +23,7 @@ import pytest
 
 from inmanta import data
 from inmanta.data import Report
-from utils import parse_datetime_to_utc
+from inmanta.util import parse_timestamp
 
 
 def compile_ids(compile_objects):
@@ -49,7 +50,8 @@ async def env_with_compiles(client, environment):
             do_export=True,
             force_update=False,
             metadata={"meta": 42} if i % 2 else None,
-            environment_variables={"TEST_ENV_VAR": True} if i % 2 else None,
+            requested_environment_variables={"TEST_ENV_VAR": "True"} if i % 2 else {},
+            used_environment_variables={"TEST_ENV_VAR": "True"} if i % 2 else {},
             success=True,
             handled=True,
             version=1,
@@ -97,9 +99,9 @@ async def test_compile_details(server, client, env_with_compiles):
     assert result.code == 200
     reports = result.result["data"]["reports"]
     assert len(reports) == 2
-    assert parse_datetime_to_utc(reports[0]["started"]) < parse_datetime_to_utc(reports[1]["started"])
+    assert parse_timestamp(reports[0]["started"]) < parse_timestamp(reports[1]["started"])
     assert uuid.UUID(result.result["data"]["id"]) == ids[0]
-    assert parse_datetime_to_utc(result.result["data"]["requested"]) == compile_requested_timestamps[0].astimezone(
+    assert parse_timestamp(result.result["data"]["requested"]) == compile_requested_timestamps[0].astimezone(
         datetime.timezone.utc
     )
 
@@ -110,9 +112,9 @@ async def test_compile_details(server, client, env_with_compiles):
     assert len(substituted_reports) == 2
     assert substituted_reports == reports
     assert uuid.UUID(result.result["data"]["id"]) == ids[2]
-    assert datetime.datetime.strptime(result.result["data"]["requested"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    ) == compile_requested_timestamps[2].astimezone(datetime.timezone.utc)
+    assert parse_timestamp(result.result["data"]["requested"]) == compile_requested_timestamps[2].astimezone(
+        datetime.timezone.utc
+    )
 
     # A compile that has no reports
     result = await client.compile_details(environment, ids[3])

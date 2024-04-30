@@ -15,9 +15,16 @@
 
     Contact: code@inmanta.com
 """
+
+import logging.config
 import warnings
 
+from tornado.httpclient import AsyncHTTPClient
+
 import toml
+from inmanta import logging as inmanta_logging
+from inmanta.logging import InmantaLoggerConfig
+from inmanta.protocol import auth
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -80,8 +87,9 @@ import traceback
 import uuid
 import venv
 from collections import abc
+from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
-from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Callable, Dict, Optional, Union
 
 import asyncpg
 import pkg_resources
@@ -94,52 +102,63 @@ from click import testing
 from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
-from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
-import build.env
 import inmanta
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
+import inmanta.user_setup
 from inmanta import config, const, data, env, loader, protocol, resources
+from inmanta.agent import config as agent_cfg
 from inmanta import tracing as inmanta_tracing
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
-from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
+from inmanta.db import util as db_util
+from inmanta.env import CommandRunner, LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
-from inmanta.moduletool import IsolatedEnvBuilderCached, ModuleTool, V2ModuleBuilder
+from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server, SliceStartupException
+from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
+from pytest_postgresql import factories
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
 if PYTEST_PLUGIN_MODE:
     from inmanta_tests import utils  # noqa: F401
-    from inmanta_tests.db.common import PGRestore  # noqa: F401
 else:
     import utils
-    from db.common import PGRestore
+
+# These elements were moved to inmanta.db.util to allow them to be used from other extensions.
+# This import statement is present to ensure backwards compatibility.
+from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore  # noqa: F401
+from inmanta.db.util import clear_database as do_clean_hard  # noqa: F401
+from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_types  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
-TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["resourceaction_resource"]  # Join table
+TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
+    "resourceaction_resource",
+]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
 initial_cwd = os.getcwd()
+
+pg_logfile = os.path.join(initial_cwd, "pg.log")
 
 
 def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
@@ -223,20 +242,53 @@ def tracing(request: pytest.FixtureRequest):
         yield
 
 
+# adds a custom log location for postgres
+postgresql_proc_with_log = factories.postgresql_proc(startparams=f"--log='{pg_logfile}'")
+
+
 @pytest.fixture(scope="session")
 def postgres_db(request: pytest.FixtureRequest):
     """This fixture loads the pytest-postgresql fixture. When --postgresql-host is set, it will use the noproc
     fixture to use an external database. Without this option, an "embedded" postgres is started.
     """
+
     option_name = "postgresql_host"
     conf = request.config.getoption(option_name)
     if conf:
         fixture = "postgresql_noproc"
     else:
-        fixture = "postgresql_proc"
+        fixture = "postgresql_proc_with_log"
 
     logger.info("Using database fixture %s", fixture)
-    yield request.getfixturevalue(fixture)
+    pg = request.getfixturevalue(fixture)
+    yield pg
+
+    if os.path.exists(pg_logfile):
+        has_deadlock = False
+        with open(pg_logfile) as fh:
+            for line in fh:
+                if "deadlock" in line:
+                    has_deadlock = True
+                    break
+            sublogger = logging.getLogger("pytest.postgresql.deadlock")
+            for line in fh:
+                sublogger.warning("%s", line)
+        os.remove(pg_logfile)
+        assert not has_deadlock
+
+
+@pytest.fixture
+async def run_without_keeping_psql_logs(postgres_db):
+    if os.path.exists(pg_logfile):
+        # Store the original content of the logfile
+        with open(pg_logfile) as file:
+            original_content = file.read()
+    yield
+
+    if os.path.exists(pg_logfile):
+        # Restore the original content of the logfile
+        with open(pg_logfile, "w") as file:
+            file.write(original_content)
 
 
 @pytest.fixture
@@ -340,75 +392,16 @@ async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_res
     await data.disconnect()
 
 
-async def postgress_get_custom_types(postgresql_client) -> List[str]:
-    # Query extracted from CLI
-    # psql -E
-    # \dT
-
-    get_custom_types = """
-    SELECT n.nspname as "Schema",
-      pg_catalog.format_type(t.oid, NULL) AS "Name",
-      pg_catalog.obj_description(t.oid, 'pg_type') as "Description"
-    FROM pg_catalog.pg_type t
-         LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-    WHERE (t.typrelid = 0 OR (SELECT c.relkind = 'c' FROM pg_catalog.pg_class c WHERE c.oid = t.typrelid))
-      AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_type el WHERE el.oid = t.typelem AND el.typarray = t.oid)
-           AND n.nspname <> 'pg_catalog'
-          AND n.nspname <> 'information_schema'
-      AND pg_catalog.pg_type_is_visible(t.oid)
-    ORDER BY 1, 2;
-    """
-
-    types_in_db = await postgresql_client.fetch(get_custom_types)
-    type_names = [x["Name"] for x in types_in_db]
-
-    return type_names
-
-
-async def do_clean_hard(postgresql_client):
-    assert not postgresql_client.is_in_transaction()
-    await postgresql_client.reload_schema_state()
-    # query taken from : https://database.guide/3-ways-to-list-all-functions-in-postgresql/
-    functions_query = """
-SELECT routine_name
-FROM  information_schema.routines
-WHERE routine_type = 'FUNCTION'
-AND routine_schema = 'public';
-    """
-    functions_in_db = await postgresql_client.fetch(functions_query)
-    function_names = [x["routine_name"] for x in functions_in_db]
-    if function_names:
-        drop_query = "DROP FUNCTION if exists %s " % ", ".join(function_names)
-        await postgresql_client.execute(drop_query)
-
-    tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    table_names = ["public." + x["table_name"] for x in tables_in_db]
-    if table_names:
-        drop_query = "DROP TABLE %s CASCADE" % ", ".join(table_names)
-        await postgresql_client.execute(drop_query)
-
-    type_names = await postgress_get_custom_types(postgresql_client)
-    if type_names:
-        drop_query = "DROP TYPE %s" % ", ".join(type_names)
-        await postgresql_client.execute(drop_query)
-    logger.info(
-        "Performed Hard Clean with tables: %s  types: %s  functions: %s",
-        ",".join(table_names),
-        ",".join(type_names),
-        ",".join(function_names),
-    )
-
-
 @pytest.fixture(scope="function")
 async def hard_clean_db(postgresql_client):
-    await do_clean_hard(postgresql_client)
+    await db_util.clear_database(postgresql_client)
     yield
 
 
 @pytest.fixture(scope="function")
 async def hard_clean_db_post(postgresql_client):
     yield
-    await do_clean_hard(postgresql_client)
+    await db_util.clear_database(postgresql_client)
 
 
 @pytest.fixture(scope="function")
@@ -440,7 +433,7 @@ async def clean_db(postgresql_pool, create_db, postgres_db):
 
 @pytest.fixture(scope="function")
 def get_columns_in_db_table(postgresql_client):
-    async def _get_columns_in_db_table(table_name: str) -> List[str]:
+    async def _get_columns_in_db_table(table_name: str) -> list[str]:
         result = await postgresql_client.fetch(
             "SELECT column_name "
             "FROM information_schema.columns "
@@ -452,8 +445,23 @@ def get_columns_in_db_table(postgresql_client):
 
 
 @pytest.fixture(scope="function")
+def get_primary_key_columns_in_db_table(postgresql_client):
+    async def _get_primary_key_columns_in_db_table(table_name: str) -> list[str]:
+        # Query taken from here: https://wiki.postgresql.org/wiki/Retrieve_primary_key_columns
+        result = await postgresql_client.fetch(
+            "SELECT a.attname FROM pg_index i "
+            "JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+            "WHERE i.indrelid = '" + table_name + "'::regclass "
+            "AND i.indisprimary;"
+        )
+        return [r["attname"] for r in result]
+
+    return _get_primary_key_columns_in_db_table
+
+
+@pytest.fixture(scope="function")
 def get_tables_in_db(postgresql_client):
-    async def _get_tables_in_db() -> List[str]:
+    async def _get_tables_in_db() -> list[str]:
         result = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
         return [r["table_name"] for r in result]
 
@@ -461,16 +469,39 @@ def get_tables_in_db(postgresql_client):
 
 
 @pytest.fixture(scope="function")
-def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[List[str]]]:
+def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[list[str]]]:
     """
     Fixture that returns an async callable that returns all the custom types defined
     in the PostgreSQL database.
     """
 
-    async def f() -> List[str]:
-        return await postgress_get_custom_types(postgresql_client)
+    async def f() -> list[str]:
+        return await db_util.postgres_get_custom_types(postgresql_client)
 
     return f
+
+
+@pytest.fixture(scope="function")
+def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[Optional[str]]]:
+    """
+    Fixture that returns the type of a column in a table
+    """
+
+    async def _get_type_of_column(table_name: str, column_name: str) -> Optional[str]:
+        data_type = await postgresql_client.fetchval(
+            """
+                SELECT data_type
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                    AND table_name = $1
+                    AND column_name = $2;
+            """,
+            table_name,
+            column_name,
+        )
+        return data_type
+
+    return _get_type_of_column
 
 
 @pytest.fixture(scope="function")
@@ -520,7 +551,7 @@ def reset_metrics():
     pyformance.set_global_registry(MetricsRegistry())
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function")
 async def clean_reset(create_db, clean_db, deactive_venv):
     reset_all_objects()
     config.Config._reset()
@@ -542,7 +573,7 @@ def clean_reset_session():
     Execute cleanup tasks that should only run at the end of the test suite.
     """
     yield
-    IsolatedEnvBuilderCached.get_instance().destroy()
+    DefaultIsolatedEnvCached.get_instance().destroy()
 
 
 def reset_all_objects():
@@ -555,13 +586,16 @@ def reset_all_objects():
     Project._project = None
     unknown_parameters.clear()
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
-    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
+    V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
+    auth.AuthJWTConfig.reset()
+    InmantaLoggerConfig.clean_instance()
+    AsyncHTTPClient.configure(None)
 
 
 @pytest.fixture()
 def disable_isolated_env_builder_cache() -> None:
-    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = True
+    V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = True
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -574,11 +608,11 @@ def restore_cwd():
 
 
 @pytest.fixture(scope="function")
-def no_agent_backoff():
-    backoff = inmanta.agent.agent.GET_RESOURCE_BACKOFF
-    inmanta.agent.agent.GET_RESOURCE_BACKOFF = 0
+def no_agent_backoff(inmanta_config: ConfigParser) -> None:
+    old_backoff = agent_cfg.agent_get_resource_backoff.get()
+    agent_cfg.agent_get_resource_backoff.set("0")
     yield
-    inmanta.agent.agent.GET_RESOURCE_BACKOFF = backoff
+    agent_cfg.agent_get_resource_backoff.set(str(old_backoff))
 
 
 @pytest.fixture()
@@ -596,17 +630,17 @@ def free_socket():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def inmanta_config() -> Iterator[ConfigParser]:
+def inmanta_config(clean_reset) -> Iterator[ConfigParser]:
     config.Config.load_config()
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
-    config.Config.set("auth_jwt_default", "client_types", "agent,compiler")
+    config.Config.set("auth_jwt_default", "client_types", "agent,compiler,api")
     config.Config.set("auth_jwt_default", "key", "rID3kG4OwGpajIsxnGDhat4UFcMkyFZQc1y3oKQTPRs")
     config.Config.set("auth_jwt_default", "expire", "0")
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
 
-    yield config.Config._get_instance()
+    yield config.Config.get_instance()
 
 
 @pytest.fixture
@@ -658,10 +692,10 @@ async def agent_factory(server):
     async def create_agent(
         environment: uuid.UUID,
         hostname: Optional[str] = None,
-        agent_map: Optional[Dict[str, str]] = None,
+        agent_map: Optional[dict[str, str]] = None,
         code_loader: bool = False,
-        agent_names: List[str] = [],
-    ) -> None:
+        agent_names: list[str] = [],
+    ) -> Agent:
         a = Agent(hostname=hostname, environment=environment, agent_map=agent_map, code_loader=code_loader)
         for agent_name in agent_names:
             await a.add_end_point_name(agent_name)
@@ -675,16 +709,21 @@ async def agent_factory(server):
 
 
 @pytest.fixture(scope="function")
-async def autostarted_agent(server, environment):
+async def autostarted_agent(server, client, environment):
     """Configure agent1 as an autostarted agent."""
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
-    await env.set(data.AUTO_DEPLOY, True)
-    await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
+    assert result.code == 200
+    result = await client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
+    assert result.code == 200
     # disable deploy and repair intervals
-    await env.set(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
-    await env.set(data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
-    await env.set(data.AUTOSTART_ON_START, True)
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_ON_START, True)
+    assert result.code == 200
 
 
 @pytest.fixture(scope="function")
@@ -737,11 +776,14 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     with tempfile.TemporaryDirectory() as state_dir:
         port = str(unused_tcp_port_factory())
 
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
+
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "password", pg_password)
         config.Config.set("database", "connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -767,7 +809,7 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
 
     try:
         await ibl.start()
@@ -832,12 +874,15 @@ async def server_multi(
                 token = protocol.encode_token(ct)
                 config.Config.set(x, "token", token)
 
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
+
         port = str(unused_tcp_port_factory())
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "password", pg_password)
         config.Config.set("database", "connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -851,7 +896,7 @@ async def server_multi(
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
 
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
 
         try:
             await ibl.start()
@@ -904,62 +949,91 @@ def capture_warnings():
     logging.captureWarnings(False)
 
 
-async def create_environment(client, use_custom_env_settings: bool) -> str:
+@pytest.fixture
+async def project_default(server, client) -> AsyncIterator[str]:
     """
-    Create a project (env-test) and an environment (dev).
-
-    :param client: The client that should be used to create the project and environment.
-    :param use_custom_env_settings: True iff the auto_deploy features is disabled and the
-                                    agent trigger method is set to push_full_deploy.
-    :return: The uuid of the newly created environment as a string.
+    Fixture that creates a new inmanta project called env-test.
     """
     result = await client.create_project("env-test")
     assert result.code == 200
-    project_id = result.result["project"]["id"]
+    yield result.result["project"]["id"]
 
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
 
-    cfg_env.set(env_id)
+@pytest.fixture
+async def project_multi(server_multi, client_multi) -> AsyncIterator[str]:
+    """
+    Does the same as the project fixture, but this fixture should be used instead when the test case
+    uses the server_multi or client_multi fixture.
+    """
+    result = await client_multi.create_project("env-test")
+    assert result.code == 200
+    yield result.result["project"]["id"]
 
-    if use_custom_env_settings:
-        env_obj = await data.Environment.get_by_id(uuid.UUID(env_id))
-        await env_obj.set(data.AUTO_DEPLOY, False)
-        await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
-        await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
-        await env_obj.set(data.RECOMPILE_BACKOFF, 0)
 
-    return env_id
+@pytest.fixture
+async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str, str, bool], Awaitable[str]]]:
+    """
+    Fixture to create a new environment in a certain project.
+    """
+
+    async def _create_environment(client, project_id: str, env_name: str, use_custom_env_settings: bool = True) -> str:
+        """
+        :param client: The client that should be used to create the project and environment.
+        :param use_custom_env_settings: True iff the auto_deploy features is disabled and the
+                                        agent trigger method is set to push_full_deploy.
+        :return: The uuid of the newly created environment as a string.
+        """
+        result = await client.create_environment(project_id=project_id, name=env_name)
+        env_id = result.result["environment"]["id"]
+
+        cfg_env.set(env_id)
+
+        if use_custom_env_settings:
+            env_obj = await data.Environment.get_by_id(uuid.UUID(env_id))
+            await env_obj.set(data.AUTO_DEPLOY, False)
+            await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
+            await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
+            await env_obj.set(data.RECOMPILE_BACKOFF, 0)
+
+        return env_id
+
+    yield _create_environment
 
 
 @pytest.fixture(scope="function")
-async def environment(client, server) -> AsyncIterator[str]:
+async def environment(
+    server, client, project_default: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
+) -> AsyncIterator[str]:
     """
     Create a project and environment, with auto_deploy turned off and push_full_deploy set to push_full_deploy.
     This fixture returns the uuid of the environment.
     """
-    env_id = await create_environment(client, use_custom_env_settings=True)
-    yield env_id
+    yield await environment_creator(client, project_id=project_default, env_name="dev", use_custom_env_settings=True)
 
 
 @pytest.fixture(scope="function")
-async def environment_default(client, server) -> AsyncIterator[str]:
+async def environment_default(
+    server, client, project_default: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
+) -> AsyncIterator[str]:
     """
     Create a project and environment with default environment settings.
     This fixture returns the uuid of the environment.
     """
-    env_id = await create_environment(client, use_custom_env_settings=False)
-    yield env_id
+    yield await environment_creator(client, project_id=project_default, env_name="dev", use_custom_env_settings=False)
 
 
 @pytest.fixture(scope="function")
-async def environment_multi(client_multi, server_multi) -> AsyncIterator[str]:
+async def environment_multi(
+    client_multi,
+    server_multi,
+    project_multi: str,
+    environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]],
+) -> AsyncIterator[str]:
     """
     Create a project and environment, with auto_deploy turned off and the agent trigger method set to push_full_deploy.
     This fixture returns the uuid of the environment.
     """
-    env_id = await create_environment(client_multi, use_custom_env_settings=True)
-    yield env_id
+    yield await environment_creator(client_multi, project_id=project_multi, env_name="dev", use_custom_env_settings=True)
 
 
 @pytest.fixture(scope="session")
@@ -975,7 +1049,7 @@ def write_db_update_file():
     yield _write_db_update_file
 
 
-class KeepOnFail(object):
+class KeepOnFail:
     def keep(self) -> "Optional[Dict[str, str]]":
         pass
 
@@ -998,15 +1072,7 @@ def pytest_runtest_makereport(item, call):
 
         if resources:
             # we are behind report formatting, so write to report, not item
-            rep.sections.append(
-                ("Resources Kept", "\n".join(["%s %s" % (label, resource) for label, resource in resources.items()]))
-            )
-
-
-async def off_main_thread(func):
-    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-    return await asyncio.get_event_loop().run_in_executor(None, func)
+            rep.sections.append(("Resources Kept", "\n".join([f"{label} {resource}" for label, resource in resources.items()])))
 
 
 class ReentrantVirtualEnv(VirtualEnv):
@@ -1019,7 +1085,7 @@ class ReentrantVirtualEnv(VirtualEnv):
     """
 
     def __init__(self, env_path: str) -> None:
-        super(ReentrantVirtualEnv, self).__init__(env_path)
+        super().__init__(env_path)
         self.working_set = None
 
     def deactivate(self):
@@ -1049,7 +1115,7 @@ class ReentrantVirtualEnv(VirtualEnv):
 class SnippetCompilationTest(KeepOnFail):
     def setUpClass(self):
         self.libs = tempfile.mkdtemp()
-        self.repo = "https://github.com/inmanta/"
+        self.repo: str = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
         self.venv = ReentrantVirtualEnv(env_path=self.env)
         config.Config.load_config()
@@ -1086,14 +1152,18 @@ class SnippetCompilationTest(KeepOnFail):
         *,
         autostd: bool = True,
         install_project: bool = True,
-        install_v2_modules: Optional[List[LocalPackagePath]] = None,
-        add_to_module_path: Optional[List[str]] = None,
-        python_package_sources: Optional[List[str]] = None,
-        project_requires: Optional[List[InmantaModuleRequirement]] = None,
-        python_requires: Optional[List[Requirement]] = None,
+        install_v2_modules: Optional[list[LocalPackagePath]] = None,
+        add_to_module_path: Optional[list[str]] = None,
+        python_package_sources: Optional[list[str]] = None,
+        project_requires: Optional[list[InmantaModuleRequirement]] = None,
+        python_requires: Optional[list[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
-        relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
+        relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
         strict_deps_check: Optional[bool] = None,
+        use_pip_config_file: bool = False,
+        index_url: Optional[str] = None,
+        extra_index_url: list[str] = [],
+        main_file: str = "main.cf",
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1112,6 +1182,10 @@ class SnippetCompilationTest(KeepOnFail):
         :param relation_precedence_policy: The relation precedence policy that should be stored in the project.yml file of the
                                            Inmanta project.
         :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
+        :param use_pip_config_file: True iff the pip config file should be used and no source is required for v2 to work
+                                    False if a package source is needed for v2 modules to work
+        :param main_file: Path to the .cf file to use as main entry point. A relative or an absolute path can be provided.
+            If a relative path is used, it's interpreted relative to the root of the project directory.
         """
         self.setup_for_snippet_external(
             snippet,
@@ -1121,15 +1195,21 @@ class SnippetCompilationTest(KeepOnFail):
             python_requires,
             install_mode,
             relation_precedence_rules,
+            use_pip_config_file,
+            index_url,
+            extra_index_url,
+            main_file,
         )
-        return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
+        return self._load_project(
+            autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check, main_file=main_file
+        )
 
     @inmanta_tracing.tracer.start_as_current_span("load project")
     def _load_project(
         self,
         autostd: bool,
         install_project: bool,
-        install_v2_modules: Optional[List[LocalPackagePath]] = None,
+        install_v2_modules: Optional[list[LocalPackagePath]] = None,
         main_file: str = "main.cf",
         strict_deps_check: Optional[bool] = None,
     ):
@@ -1154,7 +1234,8 @@ class SnippetCompilationTest(KeepOnFail):
         """
         env.mock_process_env(env_path=self.env)
 
-    def _install_v2_modules(self, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
+    def _install_v2_modules(self, install_v2_modules: Optional[list[LocalPackagePath]] = None) -> None:
+        """Assumes we have a project set"""
         install_v2_modules = install_v2_modules if install_v2_modules is not None else []
         module_tool = ModuleTool()
         for mod in install_v2_modules:
@@ -1163,7 +1244,11 @@ class SnippetCompilationTest(KeepOnFail):
                     install_path = mod.path
                 else:
                     install_path = module_tool.build(mod.path, build_dir)
-                self.project.virtualenv.install_from_source(paths=[LocalPackagePath(path=install_path, editable=mod.editable)])
+                self.project.virtualenv.install_for_config(
+                    requirements=[],
+                    paths=[LocalPackagePath(path=install_path, editable=mod.editable)],
+                    config=self.project.metadata.pip,
+                )
 
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd, venv_path=self.env))
@@ -1173,15 +1258,20 @@ class SnippetCompilationTest(KeepOnFail):
     def setup_for_snippet_external(
         self,
         snippet: str,
-        add_to_module_path: Optional[List[str]] = None,
-        python_package_sources: Optional[List[str]] = None,
-        project_requires: Optional[List[InmantaModuleRequirement]] = None,
-        python_requires: Optional[List[Requirement]] = None,
+        add_to_module_path: Optional[list[str]] = None,
+        python_package_sources: Optional[list[str]] = None,
+        project_requires: Optional[list[InmantaModuleRequirement]] = None,
+        python_requires: Optional[list[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
-        relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
+        relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
+        use_pip_config_file: bool = False,
+        index_url: Optional[str] = None,
+        extra_index_url: list[str] = [],
+        main_file: str = "main.cf",
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
+
         project_requires = project_requires if project_requires is not None else []
         python_requires = python_requires if python_requires is not None else []
         relation_precedence_rules = relation_precedence_rules if relation_precedence_rules else []
@@ -1196,15 +1286,7 @@ class SnippetCompilationTest(KeepOnFail):
                 - {{type: git, url: {self.repo} }}
             """.rstrip()
             )
-            if python_package_sources:
-                cfg.write(
-                    "".join(
-                        f"""
-                - {{type: package, url: {source} }}
-                        """.rstrip()
-                        for source in python_package_sources
-                    )
-                )
+
             if relation_precedence_rules:
                 cfg.write("\n            relation_precedence_policy:\n")
                 cfg.write("\n".join(f"                - {rule}" for rule in relation_precedence_rules))
@@ -1213,13 +1295,30 @@ class SnippetCompilationTest(KeepOnFail):
                 cfg.write("\n".join(f"                - {req}" for req in project_requires))
             if install_mode:
                 cfg.write(f"\n            install_mode: {install_mode.value}")
+
+            cfg.write(
+                f"""
+            pip:
+                use_system_config: {use_pip_config_file}
+"""
+            )
+            if index_url:
+                cfg.write(
+                    f"""                index_url: {index_url}
+"""
+                )
+            if extra_index_url:
+                cfg.write(
+                    f"""                extra_index_url: [{", ".join(url for url in extra_index_url)}]
+"""
+                )
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
-        self.main = os.path.join(self.project_dir, "main.cf")
+        self.main = os.path.join(self.project_dir, main_file)
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
 
-    def _get_modulepath_for_project_yml_file(self, add_to_module_path: List[str] = []) -> str:
+    def _get_modulepath_for_project_yml_file(self, add_to_module_path: list[str] = []) -> str:
         dirs = [self.libs]
         if self.modules_dir:
             dirs.append(self.modules_dir)
@@ -1232,7 +1331,8 @@ class SnippetCompilationTest(KeepOnFail):
         include_status=False,
         do_raise=True,
         partial_compile: bool = False,
-        resource_sets_to_remove: Optional[List[str]] = None,
+        resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete=False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         return self._do_export(
             deploy=False,
@@ -1240,6 +1340,7 @@ class SnippetCompilationTest(KeepOnFail):
             do_raise=do_raise,
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            soft_delete=soft_delete,
         )
 
     def get_exported_json(self) -> JsonType:
@@ -1252,14 +1353,15 @@ class SnippetCompilationTest(KeepOnFail):
         include_status=False,
         do_raise=True,
         partial_compile: bool = False,
-        resource_sets_to_remove: Optional[List[str]] = None,
+        resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete=False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         """
         helper function to allow actual export to be run on a different thread
         i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
         """
 
-        class Options(object):
+        class Options:
             pass
 
         options = Options()
@@ -1267,6 +1369,7 @@ class SnippetCompilationTest(KeepOnFail):
         options.depgraph = False
         options.deploy = deploy
         options.ssl = False
+        options.soft_delete = soft_delete
 
         from inmanta.export import Exporter  # noqa: H307
 
@@ -1297,16 +1400,20 @@ class SnippetCompilationTest(KeepOnFail):
         include_status=False,
         do_raise=True,
         partial_compile: bool = False,
-        resource_sets_to_remove: Optional[List[str]] = None,
+        resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete: bool = False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
-        return await off_main_thread(
+        """Export to an actual server"""
+        return await asyncio.get_running_loop().run_in_executor(
+            None,
             lambda: self._do_export(
                 deploy=True,
                 include_status=include_status,
                 do_raise=do_raise,
                 partial_compile=partial_compile,
                 resource_sets_to_remove=resource_sets_to_remove,
-            )
+                soft_delete=soft_delete,
+            ),
         )
 
     def setup_for_error(self, snippet, shouldbe, indent_offset=0):
@@ -1354,7 +1461,7 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
 
 @pytest.fixture(scope="function")
 def snippetcompiler(
-    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str
+    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str, clean_reset
 ) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
@@ -1365,7 +1472,7 @@ def snippetcompiler(
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler_clean(modules_dir: str) -> Iterator[SnippetCompilationTest]:
+def snippetcompiler_clean(modules_dir: str, clean_reset) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
     """
@@ -1392,7 +1499,7 @@ def projects_dir() -> str:
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 
-class CLI(object):
+class CLI:
     async def run(self, *args, **kwargs):
         # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
@@ -1415,13 +1522,10 @@ def cli(caplog):
     # due to mysterious interference when juggling with sys.stdout
     # https://github.com/pytest-dev/pytest/issues/10553
     with caplog.at_level(logging.FATAL):
-        # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-        asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-        o = CLI()
-        yield o
+        yield CLI()
 
 
-class AsyncCleaner(object):
+class AsyncCleaner:
     def __init__(self):
         self.register = []
 
@@ -1439,7 +1543,7 @@ async def async_finalizer():
     await asyncio.gather(*[item() for item in cleaner.register])
 
 
-class CompileRunnerMock(object):
+class CompileRunnerMock:
     def __init__(
         self, request: data.Compile, make_compile_fail: bool = False, runner_queue: Optional[queue.Queue] = None
     ) -> None:
@@ -1450,7 +1554,7 @@ class CompileRunnerMock(object):
         self._runner_queue = runner_queue
         self.block = False
 
-    async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, None]:
+    async def run(self, force_update: Optional[bool] = False) -> tuple[bool, None]:
         now = datetime.datetime.now()
 
         if self._runner_queue is not None:
@@ -1484,6 +1588,23 @@ def monkey_patch_compiler_service(monkeypatch, server, make_compile_fail, runner
         return CompileRunnerMock(compile, make_compile_fail, runner_queue)
 
     monkeypatch.setattr(compilerslice, "_get_compile_runner", patch, raising=True)
+    monkeypatch.setattr(compilerslice, "_running_compiles", {}, raising=False)
+
+    original_run = compilerslice._run
+
+    async def _run(compile: data.Compile) -> None:
+        compilerslice._running_compiles[compile.environment] = compile
+        await original_run(compile)
+        async with compilerslice._write_lock_env_to_compile_task:
+            if compile.environment not in compilerslice._env_to_compile_task:
+                # Clear self._running_compiles iff the compiler service has deleted the environment from the compiling
+                # environments set.
+                del compilerslice._running_compiles[compile.environment]
+            else:
+                # Otherwise, a new _run will have overwritten the running compile => do nothing
+                assert compilerslice._running_compiles[compile.environment] is not compile
+
+    monkeypatch.setattr(compilerslice, "_run", _run, raising=True)
 
 
 @pytest.fixture
@@ -1505,7 +1626,7 @@ async def mocked_compiler_service_block(server, monkeypatch):
 
 
 @pytest.fixture
-def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
+def tmpvenv(tmpdir: py.path.local) -> Iterator[tuple[py.path.local, py.path.local]]:
     """
     Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the `tmpdir`
     fixture. This venv is completely decoupled from the active development venv.
@@ -1521,8 +1642,8 @@ def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.loca
 
 @pytest.fixture
 def tmpvenv_active(
-    deactive_venv, tmpvenv: Tuple[py.path.local, py.path.local]
-) -> Iterator[Tuple[py.path.local, py.path.local]]:
+    deactive_venv, tmpvenv: tuple[py.path.local, py.path.local]
+) -> Iterator[tuple[py.path.local, py.path.local]]:
     """
     Activates the venv created by the `tmpvenv` fixture within the currently running process. This venv is completely decoupled
     from the active development venv. As a result, any attempts to load new modules from the development venv will fail until
@@ -1579,15 +1700,9 @@ def tmpvenv_active(
     env.mock_process_env(python_path=str(python_path))
     env.process_env.notify_change()
 
-    # Force refresh build's decision on whether it should use virtualenv or venv. This decision is made based on the active
-    # environment, which we're changing now.
-    build.env._should_use_virtualenv.cache_clear()
-
     yield tmpvenv
 
     loader.unload_modules_for_path(site_packages)
-    # Force refresh build's cache once more
-    build.env._should_use_virtualenv.cache_clear()
 
 
 @pytest.fixture
@@ -1603,12 +1718,41 @@ def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env
     loader.unload_modules_for_path(venv.site_packages_dir)
 
 
+@pytest.fixture
+def create_empty_local_package_index_factory() -> Callable[[str], str]:
+    """
+    A fixture that acts as a factory to create empty local pip package indexes.
+    Each call creates a new index in a different temporary directory.
+    """
+
+    created_directories: list[str] = []
+
+    def _create_local_package_index(prefix: str = "test"):
+        """
+        Creates an empty pip index. The prefix argument is used as a prefix for the temporary directory name
+        for clarity and debugging purposes. The 'dir2pi' tool will then create a 'simple' directory inside
+        this temporary directory, which contains the index files.
+        """
+        tmpdir = tempfile.mkdtemp(prefix=f"{prefix}-")
+        created_directories.append(tmpdir)  # Keep track of the tempdir for cleanup
+        dir2pi(argv=["dir2pi", tmpdir])
+        index_dir = os.path.join(tmpdir, "simple")  # The 'simple' directory is created inside the tmpdir by dir2pi
+        return index_dir
+
+    yield _create_local_package_index
+
+    # Cleanup after the session ends
+    for directory in created_directories:
+        shutil.rmtree(directory)
+
+
 @pytest.fixture(scope="session")
 def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
     :return: The path to the index
     """
+
     cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
     build_dir = os.path.join(cache_dir, "build")
     index_dir = os.path.join(build_dir, "simple")
@@ -1618,7 +1762,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         if any(not os.path.exists(f) for f in [build_dir, index_dir, timestamp_file]):
             # Cache doesn't exist
             return True
-        if len(os.listdir(index_dir)) != len(os.listdir(modules_v2_dir)) + 1:  # #modules + index.html
+        if len(os.listdir(index_dir)) != len(os.listdir(modules_v2_dir)) + 3:  # #modules + index.html + setuptools + wheel
             # Modules were added/removed from the build_dir
             return True
         # Cache is dirty
@@ -1626,11 +1770,11 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
             os.path.getmtime(os.path.join(root, f)) > os.path.getmtime(timestamp_file)
             for root, _, files in os.walk(modules_v2_dir)
             for f in files
+            if "egg-info" not in root  # we write egg info in some test, messing up the tests
         )
 
     if _should_rebuild_cache():
-        logger.info(f"Cache {cache_dir} is dirty. Rebuilding cache.")
-        # Remove cache
+        logger.info("Cache %s is dirty. Rebuilding cache.", cache_dir)  # Remove cache
         if os.path.exists(cache_dir):
             shutil.rmtree(cache_dir)
         os.makedirs(build_dir)
@@ -1638,12 +1782,17 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         for module_dir in os.listdir(modules_v2_dir):
             path: str = os.path.join(modules_v2_dir, module_dir)
             ModuleTool().build(path=path, output_dir=build_dir)
+        # Download bare necessities
+        CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
+            ["pip", "download", "setuptools", "wheel"], cwd=build_dir
+        )
+
         # Build python package repository
         dir2pi(argv=["dir2pi", build_dir])
         # Update timestamp file
         open(timestamp_file, "w").close()
     else:
-        logger.info(f"Using cache {cache_dir}")
+        logger.info("Using cache %s", cache_dir)
 
     yield index_dir
 
@@ -1661,10 +1810,11 @@ async def migrate_db_from(
     if marker is None or len(marker.args) != 1:
         raise ValueError("Please set the db version to restore using `@pytest.mark.db_restore_dump(<file>)`")
     # restore old version
-    with open(marker.args[0], "r") as fh:
+    with open(marker.args[0]) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
+        logger.debug("Restored %s", marker.args[0])
 
-    bootloader: InmantaBootloader = InmantaBootloader()
+    bootloader: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
     async def migrate() -> None:
         # start boatloader, triggering db migration
@@ -1680,7 +1830,7 @@ async def migrate_db_from(
 @pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
 def guard_invariant_on_v2_modules_in_data_dir(modules_v2_dir: str) -> None:
     """
-    When the test suite runs, the python environment used to build V2 modules is cached using the IsolatedEnvBuilderCached
+    When the test suite runs, the python environment used to build V2 modules is cached using the DefaultIsolatedEnvCached
     class. This cache relies on the fact that all modules in the tests/data/modules_v2 directory use the same build-backand
     and build requirements. This guard verifies whether that assumption is fulfilled and raises an exception if it's not.
     """
@@ -1699,7 +1849,7 @@ All modules present in the tests/data/module_v2 directory should satisfy the abo
 the test suite caches the python environment used to build the V2 modules. This cache relies on the assumption that all modules
 use the same build-backend and build requirements.
         """.strip()
-        with open(pyproject_toml_path, "r", encoding="utf-8") as fh:
+        with open(pyproject_toml_path, encoding="utf-8") as fh:
             pyproject_toml_as_dct = toml.load(fh)
             try:
                 if pyproject_toml_as_dct["build-system"]["build-backend"] != "setuptools.build_meta" or set(
@@ -1740,6 +1890,23 @@ async def set_running_tests():
     inmanta.RUNNING_TESTS = True
 
 
+@pytest.fixture(scope="function", autouse=True)
+async def dont_override_root_logger(request, monkeypatch):
+    """
+    Make sure the inmanta.logging.FullLoggingConfig._to_dict_config() method doesn't override the root logger
+    when the caplog fixture is used, because caplog captures log messages by attaching a handler to the root logger.
+    """
+    original_to_dict_config_method = inmanta_logging.FullLoggingConfig._to_dict_config
+
+    def _to_dict_config_patched(self) -> dict[str, object]:
+        dict_config = original_to_dict_config_method(self)
+        dict_config.pop("root", None)
+        return dict_config
+
+    if "caplog" in request.fixturenames:
+        monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "_to_dict_config", _to_dict_config_patched)
+
+
 @pytest.fixture(scope="session")
 def index_with_pkgs_containing_optional_deps() -> str:
     """
@@ -1767,3 +1934,16 @@ def index_with_pkgs_containing_optional_deps() -> str:
                 publish_index=pip_index,
             )
         yield pip_index.url
+
+
+@pytest.fixture(scope="session", autouse=True)
+def disable_version_and_agent_cleanup_job():
+    """
+    Disable the cleanup job ran by the Inmanta server that cleans up old model version and agent records that are no longer
+    used. Enabling this cleanup for the test suite causes race conditions in tests cases that create agent records without an
+    associated model version.
+    """
+    old_perform_cleanup = orchestrationservice.PERFORM_CLEANUP
+    orchestrationservice.PERFORM_CLEANUP = False
+    yield
+    orchestrationservice.PERFORM_CLEANUP = old_perform_cleanup

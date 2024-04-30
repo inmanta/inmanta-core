@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 """
     These tests make sure that for each module mentioned in the compiler API docs, using it as an entry point for importing
     does not result in an import loop (see #2341 and #2342).
@@ -22,7 +23,8 @@
 
 import importlib
 import multiprocessing
-from typing import Callable, Iterator, Optional
+from collections.abc import Iterator
+from typing import Callable, Optional
 
 import pytest
 
@@ -85,6 +87,7 @@ def test_import_proxy(import_entry_point) -> None:
 def test_import_data(import_entry_point) -> None:
     assert import_entry_point("inmanta.data") == 0
     assert import_entry_point("inmanta.data.model") == 0
+    assert import_entry_point("inmanta.db.util") == 0
 
 
 def test_import_compile_data(import_entry_point) -> None:
@@ -97,6 +100,8 @@ def test_import_module(import_entry_point) -> None:
 
 def test_import_protocol(import_entry_point) -> None:
     assert import_entry_point("inmanta.protocol") == 0
+    assert import_entry_point("inmanta.protocol.auth") == 0
+    assert import_entry_point("inmanta.protocol.common") == 0
     assert import_entry_point("inmanta.protocol.exceptions") == 0
 
 
@@ -123,3 +128,7 @@ def test_import_compiler(import_entry_point: Callable[[str], Optional[int]]) -> 
 def test_import_server(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.server.extensions") == 0
     assert import_entry_point("inmanta.server.bootloader") == 0
+
+
+def test_import_validation_type(import_entry_point: Callable[[str], Optional[int]]) -> None:
+    assert import_entry_point("inmanta.validation_type") == 0
