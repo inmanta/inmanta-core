@@ -487,7 +487,7 @@ class IndexLookup(ReferenceStatement, Resumer):
 
 class ShortIndexLookup(IndexLookup):
     """lookup of the form
-    entity ExtendedHost extends ip::host:
+    entity ExtendedHost extends ip::Host:
     end
 
     ExtendedHost.resources [0:] -- std::testing::NullResource.host[1]
