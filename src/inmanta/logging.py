@@ -32,15 +32,11 @@ from typing import Optional, TextIO
 import colorlog
 from colorlog.formatter import LogColors
 
-import inmanta
 from inmanta import config, const
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
 
 LOGGER = logging.getLogger(__name__)
-
-# True iff the tests are run and the current test case is using the caplog fixture.
-CAPLOG_FIXTURE_USED = False
 
 
 def _is_on_tty() -> bool:
@@ -169,12 +165,6 @@ class FullLoggingConfig(LoggingConfigExtension):
         """
         self.ensure_log_dirs()
         dict_config = self._to_dict_config()
-        if inmanta.RUNNING_TESTS and CAPLOG_FIXTURE_USED:
-            # The caplog fixture attaches a handler to the root logger to do its log capturing.
-            # As such, overriding the root logger here would break the caplog fixture. There is also
-            # no need to override it because we want all the logs, handled by the root logger,
-            # to go to caplog when the caplog fixture is used.
-            dict_config.pop("root", None)
         logging.config.dictConfig(dict_config)
 
     def _to_dict_config(self) -> dict[str, object]:
@@ -528,7 +518,7 @@ class InmantaLoggerConfig:
         """
         log_config: FullLoggingConfig = LoggingConfigBuilder().get_bootstrap_logging_config(stream)
         self._stream = stream
-        self._handler: Optional[logging.Handler] = self._apply_logging_config(log_config)
+        self._handlers: abc.Sequence[logging.Handler] = self._apply_logging_config(log_config)
         self._options_applied: bool = False
         self._logging_configs_extensions: list[LoggingConfigExtension] = []
 
@@ -551,9 +541,11 @@ class InmantaLoggerConfig:
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout)
         """
         if cls._instance:
-            if not isinstance(cls._instance._handler, logging.StreamHandler):
+            if len(cls._instance._handlers) != 1:
+                raise Exception("More than one root handler configured.")
+            if not isinstance(cls._instance._handlers[0], logging.StreamHandler):
                 raise Exception("Instance already exists with a different handler")
-            elif isinstance(cls._instance._handler, logging.StreamHandler) and cls._instance._handler.stream != stream:
+            elif isinstance(cls._instance._handlers[0], logging.StreamHandler) and cls._instance._handlers[0].stream != stream:
                 raise Exception("Instance already exists with a different stream")
         else:
             cls._instance = cls(stream)
@@ -589,20 +581,16 @@ class InmantaLoggerConfig:
         logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
             self._stream, options, self._logging_configs_extensions
         )
-        self._handler = self._apply_logging_config(logging_config)
+        self._handlers = self._apply_logging_config(logging_config)
 
-    def _apply_logging_config(self, logging_config: FullLoggingConfig) -> Optional[logging.Handler]:
+    def _apply_logging_config(self, logging_config: FullLoggingConfig) -> abc.Sequence[logging.Handler]:
         """
         Apply the given logging_config as the current configuration of the logging system.
 
         This method assume that the given config defines a single root handler.
         """
         logging_config.apply_config()
-        if inmanta.RUNNING_TESTS and CAPLOG_FIXTURE_USED:
-            return None
-        else:
-            assert len(logging.root.handlers) == 1
-            return logging.root.handlers[0]
+        return logging.root.handlers
 
     @stable_api
     def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:
@@ -614,10 +602,9 @@ class InmantaLoggerConfig:
         :param inmanta_log_level: The inmanta logging level
         :param cli: True if the logs will be outputted to the CLI.
         """
-        if self._handler is None:
-            raise Exception("InmantaLogger.set_log_level() cannot be used together with the caplog fixture.")
         python_log_level = convert_inmanta_log_level(inmanta_log_level, cli)
-        self._handler.setLevel(python_log_level)
+        for handler in self._handlers:
+            handler.setLevel(python_log_level)
         logging.root.setLevel(python_log_level)
 
     @stable_api
@@ -627,9 +614,8 @@ class InmantaLoggerConfig:
 
         :param formatter: The log formatter.
         """
-        if self._handler is None:
-            raise Exception("InmantaLogger.set_log_formatter() cannot be used together with the caplog fixture.")
-        self._handler.setFormatter(formatter)
+        for handler in self._handlers:
+            handler.setFormatter(formatter)
 
     @stable_api
     def set_logfile_location(self, location: str) -> None:
@@ -639,14 +625,12 @@ class InmantaLoggerConfig:
 
         :param location: The location of the log file.
         """
-        if self._handler is None:
-            raise Exception("InmantaLogger.set_logfile_location() cannot be used together with the caplog fixture.")
         file_handler = logging.handlers.WatchedFileHandler(filename=location, mode="a+")
-        if self._handler:
-            self._handler.close()
-            logging.root.removeHandler(self._handler)
-        self._handler = file_handler
-        logging.root.addHandler(self._handler)
+        for handler in self._handlers:
+            handler.close()
+            logging.root.removeHandler(handler)
+        self._handlers = [file_handler]
+        logging.root.addHandler(file_handler)
 
     @stable_api
     def get_handler(self) -> logging.Handler:
@@ -655,9 +639,8 @@ class InmantaLoggerConfig:
 
         :return: The logging handler
         """
-        if self._handler is None:
-            raise Exception("InmantaLogger.get_handler() cannot be used together with the caplog fixture.")
-        return self._handler
+        assert len(self._handlers) == 1, "This could happen if this method is used in combination with the caplog fixture."
+        return self._handlers[0]
 
     @stable_api
     def register_default_logging_config(self, logging_config: LoggingConfigExtension) -> None:

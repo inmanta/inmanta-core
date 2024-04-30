@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import logging.config
 import warnings
 
 from tornado.httpclient import AsyncHTTPClient
@@ -1879,14 +1880,20 @@ async def set_running_tests():
 
 
 @pytest.fixture(scope="function", autouse=True)
-async def set_caplog_fixture_used(request):
+async def dont_override_root_logger(request, monkeypatch):
     """
-    Make the inmanta.logging module aware about the fact that the caplog fixture is used or not.
+    Make sure the inmanta.logging.FullLoggingConfig._to_dict_config() method doesn't override the root logger
+    when the caplog fixture is used, because caplog captures log messages by attaching a handler to the root logger.
     """
-    prev_val = inmanta_logging.CAPLOG_FIXTURE_USED
-    inmanta_logging.CAPLOG_FIXTURE_USED = "caplog" in request.fixturenames
-    yield
-    inmanta_logging.CAPLOG_FIXTURE_USED = prev_val
+    original_to_dict_config_method = inmanta_logging.FullLoggingConfig._to_dict_config
+
+    def _to_dict_config_patched(self) -> dict[str, object]:
+        dict_config = original_to_dict_config_method(self)
+        dict_config.pop("root", None)
+        return dict_config
+
+    if "caplog" in request.fixturenames:
+        monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "_to_dict_config", _to_dict_config_patched)
 
 
 @pytest.fixture(scope="session")
