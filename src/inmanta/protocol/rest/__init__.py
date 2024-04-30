@@ -72,6 +72,7 @@ class CallArguments:
         self._headers: dict[str, str] = {}
         self._metadata: dict[str, object] = {}
         self._auth_token: Optional[auth.claim_type] = None
+        self._auth_username: Optional[str] = None
 
         self._processed: bool = False
 
@@ -198,8 +199,8 @@ class CallArguments:
 
     def get_call_context(self) -> Optional[str]:
         """Returns the name of the first handler argument that is of type CallContext"""
-        for arg, hint in get_type_hints(self._config.handler).items():
-            if issubclass(hint, common.CallContext):
+        for arg, hint in self._config.handler.__annotations__.items():
+            if isinstance(hint, type) and issubclass(hint, common.CallContext):
                 return arg
         return None
 
@@ -289,7 +290,9 @@ class CallArguments:
 
         # verify if we need to inject a CallContext
         if call_context_var := self.get_call_context():
-            self._call_args[call_context_var] = common.CallContext(request_headers=self._headers, auth_token=self._auth_token)
+            self._call_args[call_context_var] = common.CallContext(
+                request_headers=self._headers, auth_token=self._auth_token, auth_username=self._auth_username
+            )
 
         self._processed = True
 
@@ -479,6 +482,45 @@ class CallArguments:
 
             return common.Response.create(ReturnValue(status_code=code, response=None), envelope=False)
 
+    def _parse_and_validate_auth_token(self) -> None:
+        """Get the auth token provided by the caller and decode it.
+
+        :return: A mapping of claims
+        """
+        header_value: Optional[str] = None
+        header_name: Optional[str] = None
+        cfg_name: Optional[str] = None
+        for name in auth.AuthJWTConfig.list():
+            cfg = auth.AuthJWTConfig.get(name)
+
+            if cfg.jwt_header in self._request_headers:
+                header_value = self._request_headers[cfg.jwt_header]
+                header_name = cfg.jwt_header
+                cfg_name = name
+
+        if not header_value or not header_name or not cfg_name:
+            return None
+
+        if " " in header_value:
+            parts = header_value.split(" ")
+
+            if len(parts) != 2 or parts[0].lower() != "bearer":
+                logging.getLogger(__name__).warning(
+                    f"Invalid JWT token header ({header_name} from auth config {cfg_name}). "
+                    f"A bearer token is expected, instead ({header_value} was provided)"
+                )
+                return None
+
+            token_value = parts[1]
+        else:
+            token_value = header_value
+
+        self._auth_token = auth.decode_token(token_value)
+
+        cfg = auth.AuthJWTConfig.get(cfg_name)
+        if cfg.jwt_username_claim in self._auth_token:
+            self._auth_username = self._auth_token[cfg.jwt_username_claim]
+
     def authenticate(self, auth_enabled: bool) -> None:
         """Fetch any identity information and authenticate. This will also load this authentication
         information in this instance.
@@ -489,7 +531,7 @@ class CallArguments:
             return
 
         # get and validate the token. A valid token means that user is authenticated
-        self._auth_token = auth.get_auth_token(self._request_headers)
+        self._parse_and_validate_auth_token()
         if self._auth_token is None and self._config.properties.enforce_auth:
             # We only need a valid token when the
             raise exceptions.UnauthorizedException()

@@ -72,10 +72,14 @@ class CallContext:
 
     request_headers: dict[str, str]
     auth_token: Optional[auth.claim_type]
+    auth_username: Optional[str]
 
-    def __init__(self, request_headers: dict[str, str], auth_token: Optional[auth.claim_type]) -> None:
+    def __init__(
+        self, request_headers: dict[str, str], auth_token: Optional[auth.claim_type], auth_username: Optional[str]
+    ) -> None:
         self.request_headers = request_headers
         self.auth_token = auth_token
+        self.auth_username = auth_username
 
 
 class ArgOption:

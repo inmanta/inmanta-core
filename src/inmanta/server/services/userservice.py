@@ -129,5 +129,4 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.get_current_user)
     async def get_current_user(self, context: common.CallContext) -> model.CurrentUser:
-        print(context.auth_token)
-        return model.CurrentUser(username=context.auth_token["sub"])
+        return model.CurrentUser(username=context.auth_username)

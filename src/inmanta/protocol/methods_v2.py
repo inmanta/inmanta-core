@@ -26,7 +26,7 @@ from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, Parame
 from inmanta.data import model
 from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
 from inmanta.protocol import methods
-from inmanta.protocol.common import CallContext, ReturnValue
+from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes

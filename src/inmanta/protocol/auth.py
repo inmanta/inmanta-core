@@ -358,6 +358,14 @@ class AuthJWTConfig:
         self.keys: dict[str, bytes] = {}
         self._config: configparser.SectionProxy = config
         self.claims: list[ClaimMatch] = []
+
+        self.jwt_header: str = "Authorization"
+        self.jwt_username_claim: str = "sub"
+        self.expire: int = 0
+        self.sign: bool = False
+        self.issuer: str = "https://localhost:8888/"
+        self.audience: str
+
         if "algorithm" not in config:
             raise ValueError("algorithm is required in %s section" % self.section)
 
@@ -377,8 +385,6 @@ class AuthJWTConfig:
         """
         if "sign" in self._config:
             self.sign = config.is_bool(self._config["sign"])
-        else:
-            self.sign = False
 
         if "client_types" not in self._config:
             raise ValueError("client_types is a required options for %s" % self.section)
@@ -390,13 +396,9 @@ class AuthJWTConfig:
 
         if "expire" in self._config:
             self.expire = config.is_int(self._config["expire"])
-        else:
-            self.expire = 0
 
         if "issuer" in self._config:
             self.issuer = config.is_str(self._config["issuer"])
-        else:
-            self.issuer = "https://localhost:8888/"
 
         if "audience" in self._config:
             self.audience = config.is_str(self._config["audience"])
@@ -405,6 +407,12 @@ class AuthJWTConfig:
 
         if "claims" in self._config:
             self.parse_claim_matching(self._config["claims"])
+
+        if "jwt-header" in self._config:
+            self.jwt_header = self._config["jwt-header"]
+
+        if "jwt-username-claim" in self._config:
+            self.jwt_username_claim = self._config.get("jwt-username-claim")
 
     def parse_claim_matching(self, claim_conf: str) -> None:
         """Parse claim matching expressions"""
