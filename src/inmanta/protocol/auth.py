@@ -409,9 +409,13 @@ class AuthJWTConfig:
             self.parse_claim_matching(self._config["claims"])
 
         if "jwt-header" in self._config:
+            if self.sign:
+                raise ValueError(f"auth config {self.section} used for signing cannot use a custom header.")
             self.jwt_header = self._config["jwt-header"]
 
         if "jwt-username-claim" in self._config:
+            if self.sign:
+                raise ValueError(f"auth config {self.section} used for signing cannot use a custom claim.")
             self.jwt_username_claim = self._config.get("jwt-username-claim")
 
     def parse_claim_matching(self, claim_conf: str) -> None:
