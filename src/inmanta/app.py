@@ -49,7 +49,9 @@ from collections import abc
 from configparser import ConfigParser
 from typing import Optional
 
+import logfire
 import click
+import logfire.propagate
 from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
 
@@ -865,10 +867,7 @@ def app() -> None:
             if helpmsg is not None:
                 print(helpmsg)
 
-    ctx = None
-    if "traceparent" in os.environ:
-        ctx = TraceContextTextMapPropagator().extract(carrier=os.environ)
-
+    ctx = TraceContextTextMapPropagator().extract(carrier=os.environ)
     with tracing.tracer.start_as_current_span(f"cmd {options.func.__name__}", context=ctx):
         try:
             options.func(options)

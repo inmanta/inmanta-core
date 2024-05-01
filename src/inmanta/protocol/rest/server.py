@@ -148,14 +148,14 @@ class RESTHandler(tornado.web.RequestHandler):
                     request_headers = self.request.headers
                     auth_token = self.get_auth_token(request_headers)
 
-                auth_enabled = server_enable_auth.get()
-                if not auth_enabled or auth_token is not None or not call_config.properties.enforce_auth:
-                    result = await self._transport._execute_call(
-                        kwargs, http_method, call_config, message, request_headers, auth_token
-                    )
-                    self.respond(result.body, result.headers, result.status_code)
-                else:
-                    raise exceptions.UnauthorizedException()
+                    auth_enabled = server_enable_auth.get()
+                    if not auth_enabled or auth_token is not None or not call_config.properties.enforce_auth:
+                        result = await self._transport._execute_call(
+                            kwargs, http_method, call_config, message, request_headers, auth_token
+                        )
+                        self.respond(result.body, result.headers, result.status_code)
+                    else:
+                        raise exceptions.UnauthorizedException()
 
                 except JSONDecodeError as e:
                     error_message = f"The request body couldn't be decoded as a JSON: {e}"
@@ -166,9 +166,9 @@ class RESTHandler(tornado.web.RequestHandler):
                     LOGGER.exception("An exception occured")
                     self.respond({"message": "Unable to decode request body"}, {}, 400)
 
-            except exceptions.BaseHttpException as e:
-                LOGGER.warning("Received an exception with status code %d and message %s", e.to_status(), e.to_body())
-                self.respond(e.to_body(), {}, e.to_status())
+                except exceptions.BaseHttpException as e:
+                    LOGGER.warning("Received an exception with status code %d and message %s", e.to_status(), e.to_body())
+                    self.respond(e.to_body(), {}, e.to_status())
 
                 except CancelledError:
                     self.respond({"message": "Request is cancelled on the server"}, {}, 500)
