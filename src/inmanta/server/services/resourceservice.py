@@ -19,7 +19,6 @@
 import asyncio
 import datetime
 import logging
-import os
 import re
 import uuid
 from collections import abc, defaultdict
@@ -31,7 +30,7 @@ from asyncpg.exceptions import UniqueViolationError
 from pydantic import ValidationError
 from tornado.httputil import url_concat
 
-from inmanta import config, const, data, util
+from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import (
@@ -120,9 +119,6 @@ class ResourceService(protocol.ServerSlice):
     def __init__(self) -> None:
         super().__init__(SLICE_RESOURCE)
 
-        self._resource_action_loggers: dict[uuid.UUID, logging.Logger] = {}
-        self._resource_action_handlers: dict[uuid.UUID, logging.Handler] = {}
-
         # Dict: environment_id: (model_version, increment, negative_increment, negative_increment_per_agent, run_ahead_lock)
         self._increment_cache: dict[
             uuid.UUID,
@@ -138,6 +134,7 @@ class ResourceService(protocol.ServerSlice):
         ] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
+        self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
@@ -160,68 +157,17 @@ class ResourceService(protocol.ServerSlice):
 
     async def stop(self) -> None:
         await super().stop()
-        self._close_resource_action_loggers()
 
     def clear_env_cache(self, env: data.Environment) -> None:
         LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env.id)
         self._increment_cache[env.id] = None
 
-    @staticmethod
-    def get_resource_action_log_file(environment: uuid.UUID) -> str:
-        """Get the correct filename for the given environment
-        :param environment: The environment id to get the file for
-        :return: The path to the logfile
-        """
-        return os.path.join(config.log_dir.get(), opt.server_resource_action_log_prefix.get() + str(environment) + ".log")
-
     def get_resource_action_logger(self, environment: uuid.UUID) -> logging.Logger:
-        """Get the resource action logger for the given environment. If the logger was not created, create it.
+        """Get the resource action logger for the given environment.
         :param environment: The environment to get a logger for
         :return: The logger for the given environment.
         """
-        if environment in self._resource_action_loggers:
-            return self._resource_action_loggers[environment]
-
-        resource_action_log = self.get_resource_action_log_file(environment)
-
-        file_handler = logging.handlers.WatchedFileHandler(filename=resource_action_log, mode="a+")
-        # Most logs will come from agents. We need to use their level and timestamp and their formatted message
-        file_handler.setFormatter(logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s"))
-        file_handler.setLevel(logging.DEBUG)
-
-        resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(str(environment))
-        resource_action_logger.setLevel(logging.DEBUG)
-        resource_action_logger.addHandler(file_handler)
-
-        self._resource_action_loggers[environment] = resource_action_logger
-        self._resource_action_handlers[environment] = file_handler
-
-        return resource_action_logger
-
-    def _close_resource_action_loggers(self) -> None:
-        """Close all resource action loggers and their associated handlers"""
-        try:
-            while True:
-                env, logger = self._resource_action_loggers.popitem()
-                self.close_resource_action_logger(env, logger)
-        except KeyError:
-            pass
-
-    def close_resource_action_logger(self, env: uuid.UUID, logger: Optional[logging.Logger] = None) -> None:
-        """Close the given logger for the given env.
-        :param env: The environment to close the logger for
-        :param logger: The logger to close, if the logger is none it is retrieved
-        """
-        if logger is None:
-            if env in self._resource_action_loggers:
-                logger = self._resource_action_loggers.pop(env)
-            else:
-                return
-
-        handler = self._resource_action_handlers.pop(env)
-        logger.removeHandler(handler)
-        handler.flush()
-        handler.close()
+        return self._resource_action_logger.getChild(str(environment))
 
     def log_resource_action(
         self, env: uuid.UUID, resource_ids: Sequence[str], log_level: int, ts: datetime.datetime, message: str

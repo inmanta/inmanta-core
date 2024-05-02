@@ -25,6 +25,7 @@ import pkg_resources
 import yaml
 
 from inmanta import data
+from inmanta import logging as inmanta_logging
 from inmanta.config import feature_file_config
 from inmanta.data.model import ExtensionStatus
 from inmanta.server.protocol import ServerSlice
@@ -226,3 +227,11 @@ class ApplicationContext:
         Returns the list of all available environment settings
         """
         return sorted(data.Environment._settings.values(), key=lambda x: x.name)
+
+    def register_default_logging_config(self, logging_config: inmanta_logging.LoggingConfigExtension) -> None:
+        """
+        Used by an Inmanta extension to register the default configuration of specific loggers, formatters
+        and handlers it uses.
+        """
+        inmanta_logger_config = inmanta_logging.InmantaLoggerConfig.get_current_instance()
+        inmanta_logger_config.register_default_logging_config(logging_config)

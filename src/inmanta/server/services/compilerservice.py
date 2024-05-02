@@ -520,9 +520,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)
 
-        self._compiling_envs: set[uuid.UUID] = set()
+        self._env_to_compile_task: dict[uuid.UUID, asyncio.Task[None | protocol.Result]] = {}
         # write lock only, writers take care to uphold consistency so that readers don't need the lock
-        self._write_lock_compiling_envs = asyncio.locks.Lock()
+        self._write_lock_env_to_compile_task = asyncio.locks.Lock()
 
         # boolean indicating when everything is up and compile execution can start
         self.fully_ready = False
@@ -640,7 +640,8 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                                       if set to false, nothing will be notified. If not set then the default notifications are
                                       sent (failed pull stage and errors during the do_export)
         :param failed_compile_message: the message used in notifications if notify_failed_compile is set to True.
-        :param connection: Perform the database changes using this database connection.
+        :param connection: Perform the database changes using this database connection. If this connection is in a transaction
+                           context, in_db_transaction must be set to True.
         :param in_db_transaction: If set to True, the connection must be provided and the connection must be part of an ongoing
                                   database transaction. If this parameter is set to True, is required to call
                                   `CompileService.notify_compile_request_committed()` right after the transaction commits.
@@ -655,7 +656,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         if in_db_transaction != (connection is not None and connection.is_in_transaction()):
             raise Exception(
                 f"in_db_transaction is {in_db_transaction},"
-                f" but the given connection is{'' if in_db_transaction else ' not'} executing in a transaction."
+                f" but the given connection is{' not' if in_db_transaction else ''} executing in a transaction."
             )
 
         if removed_resource_sets is None:
@@ -771,47 +772,61 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         if connection is not None and connection.is_in_transaction():
             raise ValueError("The _process_next_compile_in_queue method should not be called in a transaction context")
 
+        async def process_compile(compile: data.Compile, *, replace_active: bool = False) -> None:
+            """
+            Process a single compile: start it if no compile is currently active for its environment, unless the environment is
+            halted. If replace_active is set, a new compile is started even if one is already active.
+
+            Writes to self._env_to_compile_task => must be called under the lock.
+
+            :param replace_active: Replace the active compile if there is any. Should only be passed if the active run is
+                being wrapped up.
+            """
+            env: Optional[data.Environment] = await data.Environment.get_by_id(compile.environment, connection=con)
+            if env is None:
+                raise Exception("Can't queue compile: environment %s does not exist" % compile.environment)
+
+            # don't execute any compiles in a halted environment
+            if env.halted:
+                return
+
+            # start a new compile run iff there is no compile active or if it should be replaced
+            if replace_active or compile.environment not in self._env_to_compile_task:
+                # Run the compile. self._run will call back into this method when done
+                self._env_to_compile_task[compile.environment] = self.add_background_task(self._run(compile))
+
         # acquire connection before lock to ensure lock contention remains short lived
         async with data.Environment.get_connection(connection) as con:
-            async with self._write_lock_compiling_envs:
-                started_new_compile_run: bool = False
+            async with self._write_lock_env_to_compile_task:
+                # only inspect state and fetch compile details under the global lock to protect against race conditions
+                if not self.fully_ready or self.is_stopping():
+                    # do still mark compiles as done for accurate compile queue reporting
+                    if finish_current_compile and environment is not None:
+                        self._env_to_compile_task.pop(environment, None)
+                    return
 
-                try:
-                    # only inspect state and fetch compile details under the global lock to protect against race conditions
-                    if not self.fully_ready or self.is_stopping():
-                        return
-
-                    compiles: Sequence[data.Compile]
-                    if environment is None:
-                        compiles = await data.Compile.get_next_run_all(connection=con)
-                    else:
-                        c: Optional[data.Compile] = await data.Compile.get_next_run(environment, connection=con)
-                        compiles = [c] if c is not None else []
-
-                    compile: data.Compile
-                    for compile in compiles:
-                        env: Optional[data.Environment] = await data.Environment.get_by_id(compile.environment, connection=con)
-                        if env is None:
-                            raise Exception("Can't queue compile: environment %s does not exist" % compile.environment)
-
-                        # don't execute any compiles in a halted environment
-                        if env.halted:
-                            continue
-
+                c: Optional[data.Compile]
+                if environment is None:
+                    compiles: Sequence[data.Compile] = await data.Compile.get_next_run_all(connection=con)
+                    for c in compiles:
+                        await process_compile(c)
+                else:
+                    finishing_compile_task: Optional[asyncio.Task[object]] = (
+                        self._env_to_compile_task.get(environment, None) if finish_current_compile else None
+                    )
+                    try:
+                        c = await data.Compile.get_next_run(environment, connection=con)
+                        if c is None:
+                            return
+                        assert c.environment == environment
+                        await process_compile(c, replace_active=finish_current_compile)
+                    finally:
+                        # drop the current compile run if finish_current_compile=True and we didn't start a new one
                         if (
-                            # no compile is running for this environment
-                            compile.environment not in self._compiling_envs
-                            # the previously running compile is finished
-                            or (finish_current_compile and compile.environment == environment)
+                            finishing_compile_task is not None
+                            and self._env_to_compile_task.get(environment, None) is finishing_compile_task
                         ):
-                            self._compiling_envs.add(compile.environment)
-                            # Run the compile. self._run will call back into this method when done
-                            self.add_background_task(self._run(compile))
-                            started_new_compile_run = True
-                finally:
-                    if finish_current_compile and not started_new_compile_run:
-                        assert environment is not None
-                        self._compiling_envs.discard(environment)
+                            del self._env_to_compile_task[environment]
 
     async def _notify_listeners(self, compile: data.Compile) -> None:
         async def notify(listener: CompileStateListener) -> None:
@@ -861,7 +876,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     @protocol.handle(methods.is_compiling, environment_id="id")
     async def is_compiling(self, environment_id: uuid.UUID) -> Apireturn:
-        if environment_id in self._compiling_envs:
+        if environment_id in self._env_to_compile_task:
             return 200
         return 204
 
@@ -1086,3 +1101,28 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     async def recalculate_queue_count_cache(self) -> None:
         async with self._queue_count_cache_lock:
             self._queue_count_cache = await data.Compile.get_total_length_of_all_compile_queues()
+
+    async def cancel_compile(self, env_id: uuid.UUID) -> None:
+        """
+        Cancel the ongoing compile for the given environment (if any). After the cancellation, this method
+        will not start the execution of a new compile, if a compile request would be present in the compile
+        queue for the given environment.
+
+        pre-condition: The given environment is halted.
+
+        :param env_id: The id of the environment for which the compile should be cancelled.
+        """
+        async with self._write_lock_env_to_compile_task:
+            compile_task: Optional[asyncio.Task[None | protocol.Result]] = self._env_to_compile_task.pop(env_id, None)
+        if compile_task:
+            # We cancel the compile_task outside of the self._write_lock_env_to_compile_task lock to prevent lock contention.
+            # This is only safe if no new compiles can be scheduled on the given environment, otherwise there is the
+            # possibility that multiple compiles run concurrently on the same environment. Hence the pre-condition that
+            # this method can only be called on halted environments.
+            compile_task.cancel()
+            try:
+                # Wait until cancellation has finished
+                await compile_task
+            except asyncio.CancelledError:
+                # Don't propagate CancelledError raised by invoking compile_task.cancel()
+                pass
