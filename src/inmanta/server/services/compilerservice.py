@@ -812,9 +812,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                         await process_compile(c)
                 else:
                     finishing_compile_task: Optional[asyncio.Task[object]] = (
-                        self._env_to_compile_task.get(environment, None)
-                        if finish_current_compile
-                        else None
+                        self._env_to_compile_task.get(environment, None) if finish_current_compile else None
                     )
                     try:
                         c = await data.Compile.get_next_run(environment, connection=con)
