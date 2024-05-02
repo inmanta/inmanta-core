@@ -745,12 +745,13 @@ class DiscoveredResource(BaseModel):
     """
     :param discovered_resource_id: The name of the resource
     :param values: The actual resource
-    :param managed: A resource with the same ID is already managed by the orchestrator
+    # :param managed_resource_uri: URI of the resource with the same ID that is already managed by the orchestrator.
+    # /api/v2/resource/<rid>
     """
 
     discovered_resource_id: ResourceIdStr
     values: dict[str, object]
-    managed: bool = False
+    # managed_resource_uri: Optional[str] = None
 
     @field_validator("discovered_resource_id")
     @classmethod
@@ -765,6 +766,7 @@ class DiscoveredResource(BaseModel):
             values=self.values,
             discovered_at=datetime.datetime.now(),
             environment=env,
+            # managed_resource_uri=self.managed_resource_uri
         )
 
 

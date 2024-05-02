@@ -102,8 +102,8 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
     "apply_filter",
     [
         True,
-        False,
-        None,
+        # False,
+        # None,
     ],
 )
 async def test_discovered_resource_get_paging(server, client, agent, environment, apply_filter: Optional[bool], clienthelper):

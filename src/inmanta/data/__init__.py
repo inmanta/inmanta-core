@@ -6323,17 +6323,19 @@ class DiscoveredResource(BaseDocument):
     :param environment: the environment of the resource
     :param discovered_resource_id: The id of the resource
     :param values: The values associated with the discovered_resource
+    :param managed_resource_uri: URI of the resource with the same ID that is already managed by the orchestrator.
     """
 
     environment: uuid.UUID
     discovered_at: datetime.datetime
     discovered_resource_id: m.ResourceIdStr
     values: dict[str, object]
+    # managed_resource_uri: Optional[str] = None
 
     __primary_key__ = ("environment", "discovered_resource_id")
 
     def to_dto(self) -> m.DiscoveredResource:
-        return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values)
+        return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values, managed_resource_uri=self.managed_resource_uri)
 
 
 class File(BaseDocument):
