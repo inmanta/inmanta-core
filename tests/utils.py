@@ -412,7 +412,7 @@ def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: 
 @functools.lru_cache(1)
 def get_product_meta_data() -> ProductMetadata:
     """Get the produce meta-data"""
-    bootloader = InmantaBootloader()
+    bootloader = InmantaBootloader(configure_logging=True)
     context = bootloader.load_slices()
     return context.get_product_metadata()
 
@@ -547,6 +547,7 @@ def module_from_template(
     new_content_init_cf: Optional[str] = None,
     new_content_init_py: Optional[str] = None,
     in_place: bool = False,
+    four_digit_version: bool = False,
 ) -> module.ModuleV2Metadata:
     """
     Creates a v2 module from a template.
@@ -564,6 +565,7 @@ def module_from_template(
     :param new_content_init_cf: The new content of the _init.cf file.
     :param new_content_init_py: The new content of the __init__.py file.
     :param in_place: Modify the module in-place instead of copying it.
+    :param four_digit_version: if the version uses 4 digits (3 by default)
     """
 
     def to_python_requires(
@@ -580,6 +582,8 @@ def module_from_template(
     config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
     config: configparser.ConfigParser = configparser.ConfigParser()
     config.read(config_file)
+    if four_digit_version:
+        config["metadata"]["four_digit_version"] = "True"
     if new_version is not None:
         base, tag = module.ModuleV2Metadata.split_version(new_version)
         config["metadata"]["version"] = base

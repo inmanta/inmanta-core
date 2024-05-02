@@ -27,6 +27,7 @@ from typing import Optional
 
 import asyncpg
 
+from inmanta import logging as inmanta_logging
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
@@ -64,6 +65,14 @@ class ConstrainedApplicationContext(ApplicationContext):
     def set_feature_manager(self, feature_manager: FeatureManager) -> None:
         self.parent.set_feature_manager(feature_manager)
 
+    def register_default_logging_config(self, logging_config: inmanta_logging.LoggingConfigExtension) -> None:
+        """
+        Used by an Inmanta extension to register the default configuration of specific loggers, formatters
+        and handlers it uses. The names of the formatters and handlers must be prefixed with `<name-extension>_`.
+        """
+        logging_config.validate_for_extension(self.namespace)
+        self.parent.register_default_logging_config(logging_config)
+
 
 @stable_api
 class InmantaBootloader:
@@ -77,10 +86,18 @@ class InmantaBootloader:
     # Cache field for available extensions
     AVAILABLE_EXTENSIONS: Optional[dict[str, str]] = None
 
-    def __init__(self) -> None:
+    def __init__(self, configure_logging: bool = False) -> None:
+        """
+        :param configure_logging: This config option is used by the tests to configure the logging framework.
+                                  In normal execution, the logging framework is configured by the app.py
+        """
         self.restserver = Server()
         self.started = False
         self.feature_manager: Optional[FeatureManager] = None
+
+        if configure_logging:
+            inmanta_logger_config = inmanta_logging.InmantaLoggerConfig.get_instance()
+            inmanta_logger_config.apply_options(inmanta_logging.Options())
 
     async def start(self) -> None:
         db_wait_time: int = config.db_wait_time.get()

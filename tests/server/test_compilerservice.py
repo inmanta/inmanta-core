@@ -381,7 +381,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     e2.append(extra_compile)
 
     # We haven't started, because we hang on a handler,
-    assert len(cs._compiling_envs) == 0
+    assert len(cs._env_to_compile_task) == 0
 
     # Continue
     hanging_collector.release()
@@ -1100,7 +1100,7 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # finish 7th compile
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
-    while env.id in compilerslice._compiling_envs:
+    while env.id in compilerslice._env_to_compile_task:
         await asyncio.sleep(0.2)
 
     # 0 in the queue, 0 running
@@ -1223,21 +1223,21 @@ async def test_compileservice_queue_count_on_trx_based_api(mocked_compiler_servi
             )
             assert compile_id is not None, warnings
             assert compiler_service._queue_count_cache == 0
-            assert len(compiler_service._compiling_envs) == 0
+            assert len(compiler_service._env_to_compile_task) == 0
     # Transaction committed
     await compiler_service.notify_compile_request_committed(compile_id)
     assert compiler_service._queue_count_cache == 1
-    assert len(compiler_service._compiling_envs) == 1
+    assert len(compiler_service._env_to_compile_task) == 1
 
     await run_compile_and_wait_until_compile_is_done(compiler_service, mocked_compiler_service_block, env.id)
-    assert len(compiler_service._compiling_envs) == 0
+    assert len(compiler_service._env_to_compile_task) == 0
 
 
 @pytest.fixture(scope="function")
 async def server_with_frequent_cleanups(server_pre_start, server_config, async_finalizer):
     config.Config.set("server", "compiler-report-retention", "60")
     config.Config.set("server", "cleanup-compiler-reports_interval", "1")
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
     await ibl.start()
     yield ibl.restserver
     await ibl.stop(timeout=15)

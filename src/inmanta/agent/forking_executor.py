@@ -22,6 +22,7 @@ import concurrent.futures
 import concurrent.futures.thread
 import functools
 import logging
+import logging.config
 import multiprocessing
 import os
 import socket
@@ -36,13 +37,13 @@ import inmanta.config
 import inmanta.const
 import inmanta.env
 import inmanta.loader
+import inmanta.logging
 import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
 from inmanta.agent import executor
-from inmanta.logging import InmantaLoggerConfig
-from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
+from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -287,6 +288,11 @@ def mp_worker_entrypoint(
     # Basic config, starts on std.out
     log_config = InmantaLoggerConfig.get_instance()
     log_config.set_python_log_level(log_level)
+    config_builder = inmanta.logging.LoggingConfigBuilder()
+    logger_config: inmanta.logging.FullLoggingConfig = config_builder.get_logging_config_for_agent(
+        logfile, inmanta_log_level, cli_log
+    )
+    logger_config.apply_config()
     logging.captureWarnings(True)
 
     # Set up our own logger
