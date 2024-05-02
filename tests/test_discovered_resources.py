@@ -17,14 +17,11 @@
 """
 
 import json
-import uuid
-from datetime import datetime
 from typing import Optional
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta import data
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.server.config import get_bind_port
 
@@ -102,8 +99,8 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
     "apply_filter",
     [
         True,
-        # False,
-        # None,
+        False,
+        None,
     ],
 )
 async def test_discovered_resource_get_paging(server, client, agent, environment, apply_filter: Optional[bool], clienthelper):
@@ -117,13 +114,29 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     - False: Activate filtering and keep only discovered resources that are NOT managed.
     - None: Disable filtering: return all discovered resources regardless of whether they're managed.
     """
-    discovered_resources = [
-        {
-            "discovered_resource_id": f"test::Resource[agent1,key{i}=key{i}]",
-            "values": {"value1": f"test{i}", "value2": f"test{i+1}"},
-        }
-        for i in range(1, 7)
-    ]
+
+    #                                        |              FILTER
+    # discovered    managed   orphaned       |  TRUE        FALSE          NONE
+    # ---------------------------------------+-------------------------------------
+    #     R1            x                    |   x                           x
+    #     R2            x                    |   x                           x
+    #     R3                      x          |   x                           x
+    #     R4                      x          |   x                           x
+    #     R5                                 |                x              x
+    #     R6                                 |                x              x
+
+    discovered_resources = []
+    for i in range(1, 7):
+        rid = f"test::Resource[agent1,key{i}=key{i}]"
+        discovered_resources.append(
+            {
+                "discovered_resource_id": rid,
+                "values": {"value1": f"test{i}", "value2": f"test{i+1}"},
+                "managed_resource_uri": (
+                    f"/api/v2/resource/{rid}" if i <= 4 else None
+                ),  # Last 2 resources are not known to the orchestrator
+            }
+        )
 
     result = await agent._client.discovered_resource_create_batch(environment, discovered_resources)
     assert result.code == 200
@@ -157,8 +170,6 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     # # Create some orphans for version 1
     # version = 1
 
-
-
     # for resource in orphaned_resources:
     #     resource = data.Resource.new(
     #         environment=uuid.UUID(environment), resource_version_id=resource["id"], attributes=resource["values"]
@@ -186,16 +197,6 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     #     await resource.insert()
 
     # Resource repartition and expected filtering results:
-
-    #                                        |              FILTER
-    # discovered    managed   orphaned       |  TRUE        FALSE          NONE
-    # ---------------------------------------+-------------------------------------
-    #     R1            x                    |   x                           x
-    #     R2            x                    |   x                           x
-    #     R3                      x          |   x                           x
-    #     R4                      x          |   x                           x
-    #     R5                                 |                x              x
-    #     R6                                 |                x              x
 
     if apply_filter is None:
         filter = None

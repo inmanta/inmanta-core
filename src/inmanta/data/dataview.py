@@ -1270,7 +1270,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         Return the specification of the allowed filters, see FilterValidator
         """
         return {
-            "managed": BooleanIsNotNullFilter,
+            "managed": BooleanEqualityFilter,
         }
 
     def get_base_url(self) -> str:
@@ -1278,13 +1278,27 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
-            select_clause="SELECT dr.environment, dr.discovered_resource_id, dr.values, (CASE WHEN rps.resource_id IS NOT NULL THEN true ELSE false END) AS managedmanaged",
-            from_clause=f"""
+            select_clause="SELECT *",
+            prelude=f"""
+            WITH result AS (
+                SELECT
+                    dr.environment,
+                    dr.discovered_resource_id,
+                    dr.values,
+                    (
+                        CASE
+                            WHEN rps.resource_id IS NOT NULL THEN true
+                            ELSE false
+                        END
+                    ) AS managed
+
                 FROM {data.DiscoveredResource.table_name()} as dr
                 LEFT JOIN {data.ResourcePersistentState.table_name()} rps
                 ON dr.discovered_resource_id = rps.resource_id
+                WHERE dr.environment = $1
+            )
             """,
-            filter_statements=["dr.environment = $1"],
+            from_clause="FROM result AS r",
             values=[self.environment.id],
         )
         return query_builder
@@ -1294,7 +1308,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
             model.DiscoveredResource(
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
-                # managed_resource_uri=res["managedmanaged"]
+                managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
             ).model_dump()
             for res in records
         ]
