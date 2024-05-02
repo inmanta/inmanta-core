@@ -5012,7 +5012,8 @@ class Resource(BaseDocument):
         SELECT DISTINCT ON (resource.resource_id) resource.resource_id, {status_sub_query('resource')}
         FROM resource
         INNER JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
-        INNER JOIN resource_persistent_state ps on ps.resource_id = resource.resource_id AND resource.environment = ps.environment
+        INNER JOIN resource_persistent_state ps
+              ON ps.resource_id = resource.resource_id AND resource.environment = ps.environment
         WHERE resource.environment = $1 AND cm.released = TRUE AND resource.resource_id = ANY($2)
         ORDER BY resource.resource_id, model DESC;
         """
