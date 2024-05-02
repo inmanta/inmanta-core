@@ -82,7 +82,7 @@ class CallArguments:
             raise Exception("Process call first before accessing property")
 
         return self._call_args
-    
+
     @property
     def auth_username(self) -> Optional[str]:
         if not self._processed:
@@ -625,7 +625,7 @@ class RESTBase(util.TaskHandler[None]):
                 "Calling method %s(%s) user=%s",
                 config.method_name,
                 ", ".join([f"{name}={common.shorten(str(value))}" for name, value in arguments.call_args.items()]),
-                arguments.auth_username if arguments.auth_username else "<>"
+                arguments.auth_username if arguments.auth_username else "<>",
             )
 
             result = await config.handler(**arguments.call_args)
@@ -639,5 +639,5 @@ class RESTBase(util.TaskHandler[None]):
             raise
 
         except Exception as e:
-            LOGGER.exception("An exception occured during the request.")
+            LOGGER.exception("An exception occurred during the request.")
             raise exceptions.ServerError(str(e.args))
