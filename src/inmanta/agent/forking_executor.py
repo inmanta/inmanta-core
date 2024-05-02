@@ -134,7 +134,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.stopped.set()
 
 
-class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver[ExecutorContext]):
+class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
     pass
 
 
@@ -433,6 +433,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         :param thread_pool:  threadpool to perform work on
         :param environment_manager: The VirtualEnvironmentManager responsible for managing the virtual environments
         :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
+        :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
         :param storage_folder: folder to place code files
         :param log_level: log level for the executors
@@ -481,11 +482,11 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
     ) -> MPExecutor:
         """
-        Retrieves an Executor based on the agent name and blueprint.
+        Retrieves an Executor based on the agent name and ResourceInstallSpec.
         If an Executor does not exist for the given configuration, a new one is created.
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
-        :param blueprint: The ExecutorBlueprint defining the configuration for the Executor.
+        :param code: The set of sources to be installed on the executor.
         :return: An Executor instance
         """
         blueprint = executor.ExecutorBlueprint.from_specs(code)

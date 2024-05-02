@@ -546,7 +546,7 @@ class AgentInstance:
         # To give smooth deploy experience, we want these agents to start immediately.
         self.ensure_deploy_on_start = ensure_deploy_on_start
 
-        self.executor_manager: executor.ExecutorManager[Any] = process.executor_manager
+        self.executor_manager: executor.ExecutorManager[executor.Executor] = process.executor_manager
 
     async def stop(self) -> None:
         self._stopped = True
@@ -823,7 +823,7 @@ class AgentInstance:
 
         # Resource types for which no handler code exist for the given version
         # or for which the pip config couldn't be retrieved
-        code, invalid_resource_types = await self.process.get_code(self._env_id, version, list(resource_types))
+        code, invalid_resource_types = await self.process.get_code(self._env_id, version, resource_types)
         # Resource types for which an error occurred during handler code installation
 
         try:
@@ -937,11 +937,12 @@ class Agent(SessionEndpoint):
         remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExcutorMode.forking
         can_have_remote_executor = code_loader
 
+        self.executor_manager: executor.ExecutorManager[executor.Executor]
         if remote_executor and can_have_remote_executor:
             LOGGER.info("Selected forking agent executor mode")
             env_manager = inmanta.agent.executor.VirtualEnvironmentManager(self._storage["executor"])
             assert self.environment is not None  # Mypy
-            self.executor_manager: executor.ExecutorManager[Any] = forking_executor.MPManager(
+            self.executor_manager = forking_executor.MPManager(
                 self.thread_pool,
                 env_manager,
                 self.sessionid,
@@ -973,7 +974,7 @@ class Agent(SessionEndpoint):
                 raise CouldNotConnectToServer()
             self.agent_map = result.result["data"]["settings"][data.AUTOSTART_AGENT_MAP]
         elif self.agent_map is None:
-            self.agent_map = cfg.agent_map.get()
+            self.agent_map = dict(cfg.agent_map.get())
 
     async def _init_endpoint_names(self) -> None:
         if self.hostname is not None:
@@ -1148,7 +1149,7 @@ class Agent(SessionEndpoint):
             agent_instance.pause("Connection to server lost")
 
     async def get_code(
-        self, environment: uuid.UUID, version: int, resource_types: Sequence[str]
+        self, environment: uuid.UUID, version: int, resource_types: Collection[str]
     ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResourcesSet]:
         """
         Get the collection of installation specifications (i.e. pip config, python package dependencies,
@@ -1159,7 +1160,7 @@ class Agent(SessionEndpoint):
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
         if self._loader is None:
-            # TODO
+            # TODO: verify if this is the proper response
             return [], set()
 
         # store it outside the loop, but only load when required

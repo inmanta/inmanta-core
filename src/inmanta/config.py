@@ -262,9 +262,9 @@ def is_list(value: str | list[str]) -> list[str]:
     return [] if value == "" else [x.strip() for x in value.split(",")]
 
 
-def is_map(map_in: str | dict[str, str]) -> dict[str, str]:
+def is_map(map_in: str | typing.Mapping[str, str]) -> typing.Mapping[str, str]:
     """List of comma-separated key=value pairs"""
-    if isinstance(map_in, dict):
+    if isinstance(map_in, typing.Mapping):
         return map_in
     map_out = {}
     if map_in is not None:

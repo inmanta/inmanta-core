@@ -451,7 +451,7 @@ class Executor(abc.ABC):
         pass
 
 
-E = typing.TypeVar("E", bound=Executor)
+E = typing.TypeVar("E", bound=Executor, covariant=True)
 
 
 class ExecutorManager(abc.ABC, typing.Generic[E]):

@@ -27,10 +27,10 @@ LOGGER = logging.getLogger(__name__)
 
 # flake8: noqa: H904
 
-agent_map: Option[dict[str, str]] = Option(
+agent_map: Option[typing.Mapping[str, str]] = Option(
     "config",
     "agent-map",
-    {},
+    dict,
     """By default the agent assumes that all agent names map to the host on which the process is executed. With the
 agent map it can be mapped to other hosts. This value consists of a list of key/value pairs. The key is the name of the
 agent and the format of the value is described in :inmanta:entity:`std::AgentConfig`. When the configuration option
@@ -57,7 +57,7 @@ environment: Option[typing.Optional[uuid.UUID]] = Option(
 agent_names: Option[list[str]] = Option(
     "config",
     "agent-names",
-    ["$node-name"],
+    lambda: ["$node-name"],  # wrap in lambda to make sure we don't pass mutable defaults
     """Names of the agents this instance should deploy configuration for. When the configuration option
 config.use_autostart_agent_map is set to true, this option will be ignored.""",
     is_list,

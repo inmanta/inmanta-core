@@ -85,7 +85,7 @@ class IPCLogRecord(IPCFrame):
     msg: str
 
 
-class IPCFrameProtocol(Protocol, typing.Generic[ServerContext]):
+class IPCFrameProtocol(Protocol):
     """
     Simple protocol which sends
 
@@ -174,7 +174,7 @@ class IPCFrameProtocol(Protocol, typing.Generic[ServerContext]):
         raise Exception(f"Frame not handled {frame}")
 
 
-class IPCServer(IPCFrameProtocol[ServerContext], abc.ABC, typing.Generic[ServerContext]):
+class IPCServer(IPCFrameProtocol, abc.ABC, typing.Generic[ServerContext]):
     """Base server that dispatched methods"""
 
     @abc.abstractmethod
@@ -202,7 +202,7 @@ class IPCServer(IPCFrameProtocol[ServerContext], abc.ABC, typing.Generic[ServerC
                 self.send_frame(IPCReplyFrame(frame.id, e, is_exception=True))
 
 
-class IPCClient(IPCFrameProtocol[ServerContext]):
+class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
     """Base client that dispatched method calls"""
 
     def __init__(self, name: str):
@@ -270,7 +270,7 @@ class FinalizingIPCClient(IPCClient[ServerContext]):
             asyncio.get_running_loop().create_task(fin())
 
 
-class LogReceiver(IPCFrameProtocol[ServerContext]):
+class LogReceiver(IPCFrameProtocol):
     """
     IPC feature to receive log message
 
@@ -297,7 +297,7 @@ class LogShipper(logging.Handler):
     This sender is threadsafe
     """
 
-    def __init__(self, protocol: IPCFrameProtocol[typing.Any], eventloop: asyncio.AbstractEventLoop) -> None:
+    def __init__(self, protocol: IPCFrameProtocol, eventloop: asyncio.AbstractEventLoop) -> None:
         self.protocol = protocol
         self.eventloop = eventloop
         self.logger_name = "inmanta.ipc.logs"
