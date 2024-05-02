@@ -28,13 +28,11 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from logging import handlers
 from typing import Optional, TextIO
-import logging.config
 
 import colorlog
 import yaml
 from colorlog.formatter import LogColors
 
-from inmanta import const, config
 from inmanta import config, const
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
@@ -572,43 +570,21 @@ class InmantaLoggerConfig:
         logging.shutdown()
         cls._instance = None
 
-    def apply_logging_config_from_file(self, path: str) -> None:
+    def _get_path_to_logging_config_file(self, options: Options) -> Optional[str]:
         """
-        Apply the dict-based logging config defined in the given file.
-        """
-        with open(path, "r") as fh:
-            dict_content = yaml.safe_load(fh)
-        logging.config.dictConfig(dict_content)
+        Returns the path to the logging config file that was configured by the user
+        or None if no logging config file was set.
 
-    def _get_logging_config_file(self, options: Options) -> Optional[str]:
-        """
-        Fetch the value of the logging_config configuration option. The
-        configuration options are considered in the following order:
+        The configuration options are considered in the following order:
            1. The --logging-config CLI option.
            2. The INMANTA_CONFIG_LOGGING_CONFIG environment variable.
            3. The logging_config option in the config files.
+
+        :param options: The configuration options passed on the CLI.
         """
         if options.logging_config:
             return options.logging_config
         return config.logging_config.get()
-
-    def _apply_logging_config_from_file(self, config_file: str) -> None:
-        if not os.path.isfile(config_file):
-            raise Exception(f"File {}")
-        with open(config_file, "r") as fh:
-            dict_config = yaml.safe_load(fh)
-            try:
-                logging.config.dictConfig(dict_config)
-            except yaml.YAMLError:
-
-
-    def _apply_logging_config_from_options(self, options: Options) -> None:
-        self._options_applied = True
-        config_builder = LoggingConfigBuilder()
-        logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
-            self._stream, options, self._logging_configs_extensions
-        )
-        self._handlers = self._apply_logging_config(logging_config)
 
     @stable_api
     def apply_options(self, options: Options) -> None:
@@ -621,17 +597,40 @@ class InmantaLoggerConfig:
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
 
-        logging_config_file: Optional[str] = self._get_logging_config_file(options)
+        logging_config_file: Optional[str] = self._get_path_to_logging_config_file(options)
         if logging_config_file:
             self._apply_logging_config_from_file(logging_config_file)
         else:
             self._apply_logging_config_from_options(options)
+        self._options_applied = True
 
-    def configure_file_logger(self, log_file: str, inmanta_log_level: str) -> None:
-        self.set_logfile_location(log_file)
-        formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
-        self.set_log_formatter(formatter)
-        self.set_log_level(inmanta_log_level, cli=False)
+    def _apply_logging_config_from_file(self, config_file: str) -> None:
+        """
+        Apply the given logging config file.
+        """
+        if not os.path.isfile(config_file):
+            raise Exception(f"No logging config file exists at {config_file}.")
+        with open(config_file, "r") as fh:
+            try:
+                dict_config = yaml.safe_load(fh)
+            except yaml.YAMLError:
+                raise Exception(f"Failed to parse the logging config file at {config_file} as YAML.")
+        try:
+            logging.config.dictConfig(dict_config)
+        except Exception:
+            raise Exception(f"Failed to apply the logging config defined in {dict_config}.")
+        self._handlers = logging.root.handlers
+
+    def _apply_logging_config_from_options(self, options: Options) -> None:
+        """
+        Apply the logging configuration as defined by the CLI options when the
+        --logging-config option is not set.
+        """
+        config_builder = LoggingConfigBuilder()
+        logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
+            self._stream, options, self._logging_configs_extensions
+        )
+        self._handlers = self._apply_logging_config(logging_config)
 
     def _apply_logging_config(self, logging_config: FullLoggingConfig) -> abc.Sequence[logging.Handler]:
         """

@@ -17,11 +17,16 @@
 """
 
 import logging
+import os.path
 import sys
 from io import StringIO
+from typing import Optional
 
 import pytest
+import yaml
 
+import inmanta
+from inmanta import config
 from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter, Options
 
 
@@ -217,3 +222,107 @@ def test_logging_cleaned_after_apply_options(tmpdir):
     log_output = stream.getvalue().strip()
     expected_output = "test_logger              INFO    This is a test message"
     assert log_output == expected_output
+
+
+def test_handling_logging_config_option(tmpdir, monkeypatch) -> None:
+    """
+    Verify the behavior of the logging_config option.
+    """
+    logger = logging.getLogger("TEST")
+
+    stream = StringIO()
+    # In order to reference an object in the logging_config file, it needs to be part of a module.
+    # For this reason we add the 'stream' attribute to the inmanta module. It's referenced in the
+    # logging_config file using ext://inmanta.stream
+    monkeypatch.setattr(inmanta, "stream", stream, raising=False)
+
+    def write_logging_config_file(path: str, formatter: str) -> None:
+        config = {
+            "version": 1,
+            "formatters": {
+                "console_formatter": {
+                    "format": formatter,
+                }
+            },
+            "handlers": {
+                "console_handler": {
+                    "class": "logging.StreamHandler",
+                    "formatter": "console_formatter",
+                    "level": "INFO",
+                    "stream": "ext://inmanta.stream",
+                },
+            },
+            "root": {
+                "level": "INFO",
+                "handlers": ["console_handler"],
+            },
+            "disable_existing_loggers": False,
+        }
+        with open(path, "w") as fh:
+            yaml.dump(config, fh)
+
+    def setup_logging_config(cli_options: Options, file_option_value: Optional[str] = None) -> None:
+        # Set/Reset config options
+        config.Config._reset()
+        if file_option_value:
+            config.logging_config.set(file_option_value)
+        # Reset/Configure logging framework
+        InmantaLoggerConfig.clean_instance()
+        inmanta_logger_config = InmantaLoggerConfig.get_instance()
+        inmanta_logger_config.apply_options(cli_options)
+        # Reset stream buffer
+        stream.truncate()
+
+    path_logging_config_file1 = os.path.join(tmpdir, "logging_config1.yml")
+    path_logging_config_file2 = os.path.join(tmpdir, "logging_config2.yml")
+    path_logging_config_file3 = os.path.join(tmpdir, "logging_config3.yml")
+
+    # Set --logging-config option on CLI only
+    write_logging_config_file(path=path_logging_config_file1, formatter="AAA %(message)s")
+    # Also assert that the other config options are ignored when logging_config is set.
+    setup_logging_config(cli_options=Options(logging_config=path_logging_config_file1, verbose=1), file_option_value=None)
+    logger.info("test")
+    assert "AAA test" in stream.getvalue()
+
+    # Set logging_config option in cfg file only
+    write_logging_config_file(path=path_logging_config_file1, formatter="BBB %(message)s")
+    setup_logging_config(cli_options=Options(), file_option_value=path_logging_config_file1)
+    logger.info("test")
+    assert "BBB test" in stream.getvalue()
+
+    # Set the logging-config config option both on CLI and cfg file. CLI option takes precedence.
+    write_logging_config_file(path=path_logging_config_file1, formatter="CCC %(message)s")
+    write_logging_config_file(path=path_logging_config_file2, formatter="DDD %(message)s")
+    setup_logging_config(
+        cli_options=Options(logging_config=path_logging_config_file1),
+        file_option_value=path_logging_config_file2,
+    )
+    logger.info("test")
+    assert "CCC test" in stream.getvalue()
+
+    # Set the logging-config config option in the cfg config file and using the environment variable.
+    # The environment variable takes precedence.
+    write_logging_config_file(path=path_logging_config_file1, formatter="EEE %(message)s")
+    write_logging_config_file(path=path_logging_config_file2, formatter="FFF %(message)s")
+    with monkeypatch.context() as m:
+        m.setenv("INMANTA_CONFIG_LOGGING_CONFIG", path_logging_config_file1)
+        setup_logging_config(
+            cli_options=Options(),
+            file_option_value=path_logging_config_file2,
+        )
+        logger.info("test")
+        assert "EEE test" in stream.getvalue()
+
+    # Set the logging-config config option on the CLI, in the cfg config file and using the environment variable.
+    # The CLI option takes precedence.
+    write_logging_config_file(path=path_logging_config_file1, formatter="GGG %(message)s")
+    write_logging_config_file(path=path_logging_config_file2, formatter="HHH %(message)s")
+    write_logging_config_file(path=path_logging_config_file3, formatter="III %(message)s")
+    with monkeypatch.context() as m:
+        m.setenv("INMANTA_CONFIG_LOGGING_CONFIG", path_logging_config_file1)
+        setup_logging_config(
+            cli_options=Options(logging_config=path_logging_config_file2),
+            file_option_value=path_logging_config_file3,
+        )
+        logger.info("test")
+        assert "HHH test" in stream.getvalue()
