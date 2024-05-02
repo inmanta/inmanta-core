@@ -1237,7 +1237,7 @@ async def test_compileservice_queue_count_on_trx_based_api(mocked_compiler_servi
 async def server_with_frequent_cleanups(server_pre_start, server_config, async_finalizer):
     config.Config.set("server", "compiler-report-retention", "60")
     config.Config.set("server", "cleanup-compiler-reports_interval", "1")
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
     await ibl.start()
     yield ibl.restserver
     await ibl.stop(timeout=15)

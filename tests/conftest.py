@@ -16,11 +16,13 @@
     Contact: code@inmanta.com
 """
 
+import logging.config
 import warnings
 
 from tornado.httpclient import AsyncHTTPClient
 
 import toml
+from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 
@@ -800,7 +802,7 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
 
     try:
         await ibl.start()
@@ -887,7 +889,7 @@ async def server_multi(
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
 
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
 
         try:
             await ibl.start()
@@ -1784,7 +1786,7 @@ async def migrate_db_from(
         await PGRestore(fh.readlines(), postgresql_client).run()
         logger.debug("Restored %s", marker.args[0])
 
-    bootloader: InmantaBootloader = InmantaBootloader()
+    bootloader: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
     async def migrate() -> None:
         # start boatloader, triggering db migration
@@ -1858,6 +1860,23 @@ async def set_running_tests():
     Ensure the RUNNING_TESTS variable is True when running tests
     """
     inmanta.RUNNING_TESTS = True
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def dont_override_root_logger(request, monkeypatch):
+    """
+    Make sure the inmanta.logging.FullLoggingConfig._to_dict_config() method doesn't override the root logger
+    when the caplog fixture is used, because caplog captures log messages by attaching a handler to the root logger.
+    """
+    original_to_dict_config_method = inmanta_logging.FullLoggingConfig._to_dict_config
+
+    def _to_dict_config_patched(self) -> dict[str, object]:
+        dict_config = original_to_dict_config_method(self)
+        dict_config.pop("root", None)
+        return dict_config
+
+    if "caplog" in request.fixturenames:
+        monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "_to_dict_config", _to_dict_config_patched)
 
 
 @pytest.fixture(scope="session")
