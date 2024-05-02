@@ -43,6 +43,21 @@ def _is_on_tty() -> bool:
     return (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ
 
 
+def python_log_level_to_name(python_log_level: int) -> str:
+    """Convert a python log level to a human readable version that works in log config files"""
+    # we build the reverse mapping every time because
+    # we don't want to use private fields
+    # name_to_level = logging._levelToName
+    # the underlying assumption is that this code is not performance critical
+    name_to_level = logging.getLevelNamesMapping()
+    level_to_name = {v: k for k, v in name_to_level.items()}
+
+    result = level_to_name.get(python_log_level)
+    if result is not None:
+        return result
+    return str(python_log_level)
+
+
 """
 This dictionary maps the Inmanta log levels to the corresponding Python log levels
 """
@@ -226,6 +241,7 @@ class LoggingConfigBuilder:
         self,
         stream: TextIO = sys.stdout,
         logging_config_extensions: Optional[abc.Sequence[LoggingConfigExtension]] = None,
+        python_log_level: int = logging.INFO,
     ) -> FullLoggingConfig:
         """
         This method returns the logging config that should be used between the moment that the process starts,
@@ -233,8 +249,10 @@ class LoggingConfigBuilder:
 
         :param stream: The TextIO stream where the logs will be sent to.
         :param logging_config_extensions: The logging config required by the extensions.
+        :param python_log_level: python log level to configure for the bootstrap logger
         """
         name_root_handler = "core_console_handler"
+        log_level_name = python_log_level_to_name(python_log_level)
         logging_config_core = FullLoggingConfig(
             formatters={
                 "core_console_formatter": self._get_multiline_formatter_config(),
@@ -243,13 +261,13 @@ class LoggingConfigBuilder:
                 name_root_handler: {
                     "class": "logging.StreamHandler",
                     "formatter": "core_console_formatter",
-                    "level": "INFO",
+                    "level": log_level_name,
                     "stream": stream,
                 },
             },
             loggers={},
             root_handlers={name_root_handler},
-            root_log_level="INFO",
+            root_log_level=log_level_name,
         )
         logging_config_core.validate_for_extension(extension_name="core")
         return self._join_logging_configs(logging_config_core, logging_config_extensions)

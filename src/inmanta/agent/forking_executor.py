@@ -43,7 +43,7 @@ import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
 from inmanta.agent import executor
-from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer
+from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
 
 LOGGER = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.stopped.set()
 
 
-class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
+class ExecutorClient(inmanta.protocol.ipc_light.FinalizingIPCClient[ExecutorContext], inmanta.protocol.ipc_light.LogReceiver):
     pass
 
 
