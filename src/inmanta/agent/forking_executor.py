@@ -148,7 +148,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.stopped.set()
 
 
-class ExecutorClient(inmanta.protocol.ipc_light.FinalizingIPCClient[ExecutorContext], inmanta.protocol.ipc_light.LogReceiver):
+class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
     pass
 
 
@@ -242,7 +242,6 @@ class CloseVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, 
 
     async def call(self, context: ExecutorContext) -> None:
         assert context.executor is not None
-        # May need to be on threadpool because it can call finalizers
         await context.executor.close_version(self.version)
 
 
@@ -525,6 +524,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                         my_executor.failed_resource_types.add(rtype)
 
             # TODO: recovery. If loading failed, we currently never rebuild
+            # https://github.com/inmanta/inmanta-core/issues/7281
             return my_executor
 
     async def create_executor(self, executor_id: executor.ExecutorId) -> MPExecutor:

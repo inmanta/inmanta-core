@@ -425,7 +425,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         """
         Close a version on the cache
         """
-        # May need to run on threadpool due to finalizers?
+        # Needs to run on threadpool due to finalizers?
+        # https://github.com/inmanta/inmanta-core/issues/833
         self._cache.close_version(version)
 
 

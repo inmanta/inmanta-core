@@ -776,7 +776,7 @@ class AgentInstance:
                             resource.rvid,
                             undeployable[resource.rvid],
                         )
-                        # TODO: SKIP IS NO CHANGE????
+                        # TODO: SKIP IS NO CHANGE???? https://github.com/inmanta/inmanta-core/issues/7588
                         await self.get_client().dryrun_update(
                             tid=resource.env_id, id=dry_run_id, resource=resource.rvid, changes={}
                         )
@@ -919,7 +919,7 @@ class Agent(SessionEndpoint):
         self._loader: Optional[CodeLoader] = None
         self._env: Optional[env.VirtualEnv] = None
         if code_loader:
-            # all of this should go into the executor manager
+            # all of this should go into the executor manager https://github.com/inmanta/inmanta-core/issues/7589
             self._env = env.VirtualEnv(self._storage["env"])
             self._env.use_virtual_env()
             self._loader = CodeLoader(self._storage["code"], clean=True)
@@ -1369,6 +1369,8 @@ class Agent(SessionEndpoint):
         """
         Check if the server storage is configured and ready to use.
         """
+
+        # TODO: review on disk layout: https://github.com/inmanta/inmanta-core/issues/7590
 
         state_dir = cfg.state_dir.get()
 

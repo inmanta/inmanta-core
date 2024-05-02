@@ -91,15 +91,20 @@ class IPCFrameProtocol(Protocol):
 
     frame_length: 4 bytes, unsigned integer
     frame: frame_length, pickled data
+
+    It is intended as an async replacement of the facilities offered by multiprocessing and of similar design.
+
+    This protocol is only suited for local interprocess communications, when both ends are trusted.
+    This protocol is based on pickle for speed, so it is as insecure as pickle.
     """
 
-    # TODo: investigate memory view
     def __init__(self, name: str) -> None:
         # Expected size of frame
         # -1 if no frame in flight
         self.frame_size = -1
 
         # Buffer with all data we have received and not dispatched
+        # We could sqeeze out some more performance by using memoryview instead of an array
         self.frame_buffer: Optional[bytes] = None
 
         # Our transport
