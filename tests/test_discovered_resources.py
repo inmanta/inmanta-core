@@ -115,6 +115,8 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     - None: Disable filtering: return all discovered resources regardless of whether they're managed.
     """
 
+    # Resource repartition and expected filtering results:
+
     #                                        |              FILTER
     # discovered    managed   orphaned       |  TRUE        FALSE          NONE
     # ---------------------------------------+-------------------------------------
@@ -154,28 +156,6 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     ]
     await clienthelper.put_version_simple(resources=orphaned_resources, version=version1)
 
-    # # Create 2 versions of the model
-    # for i in range(1, 3):
-    #     cm = data.ConfigurationModel(
-    #         environment=uuid.UUID(environment),
-    #         version=i,
-    #         date=datetime.now(),
-    #         total=1,
-    #         released=True,
-    #         version_info={},
-    #         is_suitable_for_partial_compiles=False,
-    #     )
-    #     await cm.insert()
-    #
-    # # Create some orphans for version 1
-    # version = 1
-
-    # for resource in orphaned_resources:
-    #     resource = data.Resource.new(
-    #         environment=uuid.UUID(environment), resource_version_id=resource["id"], attributes=resource["values"]
-    #     )
-    #     await resource.insert()
-
     # Create some Resources that are already managed:
     version2 = await clienthelper.get_version()
     managed_resources = [
@@ -189,14 +169,6 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         for res in discovered_resources[:2]
     ]
     await clienthelper.put_version_simple(resources=managed_resources, version=version2)
-
-    # for resource in managed_resources:
-    #     resource = data.Resource.new(
-    #         environment=uuid.UUID(environment), resource_version_id=resource["id"], attributes=resource["values"]
-    #     )
-    #     await resource.insert()
-
-    # Resource repartition and expected filtering results:
 
     if apply_filter is None:
         filter = None

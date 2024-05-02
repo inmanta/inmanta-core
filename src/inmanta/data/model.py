@@ -766,7 +766,6 @@ class DiscoveredResource(BaseModel):
             values=self.values,
             discovered_at=datetime.datetime.now(),
             environment=env,
-            # managed_resource_uri=self.managed_resource_uri
         )
 
 
