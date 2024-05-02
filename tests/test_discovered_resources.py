@@ -108,7 +108,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     Test that discovered resources can be retrieved with paging. The test creates multiple resources, retrieves them
     with various paging options, and verifies that the expected resources are returned.
 
-    Also tests the linking between unmanaged and managed resources via the apply_filter parameter:
+    Also test the linking between unmanaged and managed resources via the apply_filter parameter:
 
     - True: Activate filtering and keep only discovered resources that are managed.
     - False: Activate filtering and keep only discovered resources that are NOT managed.
