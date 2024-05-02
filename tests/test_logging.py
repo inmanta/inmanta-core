@@ -232,9 +232,9 @@ def test_handling_logging_config_option(tmpdir, monkeypatch) -> None:
 
     stream = StringIO()
     # In order to reference an object in the logging_config file, it needs to be part of a module.
-    # For this reason we add the 'stream' attribute to the inmanta module. It's referenced in the
-    # logging_config file using ext://inmanta.stream
-    monkeypatch.setattr(inmanta, "stream", stream, raising=False)
+    # For this reason we add the 'pytest_stream' attribute to the inmanta module. It's referenced in the
+    # logging_config file using ext://inmanta.pytest_stream
+    monkeypatch.setattr(inmanta, "pytest_stream", stream, raising=False)
 
     def write_logging_config_file(path: str, formatter: str) -> None:
         config = {
@@ -249,7 +249,7 @@ def test_handling_logging_config_option(tmpdir, monkeypatch) -> None:
                     "class": "logging.StreamHandler",
                     "formatter": "console_formatter",
                     "level": "INFO",
-                    "stream": "ext://inmanta.stream",
+                    "stream": "ext://inmanta.pytest_stream",
                 },
             },
             "root": {
