@@ -1591,7 +1591,8 @@ def discovered_resources_get_batch(
     filter: Optional[dict[str, list[str]]] = None,
 ) -> list[model.DiscoveredResource]:
     """
-    Get a list of discovered resources.
+    Get a list of discovered resources. For resources that the orchestrator is already managing, a link to the corresponding
+    resource is provided.
 
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
