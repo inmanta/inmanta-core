@@ -963,7 +963,7 @@ async def run_compile_and_wait_until_compile_is_done(
     """
     Unblock the first compile in the compiler queue and wait until the compile finishes.
     """
-    current_compile = compiler_service._running_compiles[env_id]
+    current_task = compiler_service._env_to_compile_task[env_id]
 
     # prevent race conditions where compile request is not yet in queue
     await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
@@ -974,9 +974,9 @@ async def run_compile_and_wait_until_compile_is_done(
     run.block = False
 
     def _is_compile_finished() -> bool:
-        if env_id not in compiler_service._running_compiles:
+        if env_id not in compiler_service._env_to_compile_task:
             return True
-        if current_compile is not compiler_service._running_compiles[env_id]:
+        if current_task is not compiler_service._env_to_compile_task[env_id]:
             return True
         return False
 
@@ -1237,7 +1237,7 @@ async def test_compileservice_queue_count_on_trx_based_api(mocked_compiler_servi
 async def server_with_frequent_cleanups(server_pre_start, server_config, async_finalizer):
     config.Config.set("server", "compiler-report-retention", "60")
     config.Config.set("server", "cleanup-compiler-reports_interval", "1")
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
     await ibl.start()
     yield ibl.restserver
     await ibl.stop(timeout=15)
