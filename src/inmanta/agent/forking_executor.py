@@ -74,6 +74,8 @@ class ExecutorContext:
 class ExecutorServer(IPCServer[ExecutorContext]):
     """The IPC server running on the executor
 
+    When connected, this server will capture all logs and transport them to the remote side
+
     Shutdown sequence and responses
 
     1. Client: send stop to serverside
@@ -89,18 +91,29 @@ class ExecutorServer(IPCServer[ExecutorContext]):
     Pipe break: go to 3a and 3b
     """
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, take_over_logging: bool = True) -> None:
+        """
+        :param capture_all_logs: when we are connected and are able to stream logs, do we remove all other log handlers?
+        """
         super().__init__(name)
         self.stopping = False
         self.stopped = asyncio.Event()
         self.ctx = ExecutorContext(self)
         self.log_transport: typing.Optional[LogShipper] = None
+        self.take_over_logging = take_over_logging
 
     def connection_made(self, transport: transports.Transport) -> None:
         super().connection_made(transport)
 
         # Second stage logging setup
         # Take over logger to ship to remote
+
+        if self.take_over_logging:
+            # Remove all loggers
+            root_logger = logging.root
+            for handler in root_logger.handlers:
+                root_logger.removeHandler(handler)
+
         self.log_transport = LogShipper(self, asyncio.get_running_loop())
         logging.getLogger().addHandler(self.log_transport)
 
@@ -286,12 +299,8 @@ def mp_worker_entrypoint(
 
     # Set up logging stage 1
     # Basic config, starts on std.out
-    log_config = InmantaLoggerConfig.get_instance()
-    log_config.set_python_log_level(log_level)
     config_builder = inmanta.logging.LoggingConfigBuilder()
-    logger_config: inmanta.logging.FullLoggingConfig = config_builder.get_logging_config_for_agent(
-        logfile, inmanta_log_level, cli_log
-    )
+    logger_config: inmanta.logging.FullLoggingConfig = config_builder.get_bootstrap_logging_config(python_log_level=log_level)
     logger_config.apply_config()
     logging.captureWarnings(True)
 
@@ -307,12 +316,7 @@ def mp_worker_entrypoint(
         # Start serving
         # also performs setup of log shipper
         # this is part of stage 2 logging setup
-        transport, protocol = await loop.connect_accepted_socket(functools.partial(ExecutorServer, name), socket)
-        # Add cli logger if requested
-        # the default log to std.out is removed by stage 2 setup
-        # this adds it back
-        if cli_log:
-            log_config.add_cli_logger(log_level)
+        transport, protocol = await loop.connect_accepted_socket(functools.partial(ExecutorServer, name, not cli_log), socket)
         inmanta.signals.setup_signal_handlers(protocol.stop)
         await protocol.stopped.wait()
 
