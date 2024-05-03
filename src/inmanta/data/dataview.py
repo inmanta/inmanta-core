@@ -1289,7 +1289,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
 
                 FROM {data.DiscoveredResource.table_name()} as dr
                 LEFT JOIN {data.ResourcePersistentState.table_name()} rps
-                ON dr.discovered_resource_id = rps.resource_id
+                ON dr.environment=rps.environment AND dr.discovered_resource_id = rps.resource_id
                 WHERE dr.environment = $1
             )
             """,
