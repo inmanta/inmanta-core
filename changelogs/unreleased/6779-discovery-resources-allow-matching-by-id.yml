@@ -1,6 +1,5 @@
 description: >
-  Add filtering capabilities on DiscoveredResourceView. Discovered resource can now be filtered based on
-  whether they are already managed or not.
+  Add support to the `GET /api/v2/discovered` endpoint to filter the discovered resources on whether they are managed or not.
 issue-nr: 6779
 change-type: minor
 destination-branches: [master, iso7]
