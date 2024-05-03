@@ -59,7 +59,7 @@ async def test_resource_list_no_released_version(server, client):
     )
     await cm.insert()
 
-    name = f"file{1}"
+    name = "file1"
     key = f"std::testing::NullResource[agent1,name={name}]"
     res1_v1 = data.Resource.new(
         environment=env.id, resource_version_id=ResourceVersionIdStr(f"{key},v={version}"), attributes={"name": name}
