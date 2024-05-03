@@ -264,11 +264,11 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 4
 
-    result = await client.resource_list(env.id, filter={"resource_type": ["File"], "resource_id_value": "dir1"})
+    result = await client.resource_list(env.id, filter={"resource_type": ["File"], "resource_id_value": "5"})
     assert result.code == 200
     assert len(result.result["data"]) == 0
 
-    result = await client.resource_list(env.id, filter={"resource_type": ["Directory"], "resource_id_value": "dir5"})
+    result = await client.resource_list(env.id, filter={"resource_type": ["Directory"], "resource_id_value": "5"})
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
