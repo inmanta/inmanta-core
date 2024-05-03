@@ -52,6 +52,7 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
             threadpool,
             venv_manager,
             agent_session_id,
+            uuid.uuid4(),
             log_folder=str(log_folder),
             storage_folder=str(storage_folder),
             cli_log=True,
@@ -64,7 +65,7 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
     for threadpool in threadpools:
         threadpool.shutdown(wait=False)
     await asyncio.gather(*(manager.stop() for manager in managers))
-    await asyncio.gather(*(manager.join(10) for manager in managers))
+    await asyncio.gather(*(manager.join([], 10) for manager in managers))
 
 
 @pytest.fixture

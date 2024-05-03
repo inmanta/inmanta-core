@@ -218,12 +218,12 @@ class Config:
         return opt
 
 
-def is_int(value: str) -> int:
+def is_int(value: str | int) -> int:
     """int"""
     return int(value)
 
 
-def is_float(value: str) -> float:
+def is_float(value: str | float) -> float:
     """float"""
     return float(value)
 
@@ -262,8 +262,10 @@ def is_list(value: str | list[str]) -> list[str]:
     return [] if value == "" else [x.strip() for x in value.split(",")]
 
 
-def is_map(map_in: str) -> dict[str, str]:
+def is_map(map_in: str | typing.Mapping[str, str]) -> typing.Mapping[str, str]:
     """List of comma-separated key=value pairs"""
+    if isinstance(map_in, typing.Mapping):
+        return map_in
     map_out = {}
     if map_in is not None:
         mappings = map_in.split(",")
@@ -291,10 +293,12 @@ def is_str_opt(value: Optional[str]) -> Optional[str]:
     return str(value)
 
 
-def is_uuid_opt(value: Optional[str]) -> Optional[uuid.UUID]:
+def is_uuid_opt(value: Optional[str | uuid.UUID]) -> Optional[uuid.UUID]:
     """optional uuid"""
     if value is None:
         return None
+    if isinstance(value, uuid.UUID):
+        return value
     return uuid.UUID(value)
 
 
