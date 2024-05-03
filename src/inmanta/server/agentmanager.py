@@ -25,7 +25,7 @@ import sys
 import time
 import uuid
 from asyncio import queues, subprocess
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, Union, cast
