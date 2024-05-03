@@ -387,6 +387,16 @@ log_dir = Option(
     is_str,
 )
 
+logging_config = Option(
+    section="config",
+    name="logging_config",
+    default=None,
+    documentation="The path to the configuration file for the logging framework. This is a YAML file that follows "
+    "the dictionary-schema accepted by logging.config.dictConfig(). All other log-related configuration "
+    "options will be ignored when this option is set.",
+    validator=is_str_opt,
+)
+
 
 def get_executable() -> Optional[str]:
     """``os.path.abspath(sys.argv[0])``"""

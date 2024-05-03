@@ -819,6 +819,13 @@ def cmd_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--log-file", dest="log_file", help="Path to the logfile")
     parser.add_argument(
+        "--logging-config",
+        dest="logging_config",
+        help="The path to the configuration file for the logging framework. This is a YAML file that follows "
+        "the dictionary-schema accepted by logging.config.dictConfig(). All other log-related configuration "
+        "arguments will be ignored when this argument is provided.",
+    )
+    parser.add_argument(
         "--log-file-level",
         dest="log_file_level",
         choices=["0", "1", "2", "3", "4", "ERROR", "WARNING", "INFO", "DEBUG", "TRACE"],
