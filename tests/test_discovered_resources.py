@@ -95,20 +95,13 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
         assert result.result["data"]["values"] == res["values"]
 
 
-@pytest.mark.parametrize(
-    "apply_filter",
-    [
-        True,
-        False,
-        None,
-    ],
-)
-async def test_discovered_resource_get_paging(server, client, agent, environment, apply_filter: Optional[bool], clienthelper):
+
+async def test_discovered_resource_get_paging(server, client, agent, environment, clienthelper):
     """
     Test that discovered resources can be retrieved with paging. The test creates multiple resources, retrieves them
     with various paging options, and verifies that the expected resources are returned.
 
-    Also test the linking between unmanaged and managed resources via the apply_filter parameter:
+    Also test the linking between unmanaged and managed resources and correct filtering via the 'managed' filter i.e.:
 
     - True: Activate filtering and keep only discovered resources that are managed.
     - False: Activate filtering and keep only discovered resources that are NOT managed.
@@ -170,22 +163,24 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     ]
     await clienthelper.put_version_simple(resources=managed_resources, version=version2)
 
-    if apply_filter is None:
-        filter = None
-        expected_result = discovered_resources
-    else:
-        filter = {"managed": apply_filter}
-        if apply_filter:
-            expected_result = discovered_resources[:-2]
-        else:
-            expected_result = discovered_resources[-2:]
+    filter_values = [
+        None,
+        {"managed": True},
+        {"managed": False}
+    ]
+    expected_results = [
+        discovered_resources,
+        discovered_resources[:-2],
+        discovered_resources[-2:]
+    ]
 
-    result = await client.discovered_resources_get_batch(
-        environment,
-        filter=filter,
-    )
-    assert result.code == 200
-    assert result.result["data"] == expected_result
+    for filter, expected_result in zip(filter_values, expected_results):
+        result = await client.discovered_resources_get_batch(
+            environment,
+            filter=filter,
+        )
+        assert result.code == 200
+        assert result.result["data"] == expected_result
 
     result = await client.discovered_resources_get_batch(environment, limit=2)
     assert result.code == 200
