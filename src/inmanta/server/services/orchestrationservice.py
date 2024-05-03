@@ -24,6 +24,7 @@ from collections import abc, defaultdict
 from typing import Literal, Optional, cast
 
 import asyncpg
+import logfire
 import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
@@ -782,37 +783,38 @@ class OrchestrationService(protocol.ServerSlice):
             except asyncpg.exceptions.UniqueViolationError:
                 raise ServerError("The given version is already defined. Versions should be unique.")
 
-            all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
-            if is_partial_update:
-                # Make mypy happy
-                assert partial_base_version is not None
-                # This dict maps a resource id to its resource set for unchanged resource sets.
-                rids_unchanged_resource_sets: dict[ResourceIdStr, str] = (
-                    await data.Resource.copy_resources_from_unchanged_resource_set(
-                        environment=env.id,
-                        source_version=partial_base_version,
-                        destination_version=version,
-                        updated_resource_sets=updated_resource_sets,
-                        deleted_resource_sets=deleted_resource_sets_as_set,
-                        connection=connection,
+            with logfire.span("put_version.partial"):
+                all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
+                if is_partial_update:
+                    # Make mypy happy
+                    assert partial_base_version is not None
+                    # This dict maps a resource id to its resource set for unchanged resource sets.
+                    rids_unchanged_resource_sets: dict[ResourceIdStr, str] = (
+                        await data.Resource.copy_resources_from_unchanged_resource_set(
+                            environment=env.id,
+                            source_version=partial_base_version,
+                            destination_version=version,
+                            updated_resource_sets=updated_resource_sets,
+                            deleted_resource_sets=deleted_resource_sets_as_set,
+                            connection=connection,
+                        )
                     )
-                )
-                resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
-                if resources_that_moved_resource_sets:
-                    msg = (
-                        "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
-                        "a full compile is necessary for this process:\n"
-                    )
-                    msg += "\n".join(
-                        f"    {rid} moved from {rids_unchanged_resource_sets[rid]} to {resource_sets[rid]}"
-                        for rid in resources_that_moved_resource_sets
-                    )
+                    resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
+                    if resources_that_moved_resource_sets:
+                        msg = (
+                            "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
+                            "a full compile is necessary for this process:\n"
+                        )
+                        msg += "\n".join(
+                            f"    {rid} moved from {rids_unchanged_resource_sets[rid]} to {resource_sets[rid]}"
+                            for rid in resources_that_moved_resource_sets
+                        )
 
-                    raise BadRequest(msg)
-                all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
+                        raise BadRequest(msg)
+                    all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
 
-            await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
-            await cm.recalculate_total(connection=connection)
+                await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
+                await cm.recalculate_total(connection=connection)
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
@@ -1082,6 +1084,7 @@ class OrchestrationService(protocol.ServerSlice):
         return returnvalue
 
     @handle(methods.release_version, version_id="id", env="tid")
+    @logfire.instrument("OrchestrationService.release_version", extract_args=True)
     async def release_version(
         self,
         env: data.Environment,

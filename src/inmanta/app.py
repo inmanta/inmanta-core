@@ -54,6 +54,8 @@ from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
 
 import inmanta.compiler as compiler
+import logfire
+import logfire.propagate
 from inmanta import const, module, moduletool, protocol, util
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
@@ -67,9 +69,14 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
+from logfire.integrations.logging import LogfireLoggingHandler
+from logfire.integrations.pydantic import PluginSettings
 
 LOGGER = logging.getLogger("inmanta")
 
+## Setup tracing
+logfire.configure(send_to_logfire=os.path.exists(".logfire"), console=False)
+logfire.instrument_asyncpg()
 
 def server_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[argparse.ArgumentParser]) -> None:
     parser.add_argument(
@@ -815,6 +822,7 @@ def app() -> None:
     Run the compiler
     """
     log_config = InmantaLoggerConfig.get_instance()
+    logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
 
     # do an initial load of known config files to build the libdir path
     Config.load_config()
@@ -864,21 +872,28 @@ def app() -> None:
             if helpmsg is not None:
                 print(helpmsg)
 
-    try:
-        options.func(options)
-    except ShowUsageException as e:
-        print(e.args[0], file=sys.stderr)
-        parser.print_usage()
-    except CLIException as e:
-        report(e)
-        sys.exit(e.exitcode)
-    except Exception as e:
-        report(e)
-        sys.exit(1)
-    except KeyboardInterrupt as e:
-        report(e)
-        sys.exit(1)
-    sys.exit(0)
+    if "traceparent" in os.environ:
+        ctx = logfire.propagate.attach_context({"traceparent": os.environ["traceparent"]})
+    else:
+        ctx = contextlib.nullcontext()
+
+    with ctx:
+        with logfire.span(f"cmd {options.func.__name__}"):
+            try:
+                options.func(options)
+            except ShowUsageException as e:
+                print(e.args[0], file=sys.stderr)
+                parser.print_usage()
+            except CLIException as e:
+                report(e)
+                sys.exit(e.exitcode)
+            except Exception as e:
+                report(e)
+                sys.exit(1)
+            except KeyboardInterrupt as e:
+                report(e)
+                sys.exit(1)
+            sys.exit(0)
 
 
 if __name__ == "__main__":

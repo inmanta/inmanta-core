@@ -25,12 +25,15 @@ from collections import defaultdict
 from collections.abc import MutableMapping, Sequence
 from json import JSONDecodeError
 from typing import Optional, Union
+import contextlib
 
+import logfire.propagate
 import tornado
 from pyformance import timer
 from tornado import httpserver, iostream, routing, web
 
 import inmanta.protocol.endpoints
+import logfire
 from inmanta import config as inmanta_config
 from inmanta import const
 from inmanta.protocol import common, exceptions
@@ -110,51 +113,52 @@ class RESTHandler(tornado.web.RequestHandler):
         if not self._transport.running:
             return
 
-        with timer("rpc." + call_config.method_name).time():
-            self._transport.start_request()
-            try:
-                message = self._transport._decode(self.request.body)
-                if message is None:
-                    message = {}
-
-                # add any url template arguments
-                if kwargs:
-                    message.update(kwargs)
-
-                # add any url arguments
-                for key, value in self.request.query_arguments.items():
-                    if len(value) == 1:
-                        message[key] = value[0].decode("latin-1")
-                    else:
-                        message[key] = [v.decode("latin-1") for v in value]
-
-                result = await self._transport._execute_call(call_config, message, self.request.headers)
-                self.respond(result.body, result.headers, result.status_code)
-            except JSONDecodeError as e:
-                error_message = f"The request body couldn't be decoded as a JSON: {e}"
-                LOGGER.info(error_message, exc_info=True)
-                self.respond({"message": error_message}, {}, 400)
-
-            except ValueError:
-                LOGGER.exception("An exception occurred")
-                self.respond({"message": "Unable to decode request body"}, {}, 400)
-
-            except exceptions.BaseHttpException as e:
-                LOGGER.warning("Received an exception with status code %d and message %s", e.to_status(), e.to_body())
-                self.respond(e.to_body(), {}, e.to_status())
-
-            except CancelledError:
-                self.respond({"message": "Request is cancelled on the server"}, {}, 500)
-
-            finally:
+        with logfire.span("rpc." + call_config.method_name):
+            with timer("rpc." + call_config.method_name).time():
+                self._transport.start_request()
                 try:
-                    await self.finish()
-                except iostream.StreamClosedError:
-                    # The connection has been closed already.
-                    pass
-                except Exception:
-                    LOGGER.exception("An exception occurred responding to %s", self.request.remote_ip)
-                self._transport.end_request()
+                    message = self._transport._decode(self.request.body)
+                    if message is None:
+                        message = {}
+
+                    # add any url template arguments
+                    if kwargs:
+                        message.update(kwargs)
+
+                    # add any url arguments
+                    for key, value in self.request.query_arguments.items():
+                        if len(value) == 1:
+                            message[key] = value[0].decode("latin-1")
+                        else:
+                            message[key] = [v.decode("latin-1") for v in value]
+
+                    result = await self._transport._execute_call(call_config, message, self.request.headers)
+                    self.respond(result.body, result.headers, result.status_code)
+                except JSONDecodeError as e:
+                    error_message = f"The request body couldn't be decoded as a JSON: {e}"
+                    LOGGER.info(error_message, exc_info=True)
+                    self.respond({"message": error_message}, {}, 400)
+
+                except ValueError:
+                    LOGGER.exception("An exception occurred")
+                    self.respond({"message": "Unable to decode request body"}, {}, 400)
+
+                except exceptions.BaseHttpException as e:
+                    LOGGER.warning("Received an exception with status code %d and message %s", e.to_status(), e.to_body())
+                    self.respond(e.to_body(), {}, e.to_status())
+
+                except CancelledError:
+                    self.respond({"message": "Request is cancelled on the server"}, {}, 500)
+
+                finally:
+                    try:
+                        await self.finish()
+                    except iostream.StreamClosedError:
+                        # The connection has been closed already.
+                        pass
+                    except Exception:
+                        LOGGER.exception("An exception occurred responding to %s", self.request.remote_ip)
+                    self._transport.end_request()
 
     async def head(self, *args: str, **kwargs: str) -> None:
         if args:

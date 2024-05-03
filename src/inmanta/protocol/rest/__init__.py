@@ -22,11 +22,13 @@ import logging
 import uuid
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
+import contextlib
 
 import pydantic
 import typing_inspect
 from tornado import escape
 
+import logfire
 from inmanta import const, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol import auth, common, exceptions
@@ -604,40 +606,48 @@ class RESTBase(util.TaskHandler[None]):
         message: dict[str, object],
         request_headers: Mapping[str, str],
     ) -> common.Response:
-        try:
-            if config is None:
-                raise Exception("This method is unknown! This should not occur!")
+        if "traceparent" in request_headers:
+            ctx = logfire.propagate.attach_context({"traceparent": request_headers["traceparent"]})
+        else:
+            ctx = contextlib.nullcontext()
 
-            if config.properties.validate_sid:
-                if "sid" not in message or not isinstance(message["sid"], str):
-                    raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
+        with ctx:
+            try:
+                if config is None:
+                    raise Exception("This method is unknown! This should not occur!")
 
-                sid = uuid.UUID(str(message["sid"]))
-                if not isinstance(sid, uuid.UUID) or not self.validate_sid(sid):
-                    raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
+                if config.properties.validate_sid:
+                    if "sid" not in message or not isinstance(message["sid"], str):
+                        raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
 
-            arguments = CallArguments(config, message, request_headers)
-            arguments.authenticate(server_config.server_enable_auth.get())
-            await arguments.process()
-            arguments.authorize_request()
+                    sid = uuid.UUID(str(message["sid"]))
+                    if not isinstance(sid, uuid.UUID) or not self.validate_sid(sid):
+                        raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
-            LOGGER.debug(
-                "Calling method %s(%s) user=%s",
-                config.method_name,
-                ", ".join([f"{name}={common.shorten(str(value))}" for name, value in arguments.call_args.items()]),
-                arguments.auth_username if arguments.auth_username else "<>",
-            )
+                arguments = CallArguments(config, message, request_headers)
+                arguments.authenticate(server_config.server_enable_auth.get())
+                await arguments.process()
+                arguments.authorize_request()
 
-            result = await config.handler(**arguments.call_args)
-            return await arguments.process_return(result)
-        except pydantic.ValidationError:
-            LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
-            raise exceptions.ServerError("data validation error.")
+                LOGGER.debug(
+                    "Calling method %s(%s) user=%s",
+                    config.method_name,
+                    ", ".join([f"{name}={common.shorten(str(value))}" for name, value in arguments.call_args.items()]),
+                    arguments.auth_username if arguments.auth_username else "<>",
+                )
 
-        except exceptions.BaseHttpException:
-            LOGGER.debug("An HTTP Error occurred", exc_info=True)
-            raise
+                with logfire.span(f"Calling method {config.method_name}", **arguments.call_args):
+                    result = await config.handler(**arguments.call_args)
 
-        except Exception as e:
-            LOGGER.exception("An exception occurred during the request.")
-            raise exceptions.ServerError(str(e.args))
+                return await arguments.process_return(result)
+            except pydantic.ValidationError:
+                LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
+                raise exceptions.ServerError("data validation error.")
+
+            except exceptions.BaseHttpException:
+                LOGGER.debug("An HTTP Error occurred", exc_info=True)
+                raise
+
+            except Exception as e:
+                LOGGER.exception("An exception occurred during the request.")
+                raise exceptions.ServerError(str(e.args))

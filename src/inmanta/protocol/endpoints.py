@@ -19,6 +19,7 @@
 import asyncio
 import inspect
 import logging
+import contextlib
 import socket
 import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
@@ -27,7 +28,8 @@ from collections.abc import Coroutine
 from enum import Enum
 from typing import Any, Callable, Optional
 from urllib import parse
-
+import logfire
+import logfire.propagate
 from inmanta import config as inmanta_config
 from inmanta import util
 from inmanta.protocol.common import UrlMethod

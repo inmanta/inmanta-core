@@ -31,6 +31,7 @@ from colorlog.formatter import LogColors
 
 from inmanta import const
 from inmanta.stable_api import stable_api
+from logfire.integrations.logging import LogfireLoggingHandler
 
 
 def _is_on_tty() -> bool:
@@ -129,6 +130,7 @@ class InmantaLoggerConfig:
 
         logging.root.handlers = []
         logging.root.addHandler(self._handler)
+        logging.root.addHandler(LogfireLoggingHandler())
 
         self._inmanta_plugin_pkg_regex = re.compile(r"^inmanta_plugins\.(?P<module_name>[^.]+)")
         # Regex that extracts the name of the module from a fully qualified import of a Python

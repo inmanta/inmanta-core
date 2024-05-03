@@ -35,6 +35,7 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 
 import pkg_resources
 
+import logfire
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, in_process_executor
@@ -701,6 +702,7 @@ class AgentInstance:
             return False
         return True
 
+    @logfire.instrument("Agent.get_latest_version_for_agent", extract_args=True)
     async def get_latest_version_for_agent(
         self,
         deploy_request: DeployRequest,
@@ -796,6 +798,7 @@ class AgentInstance:
 
             return await executor.get_facts(resource_refs[0])
 
+    @logfire.instrument("Agent.setup_executor", extract_args=True)
     async def setup_executor(
         self, version: int, action: const.ResourceAction, resources: list[JsonType]
     ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], executor.Executor]:
@@ -1116,6 +1119,7 @@ class Agent(SessionEndpoint):
         for agent_instance in self._instances.values():
             agent_instance.pause("Connection to server lost")
 
+    @logfire.instrument("Agent.get_code", extract_args=True)
     async def get_code(
         self, environment: uuid.UUID, version: int, resource_types: Sequence[str]
     ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResourcesSet]:
@@ -1180,6 +1184,7 @@ class Agent(SessionEndpoint):
 
         return resource_install_specs, invalid_resource_types
 
+    @logfire.instrument("Agent.ensure_code")
     async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> executor.FailedResourcesSet:
         """Ensure that the code for the given environment and version is loaded"""
 

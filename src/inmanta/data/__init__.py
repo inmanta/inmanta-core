@@ -38,6 +38,7 @@ from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload
 from uuid import UUID
 
 import asyncpg
+import logfire
 import dateutil
 import pydantic
 import pydantic.tools
@@ -3464,6 +3465,7 @@ class Agent(BaseDocument):
         await cls._execute_query(query, *values, connection=connection)
 
     @classmethod
+    @logfire.instrument("Agent.update_primary", extract_args=True)
     async def update_primary(
         cls,
         env: uuid.UUID,
