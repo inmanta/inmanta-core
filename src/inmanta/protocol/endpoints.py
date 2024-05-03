@@ -170,14 +170,15 @@ class SessionEndpoint(Endpoint, CallTarget):
     _client: "SessionClient"
     _heartbeat_client: "SessionClient"
 
-    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
+    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5, *, session_id: Optional[uuid.UUID]):
+        # TODO: docstring session_id
         super().__init__(name)
         self._transport = client.RESTClient
         self._sched = util.Scheduler("session endpoint")
 
         self._env_id: Optional[uuid.UUID] = None
 
-        self.sessionid: uuid.UUID = uuid.uuid1()
+        self.sessionid: uuid.UUID = session_id if session_id is not None else uuid.uuid4()
         self.running: bool = True
         self.server_timeout = timeout
         self.reconnect_delay = reconnect_delay

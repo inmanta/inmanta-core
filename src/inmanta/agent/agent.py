@@ -406,6 +406,7 @@ class ResourceScheduler:
         gid = uuid.uuid4()
         self.logger.info("Running %s for reason: %s", gid, self.running.reason)
 
+        # TODO: how does this deal with undeployable? Are they correctly marked as done?
         # re-generate generation
         self.generation = {}
 
@@ -666,6 +667,7 @@ class AgentInstance:
                     )
                 )
             )
+            # TODO: what happens when agent unpauses? Nothing, except if deploy interval is set
             self.ensure_deploy_on_start = False
         periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
         periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value, now)
@@ -945,18 +947,23 @@ class Agent(SessionEndpoint):
             self.agent_map = cfg.agent_map.get()
 
     async def _init_endpoint_names(self) -> None:
-        if self.hostname is not None:
-            await self.add_end_point_name(self.hostname)
-        else:
-            # load agent names from the config file
-            agent_names = cfg.agent_names.get()
-            if agent_names is not None:
-                for name in agent_names:
-                    if "$" in name:
-                        name = name.replace("$node-name", self.node_name)
-                    await self.add_end_point_name(name)
+        assert self.agent_map is not None
+        endpoints: Iterable[str] = (
+            [self.hostname]
+            if self.hostname is not None
+            else self.agent_map.keys()
+            if cfg.use_autostart_agent_map.get()
+            else (
+                name if "$" not in name else name.replace("$node-name", self.node_name)
+                for name in cfg.agent_names.get()
+            )
+        )
+        for endpoint in endpoints:
+            await self.add_end_point_name(endpoint)
 
     async def stop(self) -> None:
+        # TODO: does this remove active session from agent manager?
+        #       I don't think so. Only closes the transport
         await super().stop()
         self.executor_manager.stop()
 
@@ -1037,6 +1044,7 @@ class Agent(SessionEndpoint):
             await self._update_agent_map(agent_map)
 
     async def _update_agent_map(self, agent_map: dict[str, str]) -> None:
+        # TODO: call validate method? i.e. inmanta.data.convert_agent_map
         async with self._instances_lock:
             self.agent_map = agent_map
             # Add missing agents
@@ -1057,6 +1065,7 @@ class Agent(SessionEndpoint):
                 agent_name for agent_name in update_uri_agents if self._instances[agent_name].is_enabled()
             ]
 
+            # TODO: doesn't this only set ensure_deploy_on_start for new agents?
             to_be_gathered = [self._add_end_point_name(agent_name, ensure_deploy_on_start=True) for agent_name in agents_to_add]
             to_be_gathered += [self._remove_end_point_name(agent_name) for agent_name in agents_to_remove + update_uri_agents]
             await asyncio.gather(*to_be_gathered)
@@ -1105,6 +1114,7 @@ class Agent(SessionEndpoint):
             if result.code == 200 and result.result is not None:
                 state = result.result
                 if "enabled" in state and isinstance(state["enabled"], bool):
+                    # TODO: when agent starts, this unpauses agent instances
                     await self.set_state(name, state["enabled"])
                 else:
                     LOGGER.warning("Server reported invalid state %s" % (repr(state)))
