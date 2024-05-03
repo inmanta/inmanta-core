@@ -93,7 +93,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
     def __init__(self, name: str, take_over_logging: bool = True) -> None:
         """
-        :param capture_all_logs: when we are connected and are able to stream logs, do we remove all other log handlers?
+        :param take_over_logging: when we are connected and are able to stream logs, do we remove all other log handlers?
         """
         super().__init__(name)
         self.stopping = False

@@ -177,7 +177,7 @@ agent_executor_mode = Option(
     "agent",
     "executor-mode",
     AgentExcutorMode.threaded,
-    "EXPERIMENTAL: set the agent to use threads or fork subprocesses to create workers. ",
+    "EXPERIMENTAL: set the agent to use threads or fork subprocesses to create workers.",
     is_executor_mode,
 )
 

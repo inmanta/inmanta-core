@@ -141,7 +141,7 @@ class ExecutorBlueprint(EnvBlueprint):
             raise Exception("No Pip config available, aborting")
         base_pip = pip_configs[0]
         for pip_config in pip_configs:
-            assert pip_config == base_pip, f"One agent is using multiple pipe configs: {base_pip} {pip_config}"
+            assert pip_config == base_pip, f"One agent is using multiple pip configs: {base_pip} {pip_config}"
         return ExecutorBlueprint(
             pip_config=base_pip,
             sources=sources,
