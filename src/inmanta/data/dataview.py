@@ -1285,12 +1285,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
                     dr.environment,
                     dr.discovered_resource_id,
                     dr.values,
-                    (
-                        CASE
-                            WHEN rps.resource_id IS NOT NULL THEN true
-                            ELSE false
-                        END
-                    ) AS managed
+                    (rps.resource_id IS NOT NULL)  AS managed
 
                 FROM {data.DiscoveredResource.table_name()} as dr
                 LEFT JOIN {data.ResourcePersistentState.table_name()} rps
