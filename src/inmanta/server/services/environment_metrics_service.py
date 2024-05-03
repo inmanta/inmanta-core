@@ -27,8 +27,8 @@ from enum import Enum
 from typing import Optional, Union
 
 import asyncpg
-import logfire
 
+import logfire
 from inmanta.data import (
     ENVIRONMENT_METRICS_RETENTION,
     Agent,

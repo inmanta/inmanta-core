@@ -22,6 +22,8 @@ import datetime
 import uuid
 from typing import Any, Literal, Optional, Union
 
+import logfire
+
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model
@@ -32,6 +34,7 @@ from inmanta.protocol.decorators import method, typedmethod
 from inmanta.types import JsonType, PrimitiveTypes
 
 
+@logfire.instrument("methods.convert_environment")
 async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environment":
     metadata[const.INMANTA_URN + "env"] = str(env)
     env = await data.Environment.get_by_id(env)

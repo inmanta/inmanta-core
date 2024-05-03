@@ -22,11 +22,11 @@ from asyncio import CancelledError
 from typing import TYPE_CHECKING, Any, AnyStr, Optional
 from urllib.parse import unquote
 
-import logfire
-import logfire.propagate
 import tornado.simple_httpclient
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
+import logfire
+import logfire.propagate
 from inmanta import config as inmanta_config
 from inmanta.protocol import common
 from inmanta.protocol.rest import RESTBase

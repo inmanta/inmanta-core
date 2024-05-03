@@ -27,11 +27,11 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
 import importlib_metadata
-import logfire.propagate
 from tornado import gen, queues, routing, web
 
 import inmanta.protocol.endpoints
 import logfire
+import logfire.propagate
 from inmanta.data.model import ExtensionStatus
 from inmanta.protocol import Client, Result, common, endpoints, handle, methods
 from inmanta.protocol.exceptions import ShutdownInProgress

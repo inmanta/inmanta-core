@@ -24,12 +24,12 @@ from collections import abc, defaultdict
 from typing import Literal, Optional, cast
 
 import asyncpg
-import logfire
 import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
 
 import inmanta.util
+import logfire
 from inmanta import const, data
 from inmanta.const import ResourceState
 from inmanta.data import (

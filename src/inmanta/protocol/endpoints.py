@@ -17,9 +17,9 @@
 """
 
 import asyncio
+import contextlib
 import inspect
 import logging
-import contextlib
 import socket
 import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
@@ -28,6 +28,7 @@ from collections.abc import Coroutine
 from enum import Enum
 from typing import Any, Callable, Optional
 from urllib import parse
+
 import logfire
 import logfire.propagate
 from inmanta import config as inmanta_config
@@ -310,7 +311,13 @@ class SessionEndpoint(Endpoint, CallTarget):
 
         body.update(kwargs)
 
-        response: common.Response = await transport._execute_call(config, body, method_call.headers)
+        if "traceparent" in method_call.headers:
+            ctx = logfire.propagate.attach_context({"traceparent": method_call.headers["traceparent"]})
+        else:
+            ctx = contextlib.nullcontext()
+
+        with ctx:
+            response: common.Response = await transport._execute_call(config, body, method_call.headers)
 
         if response.status_code == 500:
             msg = ""
