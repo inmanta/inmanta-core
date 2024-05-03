@@ -1160,7 +1160,6 @@ class Agent(SessionEndpoint):
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
         if self._loader is None:
-            # TODO: verify if this is the proper response
             return [], set()
 
         # store it outside the loop, but only load when required
