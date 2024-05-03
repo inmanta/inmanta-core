@@ -43,7 +43,13 @@ ServerContext = typing.TypeVar("ServerContext")
 ReturnType = typing.TypeVar("ReturnType")
 
 
-class IPCMethod(abc.ABC, typing.Generic[ServerContext, ReturnType]):
+class IPCFrame(abc.ABC):
+    """Interface marker for IPC frames"""
+
+    pass
+
+
+class IPCMethod(IPCFrame, typing.Generic[ServerContext, ReturnType]):
     """Base class for methods intended for IPC"""
 
     @abc.abstractmethod
@@ -52,20 +58,20 @@ class IPCMethod(abc.ABC, typing.Generic[ServerContext, ReturnType]):
 
 
 @dataclass
-class IPCRequestFrame(typing.Generic[ServerContext, ReturnType]):
+class IPCRequestFrame(IPCFrame, typing.Generic[ServerContext, ReturnType]):
     id: Optional[uuid.UUID]
     method: IPCMethod[ServerContext, ReturnType]
 
 
 @dataclass
-class IPCReplyFrame:
+class IPCReplyFrame(IPCFrame):
     id: uuid.UUID
     returnvalue: object
     is_exception: bool
 
 
 @dataclass
-class IPCLogRecord:
+class IPCLogRecord(IPCFrame):
     """
     Derived from logging.LogRecord, but simplified
 
@@ -79,21 +85,26 @@ class IPCLogRecord:
     msg: str
 
 
-class IPCFrameProtocol(Protocol, typing.Generic[ServerContext]):
+class IPCFrameProtocol(Protocol):
     """
     Simple protocol which sends
 
     frame_length: 4 bytes, unsigned integer
     frame: frame_length, pickled data
+
+    It is intended as an async replacement of the facilities offered by multiprocessing and of similar design.
+
+    This protocol is only suited for local interprocess communications, when both ends are trusted.
+    This protocol is based on pickle for speed, so it is as insecure as pickle.
     """
 
-    # TODo: investigate memory view
     def __init__(self, name: str) -> None:
         # Expected size of frame
         # -1 if no frame in flight
         self.frame_size = -1
 
         # Buffer with all data we have received and not dispatched
+        # We could sqeeze out some more performance by using memoryview instead of an array
         self.frame_buffer: Optional[bytes] = None
 
         # Our transport
@@ -149,7 +160,7 @@ class IPCFrameProtocol(Protocol, typing.Generic[ServerContext]):
             # Failed to unpickle, drop connection
             self.logger.exception("Unexpected exception while handling frame", self.name)
 
-    def send_frame(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
+    def send_frame(self, frame: IPCFrame) -> None:
         """
         Helper method to construct and send frames
         """
@@ -159,7 +170,7 @@ class IPCFrameProtocol(Protocol, typing.Generic[ServerContext]):
         size = struct.pack("!L", len(buffer))
         self.transport.write(size + buffer)
 
-    def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
+    def frame_received(self, frame: IPCFrame) -> None:
         """
         Method for frame handling subclasses
 
@@ -168,7 +179,7 @@ class IPCFrameProtocol(Protocol, typing.Generic[ServerContext]):
         raise Exception(f"Frame not handled {frame}")
 
 
-class IPCServer(IPCFrameProtocol[ServerContext], abc.ABC, typing.Generic[ServerContext]):
+class IPCServer(IPCFrameProtocol, abc.ABC, typing.Generic[ServerContext]):
     """Base server that dispatched methods"""
 
     @abc.abstractmethod
@@ -176,7 +187,7 @@ class IPCServer(IPCFrameProtocol[ServerContext], abc.ABC, typing.Generic[ServerC
         pass
 
     # TODO: timeouts?
-    def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
+    def frame_received(self, frame: IPCFrame) -> None:
         if isinstance(frame, IPCRequestFrame):
             asyncio.get_running_loop().create_task(self.dispatch(frame))
         else:
@@ -196,7 +207,7 @@ class IPCServer(IPCFrameProtocol[ServerContext], abc.ABC, typing.Generic[ServerC
                 self.send_frame(IPCReplyFrame(frame.id, e, is_exception=True))
 
 
-class IPCClient(IPCFrameProtocol[ServerContext]):
+class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
     """Base client that dispatched method calls"""
 
     def __init__(self, name: str):
@@ -228,7 +239,7 @@ class IPCClient(IPCFrameProtocol[ServerContext]):
         self.requests[request.id] = done  # Mypy can't do it
         return done
 
-    def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
+    def frame_received(self, frame: IPCFrame) -> None:
         """Handle replies"""
         if isinstance(frame, IPCReplyFrame):
             self.process_reply(frame)
@@ -264,7 +275,7 @@ class FinalizingIPCClient(IPCClient[ServerContext]):
             asyncio.get_running_loop().create_task(fin())
 
 
-class LogReceiver(IPCFrameProtocol[ServerContext]):
+class LogReceiver(IPCFrameProtocol):
     """
     IPC feature to receive log message
 
@@ -276,7 +287,7 @@ class LogReceiver(IPCFrameProtocol[ServerContext]):
     When installing the LogShipper and LogReceiver in the same process, this will create an infinite loop
     """
 
-    def frame_received(self, frame: IPCRequestFrame[ServerContext, ReturnType] | IPCReplyFrame) -> None:
+    def frame_received(self, frame: IPCFrame) -> None:
         if isinstance(frame, IPCLogRecord):
             # calling log here is safe because if there are no arguments, formatter is never called
             logging.getLogger(frame.name).log(frame.levelno, frame.msg)
@@ -291,7 +302,7 @@ class LogShipper(logging.Handler):
     This sender is threadsafe
     """
 
-    def __init__(self, protocol: IPCFrameProtocol[object], eventloop: asyncio.BaseEventLoop) -> None:
+    def __init__(self, protocol: IPCFrameProtocol, eventloop: asyncio.AbstractEventLoop) -> None:
         self.protocol = protocol
         self.eventloop = eventloop
         self.logger_name = "inmanta.ipc.logs"
