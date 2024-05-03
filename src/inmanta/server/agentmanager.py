@@ -1081,7 +1081,7 @@ class AutostartedAgentManager(ServerSlice):
             }
 
             # TODO: docstring: only call under agent lock and when process has been started
-            assert env.id in self._procs
+            assert env.id in self._agent_procs
             proc = self._agent_procs[env.id]
 
             actual_agents_in_up_state: set[str] = set()
@@ -1133,11 +1133,11 @@ class AutostartedAgentManager(ServerSlice):
             if env.halted:
                 return False
 
-            if env.id not in self._agent_procs or self._agent_procs[env.id].return_code is None:
+            if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is None:
                 # Start new process if none is currently running for this environment.
                 # Otherwise trust that it tracks any changes to the agent map.
                 LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
-                self._agent_procs[env.id] = await __do_start_agent(env, connection=connection)
+                self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
             elif restart:
                 LOGGER.info(
                     "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
@@ -1147,7 +1147,7 @@ class AutostartedAgentManager(ServerSlice):
                 # TODO: this is by far the simplest solution, but does it suffice? What if a non-autostarted agent is running as well?
                 #       Or what if new process fails?
                 await self.stop_agents(env, agent_lock=False)
-                self._agent_procs[env.id] = await __do_start_agent(env, connection=connection)
+                self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
 
             # Wait for all agents to start
             try:
