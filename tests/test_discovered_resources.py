@@ -17,9 +17,7 @@
 """
 
 import json
-from typing import Optional
 
-import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta.data.model import ResourceVersionIdStr
@@ -95,7 +93,6 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
         assert result.result["data"]["values"] == res["values"]
 
 
-
 async def test_discovered_resource_get_paging(server, client, agent, environment, clienthelper):
     """
     Test that discovered resources can be retrieved with paging. The test creates multiple resources, retrieves them
@@ -163,16 +160,8 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     ]
     await clienthelper.put_version_simple(resources=managed_resources, version=version2)
 
-    filter_values = [
-        None,
-        {"managed": True},
-        {"managed": False}
-    ]
-    expected_results = [
-        discovered_resources,
-        discovered_resources[:-2],
-        discovered_resources[-2:]
-    ]
+    filter_values = [None, {"managed": True}, {"managed": False}]
+    expected_results = [discovered_resources, discovered_resources[:-2], discovered_resources[-2:]]
 
     for filter, expected_result in zip(filter_values, expected_results):
         result = await client.discovered_resources_get_batch(
