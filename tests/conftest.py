@@ -1588,23 +1588,6 @@ def monkey_patch_compiler_service(monkeypatch, server, make_compile_fail, runner
         return CompileRunnerMock(compile, make_compile_fail, runner_queue)
 
     monkeypatch.setattr(compilerslice, "_get_compile_runner", patch, raising=True)
-    monkeypatch.setattr(compilerslice, "_running_compiles", {}, raising=False)
-
-    original_run = compilerslice._run
-
-    async def _run(compile: data.Compile) -> None:
-        compilerslice._running_compiles[compile.environment] = compile
-        await original_run(compile)
-        async with compilerslice._write_lock_env_to_compile_task:
-            if compile.environment not in compilerslice._env_to_compile_task:
-                # Clear self._running_compiles iff the compiler service has deleted the environment from the compiling
-                # environments set.
-                del compilerslice._running_compiles[compile.environment]
-            else:
-                # Otherwise, a new _run will have overwritten the running compile => do nothing
-                assert compilerslice._running_compiles[compile.environment] is not compile
-
-    monkeypatch.setattr(compilerslice, "_run", _run, raising=True)
 
 
 @pytest.fixture
