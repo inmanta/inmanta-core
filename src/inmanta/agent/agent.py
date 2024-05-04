@@ -38,6 +38,7 @@ import pkg_resources
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, in_process_executor
+from inmanta.scheduler import scheduler
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ResourceState
@@ -309,6 +310,7 @@ deploy_response_matrix = {
     # Prefer the normal full over PI
     (NF, PI): ignore,  # full ignores periodic increment
 }
+class QueueManager:
 
 
 class ResourceScheduler:
@@ -522,6 +524,9 @@ class AgentInstance:
 
         # init
         self._nq = ResourceScheduler(self, self._env_id, name)
+        self.work_queue = scheduler.TaskQueue()
+        self.work_queue_drainer = scheduler.TaskRunner(self.work_queue)
+
         self._time_triggered_actions: set[ScheduledTask] = set()
         self._enabled = False
         self._stopped = False
@@ -579,7 +584,7 @@ class AgentInstance:
     def is_stopped(self) -> bool:
         return self._stopped
 
-    def unpause(self) -> Apireturn:
+    async def unpause(self) -> Apireturn:
         if self._stopped:
             return 403, "Cannot unpause stopped agent instance"
 
@@ -589,10 +594,11 @@ class AgentInstance:
         self.logger.info("Agent assuming primary role for %s", self.name)
 
         self._enable_time_triggers()
+        await self.work_queue_drainer.start()
         self._enabled = True
         return 200, "unpaused"
 
-    def pause(self, reason: str = "agent lost primary role") -> Apireturn:
+    async def pause(self, reason: str = "agent lost primary role") -> Apireturn:
         if not self.is_enabled():
             return 200, "already paused"
 
@@ -603,6 +609,7 @@ class AgentInstance:
 
         # Cancel the ongoing deployment if exists
         self._nq.cancel()
+        await self.work_queue_drainer.stop()
 
         return 200, "paused"
 
@@ -1066,28 +1073,28 @@ class Agent(SessionEndpoint):
             )
             # Enable agents with updated URI that were enabled before
             for agent_to_enable in updated_uri_agents_to_enable:
-                self.unpause(agent_to_enable)
+                await self.unpause(agent_to_enable)
 
-    def unpause(self, name: str) -> Apireturn:
+    async def unpause(self, name: str) -> Apireturn:
         instance = self._instances.get(name)
         if not instance:
             return 404, "No such agent"
 
-        return instance.unpause()
+        return await instance.unpause()
 
-    def pause(self, name: str) -> Apireturn:
+    async def pause(self, name: str) -> Apireturn:
         instance = self._instances.get(name)
         if not instance:
             return 404, "No such agent"
 
-        return instance.pause()
+        return await instance.pause()
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
         if enabled:
-            return self.unpause(agent)
+            return await self.unpause(agent)
         else:
-            return self.pause(agent)
+            return await self.pause(agent)
 
     async def on_reconnect(self) -> None:
         if cfg.use_autostart_agent_map.get():
@@ -1114,7 +1121,7 @@ class Agent(SessionEndpoint):
     async def on_disconnect(self) -> None:
         LOGGER.warning("Connection to server lost, taking agents offline")
         for agent_instance in self._instances.values():
-            agent_instance.pause("Connection to server lost")
+            await agent_instance.pause("Connection to server lost")
 
     async def get_code(
         self, environment: uuid.UUID, version: int, resource_types: Sequence[str]

@@ -4,8 +4,8 @@ import bisect
 import itertools
 import typing
 
-class BaseTask(abc.ABC):
 
+class BaseTask(abc.ABC):
     """
     Base class for tasks, has a lifecycle where
 
@@ -19,6 +19,7 @@ class BaseTask(abc.ABC):
 
 
     """
+
     def __init__(self) -> None:
         self.cancelled = False
         # Indicates if a cancel is requested
@@ -51,7 +52,7 @@ class BaseTask(abc.ABC):
         self.cancelled = True
 
     def wait_for(self, other: "Task") -> None:
-        """ Declare we wait for some other task"""
+        """Declare we wait for some other task"""
         if other.done:
             # the other is done, nothing to do
             return
@@ -91,6 +92,7 @@ class BaseTask(abc.ABC):
             if awaited.waitcount == 0:
                 await awaited._runnable()
 
+
 class Task(BaseTask):
     """
 
@@ -106,6 +108,7 @@ class Task(BaseTask):
 
     async def run(self) -> None:
         print(f"Running {self._name}")
+
     def priority(self) -> int:
         return self._priority
 
@@ -117,6 +120,7 @@ class Task(BaseTask):
 
     def __repr__(self):
         return self._name
+
 
 class PriorityQueue(asyncio.Queue):
     """
@@ -130,8 +134,10 @@ class PriorityQueue(asyncio.Queue):
 
     def _put(self, item):
         bisect.insort(self._queue, item)
+
     def _get(self):
         return self._queue.pop(0)
+
 
 class TaskQueue:
 
@@ -149,7 +155,6 @@ class TaskQueue:
         if task.waitcount == 0:
             await task._runnable()
 
-
     async def get(self) -> BaseTask:
         """Remove and return the lowest priority task. Raise KeyError if empty."""
         while True:
@@ -158,7 +163,44 @@ class TaskQueue:
                 return task
 
     async def do_next(self) -> BaseTask:
-        """ run the next task """
+        """run the next task"""
         task = await self.get()
+            # TODO: handle exceptions to prevent breaking the loop
         await task._run()
         return task
+
+class SentinelTask(BaseTask):
+    """ Task to unblock the queue on shutdown """
+
+    def name(self) -> str:
+        return "Queue Shutdown"
+
+    def priority(self) -> int:
+        return 0
+
+    async def run(self) -> None:
+        return
+
+class TaskRunner:
+
+    def __init__(self, queue: TaskQueue) -> None:
+        self.queue = queue
+        self.running = False
+        self.should_run = True
+        self.finished: typing.Optional[typing.Awaitable] = None
+
+
+    async def start(self):
+        self.finished = asyncio.create_task(self.running)
+    async def stop(self) -> None:
+        self.should_run = False
+        self.queue.put(SentinelTask())
+
+    async def join(self):
+        await self.finished
+    async def run(self):
+        self.running = True
+        while self.should_run:
+            await self.queue.do_next()
+        self.running = False
+

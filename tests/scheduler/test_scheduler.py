@@ -1,15 +1,17 @@
 import asyncio
 
 from inmanta.scheduler import scheduler
+
+
 async def test_very_basics():
 
     queue = scheduler.TaskQueue()
 
-    t1 = scheduler.Task("t1",100)
-    t2 = scheduler.Task("t2",100)
-    t3 = scheduler.Task("t3",100)
-    t4 = scheduler.Task("t4",1)
-    t5 = scheduler.Task("t5",100)
+    t1 = scheduler.Task("t1", 100)
+    t2 = scheduler.Task("t2", 100)
+    t3 = scheduler.Task("t3", 100)
+    t4 = scheduler.Task("t4", 1)
+    t5 = scheduler.Task("t5", 100)
     t2.wait_for(t5)
     t6 = scheduler.Task("t6", 50)
     t7 = scheduler.Task("t7", 50)
