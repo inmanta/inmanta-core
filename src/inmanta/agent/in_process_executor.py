@@ -277,83 +277,90 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param dry_run_id: id for this dryrun
         """
         model_version: int = resources[0].model_version
-        env_id: uuid.UUID = resources[0].env_id
-
         async with self.cache(model_version):
             for resource in resources:
+                await self.dry_run_one(resource, dry_run_id)
+
+    async def dry_run_one(
+        self,
+        resource: ResourceDetails,
+        dry_run_id: uuid.UUID,
+    ) -> None:
+        model_version: int = resource.model_version
+        env_id: uuid.UUID = resource.env_id
+        try:
+            resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
+        except Exception:
+            await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource.rvid, changes={})
+            return
+        assert resource_obj is not None
+        ctx = handler.HandlerContext(resource_obj, True)
+        started = datetime.datetime.now().astimezone()
+        provider = None
+
+        resource_id: ResourceVersionIdStr = resource.rvid
+
+        try:
+            self.logger.debug("Running dryrun for %s", resource_id)
+
+            try:
+                provider = await self.get_provider(resource_obj)
+            except Exception as e:
+                ctx.exception(
+                    "Unable to find a handler for %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource_id,
+                    exception=str(e),
+                )
+                await self.client.dryrun_update(
+                    tid=env_id,
+                    id=dry_run_id,
+                    resource=resource_id,
+                    changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
+                )
+            else:
                 try:
-                    resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
-                except Exception:
-                    await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource.rvid, changes={})
-                    continue
-                assert resource_obj is not None
-                ctx = handler.HandlerContext(resource_obj, True)
-                started = datetime.datetime.now().astimezone()
-                provider = None
-
-                resource_id: ResourceVersionIdStr = resource.rvid
-
-                try:
-                    self.logger.debug("Running dryrun for %s", resource_id)
-
-                    try:
-                        provider = await self.get_provider(resource_obj)
-                    except Exception as e:
-                        ctx.exception(
-                            "Unable to find a handler for %(resource_id)s (exception: %(exception)s",
-                            resource_id=resource_id,
-                            exception=str(e),
-                        )
-                        await self.client.dryrun_update(
-                            tid=env_id,
-                            id=dry_run_id,
-                            resource=resource_id,
-                            changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
-                        )
-                    else:
-                        try:
-                            await asyncio.get_running_loop().run_in_executor(
-                                self.thread_pool, provider.execute, ctx, resource_obj, True
-                            )
-
-                            changes = ctx.changes
-                            if changes is None:
-                                changes = {}
-                            if ctx.status == const.ResourceState.failed:
-                                changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                            await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
-                        except Exception as e:
-                            ctx.exception(
-                                "Exception during dryrun for %(resource_id)s (exception: %(exception)s",
-                                resource_id=resource.rvid,
-                                exception=str(e),
-                            )
-                            changes = ctx.changes
-                            if changes is None:
-                                changes = {}
-                            changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                            await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
-
-                except Exception:
-                    ctx.exception("Unable to process resource for dryrun.")
-                    changes = {}
-                    changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
-                    await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
-                finally:
-                    if provider is not None:
-                        provider.close()
-
-                    finished = datetime.datetime.now().astimezone()
-                    await self.client.resource_action_update(
-                        tid=env_id,
-                        resource_ids=[resource_id],
-                        action_id=ctx.action_id,
-                        action=const.ResourceAction.dryrun,
-                        started=started,
-                        finished=finished,
-                        messages=ctx.logs,
-                        status=const.ResourceState.dry,
+                    await asyncio.get_running_loop().run_in_executor(
+                        self.thread_pool, provider.execute, ctx, resource_obj, True
                     )
+
+                    changes = ctx.changes
+                    if changes is None:
+                        changes = {}
+                    if ctx.status == const.ResourceState.failed:
+                        changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
+                    await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
+                except Exception as e:
+                    ctx.exception(
+                        "Exception during dryrun for %(resource_id)s (exception: %(exception)s",
+                        resource_id=resource.rvid,
+                        exception=str(e),
+                    )
+                    changes = ctx.changes
+                    if changes is None:
+                        changes = {}
+                    changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
+                    await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
+
+        except Exception:
+            ctx.exception("Unable to process resource for dryrun.")
+            changes = {}
+            changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
+            await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
+        finally:
+            if provider is not None:
+                provider.close()
+
+            finished = datetime.datetime.now().astimezone()
+            await self.client.resource_action_update(
+                tid=env_id,
+                resource_ids=[resource_id],
+                action_id=ctx.action_id,
+                action=const.ResourceAction.dryrun,
+                started=started,
+                finished=finished,
+                messages=ctx.logs,
+                status=const.ResourceState.dry,
+            )
 
     async def get_facts(self, resource: ResourceDetails) -> Apireturn:
         """

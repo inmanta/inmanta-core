@@ -429,6 +429,20 @@ class Executor(abc.ABC):
         pass
 
     @abc.abstractmethod
+    async def dry_run_one(
+        self,
+        resource: ResourceDetails,
+        dry_run_id: uuid.UUID,
+    ) -> None:
+        """
+        Perform a dryrun for the given resource
+
+        :param resource: resource for which to perform a dryrun.
+        :param dry_run_id: id for this dryrun
+        """
+        pass
+
+    @abc.abstractmethod
     async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
         """
         Get facts for a given resource

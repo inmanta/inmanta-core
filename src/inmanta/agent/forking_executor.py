@@ -43,6 +43,7 @@ import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
 from inmanta.agent import executor
+from inmanta.agent.executor import ResourceDetails
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
 
 LOGGER = logging.getLogger(__name__)
@@ -260,6 +261,21 @@ class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None])
         await context.executor.dry_run(self.resources, self.dry_run_id)
 
 
+class DryRunOneCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+
+    def __init__(
+        self,
+        resource: "inmanta.agent.executor.ResourceDetails",
+        dry_run_id: uuid.UUID,
+    ) -> None:
+        self.resource = resource
+        self.dry_run_id = dry_run_id
+
+    async def call(self, context: ExecutorContext) -> None:
+        assert context.executor is not None
+        await context.executor.dry_run_one(self.resource, self.dry_run_id)
+
+
 class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
     def __init__(
@@ -408,6 +424,13 @@ class MPExecutor(executor.Executor):
         dry_run_id: uuid.UUID,
     ) -> None:
         await self.connection.call(DryRunCommand(resources, dry_run_id))
+
+    async def dry_run_one(
+        self,
+        resource: "inmanta.agent.executor.ResourceDetails",
+        dry_run_id: uuid.UUID,
+    ) -> None:
+        await self.connection.call(DryRunOneCommand(resource, dry_run_id))
 
     async def execute(
         self,

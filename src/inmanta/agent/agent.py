@@ -77,24 +77,32 @@ class ResourceActionResult:
 ResourceActionResultFuture = asyncio.Future[ResourceActionResult]
 
 
-class BaseDeployAction(scheduler.BaseTask):
+class BaseResourceAction(scheduler.BaseTask):
 
-    def __init__(self, resource_id: Id, group_id: uuid.UUID, reason: str) -> None:
+    def __init__(self, resource_id: Id, name: str) -> None:
         super().__init__()
         self.resource_id = resource_id
-        self.group_id: uuid.UUID = group_id
-        self.reason: str = reason
-        self._name = f"Deploy {self.resource_id} as part of {self.group_id} because {self.reason}"
+        self._name = name
 
     def name(self) -> str:
         return self._name
 
-    def priority(self) -> int:
-        return 100
+
+class BaseDeployAction(BaseResourceAction):
+
+    def __init__(self, resource_id: Id, group_id: uuid.UUID, reason: str) -> None:
+        self.resource_id = resource_id
+        self.group_id: uuid.UUID = group_id
+        self.reason: str = reason
+        name = f"Deploy {self.resource_id} as part of {self.group_id} because {self.reason}"
+        super().__init__(resource_id, name)
 
     def cancel(self):
         LOGGER.info("Cancelled %s", self.name())
         super().cancel()
+
+    def priority(self) -> int:
+        return 100
 
 
 class DeployAction(BaseDeployAction):
@@ -114,12 +122,62 @@ class DeployAction(BaseDeployAction):
             )
 
 
+class DryrunAction(BaseResourceAction):
+
+    def __init__(
+        self,
+        my_executor: executor.Executor,
+        resource: ResourceDetails,
+        dry_run_id: uuid.UUID,
+    ) -> None:
+        name = f"Dry_run {resource.id} as part of {dry_run_id}"
+        super().__init__(resource.id, name)
+        self.executor = my_executor
+        self.dry_run_id = dry_run_id
+        self.resource = resource
+
+    def priority(self) -> int:
+        return 50
+
+    async def run(self) -> None:
+        # TODO: incorrect, doesn't keep cache open!
+        async with self.executor.cache(self.resource.model_version):
+            await self.executor.dry_run_one(
+                self.resource,
+                self.dry_run_id,
+            )
+
+
+class GetFactAction(BaseResourceAction):
+
+    def __init__(
+        self,
+        my_executor: executor.Executor,
+        resource: ResourceDetails,
+    ) -> None:
+        name = f"Get Fact for  {resource.id}"
+        super().__init__(resource.id, name)
+        self.executor = my_executor
+        self.resource = resource
+
+    def priority(self) -> int:
+        return 150
+
+    async def run(self) -> None:
+        await self.executor.get_facts(
+            self.resource,
+        )
+
+
 class RemoteResourceAction(BaseDeployAction):
     def __init__(self, resource_id: Id, gid: uuid.UUID, reason: str) -> None:
         super().__init__(resource_id, gid, reason)
 
     async def run(self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]") -> None:
         raise Exception("This task should never be scheduler")
+
+    def priority(self) -> int:
+        return 100
 
     async def notify(
         self,
@@ -418,8 +476,6 @@ class AgentInstance:
 
         # the lock for changing the current ongoing deployment
         self.critical_ratelimiter = asyncio.Semaphore(1)
-        # lock for dryrun tasks
-        self.dryrunlock = asyncio.Semaphore(1)
 
         # multi threading control
         self.ratelimiter = asyncio.Semaphore(1)
@@ -669,52 +725,49 @@ class AgentInstance:
         return 200
 
     async def do_run_dryrun(self, version: int, dry_run_id: uuid.UUID) -> None:
-        async with self.dryrunlock:
-            async with self.ratelimiter:
-                response = await self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
-                if response.code == 404:
-                    self.logger.warning("Version %s does not exist, can not run dryrun", version)
-                    return
+        response = await self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
+        if response.code == 404:
+            self.logger.warning("Version %s does not exist, can not run dryrun", version)
+            return
 
-                elif response.code != 200 or response.result is None:
-                    self.logger.warning("Got an error while pulling resources and version %s", version)
-                    return
+        elif response.code != 200 or response.result is None:
+            self.logger.warning("Got an error while pulling resources and version %s", version)
+            return
 
-                undeployable, resource_refs, executor = await self.setup_executor(
-                    version, const.ResourceAction.dryrun, response.result["resources"]
+        undeployable, resource_refs, executor = await self.setup_executor(
+            version, const.ResourceAction.dryrun, response.result["resources"]
+        )
+        deployable_resources: list[ResourceDetails] = []
+        for resource in resource_refs:
+            if resource.rvid in undeployable:
+                self.logger.error(
+                    "Skipping dryrun %s because in undeployable state %s",
+                    resource.rvid,
+                    undeployable[resource.rvid],
                 )
-                deployable_resources: list[ResourceDetails] = []
-                for resource in resource_refs:
-                    if resource.rvid in undeployable:
-                        self.logger.error(
-                            "Skipping dryrun %s because in undeployable state %s",
-                            resource.rvid,
-                            undeployable[resource.rvid],
-                        )
-                        # TODO: SKIP IS NO CHANGE???? https://github.com/inmanta/inmanta-core/issues/7588
-                        await self.get_client().dryrun_update(
-                            tid=resource.env_id, id=dry_run_id, resource=resource.rvid, changes={}
-                        )
-                    else:
-                        deployable_resources.append(resource)
-                if deployable_resources:
-                    assert executor is not None
-                    await executor.dry_run(deployable_resources, dry_run_id)
+                # TODO: SKIP IS NO CHANGE???? https://github.com/inmanta/inmanta-core/issues/7588
+                await self.get_client().dryrun_update(tid=resource.env_id, id=dry_run_id, resource=resource.rvid, changes={})
+            else:
+                deployable_resources.append(resource)
+        if deployable_resources:
+            assert executor is not None
+            for resource in deployable_resources:
+                self.work_queue.put(DryrunAction(executor, resource, dry_run_id))
 
     async def get_facts(self, resource: JsonType) -> Apireturn:
-        async with self.ratelimiter:
-            undeployable, resource_refs, executor = await self.setup_executor(
-                resource["model"], const.ResourceAction.getfact, [resource]
+        undeployable, resource_refs, executor = await self.setup_executor(
+            resource["model"], const.ResourceAction.getfact, [resource]
+        )
+
+        if undeployable or not resource_refs:
+            self.logger.warning(
+                "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded", resource["id"]
             )
+            return 500
 
-            if undeployable or not resource_refs:
-                self.logger.warning(
-                    "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded", resource["id"]
-                )
-                return 500
-
-            assert executor is not None
-            return await executor.get_facts(resource_refs[0])
+        assert executor is not None
+        self.work_queue.put(GetFactAction(executor, resource_refs[0]))
+        return 200
 
     async def setup_executor(
         self, version: int, action: const.ResourceAction, resources: list[JsonType]
@@ -815,7 +868,6 @@ class Agent(SessionEndpoint):
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.hostname = hostname
-        self.ratelimiter = asyncio.Semaphore(1)
         # Number of in flight requests for resolving CAD's
         self.cad_ratelimiter = asyncio.Semaphore(3)
         self.thread_pool = ThreadPoolExecutor(1, thread_name_prefix="mainpool")
