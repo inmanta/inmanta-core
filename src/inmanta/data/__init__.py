@@ -2897,7 +2897,7 @@ RETURNING last_version;
         query = f"SELECT {selected_columns} FROM environment WHERE id = $1"
         async with cls.get_connection(connection) as con:
             environment = await con.fetchrow(query, doc_id)
-        
+
             if environment:
                 return cls(from_postgres=True, **environment)
             return None

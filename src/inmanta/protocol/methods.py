@@ -23,7 +23,6 @@ import uuid
 from typing import Any, Literal, Optional, Union
 
 import logfire
-
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model

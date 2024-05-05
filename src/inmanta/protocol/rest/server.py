@@ -17,7 +17,6 @@
 """
 
 import asyncio
-import contextlib
 import logging
 import ssl
 import uuid
@@ -112,13 +111,10 @@ class RESTHandler(tornado.web.RequestHandler):
 
         if not self._transport.running:
             return
-        
-        if "traceparent" in self.request.headers:
-            ctx = logfire.propagate.attach_context({"traceparent": self.request.headers["traceparent"]})
-        else:
-            ctx = contextlib.nullcontext()
 
-        with ctx:
+        with logfire.propagate.attach_context(
+            {const.TRACEPARENT: self.request.headers[const.TRACEPARENT]} if const.TRACEPARENT in self.request.headers else {}
+        ):
             with logfire.span("rpc." + call_config.method_name):
                 with timer("rpc." + call_config.method_name).time():
                     self._transport.start_request()

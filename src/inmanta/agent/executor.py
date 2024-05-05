@@ -35,7 +35,6 @@ from typing import Any, Dict, Optional, Sequence
 import pkg_resources
 
 import inmanta.types
-import logfire
 from inmanta.agent import config as cfg
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment

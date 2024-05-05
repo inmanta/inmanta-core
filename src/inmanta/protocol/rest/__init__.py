@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import contextlib
 import inspect
 import json
 import logging

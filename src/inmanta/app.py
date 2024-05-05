@@ -887,12 +887,10 @@ def app() -> None:
             if helpmsg is not None:
                 print(helpmsg)
 
-    if "traceparent" in os.environ:
-        ctx = logfire.propagate.attach_context({"traceparent": os.environ["traceparent"]})
-    else:
-        ctx = contextlib.nullcontext()
-
-    with ctx:
+    # if a traceparent is provided, restore the context
+    with logfire.propagate.attach_context(
+        {const.TRACEPARENT: os.environ[const.TRACEPARENT]} if const.TRACEPARENT in os.environ else {}
+    ):
         try:
             options.func(options)
         except ShowUsageException as e:
