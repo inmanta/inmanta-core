@@ -40,7 +40,6 @@ import inmanta.const
 from inmanta import config, const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
-from inmanta.scheduler import scheduler
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ResourceState
@@ -48,6 +47,7 @@ from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConf
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id
+from inmanta.scheduler import scheduler
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import (
     CronSchedule,
@@ -77,149 +77,53 @@ class ResourceActionResult:
 ResourceActionResultFuture = asyncio.Future[ResourceActionResult]
 
 
-class ResourceActionBase(abc.ABC):
-    """
-    Base class for Local and Remote resource actions. Model dependencies between resources
-    and inform each other when they're done deploying.
-    """
+class BaseDeployAction(scheduler.BaseTask):
 
-    resource_id: Id
-    future: ResourceActionResultFuture
-    dependencies: list["ResourceActionBase"]
-
-    def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str) -> None:
-        """
-        :param gid: A unique identifier to identify a deploy. This is local to this agent.
-        """
-        self.scheduler: "ResourceScheduler" = scheduler
-        self.resource_id: Id = resource_id
-        self.future: ResourceActionResultFuture = asyncio.Future()
-        # This variable is used to indicate that the future of a ResourceAction will get a value, because of a deploy
-        # operation. This variable makes sure that the result cannot be set twice when the ResourceAction is cancelled.
-        self.running: bool = False
-        self.gid: uuid.UUID = gid
-        self.undeployable: Optional[const.ResourceState] = None
+    def __init__(self, resource_id: Id, group_id: uuid.UUID, reason: str) -> None:
+        super().__init__()
+        self.resource_id = resource_id
+        self.group_id: uuid.UUID = group_id
         self.reason: str = reason
-        self.logger: Logger = self.scheduler.logger
+        self._name = f"Deploy {self.resource_id} as part of {self.group_id} because {self.reason}"
 
-    async def execute(self, dummy: "ResourceActionBase", generation: "dict[ResourceIdStr, ResourceActionBase]") -> None:
-        return
+    def name(self) -> str:
+        return self._name
 
-    def is_running(self) -> bool:
-        return self.running
+    def priority(self) -> int:
+        return 100
 
-    def is_done(self) -> bool:
-        return self.future.done()
-
-    def cancel(self) -> None:
-        if not self.is_running() and not self.is_done():
-            self.logger.info("Cancelled deploy of %s %s %s", self.__class__.__name__, self.gid, self.resource_id)
-            self.future.set_result(ResourceActionResult(cancel=True))
-
-    def long_string(self) -> str:
-        return "{} awaits {}".format(self.resource_id.resource_str(), " ".join([str(aw) for aw in self.dependencies]))
-
-    def __str__(self) -> str:
-        status = ""
-        if self.is_done():
-            status = " Done"
-        elif self.is_running():
-            status = " Running"
-
-        return self.resource_id.resource_str() + status
+    def cancel(self):
+        LOGGER.info("Cancelled %s", self.name())
+        super().cancel()
 
 
-class DummyResourceAction(ResourceActionBase):
-    def __init__(self, scheduler: "ResourceScheduler", gid: uuid.UUID, reason: str) -> None:
-        dummy_id = Id("agent::Dummy", scheduler.name, "type", "dummy")
-        super().__init__(scheduler, dummy_id, gid, reason)
+class DeployAction(BaseDeployAction):
 
-
-class ResourceAction(ResourceActionBase):
-    def __init__(
-        self,
-        scheduler: "ResourceScheduler",
-        my_executor: executor.Executor,
-        env_id: uuid.UUID,
-        resource: ResourceDetails,
-        gid: uuid.UUID,
-        reason: str,
-    ) -> None:
-        """
-        :param gid: A unique identifier to identify a deploy. This is local to this agent.
-        """
-        super().__init__(scheduler, resource.id, gid, reason)
+    def __init__(self, my_executor: executor.Executor, resource: ResourceDetails, group_id: uuid.UUID, reason: str) -> None:
+        super().__init__(resource.id, group_id, reason)
         self.resource: ResourceDetails = resource
-        self.executor: executor.Executor = my_executor
-        self.env_id: uuid.UUID = env_id
+        self.executor = my_executor
 
-    async def execute(self, dummy: "ResourceActionBase", generation: Mapping[ResourceIdStr, ResourceActionBase]) -> None:
-        self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
-        async with self.executor.cache(self.resource.model_version):
-            self.dependencies = [generation[resource_id.resource_str()] for resource_id in self.resource.requires]
-            waiters = [x.future for x in self.dependencies]
-            waiters.append(dummy.future)
-            # Explicit cast is required because mypy has issues with * and generics
-            results: list[ResourceActionResult] = cast(list[ResourceActionResult], await asyncio.gather(*waiters))
-
-            if self.undeployable:
-                self.running = True
-                try:
-                    if self.is_done():
-                        # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
-                        return
-                    result = sum(results, ResourceActionResult(cancel=False))
-                    if result.cancel:
-                        # self.running will be set to false when self.cancel is called
-                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                        return
-                    self.future.set_result(ResourceActionResult(cancel=False))
-                    return
-                finally:
-                    self.running = False
-
-            async with self.scheduler.ratelimiter:
-                self.running = True
-
-                try:
-                    if self.is_done():
-                        # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
-                        return
-
-                    result = sum(results, ResourceActionResult(cancel=False))
-
-                    if result.cancel:
-                        # self.running will be set to false when self.cancel is called
-                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                        return
-
-                    await self.executor.execute(
-                        gid=self.gid,
-                        resource_details=self.resource,
-                        reason=self.reason,
-                    )
-
-                    self.future.set_result(ResourceActionResult(cancel=False))
-                finally:
-                    self.running = False
+    async def run(self) -> None:
+        await self.executor.execute(
+            gid=self.group_id,
+            resource_details=self.resource,
+            reason=self.reason,
+        )
 
 
-class RemoteResourceAction(ResourceActionBase):
-    def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str) -> None:
-        super().__init__(scheduler, resource_id, gid, reason)
+class RemoteResourceAction(BaseDeployAction):
+    def __init__(self, resource_id: Id, gid: uuid.UUID, reason: str) -> None:
+        super().__init__(resource_id, gid, reason)
 
-    async def execute(self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]") -> None:
-        pass
+    async def run(self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]") -> None:
+        raise Exception("This task should never be scheduler")
 
-    def notify(
+    async def notify(
         self,
         status: const.ResourceState,
     ) -> None:
-        if not self.future.done():
-            self.status = status
-            self.future.set_result(ResourceActionResult(cancel=False))
+        await self._done()
 
 
 @dataclasses.dataclass
@@ -312,7 +216,6 @@ deploy_response_matrix = {
     # Prefer the normal full over PI
     (NF, PI): ignore,  # full ignores periodic increment
 }
-class QueueManager:
 
 
 class ResourceScheduler:
@@ -326,12 +229,12 @@ class ResourceScheduler:
     """
 
     def __init__(self, agent: "AgentInstance", env_id: uuid.UUID, name: str) -> None:
-        self.generation: dict[ResourceIdStr, ResourceActionBase] = {}
+        self.active_group: Optional[scheduler.TaskGroup] = None
         self.cad: dict[str, RemoteResourceAction] = {}
+
         self._env_id = env_id
         self.agent = agent
         self.name = name
-        self.ratelimiter = agent.ratelimiter
         self.version: int = 0
 
         self.running: Optional[DeployRequest] = None
@@ -340,28 +243,24 @@ class ResourceScheduler:
 
         self.logger: Logger = agent.logger
 
-    def get_scheduled_resource_actions(self) -> list[ResourceActionBase]:
-        return list(self.generation.values())
-
     def finished(self) -> bool:
-        for resource_action in self.generation.values():
-            if not resource_action.is_done():
-                return False
-        return True
+        if self.active_group is None:
+            return True
+        return self.active_group.finished()
 
     def cancel(self) -> None:
         """
         Cancel all scheduled deployments.
         """
-        for ra in self.generation.values():
-            ra.cancel()
+        if self.active_group is not None:
+            self.active_group.cancel()
         if self.cad_resolver is not None:
             self.cad_resolver.cancel()
             self.cad_resolver = None
-        self.generation = {}
+        self.active_group = None
         self.cad = {}
 
-    def reload(
+    async def reload(
         self,
         resources: Sequence[ResourceDetails],
         undeployable: dict[ResourceVersionIdStr, ResourceState],
@@ -411,14 +310,14 @@ class ResourceScheduler:
         self.logger.info("Running %s for reason: %s", gid, self.running.reason)
 
         # re-generate generation
-        self.generation = {}
+        generation = {}
+        to_schedule = []
 
         for resource in resources:
-            local_resource_action = ResourceAction(self, executor, self._env_id, resource, gid, self.running.reason)
-            # mark undeployable
-            if resource.rvid in undeployable:
-                local_resource_action.undeployable = undeployable[resource.rvid]
-            self.generation[resource.rid] = local_resource_action
+            if resource.rvid not in undeployable:
+                local_resource_action = DeployAction(executor, resource, gid, self.running.reason)
+                generation[resource.rid] = local_resource_action
+                to_schedule.append(local_resource_action)
 
         # hook up Cross Agent Dependencies
         cross_agent_dependencies: set[Id] = {q for r in resources for q in r.requires if q.get_agent_name() != self.name}
@@ -428,37 +327,42 @@ class ResourceScheduler:
             self.cad[str(cad)] = ra
             rid = cad.resource_str()
             cads_by_rid[rid] = ra
-            self.generation[rid] = ra
+            generation[rid] = ra
+
+        task_group = scheduler.TaskGroup([])
+        for task in to_schedule:
+            for requires in task.resource.requires:
+                req_task = generation.get(requires.resource_str())
+                if not req_task:
+                    # undeployable requirement
+                    break
+                task.wait_for(req_task)
+            else:
+                task_group.tasks.append(task)
 
         if cads_by_rid:
             self.cad_resolver = self.agent.process.add_background_task(self.resolve_cads(self.version, cads_by_rid))
 
-        # Create dummy to give start signal
-        dummy = DummyResourceAction(self, gid, self.running.reason)
         # Dispatch all actions
-        # Will block on dependencies and dummy
-        for resource_action in self.generation.values():
-            add_future(resource_action.execute(dummy, self.generation))
-
+        self.active_group = task_group
+        await task_group.enqueue_all(self.agent.work_queue)
         # Listen for completion
-        self.agent.process.add_background_task(self.mark_deployment_as_finished(self.generation.values()))
+        # TODO: deffered task!
+        # self.agent.process.add_background_task(self.mark_deployment_as_finished(generation.values()))
 
-        # Start running
-        dummy.future.set_result(ResourceActionResult(cancel=False))
-
-    async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceActionBase]) -> None:
-        # This method is executing as a background task. As such, it will get cancelled when the agent is stopped.
-        # Because the asyncio.gather() call propagates cancellation, we shield the ResourceActionBase.future.
-        # Cancellation of these futures is handled by the ResourceActionBase.cancel() method. Not shielding them
-        # would cause the result of the future to be set twice, which results in an undesired InvalidStateError.
-        await asyncio.gather(*[asyncio.shield(resource_action.future) for resource_action in resource_actions])
-        async with self.agent.critical_ratelimiter:
-            if not self.finished():
-                return
-            if self.deferred is not None:
-                self.logger.info("Resuming run '%s'", self.deferred.reason)
-                self.agent.process.add_background_task(self.agent.get_latest_version_for_agent(self.deferred))
-                self.deferred = None
+    # async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceActionBase]) -> None:
+    #     # This method is executing as a background task. As such, it will get cancelled when the agent is stopped.
+    #     # Because the asyncio.gather() call propagates cancellation, we shield the ResourceActionBase.future.
+    #     # Cancellation of these futures is handled by the ResourceActionBase.cancel() method. Not shielding them
+    #     # would cause the result of the future to be set twice, which results in an undesired InvalidStateError.
+    #     await asyncio.gather(*[asyncio.shield(resource_action.future) for resource_action in resource_actions])
+    #     async with self.agent.critical_ratelimiter:
+    #         if not self.finished():
+    #             return
+    #         if self.deferred is not None:
+    #             self.logger.info("Resuming run '%s'", self.deferred.reason)
+    #             self.agent.process.add_background_task(self.agent.get_latest_version_for_agent(self.deferred))
+    #             self.deferred = None
 
     async def resolve_cads(self, version: int, cads: dict[ResourceIdStr, RemoteResourceAction]) -> None:
         """Batch resolve all CAD's"""
@@ -476,9 +380,9 @@ class ResourceScheduler:
                 status = const.ResourceState[status_raw]
                 rra = cads[rid_raw]
                 if status not in const.TRANSIENT_STATES:
-                    rra.notify(status)
+                    await rra.notify(status)
 
-    def notify_ready(
+    async def notify_ready(
         self,
         resourceid: ResourceVersionIdStr,
         state: const.ResourceState,
@@ -488,7 +392,7 @@ class ResourceScheduler:
         if resourceid not in self.cad:
             # received CAD notification for which no resource are waiting, so return
             return
-        self.cad[resourceid].notify(state)
+        await self.cad[resourceid].notify(state)
 
     def dump(self) -> None:
         print("Waiting:")
@@ -688,14 +592,14 @@ class AgentInstance:
             self.process._sched.remove(task)
         self._time_triggered_actions.clear()
 
-    def notify_ready(
+    async def notify_ready(
         self,
         resourceid: ResourceVersionIdStr,
         state: const.ResourceState,
         change: const.Change,
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]],
     ) -> None:
-        self._nq.notify_ready(resourceid, state, change, changes)
+        await self._nq.notify_ready(resourceid, state, change, changes)
 
     def _can_get_resources(self) -> bool:
         if self._getting_resources:
@@ -754,7 +658,7 @@ class AgentInstance:
                         result.result["version"], const.ResourceAction.deploy, result.result["resources"]
                     )
                     if len(resources) > 0 and executor is not None:
-                        self._nq.reload(resources, undeployable, deploy_request, executor)
+                        await self._nq.reload(resources, undeployable, deploy_request, executor)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> Apireturn:
         self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
@@ -1352,7 +1256,7 @@ class Agent(SessionEndpoint):
         LOGGER.debug(
             "Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s", agent, env, agent, resource, state
         )
-        instance.notify_ready(resource, state, change, changes)
+        await instance.notify_ready(resource, state, change, changes)
 
         return 200
 

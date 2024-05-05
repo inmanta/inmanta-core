@@ -1,6 +1,7 @@
 import abc
 import asyncio
 import bisect
+import graphlib
 import itertools
 import typing
 
@@ -44,7 +45,7 @@ class BaseTask(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def run(self) -> None:
+    async def run(self) -> None:
         pass
 
     def cancel(self):
@@ -79,7 +80,7 @@ class BaseTask(abc.ABC):
         if not (self.done or self.started or self.cancelled):
             self.started = True
             try:
-                self.run()
+                await self.run()
             finally:
                 self.done = True
                 await self._done()
@@ -165,12 +166,13 @@ class TaskQueue:
     async def do_next(self) -> BaseTask:
         """run the next task"""
         task = await self.get()
-            # TODO: handle exceptions to prevent breaking the loop
+        # TODO: handle exceptions to prevent breaking the loop
         await task._run()
         return task
 
+
 class SentinelTask(BaseTask):
-    """ Task to unblock the queue on shutdown """
+    """Task to unblock the queue on shutdown"""
 
     def name(self) -> str:
         return "Queue Shutdown"
@@ -181,6 +183,7 @@ class SentinelTask(BaseTask):
     async def run(self) -> None:
         return
 
+
 class TaskRunner:
 
     def __init__(self, queue: TaskQueue) -> None:
@@ -189,18 +192,45 @@ class TaskRunner:
         self.should_run = True
         self.finished: typing.Optional[typing.Awaitable] = None
 
-
     async def start(self):
-        self.finished = asyncio.create_task(self.running)
+        self.finished = asyncio.create_task(self.run())
+
     async def stop(self) -> None:
         self.should_run = False
         self.queue.put(SentinelTask())
 
     async def join(self):
         await self.finished
+
     async def run(self):
         self.running = True
         while self.should_run:
             await self.queue.do_next()
         self.running = False
 
+
+T = typing.TypeVar("T", bound=BaseTask)
+
+
+class TaskGroup(typing.Generic[T]):
+    """Utility for managing groups of tasks with the same priority"""
+
+    def __init__(self, tasks: list[T]):
+        self.tasks = tasks
+
+    def finished(self) -> bool:
+        return all(task.done for task in self.tasks)
+
+    def cancel(self) -> None:
+        for task in self.tasks:
+            task.cancel()
+
+    async def enqueue_all(self, queue: TaskQueue) -> None:
+        # pre order tasks to get a reasonably good order
+        # purely esthetic
+        task_set = set(self.tasks)
+        toposorter = graphlib.TopologicalSorter()
+        for task in self.tasks:
+            toposorter.add(task, *(pre for pre in task.requires if pre in task_set))
+        for task in toposorter.static_order():
+            await queue.put(task)
