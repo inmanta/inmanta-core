@@ -30,7 +30,7 @@ from tornado import web
 
 import requests
 from inmanta import config, const
-from inmanta.protocol import Client, auth
+from inmanta.protocol import auth
 from inmanta.server.protocol import Server
 
 
