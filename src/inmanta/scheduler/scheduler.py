@@ -29,6 +29,7 @@ class BaseTask(abc.ABC):
 
         # Link to the parent queue, required to jump into run queue
         self._queue: typing.Optional["TaskQueue"] = None
+        # priority / insertion number / self
         self._entry: typing.Optional[typing.Tuple[int, int, "BaseTask"]] = None
 
         # Inter task dependencies
@@ -48,7 +49,7 @@ class BaseTask(abc.ABC):
     async def run(self) -> None:
         pass
 
-    def cancel(self):
+    def cancel(self) -> None:
         # todo: this doesn't notify waiters
         self.cancelled = True
 
@@ -63,19 +64,20 @@ class BaseTask(abc.ABC):
         other.provides.append(self)
 
     def _enqueue(self, into: "TaskQueue", entry: typing.Tuple[int, int, "Task"]) -> None:
-        # bind to queue
+        """Internal, bind to queue"""
         assert self._queue is None
         self._queue = into
         self._entry = entry
 
-    async def _runnable(self):
-        # ready to move to run queue
-        if self._queue is not None:
-            await self._queue.run_queue.put(self._entry)
+    def _runnable(self) -> None:
+        """Internal, ready to move to run queue"""
+        assert self._queue is not None, "Task is not bound to a queue"
+        self._queue.run_queue.put_nowait(self._entry)
         # no longer needed, prevents memory leaks
         self.requires = None
 
-    async def _run(self):
+    async def _run(self) -> None:
+        """Internal, run the task, book keeping around run()"""
         # start running if required
         if not (self.done or self.started or self.cancelled):
             self.started = True
@@ -83,15 +85,15 @@ class BaseTask(abc.ABC):
                 await self.run()
             finally:
                 self.done = True
-                await self._done()
+                self._done()
 
-    async def _done(self):
-        # we are done, propagte to waiters
+    def _done(self) -> None:
+        """Internal, we are done, propagate to waiters"""
         for awaited in self.provides:
             awaited.waitcount -= 1
             assert not awaited.waitcount < 0
             if awaited.waitcount == 0:
-                await awaited._runnable()
+                awaited._runnable()
 
 
 class Task(BaseTask):
@@ -147,14 +149,14 @@ class TaskQueue:
         self.run_queue: asyncio.Queue[typing.Tuple[int, int, BaseTask]] = PriorityQueue()
         self.counter = itertools.count()  # unique sequence count, makes sort stable in the heap
 
-    async def put(self, task: BaseTask):
+    def put(self, task: BaseTask):
         "Add a new task"
         count = next(self.counter)
         entry = (task.priority(), count, task)
         task._enqueue(self, entry)
-        await self.full_queue.put(entry)
+        self.full_queue.put_nowait(entry)
         if task.waitcount == 0:
-            await task._runnable()
+            task._runnable()
 
     async def get(self) -> BaseTask:
         """Remove and return the lowest priority task. Raise KeyError if empty."""
@@ -192,10 +194,10 @@ class TaskRunner:
         self.should_run = True
         self.finished: typing.Optional[typing.Awaitable] = None
 
-    async def start(self):
+    def start(self):
         self.finished = asyncio.create_task(self.run())
 
-    async def stop(self) -> None:
+    def stop(self) -> None:
         self.should_run = False
         self.queue.put(SentinelTask())
 
@@ -225,7 +227,7 @@ class TaskGroup(typing.Generic[T]):
         for task in self.tasks:
             task.cancel()
 
-    async def enqueue_all(self, queue: TaskQueue) -> None:
+    def enqueue_all(self, queue: TaskQueue) -> None:
         # pre order tasks to get a reasonably good order
         # purely esthetic
         task_set = set(self.tasks)
@@ -233,4 +235,4 @@ class TaskGroup(typing.Generic[T]):
         for task in self.tasks:
             toposorter.add(task, *(pre for pre in task.requires if pre in task_set))
         for task in toposorter.static_order():
-            await queue.put(task)
+            queue.put(task)

@@ -105,11 +105,13 @@ class DeployAction(BaseDeployAction):
         self.executor = my_executor
 
     async def run(self) -> None:
-        await self.executor.execute(
-            gid=self.group_id,
-            resource_details=self.resource,
-            reason=self.reason,
-        )
+        # TODO: incorrect, doesn't keep cache open!
+        async with self.executor.cache(self.resource.model_version):
+            await self.executor.execute(
+                gid=self.group_id,
+                resource_details=self.resource,
+                reason=self.reason,
+            )
 
 
 class RemoteResourceAction(BaseDeployAction):
@@ -260,7 +262,7 @@ class ResourceScheduler:
         self.active_group = None
         self.cad = {}
 
-    async def reload(
+    def reload(
         self,
         resources: Sequence[ResourceDetails],
         undeployable: dict[ResourceVersionIdStr, ResourceState],
@@ -345,7 +347,7 @@ class ResourceScheduler:
 
         # Dispatch all actions
         self.active_group = task_group
-        await task_group.enqueue_all(self.agent.work_queue)
+        task_group.enqueue_all(self.agent.work_queue)
         # Listen for completion
         # TODO: deffered task!
         # self.agent.process.add_background_task(self.mark_deployment_as_finished(generation.values()))
@@ -462,6 +464,7 @@ class AgentInstance:
         self._enabled = False
         self._disable_time_triggers()
         self._nq.cancel()
+        self.work_queue_drainer.stop()
         await self.executor_manager.stop_for_agent(self.name)
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
@@ -471,6 +474,7 @@ class AgentInstance:
         :param thread_pool_finalizer: all threadpools that should be joined should be added here.
         """
         assert self._stopped
+        await self.work_queue_drainer.join()
         await self.executor_manager.join(thread_pool_finalizer, inmanta.const.SHUTDOWN_GRACE_IOLOOP * 0.9)
 
     @property
@@ -500,7 +504,7 @@ class AgentInstance:
         self.logger.info("Agent assuming primary role for %s", self.name)
 
         self._enable_time_triggers()
-        await self.work_queue_drainer.start()
+        self.work_queue_drainer.start()
         self._enabled = True
         return 200, "unpaused"
 
@@ -658,7 +662,7 @@ class AgentInstance:
                         result.result["version"], const.ResourceAction.deploy, result.result["resources"]
                     )
                     if len(resources) > 0 and executor is not None:
-                        await self._nq.reload(resources, undeployable, deploy_request, executor)
+                        self._nq.reload(resources, undeployable, deploy_request, executor)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> Apireturn:
         self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
