@@ -108,7 +108,7 @@ async def startable_server(server_config):
     """
     This fixture returns the bootloader of a server which is not yet started.
     """
-    bootloader = InmantaBootloader()
+    bootloader = InmantaBootloader(configure_logging=True)
     yield bootloader
     try:
         await bootloader.stop(timeout=15)
