@@ -3180,9 +3180,7 @@ async def test_get_current_resource_state(server, environment, client, clienthel
                 "requires": [],
             },
         ],
-        resource_state={
-            "std::testing::NullResource[agent1,name=test1]": const.ResourceState.undefined
-        },
+        resource_state={"std::testing::NullResource[agent1,name=test1]": const.ResourceState.undefined},
         compiler_version=util.get_compiler_version(),
     )
     assert result.code == 200, result.result
@@ -3237,9 +3235,7 @@ async def test_get_current_resource_state(server, environment, client, clienthel
                 "requires": [],
             },
         ],
-        resource_state={
-            "std::testing::NullResource[agent1,name=test1]": const.ResourceState.undefined
-        },
+        resource_state={"std::testing::NullResource[agent1,name=test1]": const.ResourceState.undefined},
         compiler_version=util.get_compiler_version(),
     )
     assert result.code == 200, result.result
