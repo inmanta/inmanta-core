@@ -87,7 +87,7 @@ class BaseDeployAction(BaseResourceAction):
         name = f"Deploy {self.resource_id} as part of {self.group_id} because {self.reason}"
         super().__init__(resource_id, name)
 
-    def cancel(self):
+    def cancel(self) -> None:
         LOGGER.info("Cancelled %s", self.name())
         super().cancel()
 
@@ -173,7 +173,7 @@ class RemoteResourceAction(BaseDeployAction):
         self,
         status: const.ResourceState,
     ) -> None:
-        await self._done()
+        self._done()
 
 
 @dataclasses.dataclass
@@ -360,7 +360,7 @@ class ResourceScheduler:
         self.logger.info("Running %s for reason: %s", gid, self.running.reason)
 
         # re-generate generation
-        generation = {}
+        generation: dict[ResourceIdStr, BaseDeployAction] = {}
         to_schedule = []
 
         for resource in resources:
@@ -443,11 +443,6 @@ class ResourceScheduler:
             # received CAD notification for which no resource are waiting, so return
             return
         await self.cad[resourceid].notify(state)
-
-    def dump(self) -> None:
-        print("Waiting:")
-        for r in self.generation.values():
-            print(r.long_string())
 
     def get_client(self) -> protocol.Client:
         return self.agent.get_client()
@@ -565,7 +560,7 @@ class AgentInstance:
 
         # Cancel the ongoing deployment if exists
         self._nq.cancel()
-        await self.work_queue_drainer.stop()
+        self.work_queue_drainer.stop()
 
         return 200, "paused"
 

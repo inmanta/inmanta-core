@@ -23,6 +23,9 @@ import graphlib
 import itertools
 import typing
 
+if typing.TYPE_CHECKING:
+    import _typeshed
+
 
 class BaseTask(abc.ABC):
     """
@@ -71,7 +74,7 @@ class BaseTask(abc.ABC):
         # todo: this doesn't notify waiters
         self.cancelled = True
 
-    def wait_for(self, other: "Task") -> None:
+    def wait_for(self, other: "BaseTask") -> None:
         """Declare we wait for some other task"""
         if other.done:
             # the other is done, nothing to do
@@ -81,7 +84,7 @@ class BaseTask(abc.ABC):
         self.requires.append(other)
         other.provides.append(self)
 
-    def _enqueue(self, into: "TaskQueue", entry: typing.Tuple[int, int, "Task"]) -> None:
+    def _enqueue(self, into: "TaskQueue", entry: typing.Tuple[int, int, "BaseTask"]) -> None:
         """Internal, bind to queue"""
         assert self._queue is None
         self._queue = into
@@ -90,9 +93,10 @@ class BaseTask(abc.ABC):
     def _runnable(self) -> None:
         """Internal, ready to move to run queue"""
         assert self._queue is not None, "Task is not bound to a queue"
+        assert self._entry is not None
         self._queue.run_queue.put_nowait(self._entry)
         # no longer needed, prevents memory leaks
-        self.requires = None
+        self.requires = []
 
     async def _run(self) -> None:
         """Internal, run the task, book keeping around run()"""
@@ -136,27 +140,32 @@ class Task(BaseTask):
     def name(self) -> str:
         return self._name
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._name
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self._name
 
 
-class PriorityQueue(asyncio.Queue):
+T = typing.TypeVar("T", bound="_typeshed.SupportsRichComparison")
+
+
+class PriorityQueue(asyncio.Queue[T]):
     """
     Completely sorted priority queue
 
     less efficient than heapq
     """
 
-    def _init(self, maxsize):
+    _queue: list[T]
+
+    def _init(self, maxsize: int) -> None:
         self._queue = []
 
-    def _put(self, item):
+    def _put(self, item: T) -> None:
         bisect.insort(self._queue, item)
 
-    def _get(self):
+    def _get(self) -> T:
         return self._queue.pop(0)
 
 
@@ -167,7 +176,7 @@ class TaskQueue:
         self.run_queue: asyncio.Queue[typing.Tuple[int, int, BaseTask]] = PriorityQueue()
         self.counter = itertools.count()  # unique sequence count, makes sort stable in the heap
 
-    def put(self, task: BaseTask):
+    def put(self, task: BaseTask) -> None:
         "Add a new task"
         count = next(self.counter)
         entry = (task.priority(), count, task)
@@ -210,32 +219,30 @@ class TaskRunner:
         self.queue = queue
         self.running = False
         self.should_run = True
-        self.finished: typing.Optional[typing.Awaitable] = None
+        self.finished: typing.Optional[asyncio.Task[None]] = None
 
-    def start(self):
+    def start(self) -> None:
         self.finished = asyncio.create_task(self.run())
 
     def stop(self) -> None:
         self.should_run = False
         self.queue.put(SentinelTask())
 
-    async def join(self):
+    async def join(self) -> None:
+        assert self.finished is not None
         await self.finished
 
-    async def run(self):
+    async def run(self) -> None:
         self.running = True
         while self.should_run:
             await self.queue.do_next()
         self.running = False
 
 
-T = typing.TypeVar("T", bound=BaseTask)
-
-
-class TaskGroup(typing.Generic[T]):
+class TaskGroup:
     """Utility for managing groups of tasks with the same priority"""
 
-    def __init__(self, tasks: list[T]):
+    def __init__(self, tasks: list[BaseTask]):
         self.tasks = tasks
 
     def finished(self) -> bool:
@@ -249,7 +256,7 @@ class TaskGroup(typing.Generic[T]):
         # pre order tasks to get a reasonably good order
         # purely esthetic
         task_set = set(self.tasks)
-        toposorter = graphlib.TopologicalSorter()
+        toposorter: graphlib.TopologicalSorter[BaseTask] = graphlib.TopologicalSorter()
         for task in self.tasks:
             toposorter.add(task, *(pre for pre in task.requires if pre in task_set))
         for task in toposorter.static_order():
