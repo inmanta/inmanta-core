@@ -1,4 +1,5 @@
 {
-    "component_requirements": {},
-    "system_requirements": {}
+  "python_package_constraints": {},
+  "system_requirements": {},
+  "module_compatibility_ranges": {}
 }
