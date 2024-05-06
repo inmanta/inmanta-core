@@ -4635,6 +4635,43 @@ class Resource(BaseDocument):
         return {ResourceIdStr(r["resource_id"]): ResourceState[r["status"]] for r in out}
 
     @classmethod
+    async def get_current_resource_state(
+        cls,
+        env: uuid.UUID,
+        model_version: int,
+        rid: ResourceIdStr,
+    ) -> Optional[ResourceState]:
+        query = f"""
+            SELECT (
+                SELECT max(c.version) AS version
+                FROM {ConfigurationModel.table_name()} c
+                WHERE c.environment=$1 AND c.released
+            ) AS latest_version,
+            (
+                SELECT r.status
+                FROM resource r
+                WHERE r.environment=$1 AND r.model=$2 AND r.resource_id=$3
+            ) AS status,
+            (
+                SELECT rps.last_non_deploying_status
+                FROM resource_persistent_state rps
+                WHERE rps.environment=$1 AND rps.resource_id=$3
+            ) AS last_non_deploying_status
+            """
+        results = await cls.select_query(query, [env, model_version, rid], no_obj=True)
+        if not results:
+            return None
+        assert len(results) == 1
+        if any(results[0][column_name] is None for column_name in ["status", "last_non_deploying_status"]):
+            return None
+        if results[0]["latest_version"] is None or results[0]["latest_version"] != model_version:
+            return const.ResourceState(results[0]["status"])
+        elif results[0]["status"] == "deploying":
+            return const.ResourceState("deploying")
+        else:
+            return const.ResourceState(results[0]["last_non_deploying_status"])
+
+    @classmethod
     async def set_deployed_multi(
         cls,
         environment: uuid.UUID,
