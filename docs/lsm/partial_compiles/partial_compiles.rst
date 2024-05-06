@@ -18,6 +18,7 @@ Implementation guidelines
 2. for every :ref:`Inter Service Relation<inter_service_relations>`
 
     1. indicate if this is the relation to the owner by setting :inmanta:attribute:`lsm::ServiceEntityBinding.relation_to_owner` and :inmanta:relation:`lsm::ServiceEntityBinding.owner`.
+3. to further improve performance, it is possible to batch partial compiles together by enabling :inmanta.environment-settings:setting:`enable_batched_partial_compiles`. We advice to only turn this on after the model has been tested sufficiently.
 
 
 Supported scenarios
