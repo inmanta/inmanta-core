@@ -43,12 +43,11 @@ async def test_process_manager(environment, pip_index, mpmanager_light: forking_
 
     # Prepare a source module and its hash
     code = """
-    def test():
-        return 10
-    res1 = TestResource(Id("aa::Aa", "agent1", "aa", "aa", 1))
-    res2 = TestResource(Id("aa::Aa", "agent1", "aa", "aa", 1))
-    import inmanta
-    inmanta.test_agent_code_loading = 5
+def test():
+    return 10
+
+import inmanta
+inmanta.test_agent_code_loading = 5
     """.encode()
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code)
@@ -147,7 +146,7 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements, sources=sources)
     env_bp_hash1 = blueprint1.to_env_blueprint().blueprint_hash()
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         # First execution: create an executor and verify its creation
         executor_manager = mp_manager_factory(None)
         venv_manager = executor_manager.environment_manager
@@ -170,7 +169,7 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
         assert len(executor_manager2.executor_map) == 1
         assert len(venv_manager2._environment_map) == 1
 
-        log_contains(caplog, "inmanta.agent.executor", logging.INFO, f"Found existing virtual environment at {env_dir}")
+        log_contains(caplog, "inmanta.agent.executor", logging.DEBUG, f"Found existing venv for content {str(blueprint1)}")
 
 
 async def test_blueprint_hash_consistency(tmpdir):
@@ -282,8 +281,8 @@ async def test_executor_creation_and_reuse(pip_index, mpmanager_light) -> None:
 
     # Prepare a source module and its hash
     code = """
-    def test():
-        return 10
+def test():
+    return 10
     """.encode()
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code)

@@ -42,7 +42,6 @@ from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_ORCHESTRATION,
-    SLICE_RESOURCE,
     SLICE_SERVER,
     SLICE_SESSION_MANAGER,
 )
@@ -852,7 +851,7 @@ async def test_resource_action_log(server, client, environment):
     )
     assert res.code == 200
 
-    resource_action_log = server.get_slice(SLICE_RESOURCE).get_resource_action_log_file(environment)
+    resource_action_log = os.path.join(config.log_dir.get(), f"{opt.server_resource_action_log_prefix.get()}{environment}.log")
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
     with open(resource_action_log) as f:
@@ -915,7 +914,7 @@ async def test_get_param(server, client, environment, tz_aware_timestamp: bool):
 
 async def test_server_logs_address(server_config, caplog, async_finalizer):
     with caplog.at_level(logging.INFO):
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
         async_finalizer.add(partial(ibl.stop, timeout=15))
         await ibl.start()
 
@@ -968,7 +967,7 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
     monkeypatch.setattr("asyncpg.connect", mock_asyncpg_connect)
     caplog.set_level(logging.INFO)
     caplog.clear()
-    ibl: InmantaBootloader = InmantaBootloader()
+    ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
     start_task: asyncio.Task = asyncio.create_task(ibl.start())
     await start_task
 
@@ -993,7 +992,7 @@ async def test_bootlader_connect_running_db(server_config, postgres_db, caplog, 
     config.Config.set("database", "wait_time", db_wait_time)
     caplog.set_level(logging.INFO)
     caplog.clear()
-    ibl: InmantaBootloader = InmantaBootloader()
+    ibl: InmantaBootloader = InmantaBootloader(configure_logging=True)
     await ibl.start()
     await ibl.stop(timeout=15)
 

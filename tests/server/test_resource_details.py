@@ -56,7 +56,7 @@ async def env_with_resources(server, client):
         )
 
     # nr 0 is not used
-    is_version_released = [None, False, True, True, True, False]
+    is_version_released = [None, False, True, True, True, False, True]
 
     # Add multiple versions of model, with 2 of them not released
     for i in range(1, 6):
@@ -130,6 +130,8 @@ async def env_with_resources(server, client):
         deploy_times[environment][key].append(last_deploy)
         if update_last_deployed:
             await res.update_persistent_state(last_deploy=last_deploy)
+        if is_version_released[version] and status != ResourceState.deploying:
+            await res.update_persistent_state(last_non_deploying_status=status)
 
         return res
 
