@@ -114,7 +114,7 @@ class BaseTask(abc.ABC):
         for awaited in self.provides:
             awaited.waitcount -= 1
             assert not awaited.waitcount < 0
-            if awaited.waitcount == 0:
+            if awaited.waitcount == 0 and awaited._queue is not None:
                 awaited._runnable()
 
 
