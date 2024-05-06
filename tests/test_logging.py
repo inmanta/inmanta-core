@@ -28,6 +28,7 @@ import yaml
 import inmanta
 from inmanta import config
 from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter, Options
+from test_app_cli import app
 
 
 @pytest.fixture(autouse=True)
@@ -326,3 +327,33 @@ def test_handling_logging_config_option(tmpdir, monkeypatch) -> None:
         )
         logger.info("test")
         assert "HHH test" in stream.getvalue()
+
+
+def test_output_default_logger_config(capsys) -> None:
+    app(["show-default-logger-config"])
+
+    captured = capsys.readouterr()
+
+    expected_config = """
+version: 1
+formatters:
+  console_formatter:
+    (): inmanta.logging.MultiLineFormatter
+    fmt: "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
+    log_colors: {"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"}
+    reset: True
+    no_color: False
+    keep_logger_names: False
+handlers:
+  console_handler:
+    class: logging.StreamHandler
+    formatter: console_formatter
+    level: INFO
+    stream: ext://sys.stdout
+root:
+  handlers: ["console_handler"]
+  level: "INFO"
+disable_existing_loggers: False
+"""
+
+    assert expected_config in captured.out

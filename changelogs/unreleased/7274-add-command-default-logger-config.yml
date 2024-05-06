@@ -1,0 +1,8 @@
+---
+description: Add a command "show-default-logger-config" that outputs the default logger config
+issue-nr: 7274
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  feature: "{{description}}"

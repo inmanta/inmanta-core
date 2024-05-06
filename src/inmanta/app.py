@@ -324,6 +324,32 @@ def help_command(options: argparse.Namespace) -> None:
     sys.exit(0)
 
 
+@command("show-default-logger-config", help_msg="Display the default logger configuration")
+def show_default_logger_config(options: argparse.Namespace) -> None:
+    default_config = """
+version: 1
+formatters:
+  console_formatter:
+    (): inmanta.logging.MultiLineFormatter
+    fmt: "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
+    log_colors: {"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"}
+    reset: True
+    no_color: False
+    keep_logger_names: False
+handlers:
+  console_handler:
+    class: logging.StreamHandler
+    formatter: console_formatter
+    level: INFO
+    stream: ext://sys.stdout
+root:
+  handlers: ["console_handler"]
+  level: "INFO"
+disable_existing_loggers: False
+"""
+    print(default_config)
+
+
 @command(
     "modules",
     help_msg="Subcommand to manage modules",
