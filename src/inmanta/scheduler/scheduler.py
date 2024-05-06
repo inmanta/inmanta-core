@@ -229,8 +229,9 @@ class TaskRunner:
         self.queue.put(SentinelTask())
 
     async def join(self) -> None:
-        assert self.finished is not None
-        await self.finished
+        assert not self.should_run
+        if self.finished:
+            await self.finished
 
     async def run(self) -> None:
         self.running = True

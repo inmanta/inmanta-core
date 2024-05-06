@@ -950,6 +950,7 @@ class Agent(SessionEndpoint):
         self.thread_pool.shutdown(wait=False)
         for instance in self._instances.values():
             await instance.stop()
+        for instance in self._instances.values():
             await instance.join(threadpools_to_join)
 
         await join_threadpools(threadpools_to_join)
