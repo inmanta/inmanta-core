@@ -1,8 +1,24 @@
-import logging
+"""
+    Copyright 2024 Inmanta
 
-from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent, wait_for_n_deployed_resources
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
+
+from agent_server.conftest import _deploy_resources, wait_for_n_deployed_resources
 from inmanta import config
-from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deploy_response_matrix
+from inmanta.agent.agent import DeployRequest
 
 
 async def test_basic_deploy(resource_container, agent, client, clienthelper, environment, no_agent_backoff):

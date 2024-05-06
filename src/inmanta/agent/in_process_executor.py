@@ -286,7 +286,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         resource: ResourceDetails,
         dry_run_id: uuid.UUID,
     ) -> None:
-        model_version: int = resource.model_version
         env_id: uuid.UUID = resource.env_id
         try:
             resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)

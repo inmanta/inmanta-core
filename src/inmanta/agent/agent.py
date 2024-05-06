@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import abc
 import asyncio
 import dataclasses
 import datetime
@@ -28,10 +27,10 @@ import time
 import uuid
 from asyncio import Lock
 from collections import defaultdict
-from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
+from collections.abc import Callable, Coroutine, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import Any, Collection, Dict, Optional, Union, cast
+from typing import Any, Collection, Optional, Union
 
 import pkg_resources
 
@@ -49,16 +48,7 @@ from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id
 from inmanta.scheduler import scheduler
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import (
-    CronSchedule,
-    IntervalSchedule,
-    NamedLock,
-    ScheduledTask,
-    TaskMethod,
-    TaskSchedule,
-    add_future,
-    join_threadpools,
-)
+from inmanta.util import CronSchedule, IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, TaskSchedule, join_threadpools
 
 LOGGER = logging.getLogger(__name__)
 
@@ -173,7 +163,7 @@ class RemoteResourceAction(BaseDeployAction):
     def __init__(self, resource_id: Id, gid: uuid.UUID, reason: str) -> None:
         super().__init__(resource_id, gid, reason)
 
-    async def run(self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]") -> None:
+    async def run(self) -> None:
         raise Exception("This task should never be scheduler")
 
     def priority(self) -> int:
@@ -383,7 +373,7 @@ class ResourceScheduler:
         cross_agent_dependencies: set[Id] = {q for r in resources for q in r.requires if q.get_agent_name() != self.name}
         cads_by_rid: dict[ResourceIdStr, RemoteResourceAction] = {}
         for cad in cross_agent_dependencies:
-            ra = RemoteResourceAction(self, cad, gid, self.running.reason)
+            ra = RemoteResourceAction(cad, gid, self.running.reason)
             self.cad[str(cad)] = ra
             rid = cad.resource_str()
             cads_by_rid[rid] = ra

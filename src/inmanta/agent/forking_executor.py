@@ -43,7 +43,6 @@ import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
 from inmanta.agent import executor
-from inmanta.agent.executor import ResourceDetails
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
 
 LOGGER = logging.getLogger(__name__)
