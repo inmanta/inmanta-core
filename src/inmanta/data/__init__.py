@@ -4635,12 +4635,18 @@ class Resource(BaseDocument):
         return {ResourceIdStr(r["resource_id"]): ResourceState[r["status"]] for r in out}
 
     @classmethod
-    async def get_current_resource_state(
+    async def get_status_for_v2(
         cls,
         env: uuid.UUID,
         model_version: int,
         rid: ResourceIdStr,
     ) -> Optional[ResourceState]:
+        """
+        Retrieve the ResourceState for the given resource. The difference between
+        this method and the get_status_for() method is that this method relies on the
+        resource_persistent_state table if the state is requested for a resource
+        in the latest released version of the configurationmodel.
+        """
         query = f"""
             SELECT (
                 SELECT max(c.version) AS version
