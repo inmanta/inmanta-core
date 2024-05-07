@@ -495,7 +495,7 @@ class ShortIndexLookup(IndexLookup):
     host = ExtendedHost(...)
     resource = std::testing::NullResource(name='test', host=host, ...)
 
-    index std::testing::NullResource(name='test', host=host)
+    index std::testing::NullResource(host, name)
 
     host.resources[name="test"]
     """
