@@ -18,6 +18,7 @@
 
 import asyncio
 
+import utils
 from inmanta.scheduler import scheduler
 
 
@@ -66,3 +67,55 @@ async def test_very_basics():
     queue.put(t6)
     assert t6 == await when_done
     assert t7 == await queue.do_next()
+
+
+class HangTask(scheduler.Task):
+
+    def __init__(self, name: str, prio: int) -> None:
+        super().__init__(name, prio)
+        self.event = asyncio.Event()
+        self.event.clear()
+
+    def go(self) -> None:
+        self.event.set()
+
+    async def run(self) -> None:
+        await self.event.wait()
+
+
+class FailTask(scheduler.Task):
+
+    async def run(self) -> None:
+        raise Exception("BAD!")
+
+
+async def test_task_runner():
+    queue = scheduler.TaskQueue()
+    t1 = scheduler.Task("t1", 1)
+    t2 = scheduler.Task("t2", 2)
+    t3 = FailTask("t2", 2)
+    # t6 makes it hang
+    t6 = HangTask("t6", 50)
+    t7 = scheduler.Task("t7", 50)
+    t7.wait_for(t6)
+
+    queue.put(t1)
+    queue.put(t2)
+    queue.put(t3)
+    queue.put(t6)
+    queue.put(t7)
+
+    runner = scheduler.TaskRunner(queue)
+    runner.start()
+    await asyncio.sleep(0)
+
+    await utils.retry_limited(lambda: t1.done, 1, 0.01)
+    await utils.retry_limited(lambda: t2.done, 1, 0.01)
+    await utils.retry_limited(lambda: t3.done, 1, 0.01)
+    runner.stop()
+    done = asyncio.ensure_future(runner.join())
+    assert not done.done()
+    t6.go()
+    await done
+    assert t6.done
+    assert not t7.done

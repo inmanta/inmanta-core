@@ -21,10 +21,13 @@ import asyncio
 import bisect
 import graphlib
 import itertools
+import logging
 import typing
 
 if typing.TYPE_CHECKING:
     import _typeshed
+
+LOGGER = logging.getLogger(__name__)
 
 
 class BaseTask(abc.ABC):
@@ -195,7 +198,6 @@ class TaskQueue:
     async def do_next(self) -> BaseTask:
         """run the next task"""
         task = await self.get()
-        # TODO: handle exceptions to prevent breaking the loop
         await task._run()
         return task
 
@@ -236,7 +238,11 @@ class TaskRunner:
     async def run(self) -> None:
         self.running = True
         while self.should_run:
-            await self.queue.do_next()
+            task = await self.queue.get()
+            try:
+                await task._run()
+            except Exception:
+                LOGGER.exception(f"Unexpected exception while executing task {task.name()}")
         self.running = False
 
 
