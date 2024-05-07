@@ -171,7 +171,6 @@ class SessionEndpoint(Endpoint, CallTarget):
     _heartbeat_client: "SessionClient"
 
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
-        # TODO: docstring session_id
         super().__init__(name)
         self._transport = client.RESTClient
         self._sched = util.Scheduler("session endpoint")

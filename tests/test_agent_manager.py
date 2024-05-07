@@ -1207,6 +1207,7 @@ async def test_error_handling_agent_fork(server, environment, monkeypatch):
     assert exception_message in str(excinfo.value)
 
 
+# TODO: rework test + drop are_agents_active method
 async def test_are_agents_active(server, client, environment, agent_factory) -> None:
     """
     Ensure that the `AgentManager.are_agents_active()` method returns True when an agent

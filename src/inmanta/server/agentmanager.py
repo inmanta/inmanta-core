@@ -17,7 +17,6 @@
 """
 
 import asyncio
-import contextlib
 import logging
 import os
 import shutil
@@ -653,6 +652,18 @@ class AgentManager(ServerSlice, SessionListener):
         all_active_endpoints_for_env = {ep for sid in all_sids_for_env for ep in self.endpoints_for_sid[sid]}
         return [(ep, ep in all_active_endpoints_for_env) for ep in endpoints]
 
+    async def expire_sessions_for_agents(self, env_id: uuid.UUID, endpoints: Set[str]) -> None:
+        """
+        Expire all sessions for any of the requested agent endpoints.
+        """
+        async with self.session_lock:
+            sessions_to_expire: Iterator[UUID] = (
+                session
+                for session in self.sessions.values()
+                if endpoints & session.endpoint_names and session.tid == env_id
+            )
+            await asyncio.gather(*(s.expire_and_abort(timeout=0) for s in sessions_to_expire))
+
     async def expire_all_sessions_for_environment(self, env_id: uuid.UUID) -> None:
         async with self.session_lock:
             await asyncio.gather(*[s.expire_and_abort(timeout=0) for s in self.sessions.values() if s.tid == env_id])
@@ -982,14 +993,11 @@ class AutostartedAgentManager(ServerSlice):
         env: data.Environment,
         *,
         delete_venv: bool = False,
-        agent_lock: bool = True,
     ) -> None:
         """
         Stop all agents for this environment and close sessions
-
-        :param agent_lock: Whether to acquire the agent lock. If false, caller must acquire it.
         """
-        async with (self.agent_lock if agent_lock else contextlib.nullcontext()):
+        async with self.agent_lock:
             LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
             if env.id in self._agent_procs:
                 subproc = self._agent_procs[env.id]
@@ -1001,6 +1009,31 @@ class AutostartedAgentManager(ServerSlice):
 
             LOGGER.debug("Expiring all sessions for %s", env.id)
             await self._agent_manager.expire_all_sessions_for_environment(env.id)
+
+    async def _stop_autostarted_agents(
+        self,
+        env: data.Environment,
+    ) -> None:
+        """
+        Stop the autostarted agent process for this environment and expire all its sessions.
+        Does not expire non-autostarted agents' sessions.
+
+        Must be called under the agent lock
+        """
+        LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
+        if env.id in self._agent_procs:
+            subproc = self._agent_procs[env.id]
+            self._stop_process(subproc)
+            await self._wait_for_proc_bounded([subproc])
+            del self._agent_procs[env.id]
+
+        # fetch the agent map after stopping the process to prevent races with agent map update notifying the process
+        agent_map: Mapping[str, str] = cast(
+            Mapping[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
+        )  # we know the type of this map
+
+        LOGGER.debug("Expiring sessions for autostarted agents %s", sorted(agent_map.keys()))
+        await self._agent_manager.expire_sessions_for_agents(env.id, agent_map.keys())
 
     def _get_state_dir_for_agent_in_env(self, env_id: uuid.UUID) -> str:
         """
@@ -1049,7 +1082,8 @@ class AutostartedAgentManager(ServerSlice):
         Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
 
         :param env: The environment to start the agents for
-        :param agents: A list of agent names that possibly should be started in this environment.
+        :param agents: A list of agent names that should be running in this environment. Waits for the agents that are both in
+            this list and in the agent map to be active before returning.
         :param restart: Restart all agents even if the list of agents is up to date.
         """
         if self._stopping:
@@ -1059,7 +1093,6 @@ class AutostartedAgentManager(ServerSlice):
             Mapping[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
         )  # we know the type of this map
 
-        # TODO: update agents parameter description: these are the agent instances that must be waited for
         agents: Set[str] = set(agents) & agent_map.keys()
         if len(agents) == 0:
             return False
@@ -1111,7 +1144,11 @@ class AutostartedAgentManager(ServerSlice):
                 new_actual_agents_in_up_state = {
                     agent_name
                     for agent_name in expected_agents_in_up_state
-                    if (env.id, agent_name) in self._agent_manager.tid_endpoint_to_session
+                    if (
+                        (session := self._agent_manager.tid_endpoint_to_session.get((env.id, agent_name), None)) is not None
+                        # make sure to check for expiry because sessions are unregistered from the agent manager asyncronously
+                        and not session.expired
+                    )
                 }
                 if len(new_actual_agents_in_up_state) > len(actual_agents_in_up_state):
                     # Reset timeout timer because a new instance became active
@@ -1144,9 +1181,8 @@ class AutostartedAgentManager(ServerSlice):
                     agents,
                     self._agent_procs[env.id],
                 )
-                # TODO: this is by far the simplest solution, but does it suffice? What if a non-autostarted agent is running as well?
-                #       Or what if new process fails?
-                await self.stop_agents(env, agent_lock=False)
+                if self._agent_manager
+                await self._stop_autostarted_agents(env)
                 self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
 
             # Wait for all agents to start
@@ -1161,12 +1197,8 @@ class AutostartedAgentManager(ServerSlice):
     async def __do_start_agent(
         self, env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> subprocess.Process:
-        # TODO: docstring
-        # TODO: docstring: agent lock no longer strictly required
         """
-        Start an agent process for the given agents in the given environment
-
-        Note: Always call under agent_lock
+        Start an autostarted agent process for the given environment. Should only be called if none is running yet.
         """
         config: str = await self._make_agent_config(env, connection=connection)
 
