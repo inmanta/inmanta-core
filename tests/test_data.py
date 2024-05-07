@@ -33,7 +33,7 @@ from asyncpg import Connection, ForeignKeyViolationError
 from asyncpg.pool import Pool
 
 import utils
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
 from inmanta.data import ArgumentCollector, QueryType
 from inmanta.resources import Id, ResourceVersionIdStr
@@ -3165,3 +3165,74 @@ async def test_retrieve_optional_field_no_default(init_dataclasses_and_load_sche
 
     report = await data.Report.get_by_id(report.id)
     assert report.returncode is None
+
+
+async def test_get_current_resource_state(server, environment, client, clienthelper, agent):
+    """
+    Verify the behavior of the Resource.get_current_resource_state() method.
+    """
+    # Create version 1 with available resource. Don't release the version yet
+    version1 = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version1,
+        resources=[
+            {
+                "id": f"std::testing::NullResource[agent1,name=test1],v={version1}",
+                "val": "val",
+                "requires": [],
+            },
+        ],
+        resource_state={},
+        compiler_version=util.get_compiler_version(),
+    )
+    assert result.code == 200, result.result
+
+    state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
+        env=environment,
+        rid="std::testing::NullResource[agent1,name=test1]",
+    )
+    assert state is None
+
+    # Release version
+    result = await client.release_version(tid=environment, id=version1)
+    assert result.code == 200
+
+    state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
+        env=environment,
+        rid="std::testing::NullResource[agent1,name=test1]",
+    )
+    assert state is const.ResourceState.available
+
+    # Create version 2 with undefined resource. Don't release the version yet.
+    version2 = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version2,
+        resources=[
+            {
+                "id": f"std::testing::NullResource[agent1,name=test1],v={version2}",
+                "val": "val",
+                "requires": [],
+            },
+        ],
+        resource_state={"std::testing::NullResource[agent1,name=test1]": const.ResourceState.undefined},
+        compiler_version=util.get_compiler_version(),
+    )
+    assert result.code == 200, result.result
+
+    # Assert we see the state of the released version
+    state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
+        env=environment,
+        rid="std::testing::NullResource[agent1,name=test1]",
+    )
+    assert state is const.ResourceState.available
+
+    result = await client.release_version(tid=environment, id=version2)
+    assert result.code == 200
+
+    state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
+        env=environment,
+        rid="std::testing::NullResource[agent1,name=test1]",
+    )
+    assert state is const.ResourceState.undefined
