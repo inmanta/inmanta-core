@@ -3168,6 +3168,9 @@ async def test_retrieve_optional_field_no_default(init_dataclasses_and_load_sche
 
 
 async def test_get_status_for_v2(server, environment, client, clienthelper, agent):
+    """
+    Verify the behavior of the Resource.get_status_for_v2() method.
+    """
     # Create version 1 with undefined resource and release the version.
     version1 = await clienthelper.get_version()
     result = await client.put_version(
