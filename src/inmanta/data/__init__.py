@@ -4635,44 +4635,36 @@ class Resource(BaseDocument):
         return {ResourceIdStr(r["resource_id"]): ResourceState[r["status"]] for r in out}
 
     @classmethod
-    async def get_status_for_v2(
-        cls,
-        env: uuid.UUID,
-        model_version: int,
-        rid: ResourceIdStr,
-    ) -> Optional[ResourceState]:
+    async def get_current_resource_state(cls, env: uuid.UUID, rid: ResourceIdStr) -> Optional[ResourceState]:
         """
-        Retrieve the ResourceState for the given resource. The difference between
-        this method and the get_status_for() method is that this method relies on the
-        resource_persistent_state table if the state is requested for a resource
-        in the latest released version of the configurationmodel.
+        Return the state of the given resource in the latest version of the configuration model
+        or None if the resource is not present in the latest version.
         """
         query = f"""
             SELECT (
-                SELECT max(c.version) AS version
-                FROM {ConfigurationModel.table_name()} c
-                WHERE c.environment=$1 AND c.released
-            ) AS latest_version,
-            (
                 SELECT r.status
                 FROM resource r
-                WHERE r.environment=$1 AND r.model=$2 AND r.resource_id=$3
+                WHERE r.environment=$1
+                    AND r.model=(
+                        SELECT max(c.version) AS version
+                        FROM {ConfigurationModel.table_name()} c
+                        WHERE c.environment=$1 AND c.released
+                    )
+                    AND r.resource_id=$2
             ) AS status,
             (
                 SELECT rps.last_non_deploying_status
                 FROM resource_persistent_state rps
-                WHERE rps.environment=$1 AND rps.resource_id=$3
+                WHERE rps.environment=$1 AND rps.resource_id=$2
             ) AS last_non_deploying_status
             """
-        results = await cls.select_query(query, [env, model_version, rid], no_obj=True)
+        results = await cls.select_query(query, [env, rid], no_obj=True)
         if not results:
             return None
         assert len(results) == 1
         if any(results[0][column_name] is None for column_name in ["status", "last_non_deploying_status"]):
             return None
-        if results[0]["latest_version"] is None or results[0]["latest_version"] != model_version:
-            return const.ResourceState(results[0]["status"])
-        elif results[0]["status"] == "deploying":
+        if results[0]["status"] == "deploying":
             return const.ResourceState("deploying")
         else:
             return const.ResourceState(results[0]["last_non_deploying_status"])

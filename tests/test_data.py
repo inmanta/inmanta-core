@@ -3167,11 +3167,11 @@ async def test_retrieve_optional_field_no_default(init_dataclasses_and_load_sche
     assert report.returncode is None
 
 
-async def test_get_status_for_v2(server, environment, client, clienthelper, agent):
+async def test_get_current_resource_state(server, environment, client, clienthelper, agent):
     """
-    Verify the behavior of the Resource.get_status_for_v2() method.
+    Verify the behavior of the Resource.get_current_resource_state() method.
     """
-    # Create version 1 with undefined resource and release the version.
+    # Create version 1 with available resource. Don't release the version yet
     version1 = await clienthelper.get_version()
     result = await client.put_version(
         tid=environment,
@@ -3183,14 +3183,28 @@ async def test_get_status_for_v2(server, environment, client, clienthelper, agen
                 "requires": [],
             },
         ],
-        resource_state={"std::testing::NullResource[agent1,name=test1]": const.ResourceState.undefined},
+        resource_state={},
         compiler_version=util.get_compiler_version(),
     )
     assert result.code == 200, result.result
+
+    state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
+        env=environment,
+        rid="std::testing::NullResource[agent1,name=test1]",
+    )
+    assert state is None
+
+    # Release version
     result = await client.release_version(tid=environment, id=version1)
     assert result.code == 200
 
-    # Create version 2 with available resource and release the version.
+    state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
+        env=environment,
+        rid="std::testing::NullResource[agent1,name=test1]",
+    )
+    assert state is const.ResourceState.available
+
+    # Create version 2 with undefined resource. Don't release the version yet.
     version2 = await clienthelper.get_version()
     result = await client.put_version(
         tid=environment,
@@ -3202,67 +3216,23 @@ async def test_get_status_for_v2(server, environment, client, clienthelper, agen
                 "requires": [],
             },
         ],
-        resource_state={},
-        compiler_version=util.get_compiler_version(),
-    )
-    assert result.code == 200, result.result
-    result = await client.release_version(tid=environment, id=version2)
-    assert result.code == 200
-
-    # Make sure resource from version 2 is in the deployed state
-    aclient = agent._client
-    action_id = uuid.uuid4()
-    result = await aclient.resource_deploy_start(
-        tid=environment,
-        rvid=f"std::testing::NullResource[agent1,name=test1],v={version2}",
-        action_id=action_id,
-    )
-    assert result.code == 200
-    result = await aclient.resource_deploy_done(
-        tid=environment,
-        rvid=f"std::testing::NullResource[agent1,name=test1],v={version2}",
-        action_id=action_id,
-        status=const.ResourceState.deployed,
-    )
-    assert result.code == 200, result.result
-
-    # Create version 3 with undefined resource, but don't release the version.
-    version3 = await clienthelper.get_version()
-    result = await client.put_version(
-        tid=environment,
-        version=version3,
-        resources=[
-            {
-                "id": f"std::testing::NullResource[agent1,name=test1],v={version3}",
-                "val": "val",
-                "requires": [],
-            },
-        ],
         resource_state={"std::testing::NullResource[agent1,name=test1]": const.ResourceState.undefined},
         compiler_version=util.get_compiler_version(),
     )
     assert result.code == 200, result.result
 
-    # Assert get_status_for_v2() for version 1
-    state: Optional[const.ResourceState] = await data.Resource.get_status_for_v2(
+    # Assert we see the state of the released version
+    state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
         env=environment,
-        model_version=version1,
         rid="std::testing::NullResource[agent1,name=test1]",
     )
-    assert state is const.ResourceState.undefined
+    assert state is const.ResourceState.available
 
-    # Assert get_status_for_v2() for version 2
-    state: Optional[const.ResourceState] = await data.Resource.get_status_for_v2(
-        env=environment,
-        model_version=version2,
-        rid="std::testing::NullResource[agent1,name=test1]",
-    )
-    assert state is const.ResourceState.deployed
+    result = await client.release_version(tid=environment, id=version2)
+    assert result.code == 200
 
-    # Assert get_status_for_v2() for version 3
-    state: Optional[const.ResourceState] = await data.Resource.get_status_for_v2(
+    state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
         env=environment,
-        model_version=version3,
         rid="std::testing::NullResource[agent1,name=test1]",
     )
     assert state is const.ResourceState.undefined
