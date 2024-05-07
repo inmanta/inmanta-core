@@ -1,4 +1,4 @@
 ---
-description: Add the get_status_for_v2() method to the database layer.
+description: Add the Resource.get_current_resource_state() method to the database layer.
 change-type: minor
 destination-branches: [master, iso7]
