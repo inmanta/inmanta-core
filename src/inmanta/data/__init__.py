@@ -4996,10 +4996,21 @@ class Resource(BaseDocument):
                        FROM configurationmodel
                        WHERE configurationmodel.released=TRUE
                        AND environment = $1)
+                 -- Resource is no longer present in latest released configurationmodel
                  THEN 'orphaned'
-               WHEN {resource_table_name}.status::text = 'deploying'
-                 then 'deploying'
-               ELSE ps.last_non_deploying_status::text
+               WHEN {resource_table_name}.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
+                 -- The deploying, undefined and skipped_for_undefined states can be tracked accurately
+                 -- via the resource table.
+                 THEN {resource_table_name}.status::text
+               WHEN {resource_table_name}.status NOT IN('undefined', 'skipped_for_undefined')
+                    AND ps.last_non_deploying_status IN('undefined', 'skipped_for_undefined')
+                 -- The resource moved from undefined or skipped_for_undefined to available
+                 THEN 'available'
+               WHEN ps.last_deployed_attribute_hash != {resource_table_name}.attribute_hash
+                 -- The hash changed since the last deploy -> new desired state
+                 THEN 'available'
+                 -- No override required, use last known state from actual deployment
+                 ELSE ps.last_non_deploying_status::text
              END
             ) as status
             """

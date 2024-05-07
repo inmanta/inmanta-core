@@ -15,17 +15,18 @@
 
     Contact: code@inmanta.com
 """
-
+import asyncio
 import datetime
 import itertools
 from collections import defaultdict
 from typing import Any
 from uuid import UUID
+import uuid
 
 import pytest
 from dateutil.tz import UTC
 
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.util import parse_timestamp
@@ -512,3 +513,154 @@ async def test_resource_details(server, client, env_with_resources):
     assert result.result["data"]["requires_status"] == {
         "std::testing::NullResource[internal,name=/tmp/orphaned_req]": "orphaned"
     }
+
+
+async def test_move_to_available_state(server, environment, client, clienthelper, agent):
+    """
+    Verify that the state of a resource is correctly indicated as available when
+    a new version of the configurationmodel is released that:
+
+    * Contains a resource for which the attribute hash is updated (new desired state).
+    * Contains a resource that went from undefined/skipped-for-undefined to the available state.
+    """
+    # Create model version1
+    version1 = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version1,
+        resources=[
+            {
+                "id": f"std::testing::NullResource[agent1,name=test1],v={version1}",
+                "val": f"val1",
+                "requires": [],
+            },
+            {
+                "id": f"std::testing::NullResource[agent1,name=test2],v={version1}",
+                "val": f"val2",
+                "requires": [],
+            },
+            {
+                "id": f"std::testing::NullResource[agent1,name=test3],v={version1}",
+                "val": f"val3",
+                "requires": [],
+            },
+            {
+                "id": f"std::testing::NullResource[agent1,name=test4],v={version1}",
+                "val": f"val4",
+                "requires": [],
+            },
+            {
+                "id": f"std::testing::NullResource[agent1,name=test5],v={version1}",
+                "val": f"val5",
+                "requires": [f"std::testing::NullResource[agent1,name=test4],v={version1}"],
+            },
+        ],
+        resource_state={
+            "std::testing::NullResource[agent1,name=test4]": const.ResourceState.undefined
+        },
+        compiler_version=util.get_compiler_version(),
+    )
+    assert result.code == 200, result.result
+
+    # Release version
+    result = await client.release_version(tid=environment, id=version1)
+    assert result.code == 200
+
+    # Move resources
+    #    * std::testing::NullResource[agent1,name=test1]
+    #    * std::testing::NullResource[agent1,name=test2]
+    # to deployed state
+    aclient = agent._client
+    for i in range(1, 3):
+        action_id = uuid.uuid4()
+        result = await aclient.resource_deploy_start(
+            tid=environment,
+            rvid=f"std::testing::NullResource[agent1,name=test{i}],v={version1}",
+            action_id=action_id,
+        )
+        assert result.code == 200
+        result = await aclient.resource_deploy_done(
+            tid=environment,
+            rvid=f"std::testing::NullResource[agent1,name=test{i}],v={version1}",
+            action_id=action_id,
+            status=const.ResourceState.deployed,
+        )
+        assert result.code == 200, result.result
+
+    # Create a new version containing:
+    #    * an updated desired state for resource std::testing::NullResource[agent1,name=test1]
+    #    * A version of the std::testing::NullResource[agent1,name=test4] that is no longer undefined but available.
+    version2 = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version2,
+        resources=[
+            {
+                "id": f"std::testing::NullResource[agent1,name=test1],v={version2}",
+                "val": f"val1_updated",
+                "requires": [],
+            },
+            {
+                "id": f"std::testing::NullResource[agent1,name=test2],v={version2}",
+                "val": f"val2",
+                "requires": [],
+            },
+            {
+                "id": f"std::testing::NullResource[agent1,name=test3],v={version2}",
+                "val": f"val3",
+                "requires": [],
+            },
+            {
+                "id": f"std::testing::NullResource[agent1,name=test4],v={version2}",
+                "val": f"val4",
+                "requires": [],
+            },
+            {
+                "id": f"std::testing::NullResource[agent1,name=test5],v={version2}",
+                "val": f"val5",
+                "requires": [f"std::testing::NullResource[agent1,name=test4],v={version2}"],
+            },
+        ],
+        resource_state={},
+        compiler_version=util.get_compiler_version(),
+    )
+    assert result.code == 200, result.result
+
+    # Verify resource state.
+    for rid, status in [
+        ("std::testing::NullResource[agent1,name=test1]", const.ResourceState.deployed),
+        ("std::testing::NullResource[agent1,name=test2]", const.ResourceState.deployed),
+        ("std::testing::NullResource[agent1,name=test3]", const.ResourceState.available),
+        ("std::testing::NullResource[agent1,name=test4]", const.ResourceState.undefined),
+        ("std::testing::NullResource[agent1,name=test5]", const.ResourceState.skipped_for_undefined),
+    ]:
+        result = await client.resource_details(tid=environment, rid=rid)
+        assert result.code == 200
+        assert result.result["data"]["status"] == status.value, (
+            f"Resource {rid} for status {result.result['data']['status']}, expected {status.value}"
+        )
+
+    # Release version
+    result = await client.release_version(tid=environment, id=version2)
+    assert result.code == 200
+
+    expected_statuses = {
+        "std::testing::NullResource[agent1,name=test1]": const.ResourceState.available,
+        "std::testing::NullResource[agent1,name=test2]": const.ResourceState.deployed,
+        "std::testing::NullResource[agent1,name=test3]": const.ResourceState.available,
+        "std::testing::NullResource[agent1,name=test4]": const.ResourceState.available,
+        "std::testing::NullResource[agent1,name=test5]": const.ResourceState.available,
+    }
+
+    # Verify resource state.
+    for rid, status in expected_statuses.items():
+        result = await client.resource_details(tid=environment, rid=rid)
+        assert result.code == 200
+        assert result.result["data"]["status"] == status.value, (
+            f"Resource {rid} for status {result.result['data']['status']}, expected {status.value}"
+        )
+
+    result = await client.resource_list(tid=environment)
+    assert result.code == 200
+    actual_statuses = {r["resource_id"]: const.ResourceState(r["status"]) for r in result.result["data"]}
+    assert expected_statuses == actual_statuses

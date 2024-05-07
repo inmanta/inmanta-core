@@ -564,10 +564,19 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                             CASE
                                 WHEN r.model < (SELECT version FROM latest_version)
                                     THEN 'orphaned'
-                                WHEN (r.status = 'deploying')
+                                WHEN r.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
+                                    -- The deploying, undefined and skipped_for_undefined states can be tracked accurately
+                                    -- via the resource table.
                                     THEN r.status::text
-                                ELSE
-                                    rps.last_non_deploying_status::text
+                                WHEN r.status NOT IN('undefined', 'skipped_for_undefined')
+                                    AND rps.last_non_deploying_status IN('undefined', 'skipped_for_undefined')
+                                    -- The resource moved from undefined or skipped_for_undefined to available
+                                    THEN 'available'
+                               WHEN rps.last_deployed_attribute_hash != r.attribute_hash
+                                   -- The hash changed since the last deploy -> new desired state
+                                   THEN 'available'
+                                   -- No override required, use last known state from actual deployment
+                                   ELSE rps.last_non_deploying_status::text
                             END
                         ) as status
                     FROM versioned_resource_state AS rps
