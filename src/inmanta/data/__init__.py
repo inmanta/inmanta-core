@@ -4634,6 +4634,7 @@ class Resource(BaseDocument):
         out = await cls.select_query(query, [env, model_version, rids], no_obj=True)
         return {ResourceIdStr(r["resource_id"]): ResourceState[r["status"]] for r in out}
 
+    @stable_api
     @classmethod
     async def get_current_resource_state(cls, env: uuid.UUID, rid: ResourceIdStr) -> Optional[ResourceState]:
         """
