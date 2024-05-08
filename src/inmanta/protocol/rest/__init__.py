@@ -502,7 +502,7 @@ class CallArguments:
 
         if header_value is None and "Authorization" in self._request_headers:
             # In Authorization it is parsed as a bearer token
-            parts = header_value.split(" ")
+            parts = self._request_headers["Authorization"].split(" ")
 
             if len(parts) != 2 or parts[0].lower() != "bearer":
                 logging.getLogger(__name__).warning(
