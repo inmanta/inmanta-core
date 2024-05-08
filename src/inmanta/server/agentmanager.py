@@ -24,7 +24,7 @@ import sys
 import time
 import uuid
 from asyncio import queues, subprocess
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence, Set
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, Union, cast
@@ -1181,7 +1181,6 @@ class AutostartedAgentManager(ServerSlice):
                     agents,
                     self._agent_procs[env.id],
                 )
-                if self._agent_manager
                 await self._stop_autostarted_agents(env)
                 self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
 
