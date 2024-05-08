@@ -49,10 +49,10 @@ async def test_resource_list_no_released_version(server, client):
     )
     await cm.insert()
 
-    path = f"/etc/file{1}"
-    key = f"std::File[agent1,path={path}]"
+    name = "file1"
+    key = f"std::testing::NullResource[agent1,name={name}]"
     res1_v1 = data.Resource.new(
-        environment=env.id, resource_version_id=ResourceVersionIdStr(f"{key},v={version}"), attributes={"path": path}
+        environment=env.id, resource_version_id=ResourceVersionIdStr(f"{key},v={version}"), attributes={"name": name}
     )
     await res1_v1.insert()
 
@@ -85,15 +85,15 @@ async def test_has_only_one_version_from_resource(server, client):
         await cm.insert()
 
     version = 1
-    path = "/etc/file" + str(1)
-    key = "std::File[agent1,path=" + path + "]"
-    res1_v1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"path": path})
+    name = "file" + str(1)
+    key = "std::testing::NullResource[agent1,name=" + name + "]"
+    res1_v1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
     await res1_v1.insert()
     version = 2
     res1_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
-        attributes={"path": path},
+        attributes={"name": name},
         status=ResourceState.deploying,
     )
     await res1_v2.insert()
@@ -101,7 +101,7 @@ async def test_has_only_one_version_from_resource(server, client):
     res1_v3 = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
-        attributes={"path": path},
+        attributes={"name": name},
         status=ResourceState.deployed,
     )
     await res1_v3.insert()
@@ -109,21 +109,21 @@ async def test_has_only_one_version_from_resource(server, client):
     res1_v4 = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
-        attributes={"path": path, "new_attr": 123, "requires": ["abc"]},
+        attributes={"name": name, "new_attr": 123, "requires": ["abc"]},
         status=ResourceState.deployed,
     )
     await res1_v4.insert()
 
     version = 1
-    path = "/etc/file" + str(2)
-    key = "std::File[agent1,path=" + path + "]"
-    res2_v1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"path": path})
+    name = "file" + str(2)
+    key = "std::testing::NullResource[agent1,name=" + name + "]"
+    res2_v1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
     await res2_v1.insert()
     version = 2
     res2_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
-        attributes={"path": path},
+        attributes={"name": name},
         status=ResourceState.deploying,
     )
     await res2_v2.insert()
@@ -171,12 +171,12 @@ async def env_with_resources(server, client):
             )
             await res.insert()
 
-    await create_resource("agent1", "/etc/file1", "std::File", ResourceState.available, [1, 2, 3])
-    await create_resource("agent1", "/etc/file2", "std::File", ResourceState.deploying, [1, 2])  # Orphaned
-    await create_resource("agent2", "/etc/file3", "std::File", ResourceState.deployed, [2])  # Orphaned
-    await create_resource("agent2", "/tmp/file4", "std::File", ResourceState.unavailable, [3])
-    await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3])
-    await create_resource("agent3", "/tmp/dir6", "std::Directory", ResourceState.deployed, [3])
+    await create_resource("agent1", "/etc/file1", "test::File", ResourceState.available, [1, 2, 3])
+    await create_resource("agent1", "/etc/file2", "test::File", ResourceState.deploying, [1, 2])  # Orphaned
+    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [2])  # Orphaned
+    await create_resource("agent2", "/tmp/file4", "test::File", ResourceState.unavailable, [3])
+    await create_resource("agent2", "/tmp/dir5", "test::Directory", ResourceState.skipped, [3])
+    await create_resource("agent3", "/tmp/dir6", "test::Directory", ResourceState.deployed, [3])
 
     env2 = data.Environment(name="dev-test2", project=project.id, repo_url="", repo_branch="")
     await env2.insert()
@@ -190,9 +190,9 @@ async def env_with_resources(server, client):
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
-    await create_resource("agent1", "/tmp/file7", "std::File", ResourceState.deployed, [3], environment=env2.id)
-    await create_resource("agent1", "/tmp/file2", "std::File", ResourceState.deployed, [3], environment=env2.id)
-    await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3], environment=env2.id)
+    await create_resource("agent1", "/tmp/file7", "test::File", ResourceState.deployed, [3], environment=env2.id)
+    await create_resource("agent1", "/tmp/file2", "test::File", ResourceState.deployed, [3], environment=env2.id)
+    await create_resource("agent2", "/tmp/dir5", "test::Directory", ResourceState.skipped, [3], environment=env2.id)
 
     env3 = data.Environment(name="dev-test3", project=project.id, repo_url="", repo_branch="")
     await env3.insert()
@@ -206,7 +206,7 @@ async def env_with_resources(server, client):
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
-    await create_resource("agent2", "/etc/file3", "std::File", ResourceState.deployed, [6], environment=env3.id)
+    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [6], environment=env3.id)
 
     yield env
 
@@ -233,6 +233,10 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
+    result = await client.resource_list(env.id, filter={"resource_id_value": ["file"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 4
+
     result = await client.resource_list(env.id, filter={"resource_id_value": ["/etc/file", "/tmp/file"]})
     assert result.code == 200
     assert len(result.result["data"]) == 4
@@ -241,7 +245,11 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 2
 
-    result = await client.resource_list(env.id, filter={"resource_type": ["Directory"], "resource_id_value": "1"})
+    result = await client.resource_list(env.id, filter={"resource_type": ["File"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 4
+
+    result = await client.resource_list(env.id, filter={"resource_type": ["File"], "resource_id_value": "5"})
     assert result.code == 200
     assert len(result.result["data"]) == 0
 
@@ -295,7 +303,7 @@ async def test_filter_resources(server, client, env_with_resources):
         env.id,
         filter={
             "resource_id_value": ["/etc/file", "/tmp/file"],
-            "resource_type": "file",
+            "resource_type": "File",
             "agent": "agent1",
             "status": ["!orphaned"],
         },
