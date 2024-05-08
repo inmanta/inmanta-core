@@ -4653,11 +4653,10 @@ class Resource(BaseDocument):
                     -- actual deployment operations to prevent locking issues. This case-statement calculates
                     -- the correct state from the combination of the resource table and the
                     -- resource_persistent_state table.
-                    WHEN r.status::text = 'deploying'
+                    WHEN r.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
+                        -- The deploying, undefined and skipped_for_undefined states are not tracked in the
+                        -- resource_persistent_state table.
                         THEN r.status::text
-                    WHEN r.status = 'available' AND rps.last_non_deploying_status IN('undefined', 'skipped_for_undefined')
-                        -- The resource moved from undefined or skipped_for_undefined to available
-                        THEN 'available'
                     WHEN rps.last_deployed_attribute_hash != r.attribute_hash
                         -- The hash changed since the last deploy -> new desired state
                         THEN 'available'
@@ -5005,15 +5004,14 @@ class Resource(BaseDocument):
                WHEN (SELECT {resource_table_name}.model < MAX(configurationmodel.version)
                        FROM configurationmodel
                        WHERE configurationmodel.released=TRUE
-                       AND environment = $1)
+                       AND environment = $1
+                 )
                  -- Resource is no longer present in latest released configurationmodel
                  THEN 'orphaned'
-               WHEN {resource_table_name}.status::text = 'deploying'
+               WHEN {resource_table_name}.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
+                 -- The deploying, undefined and skipped_for_undefined states are not tracked in the
+                 -- resource_persistent_state table.
                  THEN {resource_table_name}.status::text
-               WHEN {resource_table_name}.status = 'available'
-                 AND ps.last_non_deploying_status IN('undefined', 'skipped_for_undefined')
-                 -- The resource moved from undefined or skipped_for_undefined to available
-                 THEN 'available'
                WHEN ps.last_deployed_attribute_hash != {resource_table_name}.attribute_hash
                  -- The hash changed since the last deploy -> new desired state
                  THEN 'available'
