@@ -1013,6 +1013,8 @@ class AutostartedAgentManager(ServerSlice):
     async def _stop_autostarted_agents(
         self,
         env: data.Environment,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
         Stop the autostarted agent process for this environment and expire all its sessions.
@@ -1085,52 +1087,57 @@ class AutostartedAgentManager(ServerSlice):
         :param agents: A list of agent names that should be running in this environment. Waits for the agents that are both in
             this list and in the agent map to be active before returning.
         :param restart: Restart all agents even if the list of agents is up to date.
+        :param connection: The database connection to use. Must not be in a transaction context.
         """
         if self._stopping:
             raise ShutdownInProgress()
 
-        agent_map: Mapping[str, str] = cast(
-            Mapping[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
-        )  # we know the type of this map
+        if connection is not None and connection.is_in_transaction():
+            raise Exception("_ensure_agents should not be called in a transaction context")
 
-        agents: Set[str] = set(agents) & agent_map.keys()
-        if len(agents) == 0:
-            return False
+        async with data.Agent.get_connection(connection) as connection:
+            agent_map: Mapping[str, str] = cast(
+                Mapping[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
+            )  # we know the type of this map
 
-        async with self.agent_lock:
-            # silently ignore requests if this environment is halted
-            refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
-            if refreshed_env is None:
-                raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
-            env = refreshed_env
-            if env.halted:
+            agents: Set[str] = set(agents) & agent_map.keys()
+            if len(agents) == 0:
                 return False
 
-            if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is not None:
-                # Start new process if none is currently running for this environment.
-                # Otherwise trust that it tracks any changes to the agent map.
-                LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
-                self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
-            elif restart:
-                LOGGER.info(
-                    "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
-                    agents,
-                    self._agent_procs[env.id],
-                )
-                await self._stop_autostarted_agents(env)
-                self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
+            async with self.agent_lock:
+                # silently ignore requests if this environment is halted
+                refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+                if refreshed_env is None:
+                    raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
+                env = refreshed_env
+                if env.halted:
+                    return False
 
-            # Wait for all agents to start
-            try:
-                await self._wait_for_agents(env, agents)
-            except asyncio.TimeoutError:
-                # TODO: better log message? Detailed one is already raised in wait method
-                #       Depends on return value semantics
-                LOGGER.warning(
-                    "Not all agent instances started successfully",
-                )
-            # TODO: return values -> what does the bool mean?
-            return False
+                if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is not None:
+                    # Start new process if none is currently running for this environment.
+                    # Otherwise trust that it tracks any changes to the agent map.
+                    LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
+                    self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
+                elif restart:
+                    LOGGER.info(
+                        "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
+                        agents,
+                        self._agent_procs[env.id],
+                    )
+                    await self._stop_autostarted_agents(env, connection=connection)
+                    self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
+
+                # Wait for all agents to start
+                try:
+                    await self._wait_for_agents(env, agents, connection=connection)
+                except asyncio.TimeoutError:
+                    # TODO: better log message? Detailed one is already raised in wait method
+                    #       Depends on return value semantics
+                    LOGGER.warning(
+                        "Not all agent instances started successfully",
+                    )
+                # TODO: return values -> what does the bool mean?
+                return False
 
     async def __do_start_agent(
         self, env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
@@ -1277,7 +1284,9 @@ ssl=True
             if errhandle is not None:
                 errhandle.close()
 
-    async def _wait_for_agents(self, env: data.Environment, agents: Set[str]) -> None:
+    async def _wait_for_agents(
+        self, env: data.Environment, agents: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
         """
         Wait until all requested autostarted agent instances are active, e.g. after starting a new agent process.
 
@@ -1289,8 +1298,7 @@ ssl=True
         :raises TimeoutError: When not all agent instances are active and no new agent instance became active in the last
             5 seconds.
         """
-        # TODO: TimeoutError? + docstring
-        agent_statuses: dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(env.id, agents)
+        agent_statuses: dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(env.id, agents, connection=connection)
         # Only wait for agents that are not paused
         expected_agents_in_up_state: Set[str] = {
             agent_name

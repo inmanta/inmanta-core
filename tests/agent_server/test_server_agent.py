@@ -529,7 +529,7 @@ async def test_env_setting_wiring_to_autostarted_agent(
         autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
 
         config = await autostarted_agent_manager._make_agent_config(
-            env, agent_names=[], agent_map={"internal": ""}, connection=None
+            env, connection=None
         )
 
         assert f"agent-deploy-interval={interval}" in config
