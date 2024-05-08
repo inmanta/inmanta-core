@@ -70,7 +70,7 @@ async def test_purge_on_delete_requires(
         {
             "group": "root",
             "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
+            "id": "std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version,
             "owner": "root",
             "path": "/tmp/file1",
             "permissions": 644,
@@ -83,14 +83,14 @@ async def test_purge_on_delete_requires(
         {
             "group": "root",
             "hash": "b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba",
-            "id": "std::File[vm2,path=/tmp/file2],v=%d" % version,
+            "id": "std::testing::NullResource[vm2,name=/tmp/file2],v=%d" % version,
             "owner": "root",
             "path": "/tmp/file2",
             "permissions": 644,
             "purged": False,
             "reload": False,
             "purge_on_delete": True,
-            "requires": ["std::File[vm1,path=/tmp/file1],v=%d" % version],
+            "requires": ["std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version],
             "version": version,
         },
     ]
@@ -103,12 +103,28 @@ async def test_purge_on_delete_requires(
 
     now = datetime.now()
     result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+        environment,
+        ["std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version],
+        uuid.uuid4(),
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
     )
     assert result.code == 200
 
     result = await aclient.resource_action_update(
-        environment, ["std::File[vm2,path=/tmp/file2],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+        environment,
+        ["std::testing::NullResource[vm2,name=/tmp/file2],v=%d" % version],
+        uuid.uuid4(),
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
     )
     assert result.code == 200
 
@@ -208,7 +224,7 @@ async def test_purge_on_delete_compile_failed(
         {
             "group": "root",
             "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
+            "id": "std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version,
             "owner": "root",
             "path": "/tmp/file1",
             "permissions": 644,
@@ -221,20 +237,20 @@ async def test_purge_on_delete_compile_failed(
         {
             "group": "root",
             "hash": "b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba",
-            "id": "std::File[vm1,path=/tmp/file2],v=%d" % version,
+            "id": "std::testing::NullResource[vm1,name=/tmp/file2],v=%d" % version,
             "owner": "root",
             "path": "/tmp/file2",
             "permissions": 644,
             "purged": False,
             "reload": False,
             "purge_on_delete": True,
-            "requires": ["std::File[vm1,path=/tmp/file1],v=%d" % version],
+            "requires": ["std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version],
             "version": version,
         },
         {
             "group": "root",
             "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file3],v=%d" % version,
+            "id": "std::testing::NullResource[vm1,name=/tmp/file3],v=%d" % version,
             "owner": "root",
             "path": "/tmp/file3",
             "permissions": 644,
@@ -254,17 +270,41 @@ async def test_purge_on_delete_compile_failed(
 
     now = datetime.now()
     result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+        environment,
+        ["std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version],
+        uuid.uuid4(),
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
     )
     assert result.code == 200
 
     result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file2],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+        environment,
+        ["std::testing::NullResource[vm1,name=/tmp/file2],v=%d" % version],
+        uuid.uuid4(),
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
     )
     assert result.code == 200
 
     result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file3],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+        environment,
+        ["std::testing::NullResource[vm1,name=/tmp/file3],v=%d" % version],
+        uuid.uuid4(),
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
     )
     assert result.code == 200
 
@@ -321,7 +361,7 @@ async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, serve
         {
             "group": "root",
             "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
+            "id": "std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version,
             "owner": "root",
             "path": "/tmp/file1",
             "permissions": 644,
@@ -334,20 +374,20 @@ async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, serve
         {
             "group": "root",
             "hash": "b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba",
-            "id": "std::File[vm1,path=/tmp/file2],v=%d" % version,
+            "id": "std::testing::NullResource[vm1,name=/tmp/file2],v=%d" % version,
             "owner": "root",
             "path": "/tmp/file2",
             "permissions": 644,
             "purged": False,
             "reload": False,
             "purge_on_delete": True,
-            "requires": ["std::File[vm1,path=/tmp/file1],v=%d" % version],
+            "requires": ["std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version],
             "version": version,
         },
         {
             "group": "root",
             "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file3],v=%d" % version,
+            "id": "std::testing::NullResource[vm1,name=/tmp/file3],v=%d" % version,
             "owner": "root",
             "path": "/tmp/file3",
             "permissions": 644,
@@ -375,17 +415,41 @@ async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, serve
 
     now = datetime.now()
     result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+        environment,
+        ["std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version],
+        uuid.uuid4(),
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
     )
     assert result.code == 200
 
     result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file2],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+        environment,
+        ["std::testing::NullResource[vm1,name=/tmp/file2],v=%d" % version],
+        uuid.uuid4(),
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
     )
     assert result.code == 200
 
     result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file3],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+        environment,
+        ["std::testing::NullResource[vm1,name=/tmp/file3],v=%d" % version],
+        uuid.uuid4(),
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
     )
     assert result.code == 200
 
@@ -407,7 +471,7 @@ async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, serve
     res3 = {
         "group": "root",
         "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-        "id": "std::File[vm1,path=/tmp/file3],v=%d" % version,
+        "id": "std::testing::NullResource[vm1,name=/tmp/file3],v=%d" % version,
         "owner": "root",
         "path": "/tmp/file3",
         "permissions": 644,
@@ -462,7 +526,7 @@ async def test_purge_on_delete_ignore(
         {
             "group": "root",
             "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
+            "id": "std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version,
             "owner": "root",
             "path": "/tmp/file1",
             "permissions": 644,
@@ -490,7 +554,15 @@ async def test_purge_on_delete_ignore(
 
     now = datetime.now()
     result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+        environment,
+        ["std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version],
+        uuid.uuid4(),
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
     )
     assert result.code == 200
 
@@ -514,7 +586,7 @@ async def test_purge_on_delete_ignore(
         {
             "group": "root",
             "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
+            "id": "std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version,
             "owner": "root",
             "path": "/tmp/file1",
             "permissions": 644,
@@ -542,7 +614,15 @@ async def test_purge_on_delete_ignore(
 
     now = datetime.now()
     result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+        environment,
+        ["std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version],
+        uuid.uuid4(),
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
     )
     assert result.code == 200
 
@@ -604,7 +684,7 @@ async def test_disable_purge_on_delete(
         {
             "group": "root",
             "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1,path=/tmp/file1],v=%d" % version,
+            "id": "std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version,
             "owner": "root",
             "path": "/tmp/file1",
             "permissions": 644,
@@ -632,7 +712,15 @@ async def test_disable_purge_on_delete(
 
     now = datetime.now()
     result = await aclient.resource_action_update(
-        environment, ["std::File[vm1,path=/tmp/file1],v=%d" % version], uuid.uuid4(), "deploy", now, now, "deployed", [], {}
+        environment,
+        ["std::testing::NullResource[vm1,name=/tmp/file1],v=%d" % version],
+        uuid.uuid4(),
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
     )
     assert result.code == 200
 

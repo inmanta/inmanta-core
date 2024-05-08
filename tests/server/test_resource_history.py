@@ -97,19 +97,19 @@ async def env_with_resources(server, client):
         return sum([len(resource_list) for resource_list in resources.values()])
 
     async def create_resource(
-        path: str,
+        name: str,
         status: ResourceState,
         version: int,
         attributes: dict[str, object],
         agent: str = "internal",
-        resource_type: str = "std::File",
+        resource_type: str = "std::testing::NullResource",
         environment: UUID = env.id,
     ):
-        key = f"{resource_type}[{agent},path={path}]"
+        key = f"{resource_type}[{agent},name={name}]"
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-            attributes={**attributes, **{"path": path}, "version": version},
+            attributes={**attributes, **{"name": name}, "version": version},
             status=status,
             last_deploy=resource_deploy_times[total_number_of_resources()],
         )
@@ -137,7 +137,7 @@ async def env_with_resources(server, client):
             },
         )
     )
-    resources["std::File[internal,path=/tmp/dir1/file1]"].append(
+    resources["std::testing::NullResource[internal,name=file1]"].append(
         await create_resource(
             "file1",
             ResourceState.deploying,
@@ -273,7 +273,7 @@ async def env_with_resources(server, client):
             "file2",
             ResourceState.deployed,
             3,
-            {"key3": "val3", "requires": ["std::testing::NullResource[internal,dir1]"]},
+            {"key3": "val3", "requires": ["std::testing::NullResource[internal,name=dir1]"]},
         )
     )
     resources["std::testing::NullResource[internal,name=file2]"].append(
@@ -510,18 +510,18 @@ async def test_history_not_continuous_versions(server, client, environment):
         cm_times.append(datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
 
     async def create_resource(
-        path: str,
+        name: str,
         status: ResourceState,
         version: int,
         attributes: dict[str, object],
         agent: str = "internal",
-        resource_type: str = "std::File",
+        resource_type: str = "std::testing::NullResource",
     ):
-        key = f"{resource_type}[{agent},path={path}]"
+        key = f"{resource_type}[{agent},name={name}]"
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-            attributes={**attributes, **{"path": path}, "version": version},
+            attributes={**attributes, **{"name": name}, "version": version},
             status=status,
             last_deploy=datetime.datetime.now(),
         )
