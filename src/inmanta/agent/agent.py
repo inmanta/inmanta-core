@@ -949,11 +949,10 @@ class Agent(SessionEndpoint):
         endpoints: Iterable[str] = (
             [self.hostname]
             if self.hostname is not None
-            else self.agent_map.keys()
-            if cfg.use_autostart_agent_map.get()
             else (
-                name if "$" not in name else name.replace("$node-name", self.node_name)
-                for name in cfg.agent_names.get()
+                self.agent_map.keys()
+                if cfg.use_autostart_agent_map.get()
+                else (name if "$" not in name else name.replace("$node-name", self.node_name) for name in cfg.agent_names.get())
             )
         )
         for endpoint in endpoints:

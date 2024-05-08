@@ -24,7 +24,7 @@ import sys
 import time
 import uuid
 from asyncio import queues, subprocess
-from collections.abc import Collection, Iterable, Mapping, Sequence, Set
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence, Set
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, Union, cast
@@ -658,9 +658,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
         async with self.session_lock:
             sessions_to_expire: Iterator[UUID] = (
-                session
-                for session in self.sessions.values()
-                if endpoints & session.endpoint_names and session.tid == env_id
+                session for session in self.sessions.values() if endpoints & session.endpoint_names and session.tid == env_id
             )
             await asyncio.gather(*(s.expire_and_abort(timeout=0) for s in sessions_to_expire))
 
@@ -1321,7 +1319,7 @@ ssl=True
                 LOGGER.warning(
                     "Timeout: agent with PID %s took too long to start: still waiting for agent instances %s",
                     proc.pid,
-                    ",".join(sorted(expected_agents_in_up_state - actual_agents_in_up_state))
+                    ",".join(sorted(expected_agents_in_up_state - actual_agents_in_up_state)),
                 )
                 raise asyncio.TimeoutError()
             if now - last_log > AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL:
