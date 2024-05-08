@@ -635,23 +635,6 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             return None
 
-    # TODO: is this method still used? Same for the methods it calls
-    async def are_agents_active(self, tid: uuid.UUID, endpoints: list[str]) -> bool:
-        """
-        Return true iff all the given agents are in the up or the paused state.
-        """
-        return all(active for (_, active) in await self.get_agent_active_status(tid, endpoints))
-
-    async def get_agent_active_status(self, tid: uuid.UUID, endpoints: list[str]) -> list[tuple[str, bool]]:
-        """
-        Return a list of tuples where the first element of the tuple contains the name of an endpoint
-        and the second a boolean indicating where there is an active (up or paused) agent for that endpoint.
-        """
-        # TODO: this only checks that agent has a session, not that it is enabled (`on_reconnect` has finished)
-        all_sids_for_env = [sid for (sid, session) in self.sessions.items() if session.tid == tid]
-        all_active_endpoints_for_env = {ep for sid in all_sids_for_env for ep in self.endpoints_for_sid[sid]}
-        return [(ep, ep in all_active_endpoints_for_env) for ep in endpoints]
-
     async def expire_sessions_for_agents(self, env_id: uuid.UUID, endpoints: Set[str]) -> None:
         """
         Expire all sessions for any of the requested agent endpoints.
