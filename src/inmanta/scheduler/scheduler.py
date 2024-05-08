@@ -76,6 +76,9 @@ class BaseTask(abc.ABC):
     def cancel(self) -> None:
         # todo: this doesn't notify waiters
         self.cancelled = True
+        if self._queue:
+            self._queue.full_queue.drop(self._entry)
+            self._queue.run_queue.drop(self._entry)
 
     def wait_for(self, other: "BaseTask") -> None:
         """Declare we wait for some other task"""
@@ -114,6 +117,8 @@ class BaseTask(abc.ABC):
 
     def _done(self) -> None:
         """Internal, we are done, propagate to waiters"""
+        if self._queue:
+            self._queue.full_queue.drop(self._entry)
         for awaited in self.provides:
             awaited.waitcount -= 1
             assert not awaited.waitcount < 0
@@ -171,16 +176,23 @@ class PriorityQueue(asyncio.Queue[T]):
     def _get(self) -> T:
         return self._queue.pop(0)
 
+    def drop(self, item: T) -> None:
+        idx = bisect.bisect(self._queue, item) - 1
+        assert self._queue[idx] == item
+        self._queue.pop(idx)
+
 
 class TaskQueue:
 
     def __init__(self) -> None:
-        self.full_queue: asyncio.Queue[typing.Tuple[int, int, BaseTask]] = PriorityQueue()
-        self.run_queue: asyncio.Queue[typing.Tuple[int, int, BaseTask]] = PriorityQueue()
+        self.full_queue: PriorityQueue[typing.Tuple[int, int, BaseTask]] = PriorityQueue()
+        self.run_queue: PriorityQueue[typing.Tuple[int, int, BaseTask]] = PriorityQueue()
         self.counter = itertools.count()  # unique sequence count, makes sort stable in the heap
 
     def put(self, task: BaseTask) -> None:
         "Add a new task"
+        if task.cancelled:
+            return
         count = next(self.counter)
         entry = (task.priority(), count, task)
         task._enqueue(self, entry)
@@ -200,6 +212,10 @@ class TaskQueue:
         task = await self.get()
         await task._run()
         return task
+
+    def view(self) -> typing.Sequence[Task]:
+        """This leaks a reference to the internal queue: don't touch it"""
+        return self.full_queue._queue
 
 
 class SentinelTask(BaseTask):

@@ -32,22 +32,34 @@ async def test_very_basics():
     t4 = scheduler.Task("t4", 1)
     t5 = scheduler.Task("t5", 100)
     t2.wait_for(t5)
+
+    # these will get cancelled
     t6 = scheduler.Task("t6", 50)
     t7 = scheduler.Task("t7", 50)
-    t7.wait_for(t6)
+    t6.cancel()
 
     queue.put(t1)
     queue.put(t2)
     queue.put(t3)
     queue.put(t4)
     queue.put(t5)
-
+    queue.put(t6)
+    queue.put(t7)
+    assert len(queue.view()) == 6
+    t7.cancel()
+    assert len(queue.view()) == 5
     assert t4 == await queue.do_next()
+    assert len(queue.view()) == 4
     assert t1 == await queue.do_next()
+    assert len(queue.view()) == 3
     assert t3 == await queue.do_next()
+    assert len(queue.view()) == 2
     assert t5 == await queue.do_next()
+    assert len(queue.view()) == 1
     assert t2 == await queue.do_next()
+    assert len(queue.view()) == 0
 
+    # Test depdencies when first task is queued first
     t6 = scheduler.Task("t6", 50)
     t7 = scheduler.Task("t7", 50)
     t7.wait_for(t6)
@@ -56,6 +68,7 @@ async def test_very_basics():
     queue.put(t7)
     assert t7 == await queue.do_next()
 
+    # Test depdencies when second task is queued first
     t6 = scheduler.Task("t6", 50)
     t7 = scheduler.Task("t7", 50)
     t7.wait_for(t6)

@@ -407,11 +407,11 @@ def option_as_default(opt: Option[T]) -> Callable[[], T]:
 state_dir = Option("config", "state_dir", "/var/lib/inmanta", "The directory where the server stores its state", is_str)
 
 log_dir = Option(
-    "config",
-    "log_dir",
-    "/var/log/inmanta",
-    "The directory where the resource action log is stored and the logs of auto-started agents.",
-    is_str,
+    section="config",
+    name="log_dir",
+    default="/var/log/inmanta",
+    documentation="The directory where the resource action log is stored and the logs of auto-started agents.",
+    validator=is_str,
 )
 
 logging_config = Option(
