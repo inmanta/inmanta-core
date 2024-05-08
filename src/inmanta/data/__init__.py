@@ -4641,34 +4641,40 @@ class Resource(BaseDocument):
         Return the state of the given resource in the latest version of the configuration model
         or None if the resource is not present in the latest version.
         """
-        query = f"""
+        query = """
+            WITH latest_released_version AS (
+                SELECT max(version) AS version
+                FROM configurationmodel
+                WHERE environment=$1 AND released
+            )
             SELECT (
-                SELECT r.status
-                FROM resource r
-                WHERE r.environment=$1
-                    AND r.model=(
-                        SELECT max(c.version) AS version
-                        FROM {ConfigurationModel.table_name()} c
-                        WHERE c.environment=$1 AND c.released
-                    )
-                    AND r.resource_id=$2
-            ) AS status,
-            (
-                SELECT rps.last_non_deploying_status
-                FROM resource_persistent_state rps
-                WHERE rps.environment=$1 AND rps.resource_id=$2
-            ) AS last_non_deploying_status
+                CASE
+                    -- The resource_persistent_state.last_non_deploying_status column is only populated for
+                    -- actual deployment operations to prevent locking issues. This case-statement calculates
+                    -- the correct state from the combination of the resource table and the
+                    -- resource_persistent_state table.
+                    WHEN r.status::text = 'deploying'
+                        THEN r.status::text
+                    WHEN r.status = 'available' AND rps.last_non_deploying_status IN('undefined', 'skipped_for_undefined')
+                        -- The resource moved from undefined or skipped_for_undefined to available
+                        THEN 'available'
+                    WHEN rps.last_deployed_attribute_hash != r.attribute_hash
+                        -- The hash changed since the last deploy -> new desired state
+                        THEN 'available'
+                        -- No override required, use last known state from actual deployment
+                        ELSE rps.last_non_deploying_status::text
+                END
+            ) AS status
+            FROM resource AS r
+                 INNER JOIN resource_persistent_state AS rps ON r.environment=rps.environment AND r.resource_id=rps.resource_id
+                 INNER JOIN configurationmodel AS c ON c.environment=r.environment AND c.version=r.model
+            WHERE r.environment=$1 AND r.model = (SELECT version FROM latest_released_version) AND r.resource_id=$2
             """
         results = await cls.select_query(query, [env, rid], no_obj=True)
         if not results:
             return None
         assert len(results) == 1
-        if any(results[0][column_name] is None for column_name in ["status", "last_non_deploying_status"]):
-            return None
-        if results[0]["status"] == "deploying":
-            return const.ResourceState("deploying")
-        else:
-            return const.ResourceState(results[0]["last_non_deploying_status"])
+        return const.ResourceState(results[0]["status"])
 
     @classmethod
     async def set_deployed_multi(
@@ -4992,18 +4998,20 @@ class Resource(BaseDocument):
         def status_sub_query(resource_table_name: str) -> str:
             return f"""
             (CASE
+               -- The resource_persistent_state.last_non_deploying_status column is only populated for
+               -- actual deployment operations to prevent locking issues. This case-statement calculates
+               -- the correct state from the combination of the resource table and the
+               -- resource_persistent_state table.
                WHEN (SELECT {resource_table_name}.model < MAX(configurationmodel.version)
                        FROM configurationmodel
                        WHERE configurationmodel.released=TRUE
                        AND environment = $1)
                  -- Resource is no longer present in latest released configurationmodel
                  THEN 'orphaned'
-               WHEN {resource_table_name}.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
-                 -- The deploying, undefined and skipped_for_undefined states can be tracked accurately
-                 -- via the resource table.
+               WHEN {resource_table_name}.status::text = 'deploying'
                  THEN {resource_table_name}.status::text
-               WHEN {resource_table_name}.status NOT IN('undefined', 'skipped_for_undefined')
-                    AND ps.last_non_deploying_status IN('undefined', 'skipped_for_undefined')
+               WHEN {resource_table_name}.status = 'available'
+                 AND ps.last_non_deploying_status IN('undefined', 'skipped_for_undefined')
                  -- The resource moved from undefined or skipped_for_undefined to available
                  THEN 'available'
                WHEN ps.last_deployed_attribute_hash != {resource_table_name}.attribute_hash
