@@ -126,13 +126,12 @@ post.requires = inter
 def test_issue_220_dep_loops(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-import std
+import std::testing
 
-host = std::Host(name="Test", os=std::unix)
-f1 = std::ConfigFile(host=host, path="/f1", content="")
-f2 = std::ConfigFile(host=host, path="/f2", content="")
-f3 = std::ConfigFile(host=host, path="/f3", content="")
-f4 = std::ConfigFile(host=host, path="/f4", content="")
+f1 = std::testing::NullResource(name="f1")
+f2 = std::testing::NullResource(name="f2")
+f3 = std::testing::NullResource(name="f3")
+f4 = std::testing::NullResource(name="f4")
 f1.requires = f2
 f2.requires = f3
 f3.requires = f1
@@ -143,4 +142,8 @@ f4.requires = f1
         snippetcompiler.do_export()
 
     cyclenames = [r.id.resource_str() for r in e.value.cycle]
-    assert set(cyclenames) == {"std::File[Test,path=/f3]", "std::File[Test,path=/f2]", "std::File[Test,path=/f1]"}
+    assert set(cyclenames) == {
+        "std::testing::NullResource[internal,name=f1]",
+        "std::testing::NullResource[internal,name=f2]",
+        "std::testing::NullResource[internal,name=f3]",
+    }

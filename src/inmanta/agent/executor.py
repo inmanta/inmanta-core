@@ -120,6 +120,10 @@ class EnvBlueprint:
     def __hash__(self) -> int:
         return int(self.blueprint_hash(), 16)
 
+    def __str__(self) -> str:
+        req = ",".join(str(req) for req in self.requirements)
+        return f"EnvBlueprint(requirements=[{str(req)}], pip={self.pip_config}]"
+
 
 @dataclasses.dataclass
 class ExecutorBlueprint(EnvBlueprint):
@@ -133,9 +137,11 @@ class ExecutorBlueprint(EnvBlueprint):
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
         pip_configs = [cd.blueprint.pip_config for cd in code]
+        if not pip_configs:
+            raise Exception("No Pip config available, aborting")
         base_pip = pip_configs[0]
         for pip_config in pip_configs:
-            assert pip_config == base_pip, f"One agent is using multiple pipe configs: {base_pip} {pip_config}"
+            assert pip_config == base_pip, f"One agent is using multiple pip configs: {base_pip} {pip_config}"
         return ExecutorBlueprint(
             pip_config=base_pip,
             sources=sources,
@@ -212,7 +218,7 @@ class ResourceInstallSpec:
     """
     This class encapsulates the requirements for a specific resource type for a specific model version.
 
-    :ivar resource_type: fully qualified name for this resource type e.g. std::File
+    :ivar resource_type: fully qualified name for this resource type e.g. std::testing::NullResource
     :ivar model_version: the version of the model to use
     :ivar blueprint: the associate install blueprint
 
@@ -297,7 +303,12 @@ class VirtualEnvironmentManager:
             os.makedirs(env_dir)
             return env_dir, True  # Returning the path and True for newly created directory
         else:
-            LOGGER.info("Found existing virtual environment at %s", env_dir)
+            LOGGER.debug(
+                "Found existing venv for content %s at %s, content hash: %s",
+                str(blueprint),
+                env_dir,
+                blueprint.blueprint_hash(),
+            )
             return env_dir, False  # Returning the path and False for existing directory
 
     async def create_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
@@ -314,6 +325,7 @@ class VirtualEnvironmentManager:
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
         if is_new:
+            LOGGER.info("Creating venv for content %s, content hash: %s", str(blueprint), blueprint.blueprint_hash())
             await process_environment.create_and_install_environment(blueprint)
         self._environment_map[blueprint] = process_environment
 
@@ -327,10 +339,20 @@ class VirtualEnvironmentManager:
         assert isinstance(blueprint, EnvBlueprint), "Only EnvBlueprint instances are accepted, subclasses are not allowed."
 
         if blueprint in self._environment_map:
+            LOGGER.debug(
+                "Found existing virtual environment for content %s, content hash: %s",
+                str(blueprint),
+                blueprint.blueprint_hash(),
+            )
             return self._environment_map[blueprint]
         # Acquire a lock based on the blueprint's hash
         async with self._locks.get(blueprint.blueprint_hash()):
             if blueprint in self._environment_map:
+                LOGGER.debug(
+                    "Found existing virtual environment for content %s, content hash: %s",
+                    str(blueprint),
+                    blueprint.blueprint_hash(),
+                )
                 return self._environment_map[blueprint]
             return await self.create_environment(blueprint, threadpool)
 
@@ -429,7 +451,7 @@ class Executor(abc.ABC):
         pass
 
 
-E = typing.TypeVar("E", bound=Executor)
+E = typing.TypeVar("E", bound=Executor, covariant=True)
 
 
 class ExecutorManager(abc.ABC, typing.Generic[E]):
@@ -458,3 +480,22 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
 
         This is considered to be a hint , the manager can choose to follow or not
         """
+        pass
+
+    @abc.abstractmethod
+    async def stop(self) -> None:
+        """
+        Stop all executors.
+
+        Don't wait for them to terminate
+        """
+        pass
+
+    @abc.abstractmethod
+    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
+        """
+        Wait for all executors to terminate.
+
+        Any threadpools that need to be closed can be handed of to the parent via thread_pool_finalizer
+        """
+        pass
