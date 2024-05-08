@@ -519,7 +519,7 @@ class CallArguments:
         self._auth_token, cfg = auth.decode_token(header_value)
 
         if cfg.jwt_username_claim in self._auth_token:
-            self._auth_username = self._auth_token[cfg.jwt_username_claim]
+            self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
 
     def authenticate(self, auth_enabled: bool) -> None:
         """Fetch any identity information and authenticate. This will also load this authentication
