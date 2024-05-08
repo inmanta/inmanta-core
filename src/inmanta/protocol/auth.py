@@ -34,7 +34,6 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from inmanta import config, const
-from inmanta.server import config as server_config
 
 from . import exceptions
 
@@ -163,7 +162,7 @@ def encode_token(
     return jwt.encode(payload=payload, key=cfg.key, algorithm=cfg.algo)
 
 
-def decode_token(token: str) -> claim_type:
+def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
     try:
         # First decode the token without verification
         header = jwt.get_unverified_header(token)
@@ -231,34 +230,7 @@ def decode_token(token: str) -> claim_type:
     if not check_custom_claims(claims=decoded_payload, claim_constraints=cfg.claims):
         raise exceptions.Forbidden("The configured claims constraints did not match. See logs for details.")
 
-    return decoded_payload
-
-
-def get_auth_token(headers: MutableMapping[str, str]) -> Optional[claim_type]:
-    """Get the auth token provided by the caller and decode it.
-
-    :return: A mapping of claims
-    """
-    header_name = server_config.server_jwt_header.get()
-    if header_name not in headers:
-        return None
-
-    header_value = headers[header_name]
-    if " " in header_value:
-        parts = header_value.split(" ")
-
-        if len(parts) != 2 or parts[0].lower() != "bearer":
-            logging.getLogger(__name__).warning(
-                f"Invalid JWT token header ({header_name})."
-                f"A bearer token is expected, instead ({header_value} was provided)"
-            )
-            return None
-
-        token_value = parts[1]
-    else:
-        token_value = header_value
-
-    return decode_token(token_value)
+    return decoded_payload, cfg
 
 
 #############################
@@ -359,7 +331,6 @@ class AuthJWTConfig:
         self._config: configparser.SectionProxy = config
         self.claims: list[ClaimMatch] = []
 
-        self.jwt_header: str = "Authorization"
         self.jwt_username_claim: str = "sub"
         self.expire: int = 0
         self.sign: bool = False
@@ -407,11 +378,6 @@ class AuthJWTConfig:
 
         if "claims" in self._config:
             self.parse_claim_matching(self._config["claims"])
-
-        if "jwt-header" in self._config:
-            if self.sign:
-                raise ValueError(f"auth config {self.section} used for signing cannot use a custom header.")
-            self.jwt_header = self._config["jwt-header"]
 
         if "jwt-username-claim" in self._config:
             if self.sign:

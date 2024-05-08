@@ -39,7 +39,7 @@ def test_jwt_create(inmanta_config):
     Test creating, signing and verifying JWT with HS256 from the configuration
     """
     jot = auth.encode_token(["api"])
-    payload = auth.decode_token(jot)
+    payload, _ = auth.decode_token(jot)
 
     assert "api" in payload["urn:inmanta:ct"]
 
@@ -219,6 +219,7 @@ async def test_customer_header_user(tmp_path: pathlib.Path, server: Server) -> N
             """
 [server]
 auth=true
+auth_additional_header=Jwt-Assertion
 
 [auth_jwt_test]
 algorithm=HS256
@@ -236,7 +237,6 @@ key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
 expire=0
 issuer=https://example.com:8888/
 audience=abcdef
-jwt_header=Jwt-Assertion
 jwt_username_claim=name
 """
         )
