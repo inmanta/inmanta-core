@@ -1148,11 +1148,11 @@ async def test_mark_done(init_dataclasses_and_load_schema, resource_state, versi
 
 
 async def populate_model(env_id, version):
-    def get_path(n):
+    def get_name(n):
         return "/tmp/%d" % n
 
     def get_id(n):
-        return "std::File[agent1,path=/tmp/%d],v=%s" % (n, version)
+        return "std::testing::NullResource[agent1,name=/tmp/%d],v=%s" % (n, version)
 
     def get_resource(n, depends, status=const.ResourceState.available):
         requires = [get_id(z) for z in depends]
@@ -1160,7 +1160,7 @@ async def populate_model(env_id, version):
             environment=env_id,
             resource_version_id=get_id(n),
             status=status,
-            attributes={"path": get_path(n), "purge_on_delete": False, "purged": False, "requires": requires},
+            attributes={"name": get_name(n), "purge_on_delete": False, "purged": False, "requires": requires},
         )
 
     res1 = get_resource(1, [])
@@ -1202,17 +1202,17 @@ async def test_resource_purge_on_delete(init_dataclasses_and_load_schema):
 
     res11 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent1,name=/etc/motd],v=%s" % version,
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
+        attributes={"name": "/etc/motd", "purge_on_delete": True, "purged": False},
     )
     await res11.insert()
 
     res12 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent2,path=/etc/motd],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent2,name=/etc/motd],v=%s" % version,
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True},
+        attributes={"name": "/etc/motd", "purge_on_delete": True, "purged": True},
     )
     await res12.insert()
 
@@ -1233,9 +1233,9 @@ async def test_resource_purge_on_delete(init_dataclasses_and_load_schema):
 
         res21 = data.Resource.new(
             environment=env.id,
-            resource_version_id="std::File[agent5,path=/etc/motd],v=%s" % version,
+            resource_version_id="std::testing::NullResource[agent5,name=/etc/motd],v=%s" % version,
             status=const.ResourceState.available,
-            attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
+            attributes={"name": "/etc/motd", "purge_on_delete": True, "purged": False},
         )
         await res21.insert()
 
@@ -1255,7 +1255,7 @@ async def test_resource_purge_on_delete(init_dataclasses_and_load_schema):
 
     assert len(to_purge) == 1
     assert to_purge[0].model == 1
-    assert to_purge[0].resource_id == "std::File[agent1,path=/etc/motd]"
+    assert to_purge[0].resource_id == "std::testing::NullResource[agent1,name=/etc/motd]"
 
 
 async def test_issue_422(init_dataclasses_and_load_schema):
@@ -1281,9 +1281,9 @@ async def test_issue_422(init_dataclasses_and_load_schema):
 
     res11 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent1,name=/etc/motd],v=%s" % version,
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
+        attributes={"name": "/etc/motd", "purge_on_delete": True, "purged": False},
     )
     await res11.insert()
 
@@ -1303,9 +1303,9 @@ async def test_issue_422(init_dataclasses_and_load_schema):
 
     res21 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
+        resource_version_id="std::testing::NullResource[agent1,name=/etc/motd],v=%s" % version,
         status=const.ResourceState.available,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
+        attributes={"name": "/etc/motd", "purge_on_delete": True, "purged": False},
     )
     await res21.insert()
 
@@ -1325,7 +1325,7 @@ async def test_issue_422(init_dataclasses_and_load_schema):
 
     assert len(to_purge) == 1
     assert to_purge[0].model == 1
-    assert to_purge[0].resource_id == "std::File[agent1,path=/etc/motd]"
+    assert to_purge[0].resource_id == "std::testing::NullResource[agent1,name=/etc/motd]"
 
 
 async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_client):
@@ -1813,35 +1813,35 @@ async def test_resource_copy_last_success(init_dataclasses_and_load_schema):
 
     res1 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+        resource_version_id="std::testing::NullResource[agent1,name=/etc/file1],v=1",
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
+        attributes={"name": "/etc/motd", "purge_on_delete": True, "purged": False},
     )
     res2 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=2",
+        resource_version_id="std::testing::NullResource[agent1,name=/etc/file1],v=2",
         status=const.ResourceState.deployed,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
+        attributes={"name": "/etc/motd", "purge_on_delete": True, "purged": False},
         last_success=marker_date,
     )
     res3 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=3",
+        resource_version_id="std::testing::NullResource[agent1,name=/etc/file1],v=3",
         status=const.ResourceState.available,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True},
+        attributes={"name": "/etc/motd", "purge_on_delete": True, "purged": True},
     )
     res4 = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=4",
+        resource_version_id="std::testing::NullResource[agent1,path=/etc/file1],v=4",
         status=const.ResourceState.available,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True},
+        attributes={"name": "/etc/motd", "purge_on_delete": True, "purged": True},
     )
 
     side_res = data.Resource.new(
         environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file2],v=3",
+        resource_version_id="std::testing::NullResource[agent1,path=/etc/file2],v=3",
         status=const.ResourceState.available,
-        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True},
+        attributes={"name": "/etc/motd", "purge_on_delete": True, "purged": True},
     )
 
     await res1.insert()
