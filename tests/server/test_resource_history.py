@@ -133,7 +133,10 @@ async def env_with_resources(server, client):
             2,
             {
                 "key1": "val1",
-                "requires": ["std::testing::NullResource[internal,dir1]", "std::testing::NullResource[internal,name=file2]"],
+                "requires": [
+                    "std::testing::NullResource[internal,name=dir1]",
+                    "std::testing::NullResource[internal,name=file2]",
+                ],
             },
         )
     )
