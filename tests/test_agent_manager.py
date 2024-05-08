@@ -1207,35 +1207,6 @@ async def test_error_handling_agent_fork(server, environment, monkeypatch):
     assert exception_message in str(excinfo.value)
 
 
-# TODO: rework test + drop are_agents_active method
-async def test_are_agents_active(server, client, environment, agent_factory) -> None:
-    """
-    Ensure that the `AgentManager.are_agents_active()` method returns True when an agent
-    is in the up or the paused state.
-    """
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-    agent_name = "agent1"
-    env_id = UUID(environment)
-    env = await data.Environment.get_by_id(env_id)
-
-    # The agent is not started yet ->  it should not be active
-    assert not await agentmanager.are_agents_active(tid=env_id, endpoints=[agent_name])
-
-    # Start agent
-    await agentmanager.ensure_agent_registered(env, agent_name)
-    await agent_factory(environment=environment, agent_map={agent_name: ""}, agent_names=[agent_name])
-
-    # Verify agent is active
-    await retry_limited(agentmanager.are_agents_active, tid=env_id, endpoints=[agent_name], timeout=10)
-
-    # Pause agent
-    result = await client.agent_action(tid=env_id, name=agent_name, action=AgentAction.pause.value)
-    assert result.code == 200, result.result
-
-    # Ensure the agent is still active
-    await retry_limited(agentmanager.are_agents_active, tid=env_id, endpoints=[agent_name], timeout=10)
-
-
 async def test_dont_start_paused_agent(server, client, environment, caplog) -> None:
     """
     Ensure that the AutostartedAgentManager doesn't try to start an agent that is paused (inmanta/inmanta-core#4398).
@@ -1269,6 +1240,9 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     # Pause agent1
     result = await client.agent_action(tid=env_id, name=agent_name, action=AgentAction.pause.value)
     assert result.code == 200, result.result
+
+    # Pausing an agent should have no direct effect on the autostarted agent manager
+    assert len(autostarted_agent_manager._agent_procs) == 1
 
     # Execute _ensure_agents() again and verify that no restart is triggered
     caplog.clear()

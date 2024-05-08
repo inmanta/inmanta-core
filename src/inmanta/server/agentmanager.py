@@ -1097,70 +1097,6 @@ class AutostartedAgentManager(ServerSlice):
         if len(agents) == 0:
             return False
 
-        # TODO: make proper method instead of nested function?
-        async def _wait_until_agent_instances_are_active() -> None:
-            # TODO: check docstring
-            """
-            Wait until all AgentInstances for the endpoints `agents` are active.
-            A TimeoutError is raised when not all AgentInstances are active and no new AgentInstance
-            became active in the last 5 seconds.
-            """
-            agent_statuses: dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(env.id, agents)
-            # Only wait for agents that are not paused
-            expected_agents_in_up_state: Set[str] = {
-                agent_name
-                for agent_name, status in agent_statuses.items()
-                if status is not None and status is not AgentStatus.paused
-            }
-
-            # TODO: docstring: only call under agent lock and when process has been started
-            assert env.id in self._agent_procs
-            proc = self._agent_procs[env.id]
-
-            actual_agents_in_up_state: set[str] = set()
-            started = int(time.time())
-            last_new_agent_seen = started
-            last_log = started
-
-            while len(expected_agents_in_up_state) != len(actual_agents_in_up_state):
-                await asyncio.sleep(0.1)
-                now = int(time.time())
-                if now - last_new_agent_seen > AUTO_STARTED_AGENT_WAIT:
-                    LOGGER.warning(
-                        "Timeout: agent with PID %s took too long to start: still waiting for agent instances %s",
-                        proc.pid,
-                        ",".join(sorted(expected_agents_in_up_state - actual_agents_in_up_state))
-                    )
-                    raise asyncio.TimeoutError()
-                if now - last_log > AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL:
-                    last_log = now
-                    LOGGER.debug(
-                        "Waiting for agent with PID %s, waited %d seconds, %d/%d instances up",
-                        proc.pid,
-                        now - started,
-                        len(actual_agents_in_up_state),
-                        len(expected_agents_in_up_state),
-                    )
-                new_actual_agents_in_up_state = {
-                    agent_name
-                    for agent_name in expected_agents_in_up_state
-                    if (
-                        (session := self._agent_manager.tid_endpoint_to_session.get((env.id, agent_name), None)) is not None
-                        # make sure to check for expiry because sessions are unregistered from the agent manager asyncronously
-                        and not session.expired
-                    )
-                }
-                if len(new_actual_agents_in_up_state) > len(actual_agents_in_up_state):
-                    # Reset timeout timer because a new instance became active
-                    last_new_agent_seen = now
-                actual_agents_in_up_state = new_actual_agents_in_up_state
-
-            LOGGER.debug(
-                "Agent process with PID %s is up for agent instances %s",
-                proc.pid,
-                ",".join(sorted(expected_agents_in_up_state)),
-            )
-
         async with self.agent_lock:
             # silently ignore requests if this environment is halted
             refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
@@ -1170,7 +1106,7 @@ class AutostartedAgentManager(ServerSlice):
             if env.halted:
                 return False
 
-            if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is None:
+            if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is not None:
                 # Start new process if none is currently running for this environment.
                 # Otherwise trust that it tracks any changes to the agent map.
                 LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
@@ -1186,10 +1122,13 @@ class AutostartedAgentManager(ServerSlice):
 
             # Wait for all agents to start
             try:
-                await _wait_until_agent_instances_are_active()
+                await self._wait_for_agents(env, agents)
             except asyncio.TimeoutError:
-                # TODO: what to do here? Should TimeoutError even be raised?
-                pass
+                # TODO: better log message? Detailed one is already raised in wait method
+                #       Depends on return value semantics
+                LOGGER.warning(
+                    "Not all agent instances started successfully",
+                )
             # TODO: return values -> what does the bool mean?
             return False
 
@@ -1337,6 +1276,74 @@ ssl=True
                 outhandle.close()
             if errhandle is not None:
                 errhandle.close()
+
+    async def _wait_for_agents(self, env: data.Environment, agents: Set[str]) -> None:
+        """
+        Wait until all requested autostarted agent instances are active, e.g. after starting a new agent process.
+
+        Must be called under the agent lock.
+
+        :param env: The environment for which to wait for agents.
+        :param agents: Autostarted agent endpoints to wait for.
+
+        :raises TimeoutError: When not all agent instances are active and no new agent instance became active in the last
+            5 seconds.
+        """
+        # TODO: TimeoutError? + docstring
+        agent_statuses: dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(env.id, agents)
+        # Only wait for agents that are not paused
+        expected_agents_in_up_state: Set[str] = {
+            agent_name
+            for agent_name, status in agent_statuses.items()
+            if status is not None and status is not AgentStatus.paused
+        }
+
+        assert env.id in self._agent_procs
+        proc = self._agent_procs[env.id]
+
+        actual_agents_in_up_state: set[str] = set()
+        started = int(time.time())
+        last_new_agent_seen = started
+        last_log = started
+
+        while len(expected_agents_in_up_state) != len(actual_agents_in_up_state):
+            await asyncio.sleep(0.1)
+            now = int(time.time())
+            if now - last_new_agent_seen > AUTO_STARTED_AGENT_WAIT:
+                LOGGER.warning(
+                    "Timeout: agent with PID %s took too long to start: still waiting for agent instances %s",
+                    proc.pid,
+                    ",".join(sorted(expected_agents_in_up_state - actual_agents_in_up_state))
+                )
+                raise asyncio.TimeoutError()
+            if now - last_log > AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL:
+                last_log = now
+                LOGGER.debug(
+                    "Waiting for agent with PID %s, waited %d seconds, %d/%d instances up",
+                    proc.pid,
+                    now - started,
+                    len(actual_agents_in_up_state),
+                    len(expected_agents_in_up_state),
+                )
+            new_actual_agents_in_up_state = {
+                agent_name
+                for agent_name in expected_agents_in_up_state
+                if (
+                    (session := self._agent_manager.tid_endpoint_to_session.get((env.id, agent_name), None)) is not None
+                    # make sure to check for expiry because sessions are unregistered from the agent manager asyncronously
+                    and not session.expired
+                )
+            }
+            if len(new_actual_agents_in_up_state) > len(actual_agents_in_up_state):
+                # Reset timeout timer because a new instance became active
+                last_new_agent_seen = now
+            actual_agents_in_up_state = new_actual_agents_in_up_state
+
+        LOGGER.debug(
+            "Agent process with PID %s is up for agent instances %s",
+            proc.pid,
+            ",".join(sorted(expected_agents_in_up_state)),
+        )
 
     async def notify_agent_about_agent_map_update(self, env: data.Environment) -> None:
         agent_client = self._agent_manager.get_agent_client(tid=env.id, endpoint="internal", live_agent_only=False)
