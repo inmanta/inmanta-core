@@ -1039,7 +1039,9 @@ class Agent(SessionEndpoint):
             await self._update_agent_map(agent_map)
 
     async def _update_agent_map(self, agent_map: dict[str, str]) -> None:
-        # TODO: call validate method? i.e. inmanta.data.convert_agent_map
+        if "internal" not in agent_map:
+            raise ValueError("The internal agent must be present in the agent map")
+
         async with self._instances_lock:
             self.agent_map = agent_map
             # Add missing agents
