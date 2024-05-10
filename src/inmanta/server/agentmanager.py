@@ -264,7 +264,6 @@ class AgentManager(ServerSlice, SessionListener):
                 live_session = self.tid_endpoint_to_session.get(key)
                 if live_session:
                     # The agent has an active agent instance that has to be paused
-                    # TODO: race condition? Agent.pause executes in transaction, new _seen_session could re-add it?
                     del self.tid_endpoint_to_session[key]
                     await live_session.get_client().set_state(agent_name, enabled=False)
                     endpoints_with_new_primary.append((agent_name, None))
@@ -1069,6 +1068,8 @@ class AutostartedAgentManager(ServerSlice):
             this list and in the agent map to be active before returning.
         :param restart: Restart all agents even if the list of agents is up to date.
         :param connection: The database connection to use. Must not be in a transaction context.
+
+        :return: True iff a new agent process was started.
         """
         if self._stopping:
             raise ShutdownInProgress()
@@ -1094,11 +1095,12 @@ class AutostartedAgentManager(ServerSlice):
                 if env.halted:
                     return False
 
+                start_new_process: bool
                 if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is not None:
                     # Start new process if none is currently running for this environment.
                     # Otherwise trust that it tracks any changes to the agent map.
                     LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
-                    self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
+                    start_new_process = True
                 elif restart:
                     LOGGER.info(
                         "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
@@ -1106,19 +1108,19 @@ class AutostartedAgentManager(ServerSlice):
                         self._agent_procs[env.id],
                     )
                     await self._stop_autostarted_agents(env, connection=connection)
+                    start_new_process = True
+                else:
+                    start_new_process = False
+
+                if start_new_process:
                     self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
 
                 # Wait for all agents to start
                 try:
                     await self._wait_for_agents(env, agents, connection=connection)
                 except asyncio.TimeoutError:
-                    # TODO: better log message? Detailed one is already raised in wait method
-                    #       Depends on return value semantics
-                    LOGGER.warning(
-                        "Not all agent instances started successfully",
-                    )
-                # TODO: return values -> what does the bool mean?
-                return False
+                    LOGGER.warning("Not all agent instances started successfully")
+                return start_new_process
 
     async def __do_start_agent(
         self, env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
