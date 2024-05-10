@@ -640,7 +640,7 @@ class AgentManager(ServerSlice, SessionListener):
         Expire all sessions for any of the requested agent endpoints.
         """
         async with self.session_lock:
-            sessions_to_expire: Iterator[UUID] = (
+            sessions_to_expire: Iterator[protocol.Session] = (
                 session for session in self.sessions.values() if endpoints & session.endpoint_names and session.tid == env_id
             )
             await asyncio.gather(*(s.expire_and_abort(timeout=0) for s in sessions_to_expire))
@@ -1083,8 +1083,8 @@ class AutostartedAgentManager(ServerSlice):
                 Mapping[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
             )  # we know the type of this map
 
-            agents: Set[str] = set(agents) & agent_map.keys()
-            if len(agents) == 0:
+            autostart_agents: Set[str] = set(agents) & agent_map.keys()
+            if len(autostart_agents) == 0:
                 return False
 
             async with self.agent_lock:
@@ -1100,12 +1100,12 @@ class AutostartedAgentManager(ServerSlice):
                 if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is not None:
                     # Start new process if none is currently running for this environment.
                     # Otherwise trust that it tracks any changes to the agent map.
-                    LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
+                    LOGGER.info("%s matches agents managed by server, ensuring it is started.", autostart_agents)
                     start_new_process = True
                 elif restart:
                     LOGGER.info(
                         "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
-                        agents,
+                        autostart_agents,
                         self._agent_procs[env.id],
                     )
                     await self._stop_autostarted_agents(env, connection=connection)
@@ -1118,7 +1118,7 @@ class AutostartedAgentManager(ServerSlice):
 
                 # Wait for all agents to start
                 try:
-                    await self._wait_for_agents(env, agents, connection=connection)
+                    await self._wait_for_agents(env, autostart_agents, connection=connection)
                 except asyncio.TimeoutError:
                     LOGGER.warning("Not all agent instances started successfully")
                 return start_new_process
