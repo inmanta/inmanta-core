@@ -1,0 +1,9 @@
+description: "Made various improvements to the AutostartedAgent._ensure_agents method"
+sections:
+  bugfix: "Fixed a race condition where autostarted agents might become unresponsive for 30s when restarted"
+change-type: patch
+destination-branches:
+  - master
+  - iso7
+  - iso6
+
