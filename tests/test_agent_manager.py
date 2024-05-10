@@ -1253,6 +1253,99 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     assert "took too long to start" not in caplog.text
 
 
+async def test_wait_for_agent_map_update(server, client, environment) -> None:
+    """
+    Verify that when _ensure_agents is called with an agent that is still starting, we wait for it rather than to kill the
+    current process and to start a new one.
+    """
+    env_id: UUID = UUID(environment)
+    agent1: str = "agent1"
+    agent2: str = "agent2"
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+
+    # Register agents in model
+    env = await data.Environment.get_by_id(env_id)
+    assert env is not None
+    await agent_manager.ensure_agent_registered(env=env, nodename=agent1)
+    await agent_manager.ensure_agent_registered(env=env, nodename=agent2)
+
+    # Add agent1 to AUTOSTART_AGENT_MAP
+    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"internal": "", agent1: ""})
+    assert result.code == 200, result.result
+
+    env: Optional[data.Environment]
+
+    # Start agent1
+    assert (env_id, agent1) not in agent_manager.tid_endpoint_to_session
+    env = await data.Environment.get_by_id(env_id)
+    assert env is not None
+    started: bool = await autostarted_agent_manager._ensure_agents(env=env, agents=[agent1])
+    assert started
+    assert (env_id, agent1) in agent_manager.tid_endpoint_to_session
+    assert len(autostarted_agent_manager._agent_procs) == 1
+
+    # Add agent2 to AUTOSTART_AGENT_MAP
+    result = await client.set_setting(
+        tid=environment,
+        id=data.AUTOSTART_AGENT_MAP,
+        value={"internal": "", agent1: "", agent2: ""},
+    )
+    assert result.code == 200, result.result
+
+    # Call _ensure_agents with agent2 very shortly after adding it to the agent map (before the new instance has connected)
+    env = await data.Environment.get_by_id(env_id)
+    assert env is not None
+    started = await autostarted_agent_manager._ensure_agents(env=env, agents=[agent1, agent2])
+    assert (env_id, agent2) in agent_manager.tid_endpoint_to_session
+    # Verify that we did not start a new process
+    assert not started
+
+
+async def test_expire_sessions_on_restart(server, client, environment) -> None:
+    """
+    Verify that when _ensure_agents is called for an explicit restart, we properly expire the old session instead of letting
+    it time out.
+    """
+    env_id: UUID = UUID(environment)
+    agent_name: str = "agent1"
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+
+    # Register agents in model
+    env = await data.Environment.get_by_id(env_id)
+    assert env is not None
+    await agent_manager.ensure_agent_registered(env=env, nodename=agent_name)
+
+    # Add agent1 to AUTOSTART_AGENT_MAP
+    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"internal": "", agent_name: ""})
+    assert result.code == 200, result.result
+
+    env: Optional[data.Environment]
+
+    # Start agent1
+    assert (env_id, agent_name) not in agent_manager.tid_endpoint_to_session
+    env = await data.Environment.get_by_id(env_id)
+    assert env is not None
+    started: bool = await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name])
+    assert started
+    current_session: Optional[protocol.Session] = agent_manager.tid_endpoint_to_session.get((env_id, agent_name), None)
+    assert current_session is not None
+    current_process: object = autostarted_agent_manager._agent_procs.get(env_id, None)
+    assert current_process is not None
+
+    # restart agent1
+    started = await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name], restart=True)
+    assert started
+    new_session: Optional[protocol.Session] = agent_manager.tid_endpoint_to_session.get((env_id, agent_name), None)
+    assert new_session is not None
+    new_process: object = autostarted_agent_manager._agent_procs.get(env_id, None)
+    assert new_process is not None
+    # assertions: should have started a new process, and expired the old session, then wait until the new one becomes active
+    assert new_process is not current_process
+    assert current_session.id != new_session.id
+
+
 async def test_auto_started_agent_log_in_debug_mode(server, environment):
     """
     Test the logging of an autostarted agent

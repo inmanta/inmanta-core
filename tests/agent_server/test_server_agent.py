@@ -22,6 +22,7 @@ import logging
 import os
 import time
 import uuid
+from collections.abc import Mapping
 from functools import partial
 from itertools import groupby
 from logging import DEBUG
@@ -1507,6 +1508,52 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     new_agent_processes = set(agent_processes) - set(agent_processes_pre)
 
     assert len(new_agent_processes) == 0, new_agent_processes
+
+
+@pytest.mark.parametrize("autostarted", (True, False))
+async def test_autostart_mapping_overrides_config(server, client, environment, async_finalizer, caplog, autostarted: bool):
+    """
+    Verify that the use_autostart_agent_map setting takes precedence over agents configured in the config file.
+    When the option is set the server's agent map should be the authority for which agents to manage.
+    """
+    # configure agent as an autostarted agent or not
+    agent_config.use_autostart_agent_map.set(str(autostarted).lower())
+    # also configure the agent with an explicit agent config and agent map, which should be ignored
+    configured_agent: str = "configured_agent"
+    agent_config.agent_names.set(configured_agent)
+
+    env_uuid = uuid.UUID(environment)
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    # configure server's autostarted agent map
+    autostarted_agent: str = "autostarted_agent"
+    result = await client.set_setting(
+        env_uuid, data.AUTOSTART_AGENT_MAP, {"internal": "localhost", autostarted_agent: "localhost"},
+    )
+    assert result.code == 200
+
+    # Start agent
+    a = agent.Agent(environment=env_uuid, code_loader=False)
+    await a.start()
+    async_finalizer(a.stop)
+
+    # Wait until agents are up
+    await retry_limited(lambda: len(agent_manager.tid_endpoint_to_session) == (2 if autostarted else 1), 2)
+
+    endpoint_sessions: Mapping[str, UUID] = {
+        key[1]: session.id
+        for key, session in agent_manager.tid_endpoint_to_session.items()
+    }
+    assert endpoint_sessions == (
+        {
+            "internal": a.sessionid,
+            autostarted_agent: a.sessionid,
+        }
+        if autostarted
+        else {
+            configured_agent: a.sessionid,
+        }
+    )
 
 
 async def test_autostart_mapping_update_uri(server, client, environment, async_finalizer, caplog):
