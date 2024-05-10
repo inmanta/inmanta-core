@@ -1528,7 +1528,9 @@ async def test_autostart_mapping_overrides_config(server, client, environment, a
     # configure server's autostarted agent map
     autostarted_agent: str = "autostarted_agent"
     result = await client.set_setting(
-        env_uuid, data.AUTOSTART_AGENT_MAP, {"internal": "localhost", autostarted_agent: "localhost"},
+        env_uuid,
+        data.AUTOSTART_AGENT_MAP,
+        {"internal": "localhost", autostarted_agent: "localhost"},
     )
     assert result.code == 200
 
@@ -1541,8 +1543,7 @@ async def test_autostart_mapping_overrides_config(server, client, environment, a
     await retry_limited(lambda: len(agent_manager.tid_endpoint_to_session) == (2 if autostarted else 1), 2)
 
     endpoint_sessions: Mapping[str, UUID] = {
-        key[1]: session.id
-        for key, session in agent_manager.tid_endpoint_to_session.items()
+        key[1]: session.id for key, session in agent_manager.tid_endpoint_to_session.items()
     }
     assert endpoint_sessions == (
         {
