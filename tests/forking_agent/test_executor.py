@@ -23,11 +23,13 @@ import logging
 import pytest
 
 import inmanta.agent
+import inmanta.agent.executor
 import inmanta.config
 import inmanta.data
 import inmanta.loader
 import inmanta.protocol.ipc_light
 import inmanta.util
+import utils
 from inmanta.agent import executor
 from inmanta.agent.forking_executor import MPManager
 from inmanta.protocol.ipc_light import ConnectionLost
@@ -147,10 +149,13 @@ def test():
         import lorem  # noqa: F401, F811
 
 
-async def test_executor_server_dirty_shutdown(mpmanager: MPManager):
+async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     manager = mpmanager
 
-    child1 = await manager.make_child_and_connect(executor.ExecutorId("test", "Test", None), None)
+    blueprint = executor.ExecutorBlueprint(
+        pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=[], sources=[]
+    )
+    child1 = await manager.make_child_and_connect(executor.ExecutorId("test", "Test", blueprint), None)
 
     result = await child1.connection.call(Echo(["aaaa"]))
     assert ["aaaa"] == result
@@ -164,3 +169,5 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager):
 
     with pytest.raises(ConnectionLost):
         await child1.connection.call("echo", ["aaaa"])
+
+    utils.assert_no_warning(caplog)

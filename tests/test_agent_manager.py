@@ -1314,7 +1314,7 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
 
     server = TestSlice(name="test_slice")
 
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
     ctx = ibl.load_slices()
 
     for mypart in ctx.get_slices():

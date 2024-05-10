@@ -487,10 +487,17 @@ class IndexLookup(ReferenceStatement, Resumer):
 
 class ShortIndexLookup(IndexLookup):
     """lookup of the form
-    vm = ip::Host(...)
-    file = std::File(host=vm, path="/etc/motd", ...)
+    entity ExtendedHost extends ip::Host:
+    end
 
-    vm.files[path="/etc/motd"]
+    ExtendedHost.resources [0:] -- std::testing::NullResource.host[1]
+
+    host = ExtendedHost(...)
+    resource = std::testing::NullResource(name='test', host=host, ...)
+
+    index std::testing::NullResource(host, name)
+
+    host.resources[name="test"]
     """
 
     __slots__ = ("rootobject", "relation", "querypart", "wrapped_querypart")

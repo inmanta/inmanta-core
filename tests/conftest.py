@@ -16,11 +16,13 @@
     Contact: code@inmanta.com
 """
 
+import logging.config
 import warnings
 
 from tornado.httpclient import AsyncHTTPClient
 
 import toml
+from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 
@@ -788,6 +790,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
+        config.Config.set("agent", "executor-mode", "forking")
         yield config
 
 
@@ -800,7 +803,7 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
 
     try:
         await ibl.start()
@@ -886,8 +889,9 @@ async def server_multi(
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
+        config.Config.set("agent", "executor-mode", "forking")
 
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
 
         try:
             await ibl.start()
@@ -1575,23 +1579,6 @@ def monkey_patch_compiler_service(monkeypatch, server, make_compile_fail, runner
         return CompileRunnerMock(compile, make_compile_fail, runner_queue)
 
     monkeypatch.setattr(compilerslice, "_get_compile_runner", patch, raising=True)
-    monkeypatch.setattr(compilerslice, "_running_compiles", {}, raising=False)
-
-    original_run = compilerslice._run
-
-    async def _run(compile: data.Compile) -> None:
-        compilerslice._running_compiles[compile.environment] = compile
-        await original_run(compile)
-        async with compilerslice._write_lock_env_to_compile_task:
-            if compile.environment not in compilerslice._env_to_compile_task:
-                # Clear self._running_compiles iff the compiler service has deleted the environment from the compiling
-                # environments set.
-                del compilerslice._running_compiles[compile.environment]
-            else:
-                # Otherwise, a new _run will have overwritten the running compile => do nothing
-                assert compilerslice._running_compiles[compile.environment] is not compile
-
-    monkeypatch.setattr(compilerslice, "_run", _run, raising=True)
 
 
 @pytest.fixture
@@ -1801,7 +1788,7 @@ async def migrate_db_from(
         await PGRestore(fh.readlines(), postgresql_client).run()
         logger.debug("Restored %s", marker.args[0])
 
-    bootloader: InmantaBootloader = InmantaBootloader()
+    bootloader: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
     async def migrate() -> None:
         # start boatloader, triggering db migration
@@ -1875,6 +1862,23 @@ async def set_running_tests():
     Ensure the RUNNING_TESTS variable is True when running tests
     """
     inmanta.RUNNING_TESTS = True
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def dont_override_root_logger(request, monkeypatch):
+    """
+    Make sure the inmanta.logging.FullLoggingConfig._to_dict_config() method doesn't override the root logger
+    when the caplog fixture is used, because caplog captures log messages by attaching a handler to the root logger.
+    """
+    original_to_dict_config_method = inmanta_logging.FullLoggingConfig._to_dict_config
+
+    def _to_dict_config_patched(self) -> dict[str, object]:
+        dict_config = original_to_dict_config_method(self)
+        dict_config.pop("root", None)
+        return dict_config
+
+    if "caplog" in request.fixturenames:
+        monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "_to_dict_config", _to_dict_config_patched)
 
 
 @pytest.fixture(scope="session")

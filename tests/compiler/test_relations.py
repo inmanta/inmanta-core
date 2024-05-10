@@ -474,37 +474,39 @@ def test_set_wrong_relation_type(snippetcompiler):
     # noqa: E501
     snippetcompiler.setup_for_error(
         """
+        import std::testing
         entity Credentials:
         end
 
-        Credentials.file [1] -- std::File
+        Credentials.null_resource [1] -- std::testing::NullResource
 
         implement Credentials using std::none
 
-        creds = Credentials(file=creds)
+        creds = Credentials(null_resource=creds)
         """,
-        """Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)`"""
-        """ (reported in Construct(Credentials) ({dir}/main.cf:9))
+        """Could not set attribute `null_resource` on instance `__config__::Credentials (instantiated at {dir}/main.cf:10)`"""
+        """ (reported in Construct(Credentials) ({dir}/main.cf:10))
 caused by:
-  Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File """
-        """(reported in Construct(Credentials) ({dir}/main.cf:9))""",
+  Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:10), should be std::testing::NullResource """
+        """(reported in Construct(Credentials) ({dir}/main.cf:10))""",
     )
 
     snippetcompiler.setup_for_error(
         """
+        import std::testing
         entity Credentials:
         end
 
-        Credentials.file [1] -- std::File
+        Credentials.null_resource [1] -- std::testing::NullResource
 
         implement Credentials using std::none
 
         creds = Credentials()
-        creds.file = creds
+        creds.null_resource = creds
         """,
-        r"""Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` (reported in creds.file = creds ({dir}/main.cf:10))
+        r"""Could not set attribute `null_resource` on instance `__config__::Credentials (instantiated at {dir}/main.cf:10)` (reported in creds.null_resource = creds ({dir}/main.cf:11))
 caused by:
-  Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File (reported in creds.file = creds ({dir}/main.cf:10))""",  # noqa: E501
+  Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:10), should be std::testing::NullResource (reported in creds.null_resource = creds ({dir}/main.cf:11))""",  # noqa: E501
     )
 
 

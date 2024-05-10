@@ -412,7 +412,7 @@ def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: 
 @functools.lru_cache(1)
 def get_product_meta_data() -> ProductMetadata:
     """Get the produce meta-data"""
-    bootloader = InmantaBootloader()
+    bootloader = InmantaBootloader(configure_logging=True)
     context = bootloader.load_slices()
     return context.get_product_metadata()
 
