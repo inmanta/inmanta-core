@@ -1489,6 +1489,14 @@ def list_users() -> list[model.User]:
     :return: A list of all users"""
 
 
+@typedmethod(path="/current_user", operation="GET", client_types=[ClientType.api], api_version=2)
+def get_current_user() -> model.CurrentUser:
+    """Get the current logged in user (based on the provided JWT) and server auth settings
+
+    :raises NotFound: Raised when server authentication is not enabled
+    """
+
+
 @typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def delete_user(username: str) -> None:
     """Delete a user from the system with given username.
