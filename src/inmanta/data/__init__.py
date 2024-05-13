@@ -5111,7 +5111,7 @@ class Resource(BaseDocument):
         inner_query = f"""
         SELECT r.resource_id as resource_id,
         (
-            CASE WHEN (r.status = 'deploying')
+            CASE WHEN r.status IN ('deploying', 'undefined', 'skipped_for_undefined')
                 THEN
                     r.status::text
                 ELSE
