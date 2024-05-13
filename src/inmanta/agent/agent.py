@@ -36,13 +36,11 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 import pkg_resources
 
 import inmanta.agent.executor
-import inmanta.const
 from inmanta import config, const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.reporting import collect_report
-from inmanta.const import ResourceState
 from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
@@ -362,7 +360,7 @@ class ResourceScheduler:
     def reload(
         self,
         resources: Sequence[ResourceDetails],
-        undeployable: dict[ResourceVersionIdStr, ResourceState],
+        undeployable: dict[ResourceVersionIdStr, const.ResourceState],
         new_request: DeployRequest,
         executor: executor.Executor,
     ) -> None:
@@ -562,7 +560,7 @@ class AgentInstance:
         :param thread_pool_finalizer: all threadpools that should be joined should be added here.
         """
         assert self._stopped
-        await self.executor_manager.join(thread_pool_finalizer, inmanta.const.SHUTDOWN_GRACE_IOLOOP * 0.9)
+        await self.executor_manager.join(thread_pool_finalizer, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
 
     @property
     def environment(self) -> uuid.UUID:
@@ -994,7 +992,7 @@ class Agent(SessionEndpoint):
 
         threadpools_to_join = [self.thread_pool]
 
-        await self.executor_manager.join(threadpools_to_join, inmanta.const.SHUTDOWN_GRACE_IOLOOP * 0.9)
+        await self.executor_manager.join(threadpools_to_join, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
         self.thread_pool.shutdown(wait=False)
         for instance in self._instances.values():
             await instance.stop()
