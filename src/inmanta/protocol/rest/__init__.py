@@ -496,38 +496,31 @@ class CallArguments:
         :return: A mapping of claims
         """
         header_value: Optional[str] = None
-        header_name: Optional[str] = None
-        cfg_name: Optional[str] = None
-        for name in auth.AuthJWTConfig.list():
-            cfg = auth.AuthJWTConfig.get(name)
 
-            if cfg.jwt_header in self._request_headers:
-                header_value = self._request_headers[cfg.jwt_header]
-                header_name = cfg.jwt_header
-                cfg_name = name
+        if additional_header := server_config.server_additional_auth_header.get():
+            if additional_header in self._request_headers:
+                header_value = self._request_headers[additional_header]
 
-        if not header_value or not header_name or not cfg_name:
-            return None
-
-        if " " in header_value:
-            parts = header_value.split(" ")
+        if header_value is None and "Authorization" in self._request_headers:
+            # In Authorization it is parsed as a bearer token
+            parts = self._request_headers["Authorization"].split(" ")
 
             if len(parts) != 2 or parts[0].lower() != "bearer":
                 logging.getLogger(__name__).warning(
-                    f"Invalid JWT token header ({header_name} from auth config {cfg_name}). "
-                    f"A bearer token is expected, instead ({header_value} was provided)"
+                    "Invalid JWT token header Authorization. A bearer token is expected, instead (%s was provided)",
+                    header_value,
                 )
                 return None
 
-            token_value = parts[1]
-        else:
-            token_value = header_value
+            header_value = parts[1]
 
-        self._auth_token = auth.decode_token(token_value)
+        if header_value is None:
+            return None
 
-        cfg = auth.AuthJWTConfig.get(cfg_name)
+        self._auth_token, cfg = auth.decode_token(header_value)
+
         if cfg.jwt_username_claim in self._auth_token:
-            self._auth_username = self._auth_token[cfg.jwt_username_claim]
+            self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
 
     def authenticate(self, auth_enabled: bool) -> None:
         """Fetch any identity information and authenticate. This will also load this authentication
@@ -541,15 +534,22 @@ class CallArguments:
         # get and validate the token. A valid token means that user is authenticated
         self._parse_and_validate_auth_token()
         if self._auth_token is None and self._config.properties.enforce_auth:
-            # We only need a valid token when the
+            # We only need a valid token when the endpoint enforces authentication
             raise exceptions.UnauthorizedException()
 
-    def authorize_request(self) -> None:
+    def authorize_request(self, auth_enabled: bool) -> None:
+        """Authorize a request based on the given data
+
+        :param auth_enabled: is authentication enabled?
         """
-        Authorize a request based on the given data
-        """
-        if self._auth_token is None:
+        if not auth_enabled:
             return
+
+        if self._auth_token is None:
+            if self._config.properties.enforce_auth:
+                # We only need a valid token when the endpoint enforces authentication and auth is enabled
+                raise exceptions.UnauthorizedException()
+            return None
 
         # Enforce environment restrictions
         env_key: str = const.INMANTA_URN + "env"
@@ -617,10 +617,13 @@ class RESTBase(util.TaskHandler[None]):
                 if not isinstance(sid, uuid.UUID) or not self.validate_sid(sid):
                     raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
+            # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
+            # Authorization might need data from the request but we do not want to process it before we are sure the call
+            # is authenticated.
             arguments = CallArguments(config, message, request_headers)
             arguments.authenticate(server_config.server_enable_auth.get())
             await arguments.process()
-            arguments.authorize_request()
+            arguments.authorize_request(server_config.server_enable_auth.get())
 
             LOGGER.debug(
                 "Calling method %s(%s) user=%s",

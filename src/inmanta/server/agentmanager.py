@@ -35,6 +35,7 @@ import asyncpg.connection
 import inmanta.config
 import logfire
 import logfire.propagate
+from inmanta import config as global_config
 from inmanta import const, data
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
@@ -1217,8 +1218,9 @@ class AutostartedAgentManager(ServerSlice):
             agent_names.append("internal")
 
         # generate config file
-        config = """[config]
+        config = f"""[config]
 state-dir=%(statedir)s
+log-dir={global_config.log_dir.get()}
 
 use_autostart_agent_map=true
 agent-names = %(agents)s
@@ -1230,6 +1232,9 @@ agent-repair-splay-time=%(agent_repair_splay)d
 agent-repair-interval=%(agent_repair_interval)s
 
 agent-get-resource-backoff=%(agent_get_resource_backoff)f
+
+[agent]
+executor-mode={agent_cfg.agent_executor_mode.get().name}
 
 [agent_rest_transport]
 port=%(port)s

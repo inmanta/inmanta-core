@@ -267,7 +267,7 @@ def resume_environment(tid: uuid.UUID) -> None:
 )
 def environment_clear(id: uuid.UUID) -> None:
     """
-    Clear all data from this environment.
+    Clear all data from this environment. The environment will be temporarily halted during the decommissioning process.
 
     :param id: The uuid of the environment.
 
@@ -1493,7 +1493,7 @@ def list_users() -> list[model.User]:
 def get_current_user() -> model.CurrentUser:
     """Get the current logged in user (based on the provided JWT) and server auth settings
 
-    :raises BadRequest: Raised when server authentication is not enabled
+    :raises NotFound: Raised when server authentication is not enabled
     """
 
 

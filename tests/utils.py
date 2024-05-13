@@ -22,6 +22,7 @@ import datetime
 import functools
 import json
 import logging
+import math
 import os
 import shutil
 import uuid
@@ -204,26 +205,48 @@ class LogSequence:
         self.allow_errors = allow_errors
         self.ignore = ignore
 
-    def _find(self, loggerpart, level, msg, after=0):
+    def _find(self, loggerpart, level, msg, after=0, min_level: int = math.inf):
+        """
+
+        :param loggerpart: part of the logger name to match
+        :param level: exact log level to match
+        :param min_level: minimal level to match (works as normal loglevel settings that take all higher levels)
+        :param msg: part of the message to match on
+        :param after: starting point in th capture buffer to search
+
+        :return: matched index in the capture buffer, -1 for no match
+        """
         for i, (logger_name, log_level, message) in enumerate(self.caplog.record_tuples[after:]):
             if msg in message:
-                if loggerpart in logger_name and level == log_level:
+                if loggerpart in logger_name and (level == log_level or (log_level >= min_level)):
                     if any(i in logger_name for i in self.ignore):
                         continue
                     return i + after
         return -1
 
-    def contains(self, loggerpart, level, msg):
-        index = self._find(loggerpart, level, msg, self.index)
+    def contains(self, loggerpart, level, msg, min_level: int = math.inf) -> "LogSequence":
+        """
+        :param loggerpart: part of the logger name to match
+        :param level: exact log level to match
+        :param min_level: minimal level to match (works as normal loglevel settings that take all higher levels)
+        :param msg: part of the message to match on
+        """
+        index = self._find(loggerpart, level, msg, self.index, min_level)
         if not self.allow_errors:
             # first error is later
-            idxe = self._find("", logging.ERROR, "", self.index)
+            idxe = self._find("", logging.ERROR, "", self.index, min_level)
             assert idxe == -1 or idxe >= index
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
-    def assert_not(self, loggerpart, level, msg):
-        idx = self._find(loggerpart, level, msg, self.index)
+    def assert_not(self, loggerpart, level, msg, min_level: int = math.inf) -> None:
+        """
+        :param loggerpart: part of the logger name to match
+        :param level: exact log level to match
+        :param min_level: minimal level to match (works as normal loglevel settings that take all higher levels)
+        :param msg: part of the message to match on
+        """
+        idx = self._find(loggerpart, level, msg, self.index, min_level)
         assert idx == -1, f"{idx}, {self.caplog.record_tuples[idx]}"
 
     def no_more_errors(self):
@@ -389,7 +412,7 @@ def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: 
 @functools.lru_cache(1)
 def get_product_meta_data() -> ProductMetadata:
     """Get the produce meta-data"""
-    bootloader = InmantaBootloader()
+    bootloader = InmantaBootloader(configure_logging=True)
     context = bootloader.load_slices()
     return context.get_product_metadata()
 
@@ -524,6 +547,7 @@ def module_from_template(
     new_content_init_cf: Optional[str] = None,
     new_content_init_py: Optional[str] = None,
     in_place: bool = False,
+    four_digit_version: bool = False,
 ) -> module.ModuleV2Metadata:
     """
     Creates a v2 module from a template.
@@ -541,6 +565,7 @@ def module_from_template(
     :param new_content_init_cf: The new content of the _init.cf file.
     :param new_content_init_py: The new content of the __init__.py file.
     :param in_place: Modify the module in-place instead of copying it.
+    :param four_digit_version: if the version uses 4 digits (3 by default)
     """
 
     def to_python_requires(
@@ -557,6 +582,8 @@ def module_from_template(
     config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
     config: configparser.ConfigParser = configparser.ConfigParser()
     config.read(config_file)
+    if four_digit_version:
+        config["metadata"]["four_digit_version"] = "True"
     if new_version is not None:
         base, tag = module.ModuleV2Metadata.split_version(new_version)
         config["metadata"]["version"] = base

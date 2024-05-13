@@ -36,9 +36,11 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 import pkg_resources
 
 import logfire
-from inmanta import const, data, env, protocol
+import inmanta.agent.executor
+import inmanta.const
+from inmanta import config, const, data, env, protocol
 from inmanta.agent import config as cfg
-from inmanta.agent import executor, in_process_executor
+from inmanta.agent import executor, forking_executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ResourceState
@@ -545,7 +547,7 @@ class AgentInstance:
         # To give smooth deploy experience, we want these agents to start immediately.
         self.ensure_deploy_on_start = ensure_deploy_on_start
 
-        self.executor_manager = process.executor_manager
+        self.executor_manager: executor.ExecutorManager[executor.Executor] = process.executor_manager
 
     async def stop(self) -> None:
         self._stopped = True
@@ -554,14 +556,14 @@ class AgentInstance:
         self._nq.cancel()
         await self.executor_manager.stop_for_agent(self.name)
 
-    def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
+    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
         """
         Called after stop to ensure complete shutdown
 
         :param thread_pool_finalizer: all threadpools that should be joined should be added here.
         """
         assert self._stopped
-        self.executor_manager.join(thread_pool_finalizer)
+        await self.executor_manager.join(thread_pool_finalizer, inmanta.const.SHUTDOWN_GRACE_IOLOOP * 0.9)
 
     @property
     def environment(self) -> uuid.UUID:
@@ -741,13 +743,13 @@ class AgentInstance:
                 self.logger.warning("Got an error while pulling resources for %s. %s", deploy_request.reason, result.result)
 
             else:
-                undeployable, resources, executor = await self.setup_executor(
-                    result.result["version"], const.ResourceAction.deploy, result.result["resources"]
-                )
-                self.logger.debug("Pulled %d resources because %s", len(resources), deploy_request.reason)
-
-                if len(resources) > 0:
-                    self._nq.reload(resources, undeployable, deploy_request, executor)
+                self.logger.debug("Pulled %d resources because %s", len(result.result["resources"]), deploy_request.reason)
+                if len(result.result["resources"]) > 0:
+                    undeployable, resources, executor = await self.setup_executor(
+                        result.result["version"], const.ResourceAction.deploy, result.result["resources"]
+                    )
+                    if len(resources) > 0 and executor is not None:
+                        self._nq.reload(resources, undeployable, deploy_request, executor)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> Apireturn:
         self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
@@ -776,13 +778,15 @@ class AgentInstance:
                             resource.rvid,
                             undeployable[resource.rvid],
                         )
+                        # TODO: SKIP IS NO CHANGE???? https://github.com/inmanta/inmanta-core/issues/7588
                         await self.get_client().dryrun_update(
                             tid=resource.env_id, id=dry_run_id, resource=resource.rvid, changes={}
                         )
                     else:
                         deployable_resources.append(resource)
-
-                await executor.dry_run(deployable_resources, dry_run_id)
+                if deployable_resources:
+                    assert executor is not None
+                    await executor.dry_run(deployable_resources, dry_run_id)
 
     async def get_facts(self, resource: JsonType) -> Apireturn:
         async with self.ratelimiter:
@@ -796,12 +800,13 @@ class AgentInstance:
                 )
                 return 500
 
+            assert executor is not None
             return await executor.get_facts(resource_refs[0])
 
     @logfire.instrument("Agent.setup_executor", extract_args=True)
     async def setup_executor(
         self, version: int, action: const.ResourceAction, resources: list[JsonType]
-    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], executor.Executor]:
+    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], Optional[executor.Executor]]:
         # TODO refactor wiring of tuples around -> not sure how
 
         """
@@ -811,20 +816,26 @@ class AgentInstance:
 
             - undeployable: resources for which code loading failed
             - loaded_resources: ALL resources from this batch
-            - the executor: with relevant handler code loaded
+            - the executor: with relevant handler code loaded, can be None if all are undeployable
 
         """
         started = datetime.datetime.now().astimezone()
         code: Collection[ResourceInstallSpec]
+
+        resource_types = {res["resource_type"] for res in resources}
+
         # Resource types for which no handler code exist for the given version
         # or for which the pip config couldn't be retrieved
-        code, invalid_resource_types = await self.process.get_code(
-            self._env_id, version, [res["resource_type"] for res in resources]
-        )
+        code, invalid_resource_types = await self.process.get_code(self._env_id, version, resource_types)
         # Resource types for which an error occurred during handler code installation
 
-        executor = await self.executor_manager.get_executor(self.name, self.uri, code)
-        failed_resource_types = executor.failed_resource_types
+        try:
+            executor = await self.executor_manager.get_executor(self.name, self.uri, code)
+            failed_resource_types = executor.failed_resource_types
+        except Exception:
+            logging.warning("Could not set up executor for %s", self.name, exc_info=True)
+            executor = None
+            failed_resource_types = resource_types
 
         loaded_resources: list[ResourceDetails] = []
         failed_resources: list[ResourceVersionIdStr] = []
@@ -911,6 +922,7 @@ class Agent(SessionEndpoint):
         self._loader: Optional[CodeLoader] = None
         self._env: Optional[env.VirtualEnv] = None
         if code_loader:
+            # all of this should go into the executor manager https://github.com/inmanta/inmanta-core/issues/7589
             self._env = env.VirtualEnv(self._storage["env"])
             self._env.use_virtual_env()
             self._loader = CodeLoader(self._storage["code"], clean=True)
@@ -925,13 +937,33 @@ class Agent(SessionEndpoint):
 
         self.agent_map: Optional[dict[str, str]] = agent_map
 
-        self.executor_manager = in_process_executor.InProcessExecutorManager(
-            environment,
-            self._client,
-            asyncio.get_event_loop(),
-            LOGGER,
-            self,
-        )
+        remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExcutorMode.forking
+        can_have_remote_executor = code_loader
+
+        self.executor_manager: executor.ExecutorManager[executor.Executor]
+        if remote_executor and can_have_remote_executor:
+            LOGGER.info("Selected forking agent executor mode")
+            env_manager = inmanta.agent.executor.VirtualEnvironmentManager(self._storage["executor"])
+            assert self.environment is not None  # Mypy
+            self.executor_manager = forking_executor.MPManager(
+                self.thread_pool,
+                env_manager,
+                self.sessionid,
+                self.environment,
+                config.log_dir.get(),
+                self._storage["executor"],
+                LOGGER.level,
+                False,
+            )
+        else:
+            LOGGER.info("Selected threaded agent executor mode")
+            self.executor_manager = in_process_executor.InProcessExecutorManager(
+                environment,
+                self._client,
+                asyncio.get_event_loop(),
+                LOGGER,
+                self,
+            )
 
     async def _init_agent_map(self) -> None:
         if cfg.use_autostart_agent_map.get():
@@ -945,7 +977,7 @@ class Agent(SessionEndpoint):
                 raise CouldNotConnectToServer()
             self.agent_map = result.result["data"]["settings"][data.AUTOSTART_AGENT_MAP]
         elif self.agent_map is None:
-            self.agent_map = cfg.agent_map.get()
+            self.agent_map = dict(cfg.agent_map.get())
 
     async def _init_endpoint_names(self) -> None:
         if self.hostname is not None:
@@ -961,15 +993,15 @@ class Agent(SessionEndpoint):
 
     async def stop(self) -> None:
         await super().stop()
-        self.executor_manager.stop()
+        await self.executor_manager.stop()
 
         threadpools_to_join = [self.thread_pool]
 
-        self.executor_manager.join(threadpools_to_join)
+        await self.executor_manager.join(threadpools_to_join, inmanta.const.SHUTDOWN_GRACE_IOLOOP * 0.9)
         self.thread_pool.shutdown(wait=False)
         for instance in self._instances.values():
             await instance.stop()
-            instance.join(threadpools_to_join)
+            await instance.join(threadpools_to_join)
 
         await join_threadpools(threadpools_to_join)
 
@@ -1121,7 +1153,7 @@ class Agent(SessionEndpoint):
 
     @logfire.instrument("Agent.get_code", extract_args=True)
     async def get_code(
-        self, environment: uuid.UUID, version: int, resource_types: Sequence[str]
+        self, environment: uuid.UUID, version: int, resource_types: Collection[str]
     ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResourcesSet]:
         """
         Get the collection of installation specifications (i.e. pip config, python package dependencies,
@@ -1342,6 +1374,8 @@ class Agent(SessionEndpoint):
         Check if the server storage is configured and ready to use.
         """
 
+        # TODO: review on disk layout: https://github.com/inmanta/inmanta-core/issues/7590
+
         state_dir = cfg.state_dir.get()
 
         if not os.path.exists(state_dir):
@@ -1363,6 +1397,11 @@ class Agent(SessionEndpoint):
         dir_map["env"] = env_dir
         if not os.path.exists(env_dir):
             os.mkdir(env_dir)
+
+        executor_dir = os.path.join(agent_state_dir, "executor")
+        dir_map["executor"] = executor_dir
+        if not os.path.exists(executor_dir):
+            os.mkdir(executor_dir)
 
         return dir_map
 

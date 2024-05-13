@@ -46,18 +46,18 @@ async def env_with_versions(environment):
 
 async def create_resource_in_multiple_versions(
     environment: uuid.UUID,
-    path: str,
+    name: str,
     version_attributes_map: dict[int, dict[str, object]],
     agent: str = "internal",
-    resource_type: str = "std::File",
+    resource_type: str = "std::testing::NullResource",
     status: ResourceState = ResourceState.deployed,
 ):
-    key = f"{resource_type}[{agent},path={path}]"
+    key = f"{resource_type}[{agent},name={name}]"
     for version, attributes in version_attributes_map.items():
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-            attributes={**attributes, **{"path": path}},
+            attributes={**attributes, **{"name": name}},
             status=status,
         )
         await res.insert()
@@ -70,9 +70,9 @@ async def test_list_attr_diff(client, environment, env_with_versions):
     constant_value = {"key2": "val2"}
     await create_resource_in_multiple_versions(
         env_id,
-        "/tmp/dir1",
+        "dir1",
         {1: constant_value, 2: constant_value, 3: constant_value},
-        resource_type="std::Directory",
+        resource_type="std::testing::NullResource",
     )
     # from v1 to v2 a single value and a list are changed, a list added another deleted,
     # and there is another list where the data type changes from ints to strings.
@@ -80,28 +80,31 @@ async def test_list_attr_diff(client, environment, env_with_versions):
     # v2 and v3 have only one difference, the requires list
     await create_resource_in_multiple_versions(
         env_id,
-        "/tmp/dir1/file1",
+        "file1",
         {
             1: {
                 "key1": "val1",
                 "list_attr_removed": [1, 2],
                 "list_attr_modified": [1, 2],
                 "simple_attr_type_change": True,
-                "requires": ["std::Directory[internal,path=/tmp/dir1]"],
+                "requires": ["std::testing::NullResource[internal,name=dir1]"],
             },
             2: {
                 "key1": "val2",
                 "list_attr_added": [3, 4],
                 "list_attr_modified": [5, 4, 3],
                 "simple_attr_type_change": "True",
-                "requires": ["std::Directory[internal,path=/tmp/dir1]"],
+                "requires": ["std::testing::NullResource[internal,name=dir1]"],
             },
             3: {
                 "key1": "val2",
                 "list_attr_added": [3, 4],
                 "list_attr_modified": [5, 4, 3],
                 "simple_attr_type_change": "True",
-                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::Directory[internal,path=/tmp/dir2]"],
+                "requires": [
+                    "std::testing::NullResource[internal,name=dir1]",
+                    "std::testing::NullResource[internal,name=dir2]",
+                ],
             },
         },
     )
@@ -148,10 +151,11 @@ async def test_list_attr_diff(client, environment, env_with_versions):
     assert result.result["data"][0]["status"] == "modified"
     assert len(result.result["data"][0]["attributes"]) == 1
     assert result.result["data"][0]["attributes"]["requires"] == {
-        "from_value": ["std::Directory[internal,path=/tmp/dir1]"],
-        "to_value": ["std::Directory[internal,path=/tmp/dir1]", "std::Directory[internal,path=/tmp/dir2]"],
-        "from_value_compare": '[\n    "std::Directory[internal,path=/tmp/dir1]"\n]',
-        "to_value_compare": '[\n    "std::Directory[internal,path=/tmp/dir1]",\n    "std::Directory[internal,path=/tmp/dir2]"\n'
+        "from_value": ["std::testing::NullResource[internal,name=dir1]"],
+        "to_value": ["std::testing::NullResource[internal,name=dir1]", "std::testing::NullResource[internal,name=dir2]"],
+        "from_value_compare": '[\n    "std::testing::NullResource[internal,name=dir1]"\n]',
+        "to_value_compare": '[\n    "std::testing::NullResource[internal,name=dir1]",\n    '
+        '"std::testing::NullResource[internal,name=dir2]"\n'
         "]",
     }
     v2_v3_diff = result.result["data"][0]["attributes"]
@@ -169,37 +173,46 @@ async def test_dict_attr_diff(client, environment, env_with_versions):
     constant_value = {"key2": "val2"}
     await create_resource_in_multiple_versions(
         env_id,
-        "/tmp/dir1",
+        "dir1",
         {1: constant_value, 2: constant_value, 3: constant_value},
-        resource_type="std::Directory",
+        resource_type="std::testing::NullResource",
     )
     await create_resource_in_multiple_versions(
         env_id,
-        "/tmp/dir2",
+        "dir2",
         {1: constant_value, 2: constant_value, 3: constant_value},
-        resource_type="std::Directory",
+        resource_type="std::testing::NullResource",
     )
     # v1 and v3 are identical
     # The changes from v1 to v2 are adding, removing and modifying dict attributes,
     # as well as a change in the order of the requires list: this shouldn't be included in the diff
     await create_resource_in_multiple_versions(
         env_id,
-        "/tmp/dir1/file1",
+        "file1",
         {
             1: {
                 "dict_attr_removed": {"a": "b"},
                 "dict_attr_modified": {"x": [6, 7], "y": "y", "z": {"abc": "test1", "d": ["test2"]}},
-                "requires": ["std::Directory[internal,path=/tmp/dir2]", "std::Directory[internal,path=/tmp/dir1]"],
+                "requires": [
+                    "std::testing::NullResource[internal,name=dir2]",
+                    "std::testing::NullResource[internal,name=dir1]",
+                ],
             },
             2: {
                 "dict_attr_added": {"x": "y"},
                 "dict_attr_modified": {"x": [42], "z": {"abc": "test1", "d": ["test3"]}},
-                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::Directory[internal,path=/tmp/dir2]"],
+                "requires": [
+                    "std::testing::NullResource[internal,name=dir1]",
+                    "std::testing::NullResource[internal,name=dir2]",
+                ],
             },
             3: {
                 "dict_attr_removed": {"a": "b"},
                 "dict_attr_modified": {"x": [6, 7], "y": "y", "z": {"abc": "test1", "d": ["test2"]}},
-                "requires": ["std::Directory[internal,path=/tmp/dir2]", "std::Directory[internal,path=/tmp/dir1]"],
+                "requires": [
+                    "std::testing::NullResource[internal,name=dir2]",
+                    "std::testing::NullResource[internal,name=dir1]",
+                ],
             },
         },
     )
@@ -271,14 +284,14 @@ async def test_resources_diff(client, environment, env_with_versions):
     # The resource is only present in version 1 and 3, the attribute values don't change
     await create_resource_in_multiple_versions(
         env_id,
-        "/tmp/dir1",
+        "dir1",
         {1: constant_value, 3: constant_value},
-        resource_type="std::Directory",
+        resource_type="std::testing::NullResource",
     )
     # The resource is only present in version 1 and 3, the attribute values change
     await create_resource_in_multiple_versions(
         env_id,
-        "/tmp/dir1/file1",
+        "file1",
         {
             1: {
                 "dict_attr_modified": {
@@ -286,20 +299,20 @@ async def test_resources_diff(client, environment, env_with_versions):
                     "y": "z",
                 },
                 "removed": False,
-                "requires": ["std::Directory[internal,path=/tmp/dir1]"],
+                "requires": ["std::testing::NullResource[internal,name=dir1]"],
             },
             3: {
                 "dict_attr_modified": {
                     "x": [42],
                 },
-                "requires": ["std::Directory[internal,path=/tmp/dir1]"],
+                "requires": ["std::testing::NullResource[internal,name=dir1]"],
             },
         },
     )
     # The resource is only present in version 2 and 3, the attribute values don't change
     await create_resource_in_multiple_versions(
         env_id,
-        "/tmp/file2",
+        "file2",
         {
             2: {
                 "dict_attr_removed": {"a": "b"},
@@ -315,27 +328,27 @@ async def test_resources_diff(client, environment, env_with_versions):
     assert result.code == 200
     # 3 resource diffs: the directory and file1 are deleted, while file2 is added
     assert len(result.result["data"]) == 3
-    assert result.result["data"][0]["resource_id"] == "std::Directory[internal,path=/tmp/dir1]"
+    assert result.result["data"][0]["resource_id"] == "std::testing::NullResource[internal,name=dir1]"
     assert_resource_deleted(result.result["data"][0])
-    assert result.result["data"][1]["resource_id"] == "std::File[internal,path=/tmp/dir1/file1]"
+    assert result.result["data"][1]["resource_id"] == "std::testing::NullResource[internal,name=file1]"
     assert_resource_deleted(result.result["data"][1])
-    assert result.result["data"][2]["resource_id"] == "std::File[internal,path=/tmp/file2]"
+    assert result.result["data"][2]["resource_id"] == "std::testing::NullResource[internal,name=file2]"
     assert_resource_added(result.result["data"][2])
 
     # From 2 to 3, the directory and file1 are added and file2 doesn't change
     result = await client.get_diff_of_versions(environment, 2, 3)
     assert result.code == 200
     assert len(result.result["data"]) == 2
-    assert result.result["data"][0]["resource_id"] == "std::Directory[internal,path=/tmp/dir1]"
+    assert result.result["data"][0]["resource_id"] == "std::testing::NullResource[internal,name=dir1]"
     assert_resource_added(result.result["data"][0])
-    assert result.result["data"][1]["resource_id"] == "std::File[internal,path=/tmp/dir1/file1]"
+    assert result.result["data"][1]["resource_id"] == "std::testing::NullResource[internal,name=file1]"
     assert_resource_added(result.result["data"][1])
 
     # From 1 to 3, the directory doesn't change, file1 changes and file2 is added
     result = await client.get_diff_of_versions(environment, 1, 3)
     assert result.code == 200
     assert len(result.result["data"]) == 2
-    assert result.result["data"][0]["resource_id"] == "std::File[internal,path=/tmp/dir1/file1]"
+    assert result.result["data"][0]["resource_id"] == "std::testing::NullResource[internal,name=file1]"
     assert result.result["data"][0]["status"] == "modified"
     assert result.result["data"][0]["attributes"]["dict_attr_modified"] == {
         "from_value": {"x": [6, 7], "y": "z"},
@@ -357,7 +370,7 @@ async def test_resources_diff(client, environment, env_with_versions):
         "from_value_compare": "False",
         "to_value_compare": "",
     }
-    assert result.result["data"][1]["resource_id"] == "std::File[internal,path=/tmp/file2]"
+    assert result.result["data"][1]["resource_id"] == "std::testing::NullResource[internal,name=file2]"
     assert_resource_added(result.result["data"][1])
 
 

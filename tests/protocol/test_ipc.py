@@ -17,13 +17,18 @@
 """
 
 import asyncio
+import functools
+import logging
 import socket
 import struct
+import threading
 
 import pytest
 
 import inmanta.config
 import inmanta.protocol.ipc_light
+import inmanta.util
+import utils
 from inmanta.protocol.ipc_light import IPCClient, IPCServer
 
 
@@ -102,3 +107,77 @@ async def test_normal_flow(request):
     args = [1, 2, 3, 4]
     result = await client_protocol.call(Echo(args))
     assert args == result
+
+
+async def test_log_transport(caplog, request):
+    """
+    Test for the IPC feature of shipping logs
+
+    Ensure we can send a log line over the IPC protocol
+
+    This doesn't actually connect the LogShipper to the logging framework, as this would create an infinite loop
+    (the log is re-injected in the same place it was first received)
+    """
+
+    loop = asyncio.get_running_loop()
+    parent_conn, child_conn = socket.socketpair()
+
+    server_transport, server_protocol = await loop.connect_accepted_socket(
+        lambda: inmanta.protocol.ipc_light.LogReceiver("logs"), parent_conn
+    )
+    request.addfinalizer(server_transport.close)
+    client_transport, client_protocol = await loop.connect_accepted_socket(lambda: IPCClient("Client"), child_conn)
+    request.addfinalizer(client_transport.close)
+    log_shipper = inmanta.protocol.ipc_light.LogShipper(client_protocol, loop)
+
+    with caplog.at_level(logging.INFO):
+        log_shipper.handle(logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("a",), exc_info=False))
+
+        def has_log(msg: str) -> bool:
+            try:
+                utils.log_contains(caplog, "deep.in.test", logging.INFO, f"Test {msg}")
+                return True
+            except AssertionError:
+                return False
+
+        await inmanta.util.retry_limited(functools.partial(has_log, "a"), 1)
+
+        # mess with threads, shows that we get at least no assertion errors
+        # Also test against % injection in the format string
+        thread = threading.Thread(
+            target=lambda: log_shipper.handle(
+                logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("%d",), exc_info=False)
+            )
+        )
+
+        thread.start()
+        await inmanta.util.retry_limited(functools.partial(has_log, "%d"), 1)
+
+        # Test we are not creating a log-loop when shut down
+        # This is a bit tricky to test, as we don't know how long to wait for a repeat log line to not appear
+
+        # This logger name should be ignored, as this is the loop protection
+        log_shipper.handle(
+            logging.LogRecord(log_shipper.logger_name, logging.INFO, "xxx", 5, "Test %s", ("X",), exc_info=False)
+        )
+
+        client_transport.close()
+
+        log_shipper.handle(logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("c",), exc_info=False))
+
+        def has_diverted_log() -> bool:
+            try:
+                utils.log_contains(caplog, log_shipper.logger_name, logging.INFO, "Could not send log line")
+                return True
+            except AssertionError:
+                return False
+
+        await inmanta.util.retry_limited(functools.partial(has_diverted_log), 1)
+        # Make sure we drain the buffer
+        await asyncio.sleep(0.1)
+        utils.log_doesnt_contain(caplog, log_shipper.logger_name, logging.INFO, "Test X")
+        # Log line is not repeated
+        # Not other log line after it
+        utils.LogSequence(caplog).contains(log_shipper.logger_name, logging.INFO, "Could not send log line").assert_not(
+            loggerpart="", level=-1, msg="", min_level=logging.DEBUG
+        )
