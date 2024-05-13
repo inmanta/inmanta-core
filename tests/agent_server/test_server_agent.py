@@ -1540,7 +1540,7 @@ async def test_autostart_mapping_overrides_config(server, client, environment, a
     async_finalizer(a.stop)
 
     # Wait until agents are up
-    await retry_limited(lambda: len(agent_manager.tid_endpoint_to_session) == (2 if autostarted else 1), 2)
+    await retry_limited(lambda: len(agent_manager.tid_endpoint_to_session) == (2 if autostarted else 1), timeout=2)
 
     endpoint_sessions: Mapping[str, UUID] = {
         key[1]: session.id for key, session in agent_manager.tid_endpoint_to_session.items()
