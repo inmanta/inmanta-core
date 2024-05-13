@@ -1076,6 +1076,12 @@ class AutostartedAgentManager(ServerSlice):
             raise ShutdownInProgress()
 
         if connection is not None and connection.is_in_transaction():
+            # Should not be called in a transaction context because it has (immediate) side effects outside of the database
+            # that are tied to the database state. Several inconsistency issues could occur if this runs in a transaction
+            # context:
+            #   - side effects based on oncommitted reads (may even need to be rolled back)
+            #   - race condition with similar side effect flows due to stale reads (e.g. other flow pauses agent and kills
+            #       process, this one brings it back because it reads the agent as unpaused)
             raise Exception("_ensure_agents should not be called in a transaction context")
 
         async with data.Agent.get_connection(connection) as connection:
