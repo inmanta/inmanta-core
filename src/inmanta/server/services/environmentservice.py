@@ -290,7 +290,7 @@ class EnvironmentService(protocol.ServerSlice):
 
                 await refreshed_env.update_fields(halted=True, connection=con)
                 await self.agent_manager.halt_agents(refreshed_env, connection=con)
-        await self.autostarted_agent_manager.stop_agents(refreshed_env, delete_agent_venv)
+        await self.autostarted_agent_manager.stop_agents(refreshed_env, delete_venv=delete_agent_venv)
 
     @handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
