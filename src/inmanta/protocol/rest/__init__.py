@@ -60,7 +60,6 @@ class CallArguments:
         :param config: The method configuration that contains the metadata and functions to call
         :param message: The message received by the RPC call
         :param request_headers: The headers received by the RPC call
-        :param handler: The handler for the call
         """
         self._config = config
         self._properties = self._config.properties
