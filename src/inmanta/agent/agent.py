@@ -1072,7 +1072,11 @@ class Agent(SessionEndpoint):
 
     async def _update_agent_map(self, agent_map: dict[str, str]) -> None:
         if "internal" not in agent_map:
-            raise ValueError("The internal agent must be present in the agent map")
+            LOGGER.warning(
+                "Agent received an update_agent_map() trigger without internal agent in the agent_map %s",
+                agent_map,
+            )
+            agent_map = {"internal": "local:", **agent_map}
 
         async with self._instances_lock:
             self.agent_map = agent_map
