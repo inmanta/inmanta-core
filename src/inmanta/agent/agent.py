@@ -35,9 +35,9 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 
 import pkg_resources
 
-import logfire
 import inmanta.agent.executor
 import inmanta.const
+import logfire
 from inmanta import config, const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor

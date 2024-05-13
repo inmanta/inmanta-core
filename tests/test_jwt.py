@@ -30,10 +30,13 @@ from tornado import web
 
 import requests
 from inmanta import config, const
+
 <<<<<<< HEAD
 from inmanta.protocol import Client, auth
+
 =======
 from inmanta.protocol import auth
+
 >>>>>>> origin/master
 from inmanta.server.protocol import Server
 
@@ -223,10 +226,7 @@ async def test_customer_header_user(tmp_path: pathlib.Path, server: Server) -> N
             """
 [server]
 auth=true
-<<<<<<< HEAD
-=======
 auth_additional_header=Jwt-Assertion
->>>>>>> origin/master
 
 [auth_jwt_test]
 algorithm=HS256
@@ -244,10 +244,6 @@ key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
 expire=0
 issuer=https://example.com:8888/
 audience=abcdef
-<<<<<<< HEAD
-jwt_header=Jwt-Assertion
-=======
->>>>>>> origin/master
 jwt_username_claim=name
 """
         )
