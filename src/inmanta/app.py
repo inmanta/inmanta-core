@@ -86,6 +86,8 @@ def configure_logfire(service: str) -> None:
         pydantic_plugin=logfire.integrations.pydantic.PydanticPlugin(record="all"),
     )
 
+    logfire.DEFAULT_LOGFIRE_INSTANCE._tags = ("bart", "dev")
+
 
 def server_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[argparse.ArgumentParser]) -> None:
     parser.add_argument(
