@@ -21,7 +21,7 @@ import json
 import logging
 import uuid
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
 
 import pydantic
 import typing_inspect
@@ -31,6 +31,7 @@ from inmanta import const, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol import auth, common, exceptions
 from inmanta.protocol.common import ReturnValue
+from inmanta.server import config as server_config
 from inmanta.types import Apireturn, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -47,52 +48,21 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 """
 
 
-def authorize_request(
-    auth_data: Optional[auth.claim_type], metadata: dict[str, str], message: JsonType, config: common.UrlMethod
-) -> None:
-    """
-    Authorize a request based on the given data
-    """
-    if auth_data is None:
-        return
-
-    # Enforce environment restrictions
-    env_key: str = const.INMANTA_URN + "env"
-    if env_key in auth_data:
-        if env_key not in metadata:
-            raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
-
-        if metadata[env_key] != "all" and auth_data[env_key] != metadata[env_key]:
-            raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
-
-    # Enforce client_types restrictions
-    ok: bool = False
-    ct_key: str = const.INMANTA_URN + "ct"
-    for ct in auth_data[ct_key]:
-        if ct in config.properties.client_types:
-            ok = True
-
-    if not ok:
-        raise exceptions.Forbidden(
-            "The authorization token does not have a valid client type for this call."
-            + f" ({auth_data[ct_key]} provided, {config.properties.client_types} expected"
-        )
-
-
 class CallArguments:
     """
     This class represents the call arguments for a method call.
     """
 
     def __init__(
-        self, properties: common.MethodProperties, message: dict[str, Optional[object]], request_headers: Mapping[str, str]
+        self, config: common.UrlMethod, message: dict[str, Optional[object]], request_headers: Mapping[str, str]
     ) -> None:
         """
-        :param method_config: The method configuration that contains the metadata and functions to call
-        :param message: The message recieved by the RPC call
+        :param config: The method configuration that contains the metadata and functions to call
+        :param message: The message received by the RPC call
         :param request_headers: The headers received by the RPC call
         """
-        self._properties = properties
+        self._config = config
+        self._properties = self._config.properties
         self._message = message
         self._request_headers = request_headers
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
@@ -100,6 +70,8 @@ class CallArguments:
         self._call_args: JsonType = {}
         self._headers: dict[str, str] = {}
         self._metadata: dict[str, object] = {}
+        self._auth_token: Optional[auth.claim_type] = None
+        self._auth_username: Optional[str] = None
 
         self._processed: bool = False
 
@@ -109,6 +81,13 @@ class CallArguments:
             raise Exception("Process call first before accessing property")
 
         return self._call_args
+
+    @property
+    def auth_username(self) -> Optional[str]:
+        if not self._processed:
+            raise Exception("Process call first before accessing property")
+
+        return self._auth_username
 
     @property
     def headers(self) -> dict[str, str]:
@@ -224,9 +203,16 @@ class CallArguments:
                         f" don't match (header={header_value}; non-header={message_value})"
                     )
 
+    def get_call_context(self) -> Optional[str]:
+        """Returns the name of the first handler argument that is of type CallContext"""
+        for arg, hint in self._config.handler.__annotations__.items():
+            if isinstance(hint, type) and issubclass(hint, common.CallContext):
+                return arg
+        return None
+
     async def process(self) -> None:
         """
-        Process the message
+        Process the request
         """
         args: list[str] = list(self._argspec.args)
 
@@ -299,6 +285,19 @@ class CallArguments:
         if len(all_fields) > 0 and self._argspec.varkw is None:
             raise exceptions.BadRequest(
                 "request contains fields %s that are not declared in method and no kwargs argument is provided." % all_fields
+            )
+
+        # rename arguments if the handler requests this
+        if hasattr(self._config.handler, "__protocol_mapping__"):
+            for k, v in self._config.handler.__protocol_mapping__.items():
+                if v in self._call_args:
+                    self._call_args[k] = self._call_args[v]
+                    del self._call_args[v]
+
+        # verify if we need to inject a CallContext
+        if call_context_var := self.get_call_context():
+            self._call_args[call_context_var] = common.CallContext(
+                request_headers=self._headers, auth_token=self._auth_token, auth_username=self._auth_username
             )
 
         self._processed = True
@@ -401,7 +400,7 @@ class CallArguments:
                 f"Failed to validate generic type {arg_type} of return value, only List and Dict are supported"
             )
 
-    async def process_return(self, config: common.UrlMethod, result: Apireturn) -> common.Response:
+    async def process_return(self, result: Apireturn) -> common.Response:
         """A handler can return ApiReturn, so lets handle all possible return types and convert it to a Response
 
         Apireturn = Union[int, Tuple[int, Optional[JsonType]], "ReturnValue", "BaseModel"]
@@ -411,7 +410,9 @@ class CallArguments:
 
             if return_type is None:
                 if result is not None:
-                    raise exceptions.ServerError(f"Method {config.method_name} returned a result but is defined as -> None")
+                    raise exceptions.ServerError(
+                        f"Method {self._config.method_name} returned a result but is defined as -> None"
+                    )
 
                 return common.Response.create(ReturnValue(status_code=200, response=None), envelope=False)
 
@@ -423,37 +424,40 @@ class CallArguments:
             # TODO: also validate the value inside a ReturnValue
             if return_type is Any:
                 return common.Response.create(
-                    ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key
+                    ReturnValue(response=result), self._config.properties.envelope, self._config.properties.envelope_key
                 )
 
             elif typing_inspect.is_union_type(return_type):
                 self._validate_union_return(return_type, result)
                 return common.Response.create(
-                    ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key
+                    ReturnValue(response=result), self._config.properties.envelope, self._config.properties.envelope_key
                 )
 
             if typing_inspect.is_generic_type(return_type):
                 if isinstance(result, ReturnValue):
-                    return common.Response.create(result, config.properties.envelope, config.properties.envelope_key)
+                    return common.Response.create(
+                        result, self._config.properties.envelope, self._config.properties.envelope_key
+                    )
                 else:
                     self._validate_generic_return(return_type, result)
                     return common.Response.create(
-                        ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key
+                        ReturnValue(response=result), self._config.properties.envelope, self._config.properties.envelope_key
                     )
 
             elif isinstance(result, BaseModel):
                 return common.Response.create(
-                    ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key
+                    ReturnValue(response=result), self._config.properties.envelope, self._config.properties.envelope_key
                 )
 
             elif isinstance(result, common.VALID_SIMPLE_ARG_TYPES):
                 return common.Response.create(
-                    ReturnValue(response=result), config.properties.envelope, config.properties.envelope_key
+                    ReturnValue(response=result), self._config.properties.envelope, self._config.properties.envelope_key
                 )
 
             else:
                 raise exceptions.ServerError(
-                    f"Method {config.method_name} returned an invalid result {result} instead of a BaseModel or ReturnValue"
+                    f"Method {self._config.method_name} returned an invalid result {result} "
+                    "instead of a BaseModel or ReturnValue"
                 )
 
         else:  # "old" style method definition
@@ -469,20 +473,103 @@ class CallArguments:
 
             else:
                 raise exceptions.ServerError(
-                    f"Method {config.method_name} returned an invalid result {result} instead of a status code or tupple"
+                    f"Method {self._config.method_name} returned an invalid result {result} instead of a status code or tupple"
                 )
 
             if body is not None:
-                if config.properties.reply:
+                if self._config.properties.reply:
                     return common.Response.create(
                         ReturnValue(status_code=code, response=body),
-                        config.properties.envelope,
-                        config.properties.envelope_key,
+                        self._config.properties.envelope,
+                        self._config.properties.envelope_key,
                     )
                 else:
                     LOGGER.warning("Method %s returned a result although it has no reply!")
 
             return common.Response.create(ReturnValue(status_code=code, response=None), envelope=False)
+
+    def _parse_and_validate_auth_token(self) -> None:
+        """Get the auth token provided by the caller and decode it.
+
+        :return: A mapping of claims
+        """
+        header_value: Optional[str] = None
+
+        if additional_header := server_config.server_additional_auth_header.get():
+            if additional_header in self._request_headers:
+                header_value = self._request_headers[additional_header]
+
+        if header_value is None and "Authorization" in self._request_headers:
+            # In Authorization it is parsed as a bearer token
+            parts = self._request_headers["Authorization"].split(" ")
+
+            if len(parts) != 2 or parts[0].lower() != "bearer":
+                logging.getLogger(__name__).warning(
+                    "Invalid JWT token header Authorization. A bearer token is expected, instead (%s was provided)",
+                    header_value,
+                )
+                return None
+
+            header_value = parts[1]
+
+        if header_value is None:
+            return None
+
+        self._auth_token, cfg = auth.decode_token(header_value)
+
+        if cfg.jwt_username_claim in self._auth_token:
+            self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
+
+    def authenticate(self, auth_enabled: bool) -> None:
+        """Fetch any identity information and authenticate. This will also load this authentication
+        information in this instance.
+
+        :param auth_enabled: is authentication enabled?
+        """
+        if not auth_enabled:
+            return
+
+        # get and validate the token. A valid token means that user is authenticated
+        self._parse_and_validate_auth_token()
+        if self._auth_token is None and self._config.properties.enforce_auth:
+            # We only need a valid token when the endpoint enforces authentication
+            raise exceptions.UnauthorizedException()
+
+    def authorize_request(self, auth_enabled: bool) -> None:
+        """Authorize a request based on the given data
+
+        :param auth_enabled: is authentication enabled?
+        """
+        if not auth_enabled:
+            return
+
+        if self._auth_token is None:
+            if self._config.properties.enforce_auth:
+                # We only need a valid token when the endpoint enforces authentication and auth is enabled
+                raise exceptions.UnauthorizedException()
+            return None
+
+        # Enforce environment restrictions
+        env_key: str = const.INMANTA_URN + "env"
+        if env_key in self._auth_token:
+            if env_key not in self.metadata:
+                raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
+
+            if self.metadata[env_key] != "all" and self._auth_token[env_key] != self.metadata[env_key]:
+                raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
+
+        # Enforce client_types restrictions
+        ok: bool = False
+        ct_key: str = const.INMANTA_URN + "ct"
+        for ct in self._auth_token[ct_key]:
+            if ct in self._config.properties.client_types:
+                ok = True
+
+        if not ok:
+            raise exceptions.Forbidden(
+                "The authorization token does not have a valid client type for this call."
+                + f" ({self._auth_token[ct_key]} provided, {self._config.properties.client_types} expected"
+            )
 
 
 # Shared
@@ -512,19 +599,13 @@ class RESTBase(util.TaskHandler[None]):
 
     async def _execute_call(
         self,
-        kwargs: dict[str, str],
-        http_method: str,
         config: common.UrlMethod,
         message: dict[str, object],
         request_headers: Mapping[str, str],
-        auth: Optional[auth.claim_type] = None,
     ) -> common.Response:
         try:
-            if kwargs is None or config is None:
+            if config is None:
                 raise Exception("This method is unknown! This should not occur!")
-
-            # create message that contains all arguments
-            message.update(kwargs)
 
             if config.properties.validate_sid:
                 if "sid" not in message or not isinstance(message["sid"], str):
@@ -534,26 +615,23 @@ class RESTBase(util.TaskHandler[None]):
                 if not isinstance(sid, uuid.UUID) or not self.validate_sid(sid):
                     raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
-            arguments = CallArguments(config.properties, message, request_headers)
+            # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
+            # Authorization might need data from the request but we do not want to process it before we are sure the call
+            # is authenticated.
+            arguments = CallArguments(config, message, request_headers)
+            arguments.authenticate(server_config.server_enable_auth.get())
             await arguments.process()
-            authorize_request(auth, arguments.metadata, arguments.call_args, config)
-
-            # rename arguments if handler requests this
-            call_args = arguments.call_args
-            if hasattr(config.handler, "__protocol_mapping__"):
-                for k, v in config.handler.__protocol_mapping__.items():
-                    if v in call_args:
-                        call_args[k] = call_args[v]
-                        del call_args[v]
+            arguments.authorize_request(server_config.server_enable_auth.get())
 
             LOGGER.debug(
-                "Calling method %s(%s)",
-                config.handler,
-                ", ".join([f"{name}='{common.shorten(str(value))}'" for name, value in arguments.call_args.items()]),
+                "Calling method %s(%s) user=%s",
+                config.method_name,
+                ", ".join([f"{name}={common.shorten(str(value))}" for name, value in arguments.call_args.items()]),
+                arguments.auth_username if arguments.auth_username else "<>",
             )
 
             result = await config.handler(**arguments.call_args)
-            return await arguments.process_return(config, result)
+            return await arguments.process_return(result)
         except pydantic.ValidationError:
             LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
             raise exceptions.ServerError("data validation error.")
@@ -563,5 +641,5 @@ class RESTBase(util.TaskHandler[None]):
             raise
 
         except Exception as e:
-            LOGGER.exception("An exception occured during the request.")
+            LOGGER.exception("An exception occurred during the request.")
             raise exceptions.ServerError(str(e.args))
