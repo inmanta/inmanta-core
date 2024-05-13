@@ -1326,7 +1326,7 @@ ssl=True
                 for agent_name in expected_agents_in_up_state
                 if (
                     (session := self._agent_manager.tid_endpoint_to_session.get((env.id, agent_name), None)) is not None
-                    # make sure to check for expiry because sessions are unregistered from the agent manager asyncronously
+                    # make sure to check for expiry because sessions are unregistered from the agent manager asynchronously
                     and not session.expired
                 )
             }
