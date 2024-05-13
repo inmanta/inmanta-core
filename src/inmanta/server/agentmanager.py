@@ -1100,7 +1100,7 @@ class AutostartedAgentManager(ServerSlice):
                 if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is not None:
                     # Start new process if none is currently running for this environment.
                     # Otherwise trust that it tracks any changes to the agent map.
-                    LOGGER.info("%s matches agents managed by server, ensuring it is started.", autostart_agents)
+                    LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_agents)
                     start_new_process = True
                 elif restart:
                     LOGGER.info(
