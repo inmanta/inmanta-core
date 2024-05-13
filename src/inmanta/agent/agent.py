@@ -267,6 +267,34 @@ deploy_response_matrix = {
     (NF, PI): ignore,  # full ignores periodic increment
 }
 
+priority_based_matrix = {
+    # ((old_is_repair, old_is_periodic), (new_is_repair, new_is_periodic))
+    # Periodic restart loops: Full periodic is never interrupted by periodic
+    (PF, PF): ignore,  # Full periodic ignores full periodic to prevent restart loops
+    (NF, PF): ignore,  # Full ignores full periodic to avoid restart loops
+    (PF, NF): terminate,  # Full periodic terminated by Full
+    (NF, NF): terminate,  # Full terminated by Full
+
+    (PI, PI): terminate,
+    (PI, NI): terminate,
+    (NI, PI): terminate,
+    (NI, NI): terminate,
+
+
+    (PF, PI): ignore,  # Full periodic ignores periodic increment to prevent restart loops
+    (PI, PF): terminate,  # Incremental periodic terminated by full periodic: upgrade to full
+    (PI, NF): terminate,  # Incremental periodic terminated by full: upgrade to full
+    # Same terminates same: focus on the new one
+    # Increment * terminates Increment *
+    (NI, PF): defer,  # Incremental defers full periodic
+    (NI, NF): defer,  # Incremental defers full
+    # Non-periodic is always executed asap
+    (PF, NI): interrupt,  # periodic full interrupted by increment
+    (NF, NI): interrupt,  # full interrupted by increment
+    # Prefer the normal full over PI
+    (NF, PI): ignore,  # full ignores periodic increment
+}
+
 
 class ResourceScheduler:
     """Class responsible for managing sequencing of actions performed by the agent.
@@ -279,7 +307,8 @@ class ResourceScheduler:
     """
 
     def __init__(self, agent: "AgentInstance", env_id: uuid.UUID, name: str) -> None:
-        self.active_group: Optional[scheduler.TaskGroup] = None
+        self.active_deploy: Optional[scheduler.TaskGroup] = None
+        self.active_repair: Optional[scheduler.TaskGroup] = None
         self.cad: dict[str, RemoteResourceAction] = {}
 
         self._env_id = env_id
@@ -294,20 +323,20 @@ class ResourceScheduler:
         self.logger: Logger = agent.logger
 
     def finished(self) -> bool:
-        if self.active_group is None:
+        if self.active_deploy is None:
             return True
-        return self.active_group.finished()
+        return self.active_deploy.finished()
 
     def cancel(self) -> None:
         """
         Cancel all scheduled deployments.
         """
-        if self.active_group is not None:
-            self.active_group.cancel()
+        if self.active_deploy is not None:
+            self.active_deploy.cancel()
         if self.cad_resolver is not None:
             self.cad_resolver.cancel()
             self.cad_resolver = None
-        self.active_group = None
+        self.active_deploy = None
         self.cad = {}
 
     def reload(
@@ -394,7 +423,7 @@ class ResourceScheduler:
             self.cad_resolver = self.agent.process.add_background_task(self.resolve_cads(self.version, cads_by_rid))
 
         # Dispatch all actions
-        self.active_group = task_group
+        self.active_deploy = task_group
         task_group.enqueue_all(self.agent.work_queue)
         # Listen for completion
         # TODO: deffered task!
