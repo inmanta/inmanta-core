@@ -28,7 +28,7 @@ def test_list_atributes(snippetcompiler):
         """
 entity Jos:
   bool[] bar
-  std::package_state[] ips = ["installed"]
+  std::email_str[] ips = ["aaa@aaa.com"]
   string[] floom = []
   string[] floomx = ["a", "b"]
   string box = "a"
@@ -45,7 +45,7 @@ d = Jos(bar = [], floom=["test","test2"])
     )
     (_, root) = compiler.do_compile()
 
-    def check_jos(jos, bar, ips=["installed"], floom=[], floomx=["a", "b"], box="a"):
+    def check_jos(jos, bar, ips=["aaa@aaa.com"], floom=[], floomx=["a", "b"], box="a"):
         jos = jos.get_value()
         assert jos.get_attribute("bar").get_value() == bar
         assert jos.get_attribute("ips").get_value(), ips
