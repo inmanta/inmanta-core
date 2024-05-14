@@ -79,14 +79,14 @@ LOGGER = logging.getLogger("inmanta")
 def configure_logfire(service: str) -> None:
     """Configure logfire"""
     AsyncPGInstrumentor(capture_parameters=True).instrument()
+    os.environ["OTEL_RESOURCE_ATTRIBUTES"] = "inmanta.dev=bart"
+
     logfire.configure(
         service_name=service,
         send_to_logfire="if-token-present",
         console=False,
         pydantic_plugin=logfire.integrations.pydantic.PydanticPlugin(record="all"),
     )
-
-    logfire.DEFAULT_LOGFIRE_INSTANCE._tags = ("bart", "dev")
 
 
 def server_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[argparse.ArgumentParser]) -> None:
