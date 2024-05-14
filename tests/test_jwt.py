@@ -19,15 +19,19 @@
 import asyncio
 import json
 import os
+import pathlib
 import time
 from functools import partial
 
+import jwt
 import pytest
 import tornado
 from tornado import web
 
-from inmanta import config
+import requests
+from inmanta import config, const
 from inmanta.protocol import auth
+from inmanta.server.protocol import Server
 
 
 def test_jwt_create(inmanta_config):
@@ -35,7 +39,7 @@ def test_jwt_create(inmanta_config):
     Test creating, signing and verifying JWT with HS256 from the configuration
     """
     jot = auth.encode_token(["api"])
-    payload = auth.decode_token(jot)
+    payload, _ = auth.decode_token(jot)
 
     assert "api" in payload["urn:inmanta:ct"]
 
@@ -204,3 +208,64 @@ claims=
     assert auth.check_custom_claims({"environment": ["prod"], "type": "dc", "other": "test"}, cfg.claims)
     assert not auth.check_custom_claims({"environment": ["prod"]}, cfg.claims)
     assert auth.check_custom_claims({"environment": ["prod"]}, [])
+
+
+async def test_customer_header_user(tmp_path: pathlib.Path, server: Server) -> None:
+    """Test using custom header and users"""
+    port = config.Config.get("client_rest_transport", "port")
+    config_file = tmp_path / "auth.cfg"
+    with open(config_file, "w+", encoding="utf-8") as fd:
+        fd.write(
+            """
+[server]
+auth=true
+auth_additional_header=Jwt-Assertion
+
+[auth_jwt_test]
+algorithm=HS256
+sign=true
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8888/
+audience=https://localhost:8888/
+
+[auth_jwt_name]
+algorithm=HS256
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://example.com:8888/
+audience=abcdef
+jwt_username_claim=name
+"""
+        )
+
+    # Make sure the config starts from a clean slate
+    config.Config.load_config(str(config_file))
+    config.Config.set("client_rest_transport", "port", str(port))
+
+    # load and parse
+    cfg = auth.AuthJWTConfig.get("test")
+    assert cfg
+
+    cfg = auth.AuthJWTConfig.get("name")
+    assert cfg
+
+    # Test authentication with custom token header
+    payload: dict[str, object] = {
+        "iss": cfg.issuer,
+        "aud": [cfg.audience],
+        const.INMANTA_URN + "ct": "api",
+        "name": "test-user",
+    }
+    token = jwt.encode(payload=payload, key=cfg.key, algorithm=cfg.algo)
+
+    def get() -> requests.Response:
+        return requests.get(f"http://localhost:{port}/api/v2/current_user", headers={"Jwt-Assertion": token})
+
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(None, get)
+    response.raise_for_status()
+
+    assert response.json()["data"]["username"] == "test-user"

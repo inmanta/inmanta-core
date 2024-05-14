@@ -1530,4 +1530,3 @@ ALTER TABLE ONLY public.discoveredresource
 --
 -- PostgreSQL database dump complete
 --
-

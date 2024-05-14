@@ -29,7 +29,7 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Sequence, Set
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
@@ -1219,7 +1219,7 @@ class BaseDocument(metaclass=DocumentMeta):
         """
         if connection is not None:
             return util.nullcontext(connection)
-        # Make pypi happy
+        # Make mypy happy
         assert cls._connection_pool is not None
         return cls._connection_pool.acquire()
 
@@ -3344,10 +3344,12 @@ class Agent(BaseDocument):
         return super().get_valid_field_names() + ["process_name", "status"]
 
     @classmethod
-    async def get_statuses(cls, env_id: uuid.UUID, agent_names: set[str]) -> dict[str, Optional[AgentStatus]]:
+    async def get_statuses(
+        cls, env_id: uuid.UUID, agent_names: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> dict[str, Optional[AgentStatus]]:
         result: dict[str, Optional[AgentStatus]] = {}
         for agent_name in agent_names:
-            agent = await cls.get_one(environment=env_id, name=agent_name)
+            agent = await cls.get_one(environment=env_id, name=agent_name, connection=connection)
             if agent:
                 result[agent_name] = agent.get_status()
             else:
@@ -4633,6 +4635,42 @@ class Resource(BaseDocument):
             """
         out = await cls.select_query(query, [env, model_version, rids], no_obj=True)
         return {ResourceIdStr(r["resource_id"]): ResourceState[r["status"]] for r in out}
+
+    @stable_api
+    @classmethod
+    async def get_current_resource_state(cls, env: uuid.UUID, rid: ResourceIdStr) -> Optional[ResourceState]:
+        """
+        Return the state of the given resource in the latest version of the configuration model
+        or None if the resource is not present in the latest version.
+        """
+        query = f"""
+            SELECT (
+                SELECT r.status
+                FROM resource r
+                WHERE r.environment=$1
+                    AND r.model=(
+                        SELECT max(c.version) AS version
+                        FROM {ConfigurationModel.table_name()} c
+                        WHERE c.environment=$1 AND c.released
+                    )
+                    AND r.resource_id=$2
+            ) AS status,
+            (
+                SELECT rps.last_non_deploying_status
+                FROM resource_persistent_state rps
+                WHERE rps.environment=$1 AND rps.resource_id=$2
+            ) AS last_non_deploying_status
+            """
+        results = await cls.select_query(query, [env, rid], no_obj=True)
+        if not results:
+            return None
+        assert len(results) == 1
+        if any(results[0][column_name] is None for column_name in ["status", "last_non_deploying_status"]):
+            return None
+        if results[0]["status"] == "deploying":
+            return const.ResourceState("deploying")
+        else:
+            return const.ResourceState(results[0]["last_non_deploying_status"])
 
     @classmethod
     async def set_deployed_multi(
