@@ -46,6 +46,12 @@
 
        {% for key, value in data["module_compatibility_ranges"]  | dictsort %}
        {% if key in list_only %}
+
+       {% if value %}
+       {% set compatible_range = value %}
+       {% else %}
+       {% set compatible_range = 'Not pinned yet' %}
+
        * - {{ key.split("inmanta-module-")[1] }}
          - .. centered:: {{ value }}
        {% endif %}
