@@ -20,7 +20,7 @@
 
 import datetime
 import uuid
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, Union, Sequence, Mapping
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
@@ -1588,7 +1588,7 @@ def discovered_resources_get_batch(
     start: Optional[str] = None,
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
-    filter: Optional[dict[str, list[str]]] = None,
+    filter: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> list[model.DiscoveredResource]:
     """
     Get a list of discovered resources. For resources that the orchestrator is already managing, a link to the corresponding

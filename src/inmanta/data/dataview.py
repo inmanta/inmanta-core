@@ -21,7 +21,7 @@ import json
 from abc import ABC
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Generic, Optional, TypeVar, Union, cast
+from typing import Generic, Optional, TypeVar, Union, cast, Mapping
 from urllib import parse
 from urllib.parse import quote
 from uuid import UUID
@@ -1251,7 +1251,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         sort: str = "discovered_resource_id.asc",
         start: Optional[str] = None,
         end: Optional[str] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        filter: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         super().__init__(
             order=DiscoveredResourceOrder.parse_from_string(sort),
