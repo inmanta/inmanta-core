@@ -21,7 +21,7 @@ import json
 from abc import ABC
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Generic, Optional, TypeVar, Union, cast, Mapping
+from typing import Generic, Mapping, Optional, TypeVar, Union, cast
 from urllib import parse
 from urllib.parse import quote
 from uuid import UUID

@@ -20,7 +20,7 @@
 
 import datetime
 import uuid
-from typing import Literal, Optional, Union, Sequence, Mapping
+from typing import Literal, Mapping, Optional, Sequence, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
