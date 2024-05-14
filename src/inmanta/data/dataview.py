@@ -166,7 +166,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         last_id: Optional[PRIMITIVE_SQL_TYPES] = None,
         start: Optional[PRIMITIVE_SQL_TYPES] = None,
         end: Optional[PRIMITIVE_SQL_TYPES] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        filter: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         """
         All boundary values for paging are exclusive, i.e. the returned page will contain only values strictly larger/smaller
@@ -390,7 +390,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         links = {}
 
-        url_query_params: dict[str, Optional[Union[SimpleTypes, list[str]]]] = {
+        url_query_params: dict[str, Optional[Union[SimpleTypes, Sequence[str]]]] = {
             "limit": self.limit,
             "sort": str(self.order),
         }
@@ -918,7 +918,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
             "action": ContainsFilterResourceAction,
         }
 
-    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[Mapping[str, Sequence[str]]]) -> dict[str, QueryFilter]:
         # Change the api names of the filters to the names used internally in the database
         query = super().process_filters(filter)
         if query.get("minimal_log_level"):
@@ -1192,7 +1192,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
             "status": ContainsFilter,
         }
 
-    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[Mapping[str, Sequence[str]]]) -> dict[str, QueryFilter]:
         out_filter = super().process_filters(filter)
         # name is ambiguous, qualify
         if "name" in out_filter:
