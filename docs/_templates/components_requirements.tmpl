@@ -51,9 +51,10 @@
        {% set compatible_range = value %}
        {% else %}
        {% set compatible_range = 'Not pinned yet' %}
+       {% endif %}
 
        * - {{ key.split("inmanta-module-")[1] }}
-         - .. centered:: {{ value }}
+         - .. centered:: {{ compatible_range }}
        {% endif %}
        {% endfor %}
 
