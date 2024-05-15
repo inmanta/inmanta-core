@@ -573,10 +573,10 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                                     -- resource_persistent_state table.
                                     THEN r.status::text
                                 WHEN rps.last_deployed_attribute_hash != r.attribute_hash
-                                   -- The hash changed since the last deploy -> new desired state
-                                   THEN 'available'
-                                   -- No override required, use last known state from actual deployment
-                                   ELSE rps.last_non_deploying_status::text
+                                    -- The hash changed since the last deploy -> new desired state
+                                    THEN r.status::text
+                                    -- No override required, use last known state from actual deployment
+                                    ELSE rps.last_non_deploying_status::text
                             END
                         ) as status
                     FROM versioned_resource_state AS rps

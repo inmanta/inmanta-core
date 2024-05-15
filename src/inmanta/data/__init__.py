@@ -4659,7 +4659,7 @@ class Resource(BaseDocument):
                         THEN r.status::text
                     WHEN rps.last_deployed_attribute_hash != r.attribute_hash
                         -- The hash changed since the last deploy -> new desired state
-                        THEN 'available'
+                        THEN r.status::text
                         -- No override required, use last known state from actual deployment
                         ELSE rps.last_non_deploying_status::text
                 END
@@ -5014,7 +5014,7 @@ class Resource(BaseDocument):
                  THEN {resource_table_name}.status::text
                WHEN ps.last_deployed_attribute_hash != {resource_table_name}.attribute_hash
                  -- The hash changed since the last deploy -> new desired state
-                 THEN 'available'
+                 THEN {resource_table_name}.status::text
                  -- No override required, use last known state from actual deployment
                  ELSE ps.last_non_deploying_status::text
              END
@@ -5112,10 +5112,12 @@ class Resource(BaseDocument):
         SELECT r.resource_id as resource_id,
         (
             CASE WHEN r.status IN ('deploying', 'undefined', 'skipped_for_undefined')
-                THEN
-                    r.status::text
-                ELSE
-                    rps.last_non_deploying_status::text
+                     THEN r.status::text
+                 WHEN rps.last_deployed_attribute_hash != r.attribute_hash
+                     -- The hash changed since the last deploy -> new desired state
+                     THEN r.status::text
+                 ELSE
+                     rps.last_non_deploying_status::text
             END
         ) as status
         FROM {cls.table_name()} as r
