@@ -450,7 +450,7 @@ The example above configures the server to validate Cloudflare ZTNA JWT tokens. 
 application.
 
 Some providers do not supply the JWT in the Authorization header but in an alternative header. This can be controlled using the
-server.auth_additional_header setting. For cloudflare it needs to be set to `Cf-Access-Jwt-Assertion`. In case of an alternative
+:inmanta.config:option:`server.auth-additional-header` setting. For cloudflare it needs to be set to `Cf-Access-Jwt-Assertion`. In case of an alternative
 header we expect the plain token and not a bearer token.
 
 
@@ -460,7 +460,7 @@ header we expect the plain token and not a bearer token.
    auth_additional_header=Cf-Access-Jwt-Assertion
 
 
-By default the `sub` claim is used to indicate the user that is logged in. Cloudflare by default will only provide the email
+By default the `sub` claim is used to indicate the user that is logged in. Cloudflare by default will only provide the `email`
 claim. By setting jwt_username_claim to email in the auth section (see the example) you can change the claim that is used for
 the username. The username is used for example for logging and the username in the web console.
 
