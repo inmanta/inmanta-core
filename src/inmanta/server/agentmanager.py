@@ -1117,7 +1117,7 @@ class AutostartedAgentManager(ServerSlice):
                 if env.halted:
                     return False
 
-                if await self._agent_manager.are_agents_active(env.id, autostart_agents):
+                if not restart and await self._agent_manager.are_agents_active(env.id, autostart_agents):
                     # do not start a new agent process if the agents are already active, regardless of whether their session
                     # is with an autostarted process or not.
                     return False
