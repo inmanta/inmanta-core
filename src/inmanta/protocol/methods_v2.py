@@ -1596,8 +1596,12 @@ def discovered_resources_get_batch(
     start: Optional[str] = None,
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
+    filter: Optional[dict[str, list[str]]] = None,
 ) -> list[model.DiscoveredResource]:
     """
+    Get a list of discovered resources. For resources that the orchestrator is already managing, a link to the corresponding
+    resource is provided.
+
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
     :param start: The lower limit for the order by column (exclusive).
@@ -1607,6 +1611,13 @@ def discovered_resources_get_batch(
     :param sort: Return the results sorted according to the parameter value.
             The following sorting attributes are supported: 'discovered_resource_id'.
             The following orders are supported: 'asc', 'desc'
+    :param filter: Filter the list of returned resources.
+        Default behavior: return all discovered resources.
+        Filtering by 'managed' is supported:
+            - filter.managed=true: only return discovered resources that the orchestrator is already aware of i.e.
+            resources that are present in any released configuration model of environment tid.
+            - filter.managed=false: only return discovered resources that the orchestrator is unaware of i.e. resources
+            that are not part of any released configuration model of environment tid.
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
