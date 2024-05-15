@@ -25,6 +25,7 @@ import pytest
 from pytest import fixture
 from tornado.gen import sleep
 
+from conftest import configure_auth
 # Methods need to be defined before the Client class is loaded by Python
 from inmanta import protocol  # NOQA
 from inmanta import data
@@ -125,9 +126,8 @@ async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) 
     await retry_limited(is_same, 10)
 
 
-async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, database_name):
-    configure(unused_tcp_port, database_name, postgres_db.port)
-
+async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgres_db, database_name):
+    configure_auth(True, False, False)
     rs = Server()
     server = SessionSpy()
     rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
