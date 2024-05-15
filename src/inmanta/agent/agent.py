@@ -92,15 +92,21 @@ class BaseDeployAction(BaseResourceAction):
         super().cancel()
 
     def priority(self) -> int:
-        return 100
+        return 100  # 90 # 110
 
 
 class DeployAction(BaseDeployAction):
 
-    def __init__(self, my_executor: executor.Executor, resource: ResourceDetails, group_id: uuid.UUID, reason: str) -> None:
+    def __init__(
+        self, my_executor: executor.Executor, resource: ResourceDetails, group_id: uuid.UUID, reason: str, priority: int
+    ) -> None:
         super().__init__(resource.id, group_id, reason)
         self.resource: ResourceDetails = resource
         self.executor = my_executor
+        self._priority = priority
+
+    def priority(self) -> int:
+        return self._priority
 
     async def run(self) -> None:
         # TODO: incorrect, doesn't keep cache open!
@@ -241,7 +247,6 @@ interrupt = DeployRequestAction.interrupt
 # But, we only defer or interrupt full deploys
 # As such, we will always execute a full deploy
 # (it may oscillate between periodic and not, but it will execute)
-
 deploy_response_matrix = {
     # ((old_is_repair, old_is_periodic), (new_is_repair, new_is_periodic))
     # Periodic restart loops: Full periodic is never interrupted by periodic
@@ -267,33 +272,26 @@ deploy_response_matrix = {
     (NF, PI): ignore,  # full ignores periodic increment
 }
 
-priority_based_matrix = {
-    # ((old_is_repair, old_is_periodic), (new_is_repair, new_is_periodic))
-    # Periodic restart loops: Full periodic is never interrupted by periodic
-    (PF, PF): ignore,  # Full periodic ignores full periodic to prevent restart loops
-    (NF, PF): ignore,  # Full ignores full periodic to avoid restart loops
-    (PF, NF): terminate,  # Full periodic terminated by Full
-    (NF, NF): terminate,  # Full terminated by Full
-
-    (PI, PI): terminate,
-    (PI, NI): terminate,
-    (NI, PI): terminate,
-    (NI, NI): terminate,
+# New logic
+# periodic run: low priority, increment can be upgrade to full
+# N run: just follow along
 
 
-    (PF, PI): ignore,  # Full periodic ignores periodic increment to prevent restart loops
-    (PI, PF): terminate,  # Incremental periodic terminated by full periodic: upgrade to full
-    (PI, NF): terminate,  # Incremental periodic terminated by full: upgrade to full
-    # Same terminates same: focus on the new one
-    # Increment * terminates Increment *
-    (NI, PF): defer,  # Incremental defers full periodic
-    (NI, NF): defer,  # Incremental defers full
-    # Non-periodic is always executed asap
-    (PF, NI): interrupt,  # periodic full interrupted by increment
-    (NF, NI): interrupt,  # full interrupted by increment
-    # Prefer the normal full over PI
-    (NF, PI): ignore,  # full ignores periodic increment
-}
+@dataclasses.dataclass
+class SubRun:
+    origin: DeployRequest
+    run: scheduler.TaskGroup
+    cad_resolver: Optional[asyncio.Task[None]]
+    cads: dict[str, RemoteResourceAction]
+
+    def cancel(self) -> None:
+        if self.cad_resolver:
+            self.cad_resolver.cancel()
+        self.run.cancel()
+
+
+PRIO_PERIODIC = 110
+PRIO_NORMAL = 100
 
 
 class ResourceScheduler:
@@ -307,25 +305,15 @@ class ResourceScheduler:
     """
 
     def __init__(self, agent: "AgentInstance", env_id: uuid.UUID, name: str) -> None:
-        self.active_deploy: Optional[scheduler.TaskGroup] = None
-        self.active_repair: Optional[scheduler.TaskGroup] = None
-        self.cad: dict[str, RemoteResourceAction] = {}
+        self.active_deploy: Optional[SubRun] = None
+        self.active_repair: Optional[SubRun] = None
 
         self._env_id = env_id
         self.agent = agent
         self.name = name
         self.version: int = 0
 
-        self.running: Optional[DeployRequest] = None
-        self.deferred: Optional[DeployRequest] = None
-        self.cad_resolver: Optional[asyncio.Task[None]] = None
-
         self.logger: Logger = agent.logger
-
-    def finished(self) -> bool:
-        if self.active_deploy is None:
-            return True
-        return self.active_deploy.finished()
 
     def cancel(self) -> None:
         """
@@ -333,11 +321,19 @@ class ResourceScheduler:
         """
         if self.active_deploy is not None:
             self.active_deploy.cancel()
-        if self.cad_resolver is not None:
-            self.cad_resolver.cancel()
-            self.cad_resolver = None
-        self.active_deploy = None
-        self.cad = {}
+        if self.active_repair is not None:
+            self.active_repair.cancel()
+
+    def finished(self) -> bool:
+        if self.active_repair is not None:
+            if not self.active_repair.run.finished():
+                return False
+
+        if self.active_deploy is not None:
+            if not self.active_deploy.run.finished():
+                return False
+
+        return True
 
     def reload(
         self,
@@ -354,94 +350,72 @@ class ResourceScheduler:
 
         **This method should only be called under critical_ratelimiter lock!**
         """
-        # First determined if we should start and if the current run should be resumed
-        if not self.finished():
-            # we are still running
-            assert self.running is not None
-            # Get correct action
-            response = deploy_response_matrix[
-                ((self.running.is_full_deploy, self.running.is_periodic), (new_request.is_full_deploy, new_request.is_periodic))
-            ]
-            # Execute action
-            if response == DeployRequestAction.terminate:
-                self.logger.info("Terminating run '%s' for '%s'", self.running.reason, new_request.reason)
-            elif response == DeployRequestAction.defer:
-                self.logger.info("Deferring run '%s' for '%s'", new_request.reason, self.running.reason)
-                self.deferred = new_request
-                return
-            elif response == DeployRequestAction.ignore:
-                self.logger.info("Ignoring new run '%s' in favor of current '%s'", new_request.reason, self.running.reason)
-                return
-            elif response == DeployRequestAction.interrupt:
-                self.logger.info("Interrupting run '%s' for '%s'", self.running.reason, new_request.reason)
-                # Can overwrite, acceptable
-                self.deferred = self.running.interrupt(new_request)
+
+        def build_run(prio: int) -> SubRun:
+            # start new run
+            gid = uuid.uuid4()
+            self.logger.info("Running %s for reason: %s", gid, new_request.reason)
+
+            # re-generate generation
+            generation: dict[ResourceIdStr, BaseDeployAction] = {}
+            to_schedule = []
+
+            for resource in resources:
+                if resource.rvid not in undeployable:
+                    local_resource_action = DeployAction(executor, resource, gid, new_request.reason, prio)
+                    generation[resource.rid] = local_resource_action
+                    to_schedule.append(local_resource_action)
+
+            # hook up Cross Agent Dependencies
+            cross_agent_dependencies: set[Id] = {q for r in resources for q in r.requires if q.get_agent_name() != self.name}
+            cads_by_rid: dict[ResourceIdStr, RemoteResourceAction] = {}
+            cads_by_rvid: dict[ResourceIdStr, RemoteResourceAction] = {}
+            for cad in cross_agent_dependencies:
+                ra = RemoteResourceAction(cad, gid, new_request.reason)
+                cads_by_rvid[str(cad)] = ra
+                rid = cad.resource_str()
+                cads_by_rid[rid] = ra
+                generation[rid] = ra
+
+            task_group = scheduler.TaskGroup([])
+            for task in to_schedule:
+                for requires in task.resource.requires:
+                    req_task = generation.get(requires.resource_str())
+                    if not req_task:
+                        # undeployable requirement
+                        break
+                    task.wait_for(req_task)
+                else:
+                    task_group.tasks.append(task)
+
+            if cads_by_rid:
+                cad_resolver = self.agent.process.add_background_task(self.resolve_cads(self.version, cads_by_rid))
             else:
-                assert False, f"Unexpected DeployRequestAction {response}"
+                cad_resolver = None
 
-            # cancel old run
-            self.cancel()
+            task_group.enqueue_all(self.agent.work_queue)
 
-        # start new run
-        self.running = new_request
-        self.version = resources[0].model_version
-        gid = uuid.uuid4()
-        self.logger.info("Running %s for reason: %s", gid, self.running.reason)
+            return SubRun(new_request, task_group, cad_resolver, cads_by_rvid)
 
-        # re-generate generation
-        generation: dict[ResourceIdStr, BaseDeployAction] = {}
-        to_schedule = []
-
-        for resource in resources:
-            if resource.rvid not in undeployable:
-                local_resource_action = DeployAction(executor, resource, gid, self.running.reason)
-                generation[resource.rid] = local_resource_action
-                to_schedule.append(local_resource_action)
-
-        # hook up Cross Agent Dependencies
-        cross_agent_dependencies: set[Id] = {q for r in resources for q in r.requires if q.get_agent_name() != self.name}
-        cads_by_rid: dict[ResourceIdStr, RemoteResourceAction] = {}
-        for cad in cross_agent_dependencies:
-            ra = RemoteResourceAction(cad, gid, self.running.reason)
-            self.cad[str(cad)] = ra
-            rid = cad.resource_str()
-            cads_by_rid[rid] = ra
-            generation[rid] = ra
-
-        task_group = scheduler.TaskGroup([])
-        for task in to_schedule:
-            for requires in task.resource.requires:
-                req_task = generation.get(requires.resource_str())
-                if not req_task:
-                    # undeployable requirement
-                    break
-                task.wait_for(req_task)
-            else:
-                task_group.tasks.append(task)
-
-        if cads_by_rid:
-            self.cad_resolver = self.agent.process.add_background_task(self.resolve_cads(self.version, cads_by_rid))
-
-        # Dispatch all actions
-        self.active_deploy = task_group
-        task_group.enqueue_all(self.agent.work_queue)
-        # Listen for completion
-        # TODO: deffered task!
-        # self.agent.process.add_background_task(self.mark_deployment_as_finished(generation.values()))
-
-    # async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceActionBase]) -> None:
-    #     # This method is executing as a background task. As such, it will get cancelled when the agent is stopped.
-    #     # Because the asyncio.gather() call propagates cancellation, we shield the ResourceActionBase.future.
-    #     # Cancellation of these futures is handled by the ResourceActionBase.cancel() method. Not shielding them
-    #     # would cause the result of the future to be set twice, which results in an undesired InvalidStateError.
-    #     await asyncio.gather(*[asyncio.shield(resource_action.future) for resource_action in resource_actions])
-    #     async with self.agent.critical_ratelimiter:
-    #         if not self.finished():
-    #             return
-    #         if self.deferred is not None:
-    #             self.logger.info("Resuming run '%s'", self.deferred.reason)
-    #             self.agent.process.add_background_task(self.agent.get_latest_version_for_agent(self.deferred))
-    #             self.deferred = None
+        if new_request.is_periodic:
+            # periodic
+            if self.active_repair is not None and not self.active_repair.run.finished():
+                # active one
+                if self.active_repair.origin.is_full_deploy:
+                    self.logger.info(
+                        "Ignoring new run '%s' in favor of current '%s'", new_request.reason, self.active_repair.origin.reason
+                    )
+                    return
+                else:
+                    self.logger.info("Upgrading run '%s' to '%s'", self.active_repair.origin.reason, new_request.reason)
+                    self.active_repair.run.cancel()
+            self.active_repair = build_run(PRIO_PERIODIC)
+        else:
+            # Just do as you are told
+            if self.active_deploy is not None and not self.active_deploy.run.finished():
+                self.logger.info("Canceling run '%s' in favor of '%s'", self.active_repair.origin.reason, new_request.reason)
+                self.active_deploy.run.cancel()
+            self.active_repair = build_run(PRIO_NORMAL)
 
     async def resolve_cads(self, version: int, cads: dict[ResourceIdStr, RemoteResourceAction]) -> None:
         """Batch resolve all CAD's"""
@@ -468,10 +442,10 @@ class ResourceScheduler:
         change: const.Change,
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]],
     ) -> None:
-        if resourceid not in self.cad:
-            # received CAD notification for which no resource are waiting, so return
-            return
-        await self.cad[resourceid].notify(state)
+        if self.active_repair is not None and resourceid in self.active_repair.cads:
+            await self.active_repair.cads[resourceid].notify(state)
+        if self.active_deploy is not None and resourceid in self.active_deploy.cads:
+            await self.active_deploy.cads[resourceid].notify(state)
 
     def get_client(self) -> protocol.Client:
         return self.agent.get_client()

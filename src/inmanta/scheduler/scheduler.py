@@ -73,15 +73,40 @@ class BaseTask(abc.ABC):
     async def run(self) -> None:
         pass
 
+    def is_queued(self) -> bool:
+        """Are we bound to a queue"""
+        return self._queue is not None
+
+    def is_runnable(self) -> bool:
+        """Could be be executed"""
+        return self.waitcount == 0
+
+    def is_cancelled(self) -> bool:
+        """Are we cancelled"""
+        return self.cancelled
+
+    def is_running(self) -> bool:
+        return self.started and not self.done
+
+    def is_done(self) -> bool:
+        return self.done
+
     def cancel(self) -> None:
-        # todo: this doesn't notify waiters
+        """Will cancel this task IF it is not already done or started"""
+        if self.cancelled or self.done or self.started:
+            return
         self.cancelled = True
         if self._queue:
             self._queue.full_queue.drop(self._entry)
-            self._queue.run_queue.drop(self._entry)
+            if self.waitcount == 0 and not self.started:
+                self._queue.run_queue.drop(self._entry)
 
     def wait_for(self, other: "BaseTask") -> None:
-        """Declare we wait for some other task"""
+        """
+        Declare we wait for some other task
+
+        Adding the same task twice will make this one wait forever!
+        """
         if other.done:
             # the other is done, nothing to do
             return
@@ -112,11 +137,13 @@ class BaseTask(abc.ABC):
             try:
                 await self.run()
             finally:
-                self.done = True
                 self._done()
 
     def _done(self) -> None:
-        """Internal, we are done, propagate to waiters"""
+        """Internal, we are done, propagate to waiters, can be called multiple times safely"""
+        if self.done:
+            return
+        self.done = True
         if self._queue:
             self._queue.full_queue.drop(self._entry)
         for awaited in self.provides:
@@ -177,12 +204,14 @@ class PriorityQueue(asyncio.Queue[T]):
         return self._queue.pop(0)
 
     def drop(self, item: T) -> None:
+        """Remove this item, raise indexerror if the item is not present"""
         idx = bisect.bisect(self._queue, item) - 1
         assert self._queue[idx] == item
         self._queue.pop(idx)
 
 
 class TaskQueue:
+    """Queue to schedule tasks with inter-dependencies and provide an overview of the queue"""
 
     def __init__(self) -> None:
         self.full_queue: PriorityQueue[typing.Tuple[int, int, BaseTask]] = PriorityQueue()
@@ -202,10 +231,8 @@ class TaskQueue:
 
     async def get(self) -> BaseTask:
         """Remove and return the lowest priority task. Raise KeyError if empty."""
-        while True:
-            priority, count, task = await self.run_queue.get()
-            if not task.cancelled:
-                return task
+        priority, count, task = await self.run_queue.get()
+        return task
 
     async def do_next(self) -> BaseTask:
         """run the next task"""
@@ -232,6 +259,10 @@ class SentinelTask(BaseTask):
 
 
 class TaskRunner:
+    """Logical thread to process work from a task queue
+
+    Can be restarted
+    """
 
     def __init__(self, queue: TaskQueue) -> None:
         self.queue = queue
@@ -240,6 +271,7 @@ class TaskRunner:
         self.finished: typing.Optional[asyncio.Task[None]] = None
 
     def start(self) -> None:
+        self.should_run = True
         self.finished = asyncio.create_task(self.run())
 
     def stop(self) -> None:
@@ -269,7 +301,7 @@ class TaskGroup:
         self.tasks = tasks
 
     def finished(self) -> bool:
-        return all(task.done for task in self.tasks)
+        return all((task.done or task.cancelled) for task in self.tasks)
 
     def cancel(self) -> None:
         for task in self.tasks:
