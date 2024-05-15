@@ -562,12 +562,21 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                         rps.environment,
                         (
                             CASE
+                                -- The resource_persistent_state.last_non_deploying_status column is only populated for
+                                -- actual deployment operations to prevent locking issues. This case-statement calculates
+                                -- the correct state from the combination of the resource table and the
+                                -- resource_persistent_state table.
                                 WHEN r.model < (SELECT version FROM latest_version)
                                     THEN 'orphaned'
-                                WHEN (r.status = 'deploying')
+                                WHEN r.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
+                                    -- The deploying, undefined and skipped_for_undefined states are not tracked in the
+                                    -- resource_persistent_state table.
                                     THEN r.status::text
-                                ELSE
-                                    rps.last_non_deploying_status::text
+                                WHEN rps.last_deployed_attribute_hash != r.attribute_hash
+                                    -- The hash changed since the last deploy -> new desired state
+                                    THEN r.status::text
+                                    -- No override required, use last known state from actual deployment
+                                    ELSE rps.last_non_deploying_status::text
                             END
                         ) as status
                     FROM versioned_resource_state AS rps

@@ -1,0 +1,6 @@
+---
+description: Fix bug where the `GET /api/v2/resource/<rid>` and `GET /api/v2/resource` endpoints return an incorrect resourcestate if a resource moved back to the available state in a new version of the configurationmodel.
+change-type: patch
+destination-branches: [master, iso7]
+sections:
+  bugfix: "{{description}}"
