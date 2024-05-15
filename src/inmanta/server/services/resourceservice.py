@@ -943,7 +943,11 @@ class ResourceService(protocol.ServerSlice):
                             if not is_increment_notification:
                                 if status == ResourceState.deployed:
                                     extra_fields["last_success"] = resource_action.started
-                                if status != ResourceState.deploying:
+                                if status not in {
+                                    ResourceState.deploying,
+                                    ResourceState.undefined,
+                                    ResourceState.skipped_for_undefined,
+                                }:
                                     extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
 
                             await res.update_persistent_state(
