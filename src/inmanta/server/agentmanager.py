@@ -644,6 +644,21 @@ class AgentManager(ServerSlice, SessionListener):
             )
             await asyncio.gather(*(s.expire_and_abort(timeout=0) for s in sessions_to_expire))
 
+    async def are_agents_active(self, tid: uuid.UUID, endpoints: Iterable[str]) -> bool:
+        """
+        Return true iff all the given agents are in the up or the paused state.
+        """
+        return all(active for (_, active) in await self.get_agent_active_status(tid, endpoints))
+
+    async def get_agent_active_status(self, tid: uuid.UUID, endpoints: Iterable[str]) -> list[tuple[str, bool]]:
+        """
+        Return a list of tuples where the first element of the tuple contains the name of an endpoint
+        and the second a boolean indicating where there is an active (up or paused) agent for that endpoint.
+        """
+        all_sids_for_env = [sid for (sid, session) in self.sessions.items() if session.tid == tid]
+        all_active_endpoints_for_env = {ep for sid in all_sids_for_env for ep in self.endpoints_for_sid[sid]}
+        return [(ep, ep in all_active_endpoints_for_env) for ep in endpoints]
+
     async def expire_all_sessions_for_environment(self, env_id: uuid.UUID) -> None:
         async with self.session_lock:
             await asyncio.gather(*[s.expire_and_abort(timeout=0) for s in self.sessions.values() if s.tid == env_id])
@@ -1099,6 +1114,11 @@ class AutostartedAgentManager(ServerSlice):
                     raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
                 env = refreshed_env
                 if env.halted:
+                    return False
+
+                if not restart and await self._agent_manager.are_agents_active(env.id, autostart_agents):
+                    # do not start a new agent process if the agents are already active, regardless of whether their session
+                    # is with an autostarted process or not.
                     return False
 
                 start_new_process: bool
