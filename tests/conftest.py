@@ -25,7 +25,6 @@ import toml
 from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
-from utils import configure_auth
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -841,7 +840,7 @@ async def server_multi(
     with tempfile.TemporaryDirectory() as state_dir:
         ssl, auth, ca = request.param
 
-        configure_auth(auth, ca, ssl)
+        utils.configure_auth(auth, ca, ssl)
 
         # Config.set() always expects a string value
         pg_password = "" if postgres_db.password is None else postgres_db.password
