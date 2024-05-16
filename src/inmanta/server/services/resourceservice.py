@@ -1317,18 +1317,13 @@ class ResourceService(protocol.ServerSlice):
         start: Optional[str] = None,
         end: Optional[str] = None,
         sort: str = "discovered_resource_id.asc",
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> ReturnValue[Sequence[DiscoveredResource]]:
         if not self.feature_manager.enabled(resource_discovery):
             raise Forbidden(message="The resource discovery feature is not enabled.")
 
         try:
-            handler = DiscoveredResourceView(
-                environment=env,
-                limit=limit,
-                sort=sort,
-                start=start,
-                end=end,
-            )
+            handler = DiscoveredResourceView(environment=env, limit=limit, sort=sort, start=start, end=end, filter=filter)
             out = await handler.execute()
             return out
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
