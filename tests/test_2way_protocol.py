@@ -32,7 +32,7 @@ from inmanta.protocol import method
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.server.protocol import Server, ServerSlice, SessionListener
-from utils import configure, retry_limited
+from utils import configure, configure_auth, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,12 +42,12 @@ def get_status_x(tid: uuid.UUID):
     pass
 
 
-@method(path="/status/<id>", operation="GET", server_agent=True, timeout=10)
+@method(path="/status/<id>", operation="GET", server_agent=True, enforce_auth=False, timeout=10)
 def get_agent_status_x(id: str):
     pass
 
 
-@method(path="/notify/<id>", operation="GET", server_agent=True, timeout=10, reply=False)
+@method(path="/notify/<id>", operation="GET", server_agent=True, enforce_auth=False, timeout=10, reply=False)
 def get_agent_push(id: str):
     pass
 
@@ -125,9 +125,9 @@ async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) 
     await retry_limited(is_same, 10)
 
 
-async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, database_name):
-    configure(unused_tcp_port, database_name, postgres_db.port)
-
+async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgres_db, database_name):
+    # Authentication complicates this even further
+    configure_auth(auth=True, ca=False, ssl=False)
     rs = Server()
     server = SessionSpy()
     rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)

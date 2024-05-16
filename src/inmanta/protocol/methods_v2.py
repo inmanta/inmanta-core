@@ -485,7 +485,9 @@ def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = Fals
     """
 
 
-@typedmethod(path="/agentmap", api=False, server_agent=True, operation="POST", client_types=[], api_version=2)
+@typedmethod(
+    path="/agentmap", api=False, server_agent=True, enforce_auth=False, operation="POST", client_types=[], api_version=2
+)
 def update_agent_map(agent_map: dict[str, str]) -> None:
     """
     Notify an agent about the fact that the autostart_agent_map has been updated.
