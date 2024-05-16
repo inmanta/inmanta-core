@@ -25,6 +25,7 @@ import toml
 from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
+from utils import configure_auth
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -882,34 +883,6 @@ async def server_multi(
             await ibl.stop(timeout=15)
         except concurrent.futures.TimeoutError:
             logger.exception("Timeout during stop of the server in teardown")
-
-
-def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-    if auth:
-        config.Config.set("server", "auth", "true")
-    for x, ct in [
-        ("server", None),
-        ("agent_rest_transport", ["agent"]),
-        ("compiler_rest_transport", ["compiler"]),
-        ("client_rest_transport", ["api", "compiler"]),
-        ("cmdline_rest_transport", ["api"]),
-    ]:
-        if ssl and not ca:
-            config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
-            config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
-            config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
-            config.Config.set(x, "ssl", "True")
-        if ssl and ca:
-            capath = os.path.join(path, "ca", "enduser-certs")
-
-            config.Config.set(x, "ssl_cert_file", os.path.join(capath, "server.crt"))
-            config.Config.set(x, "ssl_key_file", os.path.join(capath, "server.key.open"))
-            config.Config.set(x, "ssl_ca_cert_file", os.path.join(capath, "server.chain"))
-            config.Config.set(x, "ssl", "True")
-        if auth and ct is not None:
-            token = protocol.encode_token(ct)
-            config.Config.set(x, "token", token)
 
 
 @pytest.fixture(scope="function")
