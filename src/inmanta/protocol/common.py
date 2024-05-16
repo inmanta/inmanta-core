@@ -418,6 +418,8 @@ class MethodProperties:
         if validate_sid is None:
             validate_sid = agent_server and not api
 
+        assert not (enforce_auth and server_agent), "Can not authenticate the return channel"
+
         self._path = UrlPath(path)
         self.path = path
         self._operation = operation

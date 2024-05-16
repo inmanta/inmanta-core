@@ -26,6 +26,7 @@ from pytest import fixture
 from tornado.gen import sleep
 
 from conftest import configure_auth
+
 # Methods need to be defined before the Client class is loaded by Python
 from inmanta import protocol  # NOQA
 from inmanta import data
@@ -43,12 +44,12 @@ def get_status_x(tid: uuid.UUID):
     pass
 
 
-@method(path="/status/<id>", operation="GET", server_agent=True, timeout=10)
+@method(path="/status/<id>", operation="GET", server_agent=True, enforce_auth=False, timeout=10)
 def get_agent_status_x(id: str):
     pass
 
 
-@method(path="/notify/<id>", operation="GET", server_agent=True, timeout=10, reply=False)
+@method(path="/notify/<id>", operation="GET", server_agent=True, enforce_auth=False, timeout=10, reply=False)
 def get_agent_push(id: str):
     pass
 
@@ -127,6 +128,7 @@ async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) 
 
 
 async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgres_db, database_name):
+    # Authentication complicates this even further
     configure_auth(True, False, False)
     rs = Server()
     server = SessionSpy()
