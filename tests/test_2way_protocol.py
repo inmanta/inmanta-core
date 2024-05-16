@@ -129,7 +129,7 @@ async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) 
 
 async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgres_db, database_name):
     # Authentication complicates this even further
-    configure_auth(True, False, False)
+    configure_auth(auth=True, ca=False, ssl=False)
     rs = Server()
     server = SessionSpy()
     rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
