@@ -72,8 +72,8 @@ end
 
 implement A using a
 
-pre =  std::testing::NullResource(name="pre")
-post =  std::testing::NullResource(name="post")
+pre = std::testing::NullResource(name="pre")
+post = std::testing::NullResource(name="post")
 
 inter = A(name = "inter")
 inter.requires = pre
