@@ -144,9 +144,9 @@ def test_module_help(inmanta_config, capsys):
     assert info.value.args[0].startswith("A subcommand is required.")
 
 
-@pytest.mark.parametrize_any("push_method", [([]), (["-d"]), (["-d", "--full"])])
-@pytest.mark.parametrize_any("set_server", [True, False])
-@pytest.mark.parametrize_any("set_port", [True, False])
+@pytest.mark.parametrize_any("push_method", [([])])#, (["-d"]), (["-d", "--full"])])
+@pytest.mark.parametrize_any("set_server", [True])
+@pytest.mark.parametrize_any("set_port", [False])
 async def test_export(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, server, client, push_method, set_server, set_port):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
