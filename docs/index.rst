@@ -82,8 +82,3 @@
     reference/index
     troubleshooting
     changelogs
-
-PDF version
------------
-
-Download: :download:`inmanta.pdf <inmanta.pdf>`
