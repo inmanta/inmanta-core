@@ -25,6 +25,8 @@ from utils import assert_graph
 def test_abstract_requires(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
+import std::testing
+
 host = std::Host(name="host", os=std::unix)
 
 entity A:
@@ -32,15 +34,16 @@ entity A:
 end
 
 implementation a for A:
-    one = std::ConfigFile(path="{{self.name}}1", host=host, content="")
-    two = std::ConfigFile(path="{{self.name}}2", host=host, content="")
+    one = std::testing::NullResource(name="{{self.name}}1")
+    two = std::testing::NullResource(name="{{self.name}}2")
+
     two.requires = one
 end
 
 implement A using a
 
-pre = std::ConfigFile(path="host0", host=host, content="")
-post = std::ConfigFile(path="hosts4", host=host, content="")
+pre = std::testing::NullResource(name="host0")
+post = std::testing::NullResource(name="hosts4")
 
 inter = A(name = "inter")
 """
@@ -53,15 +56,15 @@ inter = A(name = "inter")
 def test_abstract_requires_3(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-host = std::Host(name="host", os=std::unix)
+import std::testing
 
 entity A:
     string name
 end
 
 implementation a for A:
-    one = std::ConfigFile(path="{{self.name}}1", host=host, content="")
-    two = std::ConfigFile(path="{{self.name}}2", host=host, content="")
+    one = std::testing::NullResource(name="{{self.name}}1")
+    two = std::testing::NullResource(name="{{self.name}}2")
     two.requires = one
     one.requires = self.requires
     two.provides = self.provides
@@ -69,8 +72,8 @@ end
 
 implement A using a
 
-pre = std::ConfigFile(path="pre", host=host, content="")
-post = std::ConfigFile(path="post", host=host, content="")
+pre = std::testing::NullResource(name="pre")
+post = std::testing::NullResource(name="post")
 
 inter = A(name = "inter")
 inter.requires = pre
@@ -82,30 +85,30 @@ post.requires = inter
     assert_graph(
         resources,
         """post: inter2
-                                  inter2: inter1
-                                  inter1: pre""",
+        inter2: inter1
+        inter1: pre""",
     )
 
 
 def test_abstract_requires_2(snippetcompiler, caplog):
     snippetcompiler.setup_for_snippet(
         """
-host = std::Host(name="host", os=std::unix)
+import std::testing
 
 entity A:
-string name
+    string name
 end
 
 implementation a for A:
-one = std::ConfigFile(path="{{self.name}}1", host=host, content="")
-two = std::ConfigFile(path="{{self.name}}2", host=host, content="")
-two.requires = one
+    one = std::testing::NullResource(name="{{self.name}}1")
+    two = std::testing::NullResource(name="{{self.name}}2")
+    two.requires = one
 end
 
 implement A using a
 
-pre = std::ConfigFile(path="host0", host=host, content="")
-post = std::ConfigFile(path="hosts4", host=host, content="")
+pre = std::testing::NullResource(name="host0")
+post = std::testing::NullResource(name="host4")
 
 inter = A(name = "inter")
 inter.requires = pre
