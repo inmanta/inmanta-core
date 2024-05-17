@@ -790,8 +790,8 @@ async def test_batched_code_upload(
     """Test uploading all code definitions at once"""
     snippetcompiler.setup_for_snippet(
         """
-    h = std::Host(name="test", os=std::linux)
-    f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
+    import std::testing
+    f = std::testing::NullResource(name="test")
     """
     )
     version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
