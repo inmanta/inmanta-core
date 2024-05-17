@@ -175,8 +175,9 @@ repo: https://github.com/inmanta/
 
     path_main_file.write(
         """
+import std::testing
 vm1=std::Host(name="non-existing-machine", os=std::linux)
-std::ConfigFile(host=vm1, path="/test", content="")
+std::testing::NullResource(name=vm1.name)
 """
     )
 
@@ -395,8 +396,9 @@ repo: https://github.com/inmanta/
 
     path_main_file.write(
         """
-vm1=std::Host(name="non-existing-machine", os=std::linux)
-std::ConfigFile(host=vm1, path="/test", content="")
+import std::testing
+
+std::testing::NullResource(name="test")
 """
     )
 

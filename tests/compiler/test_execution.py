@@ -26,7 +26,9 @@ from inmanta.module import RelationPrecedenceRule
 
 def test_issue_139_scheduler(snippetcompiler):
     snippetcompiler.setup_for_snippet(
-        """import std
+        """
+import std
+import std::testing
 
 entity Host extends std::Host:
     string attr
@@ -35,7 +37,8 @@ implement Host using std::none
 
 host = Host(name="vm1", os=std::linux)
 
-f = std::ConfigFile(host=host, path="", content="{{ host.attr }}")
+f = std::testing::NullResource(name=host.name)
+
 std::Service(host=host, name="svc", state="running", onboot=true, requires=[f])
 ref = std::Service[host=host, name="svc"]
 
