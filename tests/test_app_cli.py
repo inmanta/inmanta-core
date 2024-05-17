@@ -172,13 +172,30 @@ downloadpath: {libs_dir}
 repo: https://github.com/inmanta/
 """
     )
+    # nullres
+    # [{'date': '2024-05-17T13:16:53.396519', 'partial_base': None, 'released': True, 'deployed': True, 'result': 'success',
+    #   'version_info': {'export_metadata': {'type': 'manual', 'message': 'Manual compile on the CLI by user', 'cli-user': 'hugo',
+    #                                        'hostname': 'hugo-Latitude-5421', 'inmanta:compile:state': 'success'}}, 'total': 1,
+    #   'undeployable': [], 'skipped_for_undeployable': [], 'version': 1, 'environment': 'd95c22bb-c013-49f0-9d56-7c127e852d9d',
+    #   'is_suitable_for_partial_compiles': True, 'status': {
+    #         'fe623595-cf58-5588-bcd2-4841e70bfcb1': {'id': 'std::testing::NullResource[internal,name=non-existing-machine]',
+    #                                                  'status': 'deployed'}}, 'done': 1}]
+
+    # configfile
+    # [{'date': '2024-05-17T13:17:54.400084', 'partial_base': None, 'released': True, 'deployed': False, 'result': 'deploying',
+    #   'version_info': {'export_metadata': {'type': 'manual', 'message': 'Manual compile on the CLI by user', 'cli-user': 'hugo',
+    #                                        'hostname': 'hugo-Latitude-5421', 'inmanta:compile:state': 'success'}}, 'total': 1,
+    #   'undeployable': [], 'skipped_for_undeployable': [], 'version': 1, 'environment': '54ac4fa6-91d3-4c53-a125-e602bb62e86f',
+    #   'is_suitable_for_partial_compiles': True, 'status': {
+    #         '4dbde0ff-4b16-529d-8772-92ed1fa2c6d1': {'id': 'std::File[non-existing-machine,path=/test]',
+    #                                                  'status': 'available'}}, 'done': 0}]
 
     path_main_file.write(
         """
 import std::testing
 vm1=std::Host(name="non-existing-machine", os=std::linux)
-# std::ConfigFile(host=vm1, path="/test", content="")
-std::testing::NullResource(name=vm1.name)
+std::ConfigFile(host=vm1, path="/test", content="")
+# std::testing::NullResource(name=vm1.name)
 """
     )
 
@@ -227,6 +244,7 @@ std::testing::NullResource(name=vm1.name)
     assert result.code == 200
     assert len(result.result["versions"]) == 1
 
+    breakpoint()
     details_exported_version = result.result["versions"][0]
 
     assert details_exported_version["result"] == VersionState.deploying.name
