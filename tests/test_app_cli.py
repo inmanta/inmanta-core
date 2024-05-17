@@ -177,6 +177,7 @@ repo: https://github.com/inmanta/
         """
 import std::testing
 vm1=std::Host(name="non-existing-machine", os=std::linux)
+# std::ConfigFile(host=vm1, path="/test", content="")
 std::testing::NullResource(name=vm1.name)
 """
     )
