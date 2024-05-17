@@ -146,7 +146,7 @@ def test_module_help(inmanta_config, capsys):
 
 @pytest.mark.parametrize_any("push_method", [([]), (["-d"]), (["-d", "--full"])])
 @pytest.mark.parametrize_any("set_server", [True, False])
-@pytest.mark.parametrize_any("set_port", [False, True])
+@pytest.mark.parametrize_any("set_port", [True, False])
 async def test_export(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, server, client, push_method, set_server, set_port):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
@@ -172,7 +172,6 @@ downloadpath: {libs_dir}
 repo: https://github.com/inmanta/
 """
     )
-
 
     path_main_file.write(
         """
@@ -226,7 +225,6 @@ std::testing::NullResource(name="test", agentname="agent")
     assert result.code == 200
     assert len(result.result["versions"]) == 1
 
-    breakpoint()
     details_exported_version = result.result["versions"][0]
 
     assert details_exported_version["result"] == VersionState.deploying.name
