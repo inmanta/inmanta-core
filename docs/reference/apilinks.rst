@@ -1,7 +1,7 @@
 API self-referencing links
 ==========================
 
-Some views in the web-console can emit links to other resources.
+Some API endpoints can return links to other API endpoints.
 The following table documents all these links and their format:
 
 
@@ -11,6 +11,6 @@ The following table documents all these links and their format:
    * - Link target type
      - Link format
    * - Compile report
-     - `/api/v2/compilereport/<compile_id>`
+     - ``/api/v2/compilereport/<compile_id>``
    * - Managed resource
-     - "/api/v2/resource/<rid>"
+     - ``/api/v2/resource/<rid>``
