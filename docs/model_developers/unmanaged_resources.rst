@@ -45,10 +45,10 @@ The handler code consists of three parts:
 * Lines 12-21: The class that describes how the discovery resource ``InterfaceDiscovery`` should be serialized. This
   resource definition is analogous to the definition of a regular ``PurgeableResource`` or ``Resource``,
   except that the class inherits from ``DiscoveryResource``.
-* Lines 24-31: A Pydantic BaseModel that represents the datastructure that will be used by the discovery handler to
+* Lines 24-32: A Pydantic BaseModel that represents the datastructure that will be used by the discovery handler to
   return the attributes of the discovered resources. This specific example uses a Pydantic BaseModel,
   but discovery handlers can use any json serializable datastructure.
-* Line: 34-61: This is the handler for the discovery resource. A discovery handler class must
+* Line: 35-63: This is the handler for the discovery resource. A discovery handler class must
   satisfy the following requirements:
 
      * It must be annotated with the ``@provider`` annotation, like a regular ``CRUDHandler`` or ``ResourceHandler``.

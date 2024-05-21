@@ -654,7 +654,15 @@ def dryrun_update(tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
 # Method for requesting a dryrun from an agent
 
 
-@method(path="/agent_dryrun/<id>", operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
+@method(
+    path="/agent_dryrun/<id>",
+    operation="POST",
+    server_agent=True,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+    enforce_auth=False,
+)
 def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
     """
     Do a dryrun on an agent
@@ -835,6 +843,7 @@ def set_parameters(tid: uuid.UUID, parameters: list):
     arg_options=AGENT_ENV_OPTS,
     client_types=[],
     reply=False,
+    enforce_auth=False,
 )
 def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     """
@@ -986,7 +995,7 @@ def list_agents(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
 # Reporting by the agent to the server
 
 
-@method(path="/status", operation="GET", server_agent=True, timeout=5, client_types=[])
+@method(path="/status", operation="GET", server_agent=True, enforce_auth=False, timeout=5, client_types=[])
 def get_status():
     """
     A call from the server to the agent to report its status to the server
@@ -998,7 +1007,7 @@ def get_status():
 # Methods to allow the server to set the agents state
 
 
-@method(path="/agentstate", operation="POST", server_agent=True, timeout=5, client_types=[])
+@method(path="/agentstate", operation="POST", server_agent=True, enforce_auth=False, timeout=5, client_types=[])
 def set_state(agent: str, enabled: bool):
     """
     Set the state of the agent.
@@ -1008,7 +1017,15 @@ def set_state(agent: str, enabled: bool):
     """
 
 
-@method(path="/agentstate/<id>", operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
+@method(
+    path="/agentstate/<id>",
+    operation="POST",
+    server_agent=True,
+    enforce_auth=False,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+)
 def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
     """
     Request an agent to reload resources
@@ -1023,7 +1040,14 @@ def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
 
 
 @method(
-    path="/event/<id>", operation="PUT", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[], reply=False
+    path="/event/<id>",
+    operation="PUT",
+    server_agent=True,
+    enforce_auth=False,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+    reply=False,
 )
 def resource_event(
     tid: uuid.UUID, id: str, resource: str, send_events: bool, state: const.ResourceState, change: const.Change, changes={}

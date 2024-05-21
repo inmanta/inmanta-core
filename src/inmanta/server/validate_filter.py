@@ -18,7 +18,7 @@
 
 import datetime
 from abc import ABC, abstractmethod
-from typing import Callable, Optional, TypeVar
+from typing import Callable, Mapping, Optional, Sequence, TypeVar
 
 import dateutil
 import more_itertools
@@ -279,7 +279,7 @@ class FilterValidator(ABC):
         """A dictionary that determines the mapping between the allowed filters and how they should be parsed and validated"""
         raise NotImplementedError()
 
-    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[Mapping[str, Sequence[str]]]) -> dict[str, QueryFilter]:
         """
         Processes filters and returns a structured query filter object.
 
