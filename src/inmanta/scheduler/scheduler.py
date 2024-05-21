@@ -230,7 +230,7 @@ class TaskQueue:
             task._runnable()
 
     async def get(self) -> BaseTask:
-        """Remove and return the lowest priority task. Raise KeyError if empty."""
+        """Remove and return the lowest priority task. Raise IndexError if empty."""
         priority, count, task = await self.run_queue.get()
         return task
 

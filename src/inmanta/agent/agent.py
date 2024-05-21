@@ -413,7 +413,7 @@ class ResourceScheduler:
         else:
             # Just do as you are told
             if self.active_deploy is not None and not self.active_deploy.run.finished():
-                self.logger.info("Canceling run '%s' in favor of '%s'", self.active_repair.origin.reason, new_request.reason)
+                self.logger.info("Canceling run '%s' in favor of '%s'", self.active_deploy.origin.reason, new_request.reason)
                 self.active_deploy.run.cancel()
             self.active_repair = build_run(PRIO_NORMAL)
 
