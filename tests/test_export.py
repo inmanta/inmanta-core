@@ -216,8 +216,8 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
 async def test_server_export(snippetcompiler, server: Server, client, environment):
     snippetcompiler.setup_for_snippet(
         """
-            h = std::Host(name="test", os=std::linux)
-            f = std::ConfigFile(host=h, path="/etc/motd", content="test")
+            import std::testing
+            f = std::testing::NullResource(name="test")
         """
     )
     await snippetcompiler.do_export_and_deploy()

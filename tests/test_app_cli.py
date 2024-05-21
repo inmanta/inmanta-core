@@ -173,10 +173,14 @@ repo: https://github.com/inmanta/
 """
     )
 
+    # Use non-default agent to make sure the resource can be checked in the 'deploying' state.
+    # Using the internal default agent might trigger a race condition where the 'success' state
+    # is reached because the resource actually gets deployed.
+
     path_main_file.write(
         """
-vm1=std::Host(name="non-existing-machine", os=std::linux)
-std::ConfigFile(host=vm1, path="/test", content="")
+import std::testing
+std::testing::NullResource(name="test", agentname="non_existing_agent")
 """
     )
 
@@ -227,6 +231,7 @@ std::ConfigFile(host=vm1, path="/test", content="")
 
     details_exported_version = result.result["versions"][0]
 
+    # Check that the version started deploying thanks to auto-deploy:
     assert details_exported_version["result"] == VersionState.deploying.name
 
     shutil.rmtree(workspace)
@@ -395,8 +400,9 @@ repo: https://github.com/inmanta/
 
     path_main_file.write(
         """
-vm1=std::Host(name="non-existing-machine", os=std::linux)
-std::ConfigFile(host=vm1, path="/test", content="")
+import std::testing
+
+std::testing::NullResource(name="test")
 """
     )
 

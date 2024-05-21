@@ -1,0 +1,3 @@
+description: Remove remaining usages of deprecated std::ConfigFile from test cases.
+change-type: patch
+destination-branches: [iso6]

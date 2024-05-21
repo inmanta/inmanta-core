@@ -535,14 +535,25 @@ def test_610_multi_add(snippetcompiler):
 def test_670_assign_on_relation(snippetcompiler):
     snippetcompiler.setup_for_error_re(
         """
-        h = std::Host(name="test", os=std::linux)
-        f = std::ConfigFile(host=h, path="a", content="")
+import std::testing
 
-        h.files.path = "1"
+entity File extends std::testing::NullResource:
+end
+implement File using std::none
 
+entity Host extends std::testing::NullResource:
+end
+implement Host using std::none
+
+File.host [1] -- Host.files [0:]
+
+f1 = File(name="f1")
+host = Host(name="host", files=[f1])
+
+host.files.name = "foo"
         """,
-        r"The object at h.files is not an Entity but a <class 'list'> with value \[std::ConfigFile [0-9a-fA-F]+\]"
-        r" \(reported in h.files.path = '1' \({dir}/main.cf:5\)\)",
+        r"The object at host.files is not an Entity but a <class 'list'> with value \[__config__::File [0-9a-fA-F]+\]"
+        r" \(reported in host.files.name = 'foo' \({dir}/main.cf:17\)\)",
     )
 
 
