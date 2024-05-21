@@ -180,7 +180,7 @@ repo: https://github.com/inmanta/
     path_main_file.write(
         """
 import std::testing
-std::testing::NullResource(name="test", agentname="not_internal")
+std::testing::NullResource(name="test", agentname="non_existing_agent")
 """
     )
 
