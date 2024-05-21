@@ -1,3 +1,6 @@
+API self-referencing links
+==========================
+
 Some views in the web-console can emit links to other resources.
 The following table documents all these links and their format:
 
