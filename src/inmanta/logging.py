@@ -575,11 +575,15 @@ class InmantaLoggerConfig:
 
     @classmethod
     @stable_api
-    def clean_instance(cls) -> None:
+    def clean_instance(cls, root_handlers_to_remove: Optional[abc.Sequence[logging.Handler]] = None) -> None:
         """
-        This method should be used to clean up an instance of this class
+        This method should be used to clean up an instance of this class.
+
+        By default, this method removes and closes all root handlers from the logging framework. If the
+        root_handlers_to_remove argument is not None, only the provided root handlers will be removed and closed.
         """
-        for handler in logging.root.handlers:
+        to_remove = root_handlers_to_remove if root_handlers_to_remove is not None else logging.root.handlers
+        for handler in to_remove:
             # File-based handlers automatically re-open after close() if log records are written to them.
             # As such, we explicitly remove the handler from the root logger here.
             logging.root.removeHandler(handler)
