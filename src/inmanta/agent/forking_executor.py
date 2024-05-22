@@ -476,9 +476,17 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self.executor_map[theid] = the_executor
         self.agent_map[theid.agent_name].add(theid)
 
-    def __remove_executor(self, theid: executor.ExecutorId) -> None:
-        if theid in self.executor_map:
-            self.executor_map.pop(theid)
+    def __remove_executor(self, the_executor: MPExecutor) -> None:
+        theid = the_executor.executor_id
+        registered_for_id = self.executor_map.get(theid)
+        if registered_for_id is None:
+            # Not found
+            return
+        if registered_for_id != the_executor:
+            # We have a stale instance that refused to close before
+            # it was replaced and has now gone down
+            return
+        self.executor_map.pop(theid)
         self.agent_map[theid.agent_name].discard(theid)
 
     @classmethod
@@ -597,7 +605,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         """Internal, for child to remove itself once stopped"""
         try:
             self.children.remove(child_handle)
-            self.__remove_executor(child_handle.executor_id)
+            self.__remove_executor(child_handle)
         except ValueError:
             # already gone
             pass
