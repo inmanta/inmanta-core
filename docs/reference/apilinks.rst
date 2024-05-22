@@ -1,3 +1,6 @@
+.. _api_self_referencing_links:
+
+
 API self-referencing links
 ==========================
 

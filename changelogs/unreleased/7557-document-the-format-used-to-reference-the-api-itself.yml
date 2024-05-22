@@ -3,4 +3,4 @@ description: Add documentation for links that can be emitted by the api.
 issue-nr: 7557
 issue-repo: inmanta-core
 change-type: patch
-destination-branches: [master, iso7]
+destination-branches: [master, iso7, iso6]

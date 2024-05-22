@@ -1599,7 +1599,7 @@ def discovered_resources_get_batch(
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
     filter: Optional[dict[str, list[str]]] = None,
-) -> list[model.DiscoveredResource]:
+) -> ReturnValue[list[model.DiscoveredResource]]:
     """
     Get a list of discovered resources. For resources that the orchestrator is already managing, a link to the corresponding
     resource is provided.
