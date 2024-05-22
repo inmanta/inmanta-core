@@ -64,7 +64,6 @@ from utils import (
     LogSequence,
     _wait_until_deployment_finishes,
     assert_equal_ish,
-    assert_no_warning,
     log_contains,
     log_index,
     resource_action_consistency_check,
