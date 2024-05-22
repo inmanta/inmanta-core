@@ -61,8 +61,10 @@ from inmanta.util import get_compiler_version
 from utils import (
     UNKWN,
     ClientHelper,
+    LogSequence,
     _wait_until_deployment_finishes,
     assert_equal_ish,
+    assert_no_warning,
     log_contains,
     log_index,
     resource_action_consistency_check,
@@ -1557,7 +1559,9 @@ async def test_autostart_mapping_overrides_config(server, client, environment, a
     )
 
 
-async def test_autostart_mapping_update_uri(server, client, environment, async_finalizer, caplog):
+async def test_autostart_mapping_update_uri(
+    server, client, clienthelper, environment, async_finalizer, resource_container, caplog
+):
     caplog.set_level(logging.INFO)
     agent_config.use_autostart_agent_map.set("true")
     env_uuid = uuid.UUID(environment)
@@ -1576,12 +1580,37 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     await retry_limited(lambda: (env_uuid, agent_name) in agent_manager.tid_endpoint_to_session, 10)
     await retry_limited(agent_in_db, 10)
 
+    async def deploy_one():
+        version = await clienthelper.get_version()
+
+        resources = [
+            {
+                "key": "key1",
+                "value": f"value{version}",
+                "id": f"test::Resource[{agent_name},key=key1],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+
+        await clienthelper.put_version_simple(resources, version)
+        await client.release_version(environment, version, True)
+        await clienthelper.wait_for_deployed(version)
+
+    await deploy_one()
+
     # Update agentmap
     caplog.clear()
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {agent_name: "localhost"})
     assert result.code == 200
 
     await retry_limited(lambda: f"Updating the URI of the endpoint {agent_name} from local: to localhost" in caplog.text, 10)
+
+    await deploy_one()
+
+    # this can fail in the background, #7641
+    LogSequence(caplog).no_more_errors()
 
     # Pause agent
     result = await client.agent_action(tid=env_uuid, name="internal", action=const.AgentAction.pause.value)

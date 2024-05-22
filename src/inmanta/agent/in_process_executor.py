@@ -458,9 +458,13 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         for child in self.executors.values():
             child.stop()
 
-    async def stop_for_agent(self, agent_name: str) -> None:
+    async def stop_for_agent(self, agent_name: str) -> list[InProcessExecutor]:
         if agent_name in self.executors:
-            self.executors[agent_name].stop()
+            out = self.executors[agent_name]
+            del self.executors[agent_name]
+            out.stop()
+            return [out]
+        return []
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
         for child in self.executors.values():
@@ -476,27 +480,16 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         :param executor_id: executor identifier containing an agent name and a blueprint configuration.
         :return: An Executor instance
         """
-        def construct_or_reconstruct():
-            out = self.executors.get(agent_name)
-            if out:
-                out.stop()
-            out = InProcessExecutor(agent_name, agent_uri, self.environment, self.client, self.eventloop, self.logger)
-            self.executors[agent_name] = out
-
-
         if agent_name in self.executors:
             out = self.executors[agent_name]
-            if out.uri != agent_uri:
-                construct_or_reconstruct()
         else:
             async with self._creation_locks.get(agent_name):
                 if agent_name in self.executors:
                     out = self.executors[agent_name]
-                    if out.uri != agent_uri:
-                        construct_or_reconstruct()
                 else:
-                    construct_or_reconstruct()
-
+                    out = InProcessExecutor(agent_name, agent_uri, self.environment, self.client, self.eventloop, self.logger)
+                    self.executors[agent_name] = out
+        assert out.uri == agent_uri
         failed_resource_types: FailedResourcesSet = await self.process.ensure_code(code)
         out.failed_resource_types = failed_resource_types
 
