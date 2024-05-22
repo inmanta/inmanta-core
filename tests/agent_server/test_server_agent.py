@@ -1595,7 +1595,7 @@ async def test_autostart_mapping_update_uri(
         ]
 
         await clienthelper.put_version_simple(resources, version)
-        await client.release_version(environment, version, True)
+        await client.release_version(environment, version, push=True)
         await clienthelper.wait_for_deployed(version)
 
     await deploy_one()
