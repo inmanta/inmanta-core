@@ -673,6 +673,8 @@ class Notification(BaseModel):
     :param uri: A link to an api endpoint of the server, that is relevant to the message,
                 and can be used to get further information about the problem.
                 For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
+                The full list of supported links can be found at
+                https://docs.inmanta.com/inmanta-service-orchestrator/latest/reference/apilinks.html#api-self-referencing-links
     :param read: Whether the notification was read or not
     :param cleared: Whether the notification was cleared or not
     """
@@ -753,6 +755,8 @@ class DiscoveredResource(BaseModel):
     :param values: The actual resource
     :param managed_resource_uri: URI of the resource with the same ID that is already
         managed by the orchestrator e.g. "/api/v2/resource/<rid>". Or None if the resource is not managed.
+        The full list of supported links can be found at
+        https://docs.inmanta.com/inmanta-service-orchestrator/latest/reference/apilinks.html#api-self-referencing-links
     """
 
     discovered_resource_id: ResourceIdStr
