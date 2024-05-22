@@ -474,6 +474,7 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         """
         pass
 
+    @abc.abstractmethod
     async def stop_for_agent(self, agent_name: str) -> list[E]:
         """
         Indicate that all executors for this agent can be stopped.
