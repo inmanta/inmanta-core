@@ -127,7 +127,7 @@ class InfluxReporter(AsyncReporter):
             # Only set if we actually were able to get a successful response
             self._did_create_database = True
         except Exception:
-            LOGGER.warning("Cannot create database %s to %s", self.database, self.server, exc_info=True)
+            LOGGER.warning("Failed to connect or create to influx database %s to %s", self.database, self.server, exc_info=True)
 
     async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None) -> None:
         http_client = AsyncHTTPClient()
