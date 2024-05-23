@@ -267,7 +267,7 @@ class Environment(BaseModel):
 
 class Project(BaseModel):
     """
-    An inmanta environment.
+    An inmanta project.
     """
 
     id: uuid.UUID
@@ -755,8 +755,6 @@ class DiscoveredResource(BaseModel):
     :param values: The actual resource
     :param managed_resource_uri: URI of the resource with the same ID that is already
         managed by the orchestrator e.g. "/api/v2/resource/<rid>". Or None if the resource is not managed.
-        The full list of supported links can be found at
-        https://docs.inmanta.com/inmanta-service-orchestrator/latest/reference/apilinks.html#api-self-referencing-links
     """
 
     discovered_resource_id: ResourceIdStr
