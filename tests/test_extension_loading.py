@@ -185,10 +185,9 @@ async def test_startup_failure(async_finalizer, server_config):
 
 
 def test_load_and_filter(caplog):
-    caplog.set_level(logging.INFO)
-
     with splice_extension_in("test_module_path"):
         ibl = InmantaBootloader(configure_logging=True)
+        caplog.set_level(logging.INFO)
 
         plugin_pkgs = ibl._discover_plugin_packages()
         assert "inmanta_ext.core" in plugin_pkgs

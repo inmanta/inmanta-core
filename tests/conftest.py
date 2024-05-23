@@ -21,6 +21,7 @@ import warnings
 
 from tornado.httpclient import AsyncHTTPClient
 
+import _pytest.logging
 import toml
 from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
@@ -582,7 +583,7 @@ def reset_all_objects():
     V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
     auth.AuthJWTConfig.reset()
-    InmantaLoggerConfig.clean_instance()
+    InmantaLoggerConfig.clean_instance(root_handlers_to_remove=[h for h in logging.root.handlers if not is_caplog_handler(h)])
     AsyncHTTPClient.configure(None)
 
 
@@ -1836,21 +1837,35 @@ async def set_running_tests():
     inmanta.RUNNING_TESTS = True
 
 
+def is_caplog_handler(handler: logging.Handler) -> bool:
+    return isinstance(
+        handler,
+        (
+            _pytest.logging._FileHandler,
+            _pytest.logging._LiveLoggingStreamHandler,
+            _pytest.logging._LiveLoggingNullHandler,
+            _pytest.logging.LogCaptureHandler,
+        ),
+    )
+
+
 @pytest.fixture(scope="function", autouse=True)
-async def dont_override_root_logger(request, monkeypatch):
+async def dont_remove_caplog_handlers(request, monkeypatch):
     """
-    Make sure the inmanta.logging.FullLoggingConfig._to_dict_config() method doesn't override the root logger
-    when the caplog fixture is used, because caplog captures log messages by attaching a handler to the root logger.
+    Caplog captures log messages by attaching handlers to the root logger. This fixture makes sure the
+    inmanta.logging.FullLoggingConfig.apply_config() method doesn't remove any handlers that were added by the caplog fixture.
     """
-    original_to_dict_config_method = inmanta_logging.FullLoggingConfig._to_dict_config
+    original_apply_config = inmanta_logging.FullLoggingConfig.apply_config
 
-    def _to_dict_config_patched(self) -> dict[str, object]:
-        dict_config = original_to_dict_config_method(self)
-        dict_config.pop("root", None)
-        return dict_config
+    def patched_apply_config(self) -> None:
+        caplog_handlers = [h for h in logging.root.handlers if is_caplog_handler(h)]
+        original_apply_config(self)
+        # Re-add caplog handlers that were removed by the call to apply_config()
+        for current_handler in caplog_handlers:
+            if current_handler not in logging.root.handlers:
+                logging.root.addHandler(current_handler)
 
-    if "caplog" in request.fixturenames:
-        monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "_to_dict_config", _to_dict_config_patched)
+    monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "apply_config", patched_apply_config)
 
 
 @pytest.fixture(scope="session")
