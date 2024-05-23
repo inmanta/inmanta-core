@@ -563,8 +563,8 @@ class InmantaLoggerConfig:
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout)
         """
         if cls._instance:
-            if len(cls._instance._handlers) != 1:
-                raise Exception("More than one root handler configured.")
+            if not cls._instance._handlers:
+                raise Exception("No handlers found.")
             if not isinstance(cls._instance._handlers[0], logging.StreamHandler):
                 raise Exception("Instance already exists with a different handler")
             elif isinstance(cls._instance._handlers[0], logging.StreamHandler) and cls._instance._handlers[0].stream != stream:
@@ -710,7 +710,8 @@ class InmantaLoggerConfig:
 
         :return: The logging handler
         """
-        assert len(self._handlers) == 1, "This could happen if this method is used in combination with the caplog fixture."
+        if not self._handlers:
+            raise Exception("No handlers found.")
         return self._handlers[0]
 
     @stable_api
