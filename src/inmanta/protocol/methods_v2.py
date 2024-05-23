@@ -1320,7 +1320,7 @@ def list_notifications(
     end: Optional[datetime.datetime] = None,
     filter: Optional[dict[str, list[str]]] = None,
     sort: str = "created.desc",
-) -> ReturnValue[list[model.Notification]]:
+) -> list[model.Notification]:
     """
     List the notifications in an environment.
 
