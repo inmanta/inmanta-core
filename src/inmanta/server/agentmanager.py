@@ -1023,24 +1023,6 @@ class AutostartedAgentManager(ServerSlice):
         LOGGER.debug("Expiring sessions for autostarted agents %s", sorted(agent_map.keys()))
         await self._agent_manager.expire_sessions_for_agents(env.id, agent_map.keys())
 
-    def _get_state_dir_for_agent_in_env(self, env_id: uuid.UUID) -> str:
-        """
-        Return the state dir to be used by the auto-started agent in the given environment.
-        """
-        state_dir: str = inmanta.config.state_dir.get()
-        return os.path.join(state_dir, str(env_id))
-
-    def _remove_venv_for_agent_in_env(self, env_id: uuid.UUID) -> None:
-        """
-        Remove the venv for the auto-started agent in the given environment.
-        """
-        agent_state_dir: str = self._get_state_dir_for_agent_in_env(env_id)
-        venv_dir: str = os.path.join(agent_state_dir, "agent", "env")
-        try:
-            shutil.rmtree(venv_dir)
-        except FileNotFoundError:
-            pass
-
     def _stop_process(self, process: subprocess.Process) -> None:
         try:
             process.terminate()
