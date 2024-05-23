@@ -139,6 +139,10 @@ def test():
     assert await simplest.connection.call(GetName()) == "agent1"
     assert await full_runner.connection.call(GetName()) == "agent2"
 
+    # Assert shutdown and back up
+    await mpmanager.stop_for_agent("agent2")
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
+
     await simplest.stop()
     await simplest.join(2)
     with pytest.raises(ConnectionLost):
