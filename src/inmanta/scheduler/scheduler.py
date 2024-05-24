@@ -23,6 +23,7 @@ import graphlib
 import itertools
 import logging
 import typing
+from typing import Optional, Sequence
 
 if typing.TYPE_CHECKING:
     import _typeshed
@@ -52,9 +53,9 @@ class BaseTask(abc.ABC):
         self.done = False
 
         # Link to the parent queue, required to jump into run queue
-        self._queue: typing.Optional["TaskQueue"] = None
+        self._queue: Optional["TaskQueue"] = None
         # priority / insertion number / self
-        self._entry: typing.Optional[typing.Tuple[int, int, "BaseTask"]] = None
+        self._entry: Optional[tuple[int, int, "BaseTask"]] = None
 
         # Inter task dependencies
         self.waitcount = 0
@@ -93,6 +94,7 @@ class BaseTask(abc.ABC):
 
     def cancel(self) -> None:
         """Will cancel this task IF it is not already done or started"""
+        # TODO: this doesn't notify waiters!
         if self.cancelled or self.done or self.started:
             return
         self.cancelled = True
@@ -106,7 +108,10 @@ class BaseTask(abc.ABC):
         Declare we wait for some other task
 
         Adding the same task twice will make this one wait forever!
+
+        Adding a task that is cancelled is not allowed
         """
+        assert not other.is_cancelled
         if other.done:
             # the other is done, nothing to do
             return
@@ -115,7 +120,7 @@ class BaseTask(abc.ABC):
         self.requires.append(other)
         other.provides.append(self)
 
-    def _enqueue(self, into: "TaskQueue", entry: typing.Tuple[int, int, "BaseTask"]) -> None:
+    def _enqueue(self, into: "TaskQueue", entry: tuple[int, int, "BaseTask"]) -> None:
         """Internal, bind to queue"""
         assert self._queue is None
         self._queue = into
@@ -179,7 +184,7 @@ class Task(BaseTask):
         return self._name
 
     def __repr__(self) -> str:
-        return self._name
+        return f"Task({self.name()}, {self.priority()})"
 
 
 T = typing.TypeVar("T", bound="_typeshed.SupportsRichComparison")
@@ -214,8 +219,9 @@ class TaskQueue:
     """Queue to schedule tasks with inter-dependencies and provide an overview of the queue"""
 
     def __init__(self) -> None:
-        self.full_queue: PriorityQueue[typing.Tuple[int, int, BaseTask]] = PriorityQueue()
-        self.run_queue: PriorityQueue[typing.Tuple[int, int, BaseTask]] = PriorityQueue()
+        # TODO: we may want to make these tuples into objects
+        self.full_queue: PriorityQueue[tuple[int, int, BaseTask]] = PriorityQueue()
+        self.run_queue: PriorityQueue[tuple[int, int, BaseTask]] = PriorityQueue()
         self.counter = itertools.count()  # unique sequence count, makes sort stable in the heap
 
     def put(self, task: BaseTask) -> None:
@@ -240,13 +246,18 @@ class TaskQueue:
         await task._run()
         return task
 
-    def view(self) -> typing.Sequence[Task]:
-        """This leaks a reference to the internal queue: don't touch it"""
+    def view(self) -> Sequence[Task]:
+        """This leaks a reference to the internal queue: do not mutate the resulting collection, copy it before calling await"""
         return self.full_queue._queue
 
 
 class SentinelTask(BaseTask):
-    """Task to unblock the queue on shutdown"""
+    """
+    Task to unblock the queue on shutdown
+
+    When the queue is empty, and the call to shutdown is given, the taskrunner will remain blocked trying to de-queue work.
+    This empty task is inserted to unblock it, so it can fall out of the main loop.
+    """
 
     def name(self) -> str:
         return "Queue Shutdown"
@@ -268,17 +279,23 @@ class TaskRunner:
         self.queue = queue
         self.running = False
         self.should_run = True
-        self.finished: typing.Optional[asyncio.Task[None]] = None
+        self.finished: Optional[asyncio.Task[None]] = None
 
     def start(self) -> None:
         self.should_run = True
         self.finished = asyncio.create_task(self.run())
 
     def stop(self) -> None:
+        """Request the task runner to stop.
+        It will not pre-empty any running task, but prevent a new one from starting.
+
+        await join() to ensure it is finished.
+        """
         self.should_run = False
         self.queue.put(SentinelTask())
 
     async def join(self) -> None:
+        """Call this method after 'stop()' to ensure the worker is stopped."""
         assert not self.should_run
         if self.finished:
             await self.finished

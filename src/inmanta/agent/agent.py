@@ -475,7 +475,7 @@ class AgentInstance:
         # init
         self._nq = ResourceScheduler(self, self._env_id, name)
         self.work_queue = scheduler.TaskQueue()
-        self.work_queue_drainer = scheduler.TaskRunner(self.work_queue)
+        self.work_queue_runner = scheduler.TaskRunner(self.work_queue)
 
         self._time_triggered_actions: set[ScheduledTask] = set()
         self._enabled = False
@@ -506,7 +506,7 @@ class AgentInstance:
         self._enabled = False
         self._disable_time_triggers()
         self._nq.cancel()
-        self.work_queue_drainer.stop()
+        self.work_queue_runner.stop()
         await self.executor_manager.stop_for_agent(self.name)
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
@@ -516,7 +516,7 @@ class AgentInstance:
         :param thread_pool_finalizer: all threadpools that should be joined should be added here.
         """
         assert self._stopped
-        await self.work_queue_drainer.join()
+        await self.work_queue_runner.join()
         await self.executor_manager.join(thread_pool_finalizer, inmanta.const.SHUTDOWN_GRACE_IOLOOP * 0.9)
 
     @property
@@ -546,7 +546,7 @@ class AgentInstance:
         self.logger.info("Agent assuming primary role for %s", self.name)
 
         self._enable_time_triggers()
-        self.work_queue_drainer.start()
+        self.work_queue_runner.start()
         self._enabled = True
         return 200, "unpaused"
 
@@ -561,7 +561,7 @@ class AgentInstance:
 
         # Cancel the ongoing deployment if exists
         self._nq.cancel()
-        self.work_queue_drainer.stop()
+        self.work_queue_runner.stop()
 
         return 200, "paused"
 
