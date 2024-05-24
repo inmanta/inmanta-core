@@ -35,13 +35,11 @@ from typing import Any, Collection, Optional, Union
 import pkg_resources
 
 import inmanta.agent.executor
-import inmanta.const
 from inmanta import config, const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.reporting import collect_report
-from inmanta.const import ResourceState
 from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
@@ -338,7 +336,7 @@ class ResourceScheduler:
     def reload(
         self,
         resources: Sequence[ResourceDetails],
-        undeployable: dict[ResourceVersionIdStr, ResourceState],
+        undeployable: dict[ResourceVersionIdStr, const.ResourceState],
         new_request: DeployRequest,
         executor: executor.Executor,
     ) -> None:
@@ -932,16 +930,18 @@ class Agent(SessionEndpoint):
             self.agent_map = dict(cfg.agent_map.get())
 
     async def _init_endpoint_names(self) -> None:
-        if self.hostname is not None:
-            await self.add_end_point_name(self.hostname)
-        else:
-            # load agent names from the config file
-            agent_names = cfg.agent_names.get()
-            if agent_names is not None:
-                for name in agent_names:
-                    if "$" in name:
-                        name = name.replace("$node-name", self.node_name)
-                    await self.add_end_point_name(name)
+        assert self.agent_map is not None
+        endpoints: Iterable[str] = (
+            [self.hostname]
+            if self.hostname is not None
+            else (
+                self.agent_map.keys()
+                if cfg.use_autostart_agent_map.get()
+                else (name if "$" not in name else name.replace("$node-name", self.node_name) for name in cfg.agent_names.get())
+            )
+        )
+        for endpoint in endpoints:
+            await self.add_end_point_name(endpoint)
 
     async def stop(self) -> None:
         await super().stop()
@@ -949,7 +949,7 @@ class Agent(SessionEndpoint):
 
         threadpools_to_join = [self.thread_pool]
 
-        await self.executor_manager.join(threadpools_to_join, inmanta.const.SHUTDOWN_GRACE_IOLOOP * 0.9)
+        await self.executor_manager.join(threadpools_to_join, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
         self.thread_pool.shutdown(wait=False)
         for instance in self._instances.values():
             await instance.stop()
@@ -1025,6 +1025,13 @@ class Agent(SessionEndpoint):
             await self._update_agent_map(agent_map)
 
     async def _update_agent_map(self, agent_map: dict[str, str]) -> None:
+        if "internal" not in agent_map:
+            LOGGER.warning(
+                "Agent received an update_agent_map() trigger without internal agent in the agent_map %s",
+                agent_map,
+            )
+            agent_map = {"internal": "local:", **agent_map}
+
         async with self._instances_lock:
             self.agent_map = agent_map
             # Add missing agents

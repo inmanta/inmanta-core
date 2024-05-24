@@ -44,6 +44,7 @@ from tornado import web
 
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
+from inmanta.protocol import auth
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
@@ -64,6 +65,21 @@ OCTET_STREAM_CONTENT = "application/octet-stream"
 ZIP_CONTENT = "application/zip"
 UTF8_CHARSET = "charset=UTF-8"
 HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
+
+
+class CallContext:
+    """A context variable that provides more information about the current call context"""
+
+    request_headers: dict[str, str]
+    auth_token: Optional[auth.claim_type]
+    auth_username: Optional[str]
+
+    def __init__(
+        self, request_headers: dict[str, str], auth_token: Optional[auth.claim_type], auth_username: Optional[str]
+    ) -> None:
+        self.request_headers = request_headers
+        self.auth_token = auth_token
+        self.auth_username = auth_username
 
 
 class ArgOption:
@@ -402,6 +418,8 @@ class MethodProperties:
         if validate_sid is None:
             validate_sid = agent_server and not api
 
+        assert not (enforce_auth and server_agent), "Can not authenticate the return channel"
+
         self._path = UrlPath(path)
         self.path = path
         self._operation = operation
@@ -574,7 +592,6 @@ class MethodProperties:
         :param allow_none_type: If true, allow `None` as the type for this argument
         :param in_url: This argument is passed in the URL
         """
-
         if typing_inspect.is_new_type(arg_type):
             return self._validate_type_arg(
                 arg,
@@ -656,6 +673,8 @@ class MethodProperties:
         elif allow_none_type and types.issubclass(arg_type, type(None)):
             # A check for optional arguments
             pass
+        elif issubclass(arg_type, CallContext):
+            raise InvalidMethodDefinition("CallContext should only be defined in the handler, not the method.")
         else:
             valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])
             raise InvalidMethodDefinition(

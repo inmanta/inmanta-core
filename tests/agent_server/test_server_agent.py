@@ -22,6 +22,7 @@ import logging
 import os
 import time
 import uuid
+from collections.abc import Mapping
 from functools import partial
 from itertools import groupby
 from logging import DEBUG
@@ -60,6 +61,7 @@ from inmanta.util import get_compiler_version
 from utils import (
     UNKWN,
     ClientHelper,
+    LogSequence,
     _wait_until_deployment_finishes,
     assert_equal_ish,
     log_contains,
@@ -528,9 +530,7 @@ async def test_env_setting_wiring_to_autostarted_agent(
         env = await data.Environment.get_by_id(env_id)
         autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
 
-        config = await autostarted_agent_manager._make_agent_config(
-            env, agent_names=[], agent_map={"internal": ""}, connection=None
-        )
+        config = await autostarted_agent_manager._make_agent_config(env, connection=None)
 
         assert f"agent-deploy-interval={interval}" in config
         assert f"agent-repair-interval={interval}" in config
@@ -1511,7 +1511,56 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     assert len(new_agent_processes) == 0, new_agent_processes
 
 
-async def test_autostart_mapping_update_uri(server, client, environment, async_finalizer, caplog):
+@pytest.mark.parametrize("autostarted", (True, False))
+async def test_autostart_mapping_overrides_config(server, client, environment, async_finalizer, caplog, autostarted: bool):
+    """
+    Verify that the use_autostart_agent_map setting takes precedence over agents configured in the config file.
+    When the option is set the server's agent map should be the authority for which agents to manage.
+    """
+    # configure agent as an autostarted agent or not
+    agent_config.use_autostart_agent_map.set(str(autostarted).lower())
+    # also configure the agent with an explicit agent config and agent map, which should be ignored
+    configured_agent: str = "configured_agent"
+    agent_config.agent_names.set(configured_agent)
+
+    env_uuid = uuid.UUID(environment)
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    # configure server's autostarted agent map
+    autostarted_agent: str = "autostarted_agent"
+    result = await client.set_setting(
+        env_uuid,
+        data.AUTOSTART_AGENT_MAP,
+        {"internal": "localhost", autostarted_agent: "localhost"},
+    )
+    assert result.code == 200
+
+    # Start agent
+    a = agent.Agent(environment=env_uuid, code_loader=False)
+    await a.start()
+    async_finalizer(a.stop)
+
+    # Wait until agents are up
+    await retry_limited(lambda: len(agent_manager.tid_endpoint_to_session) == (2 if autostarted else 1), timeout=2)
+
+    endpoint_sessions: Mapping[str, UUID] = {
+        key[1]: session.id for key, session in agent_manager.tid_endpoint_to_session.items()
+    }
+    assert endpoint_sessions == (
+        {
+            "internal": a.sessionid,
+            autostarted_agent: a.sessionid,
+        }
+        if autostarted
+        else {
+            configured_agent: a.sessionid,
+        }
+    )
+
+
+async def test_autostart_mapping_update_uri(
+    server, client, clienthelper, environment, async_finalizer, resource_container, caplog
+):
     caplog.set_level(logging.INFO)
     agent_config.use_autostart_agent_map.set("true")
     env_uuid = uuid.UUID(environment)
@@ -1530,12 +1579,37 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     await retry_limited(lambda: (env_uuid, agent_name) in agent_manager.tid_endpoint_to_session, 10)
     await retry_limited(agent_in_db, 10)
 
+    async def deploy_one():
+        version = await clienthelper.get_version()
+
+        resources = [
+            {
+                "key": "key1",
+                "value": f"value{version}",
+                "id": f"test::Resource[{agent_name},key=key1],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+
+        await clienthelper.put_version_simple(resources, version)
+        await client.release_version(environment, version, push=True)
+        await clienthelper.wait_for_deployed(version)
+
+    await deploy_one()
+
     # Update agentmap
     caplog.clear()
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {agent_name: "localhost"})
     assert result.code == 200
 
     await retry_limited(lambda: f"Updating the URI of the endpoint {agent_name} from local: to localhost" in caplog.text, 10)
+
+    await deploy_one()
+
+    # this can fail in the background, #7641
+    LogSequence(caplog).no_more_errors()
 
     # Pause agent
     result = await client.agent_action(tid=env_uuid, name="internal", action=const.AgentAction.pause.value)

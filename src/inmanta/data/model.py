@@ -729,6 +729,12 @@ class User(BaseModel):
     auth_method: AuthMethod
 
 
+class CurrentUser(BaseModel):
+    """Information about the current logged in user"""
+
+    username: str
+
+
 class LoginReturn(BaseModel):
     """
     Login information
@@ -745,10 +751,13 @@ class DiscoveredResource(BaseModel):
     """
     :param discovered_resource_id: The name of the resource
     :param values: The actual resource
+    :param managed_resource_uri: URI of the resource with the same ID that is already
+        managed by the orchestrator e.g. "/api/v2/resource/<rid>". Or None if the resource is not managed.
     """
 
     discovered_resource_id: ResourceIdStr
     values: dict[str, object]
+    managed_resource_uri: Optional[str] = None
 
     @field_validator("discovered_resource_id")
     @classmethod

@@ -354,6 +354,7 @@ class MPExecutor(executor.Executor):
         self.process = process
         self.connection = connection
         self.connection.finalizers.append(self.force_stop)
+        self.closing = False
         self.closed = False
         self.owner = owner
         # Pure for debugging purpose
@@ -366,6 +367,7 @@ class MPExecutor(executor.Executor):
 
     async def stop(self) -> None:
         """Stop by shutdown"""
+        self.closing = True
         try:
             self.connection.call(StopCommand(), False)
         except inmanta.protocol.ipc_light.ConnectionLost:
@@ -393,6 +395,7 @@ class MPExecutor(executor.Executor):
         # this code can be raced from the join call and the disconnect handler
         # relying on the GIL to keep us safe
         if not self.closed:
+            self.closing = True
             self.closed = True
             self.process.close()
             self.owner._child_closed(self)
@@ -484,6 +487,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self.cli_log = cli_log
         self.session_gid = session_gid
 
+        # These maps are cleaned by the close callbacks
+        # This means it can contain closing entries
         self.executor_map: dict[executor.ExecutorId, MPExecutor] = {}
         self.agent_map: dict[str, set[executor.ExecutorId]] = collections.defaultdict(set)
 
@@ -493,9 +498,17 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self.executor_map[theid] = the_executor
         self.agent_map[theid.agent_name].add(theid)
 
-    def __remove_executor(self, theid: executor.ExecutorId) -> None:
-        if theid in self.executor_map:
-            self.executor_map.pop(theid)
+    def __remove_executor(self, the_executor: MPExecutor) -> None:
+        theid = the_executor.executor_id
+        registered_for_id = self.executor_map.get(theid)
+        if registered_for_id is None:
+            # Not found
+            return
+        if registered_for_id != the_executor:
+            # We have a stale instance that refused to close before
+            # it was replaced and has now gone down
+            return
+        self.executor_map.pop(theid)
         self.agent_map[theid.agent_name].discard(theid)
 
     @classmethod
@@ -523,14 +536,23 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         blueprint = executor.ExecutorBlueprint.from_specs(code)
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
         if executor_id in self.executor_map:
-            LOGGER.debug("Found existing executor for agent %s with id %s", agent_name, executor_id.identity())
-            return self.executor_map[executor_id]
+            it = self.executor_map[executor_id]
+            if not it.closing:
+                LOGGER.debug("Found existing executor for agent %s with id %s", agent_name, executor_id.identity())
+                return it
         # Acquire a lock based on the blueprint's hash
         # We don't care about URI here
         async with self._locks.get(executor_id.identity()):
             if executor_id in self.executor_map:
-                LOGGER.debug("Found existing executor for agent %s with id %s", agent_name, executor_id.identity())
-                return self.executor_map[executor_id]
+                it = self.executor_map[executor_id]
+                if not it.closing:
+                    LOGGER.debug("Found existing executor for agent %s with id %s", agent_name, executor_id.identity())
+                    return it
+                else:
+                    LOGGER.debug(
+                        "Found stale executor for agent %s with id %s, waiting for close", agent_name, executor_id.identity()
+                    )
+                    await it.join(2.0)
             my_executor = await self.create_executor(executor_id)
             self.__add_executor(executor_id, my_executor)
             if my_executor.failed_resource_sources:
@@ -605,7 +627,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         """Internal, for child to remove itself once stopped"""
         try:
             self.children.remove(child_handle)
-            self.__remove_executor(child_handle.executor_id)
+            self.__remove_executor(child_handle)
         except ValueError:
             # already gone
             pass
@@ -631,6 +653,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
         await asyncio.gather(*(child.join(timeout) for child in self.children))
 
-    async def stop_for_agent(self, agent_name: str) -> None:
+    async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children_ids = self.agent_map[agent_name]
-        await asyncio.gather(*(self.executor_map[child_id].stop() for child_id in children_ids))
+        children = [self.executor_map[child_id] for child_id in children_ids]
+        await asyncio.gather(*(child.stop() for child in children))
+        return children

@@ -218,7 +218,7 @@ class ResourceInstallSpec:
     """
     This class encapsulates the requirements for a specific resource type for a specific model version.
 
-    :ivar resource_type: fully qualified name for this resource type e.g. std::File
+    :ivar resource_type: fully qualified name for this resource type e.g. std::testing::NullResource
     :ivar model_version: the version of the model to use
     :ivar blueprint: the associate install blueprint
 
@@ -488,11 +488,14 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         """
         pass
 
-    async def stop_for_agent(self, agent_name: str) -> None:
+    @abc.abstractmethod
+    async def stop_for_agent(self, agent_name: str) -> list[E]:
         """
         Indicate that all executors for this agent can be stopped.
 
         This is considered to be a hint , the manager can choose to follow or not
+
+        If executors are stopped, they are returned
         """
         pass
 

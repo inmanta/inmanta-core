@@ -39,7 +39,7 @@ from pkg_resources import Requirement, parse_version
 import build
 import build.env
 from _pytest.mark import MarkDecorator
-from inmanta import const, data, env, module, util
+from inmanta import config, const, data, env, module, protocol, util
 from inmanta.data import ResourceIdStr
 from inmanta.data.model import PipConfig
 from inmanta.moduletool import ModuleTool
@@ -264,7 +264,7 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
     Assert there are no warning, except from the list of loggers to allow
     """
     for record in caplog.records:
-        assert record.levelname != "WARNING" or (record.name in loggers_to_allow), record
+        assert record.levelname != "WARNING" or (record.name in loggers_to_allow), str(record) + record.getMessage()
 
 
 def configure(unused_tcp_port, database_name, database_port):
@@ -282,6 +282,34 @@ def configure(unused_tcp_port, database_name, database_port):
     Config.set("database", "name", database_name)
     Config.set("database", "host", "localhost")
     Config.set("database", "port", str(database_port))
+
+
+def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+    if auth:
+        config.Config.set("server", "auth", "true")
+    for x, ct in [
+        ("server", None),
+        ("agent_rest_transport", ["agent"]),
+        ("compiler_rest_transport", ["compiler"]),
+        ("client_rest_transport", ["api", "compiler"]),
+        ("cmdline_rest_transport", ["api"]),
+    ]:
+        if ssl and not ca:
+            config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
+            config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
+            config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
+            config.Config.set(x, "ssl", "True")
+        if ssl and ca:
+            capath = os.path.join(path, "ca", "enduser-certs")
+
+            config.Config.set(x, "ssl_cert_file", os.path.join(capath, "server.crt"))
+            config.Config.set(x, "ssl_key_file", os.path.join(capath, "server.key.open"))
+            config.Config.set(x, "ssl_ca_cert_file", os.path.join(capath, "server.chain"))
+            config.Config.set(x, "ssl", "True")
+        if auth and ct is not None:
+            token = protocol.encode_token(ct)
+            config.Config.set(x, "token", token)
 
 
 async def report_db_index_usage(min_precent=100):

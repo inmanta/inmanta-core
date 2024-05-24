@@ -289,7 +289,9 @@ class SessionEndpoint(Endpoint, CallTarget):
             else:
                 body[key] = [v.decode("latin-1") for v in value]
 
-        response: common.Response = await transport._execute_call(kwargs, method_call.method, config, body, method_call.headers)
+        body.update(kwargs)
+
+        response: common.Response = await transport._execute_call(config, body, method_call.headers)
 
         if response.status_code == 500:
             msg = ""

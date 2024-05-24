@@ -21,15 +21,8 @@ import re
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import (
-    DuplicateException,
-    IndexException,
-    NotFoundException,
-    RuntimeException,
-    TypeNotFoundException,
-    TypingException,
-)
-from inmanta.ast.statements.generator import IndexCollisionException
+from inmanta.ast import DuplicateException, IndexException, NotFoundException, RuntimeException, TypeNotFoundException
+from inmanta.ast.statements.generator import IndexAttributeMissingInConstructorException, IndexCollisionException
 from inmanta.compiler.help.explainer import ExplainerFactory
 
 
@@ -50,39 +43,29 @@ def test_issue_121_non_matching_index(snippetcompiler):
 def test_issue_122_index_inheritance(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-entity Repository extends std::File:
+entity TopResource:
     string name
-    bool gpgcheck=false
+end
+
+index TopResource(name)
+
+entity TestResource extends TopResource:
     bool enabled=true
-    string baseurl
-    string gpgkey=""
-    int metadata_expire=7200
-    bool send_event=true
 end
 
-implementation redhatRepo for Repository:
-    self.mode = 644
-    self.owner = "root"
-    self.group = "root"
-
-    self.path = "/etc/yum.repos.d/{{ name }}.repo"
-    self.content = "{{name}}"
+implementation testRes for TestResource:
+    self.name="test"
 end
 
-implement Repository using redhatRepo
+implement TestResource using testRes
 
-h1 = std::Host(name="test", os=std::linux)
-
-Repository(host=h1, name="demo", baseurl="http://example.com")
-Repository(host=h1, name="demo", baseurl="http://example.com")
+TestResource()
         """
     )
 
-    try:
+    with pytest.raises(IndexAttributeMissingInConstructorException) as e:
         compiler.do_compile()
-        raise AssertionError("Should get exception")
-    except TypingException as e:
-        assert e.location.lnr == 25
+    assert e.value.location.lnr == 18
 
 
 def test_issue_140_index_error(snippetcompiler):
@@ -191,9 +174,13 @@ def test_index_on_subtype(snippetcompiler):
 def test_index_on_subtype2(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-        host = std::Host(name="a",os=std::linux)
-        a=std::DefaultDirectory(host=host,path="/etc")
-        b=std::Directory(host=host,path="/etc",mode=755 ,group="root",owner="root" )
+        import std::testing
+
+        entity NullResourceBis extends std::testing::NullResource:
+        end
+
+        a=std::testing::NullResource(name="test", agentname="agent1", fail=false)
+        b=NullResourceBis(name="test", agentname="agent1")
     """
     )
     with pytest.raises(DuplicateException):

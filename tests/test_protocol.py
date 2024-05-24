@@ -298,7 +298,13 @@ async def test_call_arguments_defaults():
         Create a new project
         """
 
-    call = CallArguments(protocol.common.MethodProperties.methods["test_method"][0], {"name": "test"}, {})
+    method = protocol.common.UrlMethod(
+        protocol.common.MethodProperties.methods["test_method"][0],
+        protocol.endpoints.CallTarget(),
+        test_method,
+        "test_method",
+    )
+    call = CallArguments(method, {"name": "test"}, {})
     await call.process()
 
     assert call.call_args["name"] == "test"
@@ -328,10 +334,14 @@ async def test_pydantic():
         Create a new project
         """
 
-    id = uuid.uuid4()
-    call = CallArguments(
-        protocol.common.MethodProperties.methods["test_method"][0], {"project": {"name": "test", "id": str(id)}}, {}
+    method = protocol.common.UrlMethod(
+        protocol.common.MethodProperties.methods["test_method"][0],
+        protocol.endpoints.CallTarget(),
+        test_method,
+        "test_method",
     )
+    id = uuid.uuid4()
+    call = CallArguments(method, {"project": {"name": "test", "id": str(id)}}, {})
     await call.process()
 
     project = call.call_args["project"]
@@ -339,9 +349,7 @@ async def test_pydantic():
     assert project.id == id
 
     with pytest.raises(exceptions.BadRequest):
-        call = CallArguments(
-            protocol.common.MethodProperties.methods["test_method"][0], {"project": {"name": "test", "id": "abcd"}}, {}
-        )
+        call = CallArguments(method, {"project": {"name": "test", "id": "abcd"}}, {})
         await call.process()
 
 

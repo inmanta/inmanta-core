@@ -485,7 +485,9 @@ def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = Fals
     """
 
 
-@typedmethod(path="/agentmap", api=False, server_agent=True, operation="POST", client_types=[], api_version=2)
+@typedmethod(
+    path="/agentmap", api=False, server_agent=True, enforce_auth=False, operation="POST", client_types=[], api_version=2
+)
 def update_agent_map(agent_map: dict[str, str]) -> None:
     """
     Notify an agent about the fact that the autostart_agent_map has been updated.
@@ -1489,6 +1491,14 @@ def list_users() -> list[model.User]:
     :return: A list of all users"""
 
 
+@typedmethod(path="/current_user", operation="GET", client_types=[ClientType.api], api_version=2)
+def get_current_user() -> model.CurrentUser:
+    """Get the current logged in user (based on the provided JWT) and server auth settings
+
+    :raises NotFound: Raised when server authentication is not enabled
+    """
+
+
 @typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def delete_user(username: str) -> None:
     """Delete a user from the system with given username.
@@ -1588,8 +1598,12 @@ def discovered_resources_get_batch(
     start: Optional[str] = None,
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
+    filter: Optional[dict[str, list[str]]] = None,
 ) -> list[model.DiscoveredResource]:
     """
+    Get a list of discovered resources. For resources that the orchestrator is already managing, a link to the corresponding
+    resource is provided.
+
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
     :param start: The lower limit for the order by column (exclusive).
@@ -1599,6 +1613,13 @@ def discovered_resources_get_batch(
     :param sort: Return the results sorted according to the parameter value.
             The following sorting attributes are supported: 'discovered_resource_id'.
             The following orders are supported: 'asc', 'desc'
+    :param filter: Filter the list of returned resources.
+        Default behavior: return all discovered resources.
+        Filtering by 'managed' is supported:
+            - filter.managed=true: only return discovered resources that the orchestrator is already aware of i.e.
+            resources that are present in any released configuration model of environment tid.
+            - filter.managed=false: only return discovered resources that the orchestrator is unaware of i.e. resources
+            that are not part of any released configuration model of environment tid.
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
