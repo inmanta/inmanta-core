@@ -102,26 +102,30 @@ def test_set_log_level():
 def test_set_log_formatter():
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
-    handler = inmanta_logger.get_handler()
-    assert isinstance(handler.formatter, MultiLineFormatter)
 
-    logger = logging.getLogger("test_logger")
-    expected_output_format1 = "test_logger              INFO    This is a test message"
-    expected_output_format2 = "test_logger - INFO - This is a test message"
+    try:
+        handler = inmanta_logger.get_handler()
+        assert isinstance(handler.formatter, MultiLineFormatter)
 
-    # Log a message with the default formatter
-    logger.info("This is a test message")
-    log_output = stream.getvalue().strip()
-    assert expected_output_format1 in log_output
+        logger = logging.getLogger("test_logger")
+        expected_output_format1 = "test_logger              INFO    This is a test message"
+        expected_output_format2 = "test_logger - INFO - This is a test message"
 
-    # change the formatter and verify the output is different
-    formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
-    inmanta_logger.set_log_formatter(formatter)
-    assert inmanta_logger.get_handler().formatter == formatter
+        # Log a message with the default formatter
+        logger.info("This is a test message")
+        log_output = stream.getvalue().strip()
+        assert expected_output_format1 in log_output
 
-    logger.info("This is a test message")
-    log_output = stream.getvalue().strip()
-    assert expected_output_format2 in log_output
+        # change the formatter and verify the output is different
+        formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
+        inmanta_logger.set_log_formatter(formatter)
+        assert inmanta_logger.get_handler().formatter == formatter
+
+        logger.info("This is a test message")
+        log_output = stream.getvalue().strip()
+        assert expected_output_format2 in log_output
+    finally:
+        inmanta_logger.clean_instance([handler])
 
 
 def test_set_logfile_location(
