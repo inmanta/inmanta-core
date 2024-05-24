@@ -102,6 +102,7 @@ def test_set_log_level():
 def test_set_log_formatter():
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
+
     handler = inmanta_logger.get_handler()
     assert isinstance(handler.formatter, MultiLineFormatter)
 
