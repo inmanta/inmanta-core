@@ -971,9 +971,9 @@ async def run_compile_and_wait_until_compile_is_done(
     if fail is not None:
         run._make_compile_fail = fail
     run._make_pull_fail = fail_on_pull
-    run.block = False
-
+    
     current_task = compiler_service._env_to_compile_task[env_id]
+    run.block = False
 
     def _is_compile_finished() -> bool:
         if env_id not in compiler_service._env_to_compile_task:
