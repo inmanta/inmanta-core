@@ -183,7 +183,17 @@ async def env_with_resources(server, client):
             await res.insert()
             await res.update_persistent_state(
                 last_deploy=datetime.now(tz=UTC),
-                last_non_deploying_status=status if status not in [ResourceState.available, ResourceState.deploying] else None,
+                last_non_deploying_status=(
+                    status
+                    if status
+                    not in [
+                        ResourceState.available,
+                        ResourceState.deploying,
+                        ResourceState.undefined,
+                        ResourceState.skipped_for_undefined,
+                    ]
+                    else None
+                ),
             )
 
     await create_resource("agent1", "/etc/file1", "std::File", ResourceState.available, [1, 2, 3])
