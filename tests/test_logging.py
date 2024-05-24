@@ -103,29 +103,26 @@ def test_set_log_formatter():
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
 
-    try:
-        handler = inmanta_logger.get_handler()
-        assert isinstance(handler.formatter, MultiLineFormatter)
+    handler = inmanta_logger.get_handler()
+    assert isinstance(handler.formatter, MultiLineFormatter)
 
-        logger = logging.getLogger("test_logger")
-        expected_output_format1 = "test_logger              INFO    This is a test message"
-        expected_output_format2 = "test_logger - INFO - This is a test message"
+    logger = logging.getLogger("test_logger")
+    expected_output_format1 = "test_logger              INFO    This is a test message"
+    expected_output_format2 = "test_logger - INFO - This is a test message"
 
-        # Log a message with the default formatter
-        logger.info("This is a test message")
-        log_output = stream.getvalue().strip()
-        assert expected_output_format1 in log_output
+    # Log a message with the default formatter
+    logger.info("This is a test message")
+    log_output = stream.getvalue().strip()
+    assert expected_output_format1 in log_output
 
-        # change the formatter and verify the output is different
-        formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
-        inmanta_logger.set_log_formatter(formatter)
-        assert inmanta_logger.get_handler().formatter == formatter
+    # change the formatter and verify the output is different
+    formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
+    inmanta_logger.set_log_formatter(formatter)
+    assert inmanta_logger.get_handler().formatter == formatter
 
-        logger.info("This is a test message")
-        log_output = stream.getvalue().strip()
-        assert expected_output_format2 in log_output
-    finally:
-        inmanta_logger.clean_instance([handler])
+    logger.info("This is a test message")
+    log_output = stream.getvalue().strip()
+    assert expected_output_format2 in log_output
 
 
 def test_set_logfile_location(
