@@ -965,14 +965,14 @@ async def run_compile_and_wait_until_compile_is_done(
     """
     Unblock the first compile in the compiler queue and wait until the compile finishes.
     """
-    current_task = compiler_service._env_to_compile_task[env_id]
-
     # prevent race conditions where compile request is not yet in queue
     await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
     run = compiler_queue.get(block=True)
     if fail is not None:
         run._make_compile_fail = fail
     run._make_pull_fail = fail_on_pull
+
+    current_task = compiler_service._env_to_compile_task[env_id]
     run.block = False
 
     def _is_compile_finished() -> bool:
