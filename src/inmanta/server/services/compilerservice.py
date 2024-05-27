@@ -63,6 +63,7 @@ COMPILER_LOGGER: Logger = LOGGER.getChild("report")
 # This variable can be updated by the test suite to disable the compile cleanup background task
 DISABLE_COMPILE_CLEANUP = False
 
+
 class CompileStateListener:
     @abc.abstractmethod
     async def compile_done(self, compile: data.Compile) -> None:
@@ -564,7 +565,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         await self._recover()
 
         if not DISABLE_COMPILE_CLEANUP:
-            self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False)
+            self.schedule(
+                self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False
+            )
 
     async def _cleanup(self) -> None:
         oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(

@@ -18,7 +18,7 @@
 
 import pytest
 
-from inmanta.server.services import environment_metrics_service, notificationservice, compilerservice
+from inmanta.server.services import compilerservice, environment_metrics_service, notificationservice
 
 
 @pytest.fixture

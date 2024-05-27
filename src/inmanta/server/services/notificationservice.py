@@ -40,6 +40,7 @@ LOGGER = logging.getLogger(__name__)
 # This variable can be updated by the test suite to disable the notification cleanup background task
 DISABLE_NOTIFICATION_CLEANUP = False
 
+
 class NotificationService(protocol.ServerSlice, CompileStateListener):
     """Slice for notification management"""
 
