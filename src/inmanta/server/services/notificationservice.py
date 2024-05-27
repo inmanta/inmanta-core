@@ -37,6 +37,8 @@ from inmanta.server.validate_filter import InvalidFilter
 
 LOGGER = logging.getLogger(__name__)
 
+# This variable can be updated by the test suite to disable the notification cleanup background task
+DISABLE_NOTIFICATION_CLEANUP = False
 
 class NotificationService(protocol.ServerSlice, CompileStateListener):
     """Slice for notification management"""
@@ -59,7 +61,8 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
 
     async def start(self) -> None:
         await super().start()
-        self.schedule(self._cleanup, 3600, initial_delay=0, cancel_on_stop=False)
+        if not DISABLE_NOTIFICATION_CLEANUP:
+            self.schedule(self._cleanup, 3600, initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:
         await data.Notification.clean_up_notifications()

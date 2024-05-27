@@ -60,6 +60,8 @@ RETURNCODE_INTERNAL_ERROR = -1
 LOGGER: Logger = logging.getLogger(__name__)
 COMPILER_LOGGER: Logger = LOGGER.getChild("report")
 
+# This variable can be updated by the test suite to disable the compile cleanup background task
+DISABLE_COMPILE_CLEANUP = False
 
 class CompileStateListener:
     @abc.abstractmethod
@@ -560,7 +562,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     async def start(self) -> None:
         await super().start()
         await self._recover()
-        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False)
+
+        if not DISABLE_COMPILE_CLEANUP:
+            self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:
         oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(
