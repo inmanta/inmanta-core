@@ -267,7 +267,7 @@ class Environment(BaseModel):
 
 class Project(BaseModel):
     """
-    An inmanta environment.
+    An inmanta project.
     """
 
     id: uuid.UUID
