@@ -612,6 +612,7 @@ class InmantaLoggerConfig:
         """
         Apply the given logging config file.
         """
+        handlers_before = list(logging.root.handlers)
         if not os.path.isfile(config_file):
             raise Exception(f"No logging config file exists at {config_file}.")
         with open(config_file, "r") as fh:
@@ -623,7 +624,7 @@ class InmantaLoggerConfig:
             logging.config.dictConfig(dict_config)
         except Exception:
             raise Exception(f"Failed to apply the logging config defined in {dict_config}.")
-        self._handlers = logging.root.handlers
+        self._handlers = [handler for handler in logging.root.handlers if handler not in handlers_before]
 
     def _apply_logging_config_from_options(self, options: Options) -> None:
         """
@@ -642,8 +643,9 @@ class InmantaLoggerConfig:
 
         This method assume that the given config defines a single root handler.
         """
+        handlers_before = list(logging.root.handlers)
         logging_config.apply_config()
-        return logging.root.handlers
+        return [handler for handler in logging.root.handlers if handler not in handlers_before]
 
     @stable_api
     def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:

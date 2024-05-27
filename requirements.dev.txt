@@ -5,7 +5,7 @@ openapi_spec_validator==0.7.1
 pip2pi==0.8.2
 types-PyYAML==6.0.12.20240311
 types-python-dateutil==2.9.0.20240316
-types-setuptools==69.5.0.20240522
+types-setuptools==70.0.0.20240524
 types-toml==0.10.8.20240310
 flake8-junit-report==2.1.0
 time-machine==2.14.1
@@ -21,6 +21,6 @@ sphinxcontrib-serializinghtml==1.1.10
 sphinx-argparse==0.4.0
 sphinx-autodoc-annotation==1.0-1
 sphinx-click==6.0.0
-sphinx-design==0.5.0
+sphinx-design==0.6.0
 Sphinx-Substitution-Extensions==2024.2.25
 sphinxcontrib.datatemplates==0.11.0
