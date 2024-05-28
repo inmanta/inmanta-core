@@ -1,0 +1,3 @@
+description: Fix broken link in docs
+change-type: patch
+destination-branches: [iso6]
