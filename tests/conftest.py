@@ -131,7 +131,6 @@ from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.server.services import compilerservice, environment_metrics_service, notificationservice
 
-import inmanta.server.config
 
 from inmanta.types import JsonType
 from inmanta.warnings import WarningsManager
@@ -653,10 +652,9 @@ def disable_background_tasks():
     old_disable_env_metrics_service = environment_metrics_service.DISABLE_ENV_METRICS_SERVICE
     old_disable_notification_cleanup = notificationservice.DISABLE_NOTIFICATION_CLEANUP
     old_disable_compile_cleanup = compilerservice.DISABLE_COMPILE_CLEANUP
-    # environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = True
-    # notificationservice.DISABLE_NOTIFICATION_CLEANUP = True
-    # compilerservice.DISABLE_COMPILE_CLEANUP = True
-    inmanta.server.config.server_cleanup_compiler_reports_interval.set("2")
+    environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = True
+    notificationservice.DISABLE_NOTIFICATION_CLEANUP = True
+    compilerservice.DISABLE_COMPILE_CLEANUP = True
     yield
     environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = old_disable_env_metrics_service
     notificationservice.DISABLE_NOTIFICATION_CLEANUP = old_disable_notification_cleanup
