@@ -1325,8 +1325,7 @@ def list_notifications(
     List the notifications in an environment.
 
     The returned notification objects may carry links to other objects, e.g. a compile report. The full list of supported links
-    can be found at
-    https://docs.inmanta.com/inmanta-service-orchestrator/latest/reference/apilinks.html#api-self-referencing-links
+    can be found :ref:`here <api_self_referencing_links>`.
 
     :param tid: The id of the environment
     :param limit: Limit the number of notifications that are returned
@@ -1610,8 +1609,8 @@ def discovered_resources_get_batch(
     Get a list of discovered resources.
 
     For resources that the orchestrator is already managing, a link to the corresponding resource is provided. The full list of
-    supported links can be found at
-    https://docs.inmanta.com/inmanta-service-orchestrator/latest/reference/apilinks.html#api-self-referencing-links
+    supported links can be found :ref:`here <api_self_referencing_links>`.
+
 
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
