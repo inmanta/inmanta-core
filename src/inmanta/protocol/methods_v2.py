@@ -1254,6 +1254,9 @@ def list_notifications(
     """
     List the notifications in an environment.
 
+    The returned notification objects may carry links to other objects, e.g. a compile report. The full list of supported links
+    can be found :ref:`here <api_self_referencing_links>`.
+
     :param tid: The id of the environment
     :param limit: Limit the number of notifications that are returned
     :param first_id: The notification id to use as a continuation token for paging, in combination with the 'start' value,
@@ -1387,7 +1390,9 @@ def get_environment_metrics(
 
 @typedmethod(path="/login", operation="POST", client_types=[ClientType.api], enforce_auth=False, api_version=2)
 def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
-    """Login a user. When the login succeeds an authentication header is returned with the Bearer token set.
+    """Login a user.
+
+     When the login succeeds an authentication header is returned with the Bearer token set.
 
     :param username: The user to login
     :param password: The password of this user
