@@ -129,6 +129,10 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
+from inmanta.server.services import compilerservice, environment_metrics_service, notificationservice
+
+import inmanta.server.config
+
 from inmanta.types import JsonType
 from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
@@ -640,6 +644,23 @@ def inmanta_config(clean_reset) -> Iterator[ConfigParser]:
 @pytest.fixture
 def server_pre_start(server_config):
     """This fixture is called by the server. Override this fixture to influence server config"""
+
+@pytest.fixture
+def disable_background_tasks():
+    """This fixture is called by the server. Override this fixture to influence server config
+
+    """
+    old_disable_env_metrics_service = environment_metrics_service.DISABLE_ENV_METRICS_SERVICE
+    old_disable_notification_cleanup = notificationservice.DISABLE_NOTIFICATION_CLEANUP
+    old_disable_compile_cleanup = compilerservice.DISABLE_COMPILE_CLEANUP
+    # environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = True
+    # notificationservice.DISABLE_NOTIFICATION_CLEANUP = True
+    # compilerservice.DISABLE_COMPILE_CLEANUP = True
+    inmanta.server.config.server_cleanup_compiler_reports_interval.set("2")
+    yield
+    environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = old_disable_env_metrics_service
+    notificationservice.DISABLE_NOTIFICATION_CLEANUP = old_disable_notification_cleanup
+    compilerservice.DISABLE_COMPILE_CLEANUP = old_disable_compile_cleanup
 
 
 @pytest.fixture(scope="function")
@@ -1748,7 +1769,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
 
 @pytest.fixture
 async def migrate_db_from(
-    request: pytest.FixtureRequest, hard_clean_db, hard_clean_db_post, postgresql_client: asyncpg.Connection, server_pre_start
+    request: pytest.FixtureRequest, hard_clean_db, hard_clean_db_post, postgresql_client: asyncpg.Connection,disable_background_tasks,server_pre_start
 ) -> AsyncIterator[Callable[[], Awaitable[None]]]:
     """
     Restores a db dump and yields a function that starts the server and migrates the database schema to the latest version.
