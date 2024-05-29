@@ -32,7 +32,7 @@ from tornado import gen, queues, routing, web
 
 import inmanta.protocol.endpoints
 from inmanta.data.model import ExtensionStatus
-from inmanta.protocol import Client, Result, common, endpoints, handle, methods
+from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
@@ -764,7 +764,7 @@ class SessionManager(ServerSlice):
             return 500
 
 
-class LocalClient(Client):
+class LocalClient(TypedClient):
     """A client that calls methods async on the server in the same process"""
 
     def __init__(self, name: str, server: Server) -> None:
@@ -796,4 +796,4 @@ class LocalClient(Client):
         spec = method_properties.build_call(args, kwargs)
         method_config = self._get_op_mapping(spec.url, spec.method)
         response = await self._server._transport._execute_call(method_config, spec.body, spec.headers)
-        return common.Result(code=response.status_code, result=response.body)
+        return self._process_response(common.Result(code=response.status_code, result=response.body))

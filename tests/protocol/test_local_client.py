@@ -45,5 +45,4 @@ async def test_local_client(unused_tcp_port: int, postgres_db: PostgresProc, dat
     # client based calls
     client = LocalClient("client", rs)
     response = await client.test_method(name="y", project="x")
-    assert response.code == 200
-    assert response.result["data"] == "y -> x"
+    assert response == "y -> x"

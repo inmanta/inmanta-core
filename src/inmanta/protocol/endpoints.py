@@ -29,8 +29,8 @@ from typing import Any, Callable, Optional
 from urllib import parse
 
 from inmanta import config as inmanta_config
-from inmanta import util
-from inmanta.protocol.common import UrlMethod
+from inmanta import types, util
+from inmanta.protocol import common, exceptions
 from inmanta.util import TaskHandler
 
 from . import common
@@ -58,11 +58,11 @@ class CallTarget:
 
         return methods
 
-    def get_op_mapping(self) -> dict[str, dict[str, UrlMethod]]:
+    def get_op_mapping(self) -> dict[str, dict[str, common.UrlMethod]]:
         """
         Build a mapping between urls, ops and methods
         """
-        url_map: dict[str, dict[str, UrlMethod]] = defaultdict(dict)
+        url_map: dict[str, dict[str, common.UrlMethod]] = defaultdict(dict)
 
         # Loop over all methods in this class that have a handler annotation. The handler annotation refers to a method
         # definition. This method definition defines how the handler is invoked.
@@ -83,7 +83,9 @@ class CallTarget:
                         if url in url_map and properties.operation in url_map[url]:
                             raise Exception(f"A handler is already registered for {properties.operation} {url}. ")
 
-                        url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
+                        url_map[url][properties.operation] = common.UrlMethod(
+                            properties, self, method_handlers[1], method_handlers[0]
+                        )
         return url_map
 
 
@@ -474,3 +476,56 @@ class SessionClient(Client):
 
         result = await self._transport_instance.call(method_properties, args, kwargs)
         return result
+
+
+class TypedClient(Client):
+    """A client that returns typed data instead of JSON"""
+
+    def _raise_exception(self, exception_class: type[exceptions.BaseHttpException], result: types.JsonType) -> None:
+        """Raise an exception based on the provided status"""
+        message = result.get("message", None)
+        details = result.get("error_details", None)
+
+        raise exception_class(message, details)
+
+    def _process_response(self, response: common.Result) -> types.ReturnTypes:
+        """Convert the response into a proper type and restore exception if any"""
+        match response.code:
+            case 200:
+                if "data" not in response.result:
+                    raise exceptions.BadRequest("No data was provided in the body.")
+                return response.result["data"]
+
+            case 400:
+                self._raise_exception(exceptions.BadRequest, response.result)
+
+            case 401:
+                self._raise_exception(exceptions.UnauthorizedException, response.result)
+
+            case 403:
+                self._raise_exception(exceptions.Forbidden, response.result)
+
+            case 404:
+                self._raise_exception(exceptions.NotFound, response.result)
+
+            case 409:
+                self._raise_exception(exceptions.Conflict, response.result)
+
+            case 500:
+                self._raise_exception(exceptions.ServerError, response.result)
+
+            case 503:
+                self._raise_exception(exceptions.ShutdownInProgress, response.result)
+
+            case _:
+                self._raise_exception(exceptions.ServerError, response.result)
+
+    async def _call(
+        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
+    ) -> types.ReturnTypes:
+        """Execute a call and return the result"""
+        self._process_response(await self._transport_instance.call(method_properties, args, kwargs))
+
+    def __getattr__(self, name: str) -> Callable[..., Coroutine[Any, Any, types.ReturnTypes]]:
+        """Chain the call through, this method mainly changes the return type"""
+        return super().__getattr__(name)
