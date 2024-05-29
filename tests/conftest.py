@@ -644,14 +644,18 @@ def server_pre_start(server_config):
 
 @pytest.fixture
 def disable_background_tasks():
-    """This fixture is called by the server. Override this fixture to influence server config"""
+    """This fixture disables the scheduling of background tasks."""
+
     old_disable_env_metrics_service = environment_metrics_service.DISABLE_ENV_METRICS_SERVICE
     old_disable_notification_cleanup = notificationservice.DISABLE_NOTIFICATION_CLEANUP
     old_disable_compile_cleanup = compilerservice.DISABLE_COMPILE_CLEANUP
+
     environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = True
     notificationservice.DISABLE_NOTIFICATION_CLEANUP = True
     compilerservice.DISABLE_COMPILE_CLEANUP = True
+
     yield
+
     environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = old_disable_env_metrics_service
     notificationservice.DISABLE_NOTIFICATION_CLEANUP = old_disable_notification_cleanup
     compilerservice.DISABLE_COMPILE_CLEANUP = old_disable_compile_cleanup
