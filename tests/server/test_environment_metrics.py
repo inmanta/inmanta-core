@@ -54,11 +54,11 @@ async def env_metrics_service(server_config, init_dataclasses_and_load_schema) -
 
 
 @pytest.fixture
-def server_pre_start(disable_background_tasks, server_config):
+def server_pre_start(disable_background_jobs, server_config):
     """
     This fixture is called before the server starts and disables all actions done
     by the EnvironmentMetricsService on the metrics-related database tables by calling
-    into the disable_background_tasks fixture.
+    into the disable_background_jobs fixture.
     """
 
 

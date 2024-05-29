@@ -643,8 +643,8 @@ def server_pre_start(server_config):
 
 
 @pytest.fixture
-def disable_background_tasks():
-    """This fixture disables the scheduling of background tasks."""
+def disable_background_jobs():
+    """This fixture disables the scheduling of background jobs."""
 
     old_dont_run_background_jobs = services.DONT_RUN_BACKGROUND_JOBS
     services.DONT_RUN_BACKGROUND_JOBS = True
@@ -1764,7 +1764,7 @@ async def migrate_db_from(
     hard_clean_db,
     hard_clean_db_post,
     postgresql_client: asyncpg.Connection,
-    disable_background_tasks,
+    disable_background_jobs,
     server_pre_start,
 ) -> AsyncIterator[Callable[[], Awaitable[None]]]:
     """
