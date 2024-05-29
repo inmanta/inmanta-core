@@ -32,13 +32,11 @@ from inmanta.protocol import handle, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_NOTIFICATION, SLICE_TRANSPORT, protocol
+from inmanta.server.services import DONT_RUN_BACKGROUND_JOBS
 from inmanta.server.services.compilerservice import CompilerService, CompileStateListener
 from inmanta.server.validate_filter import InvalidFilter
 
 LOGGER = logging.getLogger(__name__)
-
-# This variable can be updated by the test suite to disable the notification cleanup background task
-DISABLE_NOTIFICATION_CLEANUP = False
 
 
 class NotificationService(protocol.ServerSlice, CompileStateListener):
@@ -62,7 +60,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
 
     async def start(self) -> None:
         await super().start()
-        if not DISABLE_NOTIFICATION_CLEANUP:
+        if not DONT_RUN_BACKGROUND_JOBS:
             self.schedule(self._cleanup, 3600, initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:

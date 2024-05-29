@@ -124,10 +124,10 @@ from inmanta.module import InmantaModuleRequirement, InstallMode, Project, Relat
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER, services
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server, SliceStartupException
-from inmanta.server.services import compilerservice, environment_metrics_service, notificationservice, orchestrationservice
+from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from inmanta.warnings import WarningsManager
@@ -646,19 +646,12 @@ def server_pre_start(server_config):
 def disable_background_tasks():
     """This fixture disables the scheduling of background tasks."""
 
-    old_disable_env_metrics_service = environment_metrics_service.DISABLE_ENV_METRICS_SERVICE
-    old_disable_notification_cleanup = notificationservice.DISABLE_NOTIFICATION_CLEANUP
-    old_disable_compile_cleanup = compilerservice.DISABLE_COMPILE_CLEANUP
-
-    environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = True
-    notificationservice.DISABLE_NOTIFICATION_CLEANUP = True
-    compilerservice.DISABLE_COMPILE_CLEANUP = True
+    old_dont_run_background_jobs = services.DONT_RUN_BACKGROUND_JOBS
+    services.DONT_RUN_BACKGROUND_JOBS = True
 
     yield
 
-    environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = old_disable_env_metrics_service
-    notificationservice.DISABLE_NOTIFICATION_CLEANUP = old_disable_notification_cleanup
-    compilerservice.DISABLE_COMPILE_CLEANUP = old_disable_compile_cleanup
+    services.DONT_RUN_BACKGROUND_JOBS = old_dont_run_background_jobs
 
 
 @pytest.fixture(scope="function")
