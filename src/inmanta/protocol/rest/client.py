@@ -67,7 +67,16 @@ class RESTClient(RESTBase):
         """
         Get the method call for the given url and http method. This method is used for return calls over long poll
         """
-        return self.endpoint.match_call(url, method)
+        for target in self.call_targets:
+            url_map = target.get_op_mapping()
+            for url_re, handlers in url_map.items():
+                if not url_re.endswith("$"):
+                    url_re += "$"
+                match = re.match(url_re, url)
+                if match and method in handlers:
+                    return {unquote(k): unquote(v) for k, v in match.groupdict().items()}, handlers[method]
+
+        return None, None
 
     def _get_client_config(self) -> str:
         """

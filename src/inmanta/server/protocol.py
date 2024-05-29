@@ -18,6 +18,7 @@
 
 import asyncio
 import logging
+import re
 import socket
 import time
 import uuid
@@ -761,3 +762,38 @@ class SessionManager(ServerSlice):
         except Exception:
             LOGGER.warning(f"could not deliver agent reply with sid={sid} and reply_id={reply_id}", exc_info=True)
             return 500
+
+
+class LocalClient(Client):
+    """A client that calls methods async on the server in the same process"""
+
+    def __init__(self, name: str, server: Server) -> None:
+        super().__init__(name, with_rest_client=False)
+        self._server = server
+        self._op_mapping: dict[str, dict[str, common.UrlMethod]] = {}
+        for slice in server.get_slices().values():
+            self._op_mapping.update(slice.get_op_mapping())
+
+    def _get_op_mapping(self, url: str, method: str) -> common.UrlMethod:
+        """Get the op mapping for the provided url and method"""
+        methods = {}
+        if url not in self._op_mapping:
+            for key, mapping in self._op_mapping.items():
+                if re.match(key, url):
+                    methods = mapping
+                    break
+        else:
+            methods = self._op_mapping[url]
+
+        if method in methods:
+            return methods[method]
+
+        raise Exception(f"No handler defined for {method} {url}")
+
+    async def _call(
+        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
+    ) -> common.Result:
+        spec = method_properties.build_call(args, kwargs)
+        method_config = self._get_op_mapping(spec.url, spec.method)
+        response = await self._server._transport._execute_call(method_config, spec.body, spec.headers)
+        return common.Result(code=response.status_code, result=response.body)

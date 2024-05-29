@@ -15,10 +15,11 @@
 
     Contact: code@inmanta.com
 """
-from utils import configure
-from inmanta import config, const, protocol
-from inmanta.server.protocol import Server, ServerSlice
+
+from inmanta import protocol
 from inmanta.postgresproc import PostgresProc
+from inmanta.server.protocol import LocalClient, Server, ServerSlice
+from utils import configure
 
 
 async def test_local_client(unused_tcp_port: int, postgres_db: PostgresProc, database_name: str, async_finalizer) -> None:
@@ -26,13 +27,13 @@ async def test_local_client(unused_tcp_port: int, postgres_db: PostgresProc, dat
     configure(unused_tcp_port, database_name, postgres_db.port)
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
-        def test_method(project: str) -> str:  # NOQA
+        @protocol.typedmethod(path="/test/<name>", operation="POST", client_types=["api"])
+        def test_method(name: str, project: str) -> str:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_methodY(self, project: str) -> str:  # NOQA
-            return project
+        async def test_methodY(self, name: str, project: str) -> str:  # NOQA
+            return f"{name} -> {project}"
 
     rs = Server()
     server = ProjectServer(name="projectserver")
@@ -41,11 +42,8 @@ async def test_local_client(unused_tcp_port: int, postgres_db: PostgresProc, dat
     async_finalizer.add(server.stop)
     async_finalizer.add(rs.stop)
 
-    items = [slice.get_op_mapping() for slice in rs.get_slices().values()]
-
     # client based calls
-    client = protocol.LocalClient("client", rs)
-    #client = protocol.Client("client")
-    response = await client.test_method(project="x")
+    client = LocalClient("client", rs)
+    response = await client.test_method(name="y", project="x")
     assert response.code == 200
-    assert response.result["data"] == "x"
+    assert response.result["data"] == "y -> x"

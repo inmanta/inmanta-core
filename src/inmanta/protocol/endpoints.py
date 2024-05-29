@@ -25,9 +25,8 @@ from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import abc, defaultdict
 from collections.abc import Coroutine
 from enum import Enum
-from typing import Any, Callable, Optional, AnyStr, TYPE_CHECKING
+from typing import Any, Callable, Optional
 from urllib import parse
-import re
 
 from inmanta import config as inmanta_config
 from inmanta import util
@@ -36,7 +35,6 @@ from inmanta.util import TaskHandler
 
 from . import common
 from .rest import client
-
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -145,21 +143,6 @@ class Endpoint(TaskHandler[None]):
     async def stop(self) -> None:
         """Stop this endpoint"""
         await super().stop()
-
-    def match_call(self, url: str, method: str) -> tuple[Optional[dict[str, AnyStr]], Optional[common.UrlMethod]]:
-        """
-        Get the method call for the given url and http method. This method is used for return calls over long poll
-        """
-        for target in self.call_targets:
-            url_map = target.get_op_mapping()
-            for url_re, handlers in url_map.items():
-                if not url_re.endswith("$"):
-                    url_re += "$"
-                match = re.match(url_re, url)
-                if match and method in handlers:
-                    return {parse.unquote(k): parse.unquote(v) for k, v in match.groupdict().items()}, handlers[method]
-
-        return None, None
 
 
 class SessionEndpoint(Endpoint, CallTarget):
@@ -491,24 +474,3 @@ class SessionClient(Client):
 
         result = await self._transport_instance.call(method_properties, args, kwargs)
         return result
-
-
-class LocalClient(Client):
-    """A client that calls methods async on the server in the same process"""
-
-    def __init__(self, name: str, server) -> None:
-        super().__init__(name, with_rest_client=False)
-        self._server = server
-        self._op_mapping = {}
-        for slice in server.get_slices().values():
-            self._op_mapping.update(slice.get_op_mapping())
-
-    async def _call(
-        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
-    ) -> common.Result:
-        spec = method_properties.build_call(args, kwargs)
-        method_config = self._op_mapping[spec.url][spec.method]
-
-        # TODO: the match_call kwargs from the url should be presents in the kwargs already and thus in the body
-        response = await self._server._transport._execute_call(method_config, spec.body, spec.headers)
-        return common.Result(code=response.status_code, result=response.body)
