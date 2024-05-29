@@ -31,8 +31,7 @@ from inmanta.data.model import Notification
 from inmanta.protocol import handle, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
-from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_NOTIFICATION, SLICE_TRANSPORT, protocol
-from inmanta.server.services import DONT_RUN_BACKGROUND_JOBS
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_NOTIFICATION, SLICE_TRANSPORT, protocol, services
 from inmanta.server.services.compilerservice import CompilerService, CompileStateListener
 from inmanta.server.validate_filter import InvalidFilter
 
@@ -60,7 +59,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
 
     async def start(self) -> None:
         await super().start()
-        if not DONT_RUN_BACKGROUND_JOBS:
+        if not services.DONT_RUN_BACKGROUND_JOBS:
             self.schedule(self._cleanup, 3600, initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:

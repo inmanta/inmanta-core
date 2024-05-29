@@ -43,8 +43,7 @@ from inmanta.data.model import EnvironmentMetricsResult
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
 from inmanta.protocol.exceptions import BadRequest
-from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
-from inmanta.server.services import DONT_RUN_BACKGROUND_JOBS
+from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol, services
 
 LOGGER = logging.getLogger(__name__)
 
@@ -194,7 +193,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         self.register_metric_collector(CompileWaitingTimeMetricsCollector())
         self.register_metric_collector(AgentCountMetricsCollector())
         self.register_metric_collector(CompileTimeMetricsCollector())
-        if not DONT_RUN_BACKGROUND_JOBS:
+        if not services.DONT_RUN_BACKGROUND_JOBS:
             self.schedule(
                 self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=COLLECTION_INTERVAL_IN_SEC, cancel_on_stop=True
             )

@@ -49,8 +49,9 @@ from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
+from inmanta.server import services
 from inmanta.server.protocol import ServerSlice
-from inmanta.server.services import DONT_RUN_BACKGROUND_JOBS, environmentservice
+from inmanta.server.services import environmentservice
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import TaskMethod, ensure_directory_exist
@@ -561,7 +562,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         await super().start()
         await self._recover()
 
-        if not DONT_RUN_BACKGROUND_JOBS:
+        if not services.DONT_RUN_BACKGROUND_JOBS:
             self.schedule(
                 self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False
             )
