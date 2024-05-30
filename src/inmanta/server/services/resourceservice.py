@@ -64,7 +64,7 @@ from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
 from inmanta.server import config as opt
-from inmanta.server import extensions, protocol
+from inmanta.server import extensions, protocol, services
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
@@ -150,9 +150,10 @@ class ResourceService(protocol.ServerSlice):
         self.agentmanager_service = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
 
     async def start(self) -> None:
-        self.schedule(
-            data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get(), cancel_on_stop=False
-        )
+        if not services.DONT_RUN_BACKGROUND_JOBS:
+            self.schedule(
+                data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get(), cancel_on_stop=False
+            )
         await super().start()
 
     async def stop(self) -> None:

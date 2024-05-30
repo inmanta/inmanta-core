@@ -32,7 +32,7 @@ from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
-from inmanta.server import protocol
+from inmanta.server import protocol, services
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
 from inmanta.server.validate_filter import InvalidFilter
@@ -65,7 +65,8 @@ class ParameterService(protocol.ServerSlice):
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
 
     async def start(self) -> None:
-        self.schedule(self.renew_facts, self._fact_renew, cancel_on_stop=False)
+        if not services.DONT_RUN_BACKGROUND_JOBS:
+            self.schedule(self.renew_facts, self._fact_renew, cancel_on_stop=False)
         await super().start()
 
     async def renew_facts(self) -> None:

@@ -644,7 +644,8 @@ def server_pre_start(server_config):
 
 @pytest.fixture
 def disable_background_jobs():
-    """This fixture disables the scheduling of background jobs."""
+    """This fixture disables the scheduling of background jobs that could interfere with testing
+    e.g. cleanup jobs. The job checking for database pool exhaustion is intentionally not disabled."""
 
     old_dont_run_background_jobs = services.DONT_RUN_BACKGROUND_JOBS
     services.DONT_RUN_BACKGROUND_JOBS = True
