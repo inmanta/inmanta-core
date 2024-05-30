@@ -1,4 +1,3 @@
-
 .. _operational_procedures_lsm:
 
 Operational Procedures With LSM

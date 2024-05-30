@@ -1,7 +1,7 @@
-.. only:: iso
+Inmanta Lifecycle Service Manager
+*********************************
 
-    Inmanta Lifecycle Service Manager
-    *********************************
+.. only:: iso
 
     The Inmanta LSM is an active component that governs the lifeycle of services in the orchestration model. LSM extends the
     Orchestration Engine (OrE) and Resource Controller (ResC) with a service catalog, a service inventory and a lifecycle manager.
