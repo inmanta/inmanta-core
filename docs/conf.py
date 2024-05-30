@@ -156,7 +156,10 @@ rst_prolog = f"""\
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # The documentation build tool overrides this when extensions are included in the documentation build.
-exclude_patterns = ['adr/*.md']
+
+exclude_patterns = ['adr/*.md', "lsm"]
+if tags.has("iso"):
+    exclude_patterns = ['adr/*.md']
 
 # The reST default role (used for this markup: `text`) to use for all documents.
 # default_role = None
