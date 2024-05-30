@@ -35,7 +35,6 @@ from inmanta import types, util
 from inmanta.protocol import common, exceptions
 from inmanta.util import TaskHandler
 
-from . import common
 from .rest import client
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -494,7 +493,7 @@ class TypedClient(Client):
         """Convert the response into a proper type and restore exception if any"""
         match response.code:
             case 200:
-                if "data" not in response.result:
+                if method_properties.envelope_key not in response.result:
                     raise exceptions.BadRequest("No data was provided in the body. Make sure to only used typed methods.")
 
                 if method_properties.return_type is None:
@@ -505,7 +504,7 @@ class TypedClient(Client):
                 except common.InvalidMethodDefinition:
                     raise exceptions.BadRequest("Typed client can only be used with typed methods.")
 
-                return ta.validate_python(response.result["data"])
+                return ta.validate_python(response.result[method_properties.envelope_key])
 
             case 400:
                 self._raise_exception(exceptions.BadRequest, response.result)
@@ -535,7 +534,7 @@ class TypedClient(Client):
         self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
     ) -> types.ReturnTypes:
         """Execute a call and return the result"""
-        self._process_response(method_properties, await self._transport_instance.call(method_properties, args, kwargs))
+        return self._process_response(method_properties, await self._transport_instance.call(method_properties, args, kwargs))
 
     def __getattr__(self, name: str) -> Callable[..., Coroutine[Any, Any, types.ReturnTypes]]:
         """Chain the call through, this method mainly changes the return type"""
