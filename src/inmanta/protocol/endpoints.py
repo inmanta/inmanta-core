@@ -482,8 +482,11 @@ class SessionClient(Client):
 class TypedClient(Client):
     """A client that returns typed data instead of JSON"""
 
-    def _raise_exception(self, exception_class: type[exceptions.BaseHttpException], result: types.JsonType) -> None:
+    def _raise_exception(self, exception_class: type[exceptions.BaseHttpException], result: Optional[types.JsonType]) -> None:
         """Raise an exception based on the provided status"""
+        if result is None:
+            raise exception_class()
+
         message = result.get("message", None)
         details = result.get("error_details", None)
 
@@ -493,7 +496,8 @@ class TypedClient(Client):
         """Convert the response into a proper type and restore exception if any"""
         match response.code:
             case 200:
-                if method_properties.envelope_key not in response.result:
+                # typed methods always require an envelope key
+                if response.result is None or method_properties.envelope_key not in response.result:
                     raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
 
                 if method_properties.return_type is None:
@@ -529,6 +533,9 @@ class TypedClient(Client):
 
             case _:
                 self._raise_exception(exceptions.ServerError, response.result)
+
+        # make mypy happy, it cannot deduce that all the cases will always raise an exception
+        return None
 
     async def _call(
         self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
