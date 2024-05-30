@@ -28,6 +28,8 @@ from enum import Enum
 from typing import Any, Callable, Optional
 from urllib import parse
 
+import pydantic
+
 from inmanta import config as inmanta_config
 from inmanta import types, util
 from inmanta.protocol import common, exceptions
@@ -488,13 +490,22 @@ class TypedClient(Client):
 
         raise exception_class(message, details)
 
-    def _process_response(self, response: common.Result) -> types.ReturnTypes:
+    def _process_response(self, method_properties: common.MethodProperties, response: common.Result) -> types.ReturnTypes:
         """Convert the response into a proper type and restore exception if any"""
         match response.code:
             case 200:
                 if "data" not in response.result:
-                    raise exceptions.BadRequest("No data was provided in the body.")
-                return response.result["data"]
+                    raise exceptions.BadRequest("No data was provided in the body. Make sure to only used typed methods.")
+
+                if method_properties.return_type is None:
+                    return None
+
+                try:
+                    ta = pydantic.TypeAdapter(method_properties.return_type)
+                except common.InvalidMethodDefinition:
+                    raise exceptions.BadRequest("Typed client can only be used with typed methods.")
+
+                return ta.validate_python(response.result["data"])
 
             case 400:
                 self._raise_exception(exceptions.BadRequest, response.result)
@@ -524,7 +535,7 @@ class TypedClient(Client):
         self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
     ) -> types.ReturnTypes:
         """Execute a call and return the result"""
-        self._process_response(await self._transport_instance.call(method_properties, args, kwargs))
+        self._process_response(method_properties, await self._transport_instance.call(method_properties, args, kwargs))
 
     def __getattr__(self, name: str) -> Callable[..., Coroutine[Any, Any, types.ReturnTypes]]:
         """Chain the call through, this method mainly changes the return type"""

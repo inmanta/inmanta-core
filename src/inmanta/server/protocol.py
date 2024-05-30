@@ -796,4 +796,4 @@ class LocalClient(TypedClient):
         spec = method_properties.build_call(args, kwargs)
         method_config = self._get_op_mapping(spec.url, spec.method)
         response = await self._server._transport._execute_call(method_config, spec.body, spec.headers)
-        return self._process_response(common.Result(code=response.status_code, result=response.body))
+        return self._process_response(method_properties, common.Result(code=response.status_code, result=response.body))
