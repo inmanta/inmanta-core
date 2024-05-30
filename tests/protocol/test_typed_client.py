@@ -29,7 +29,7 @@ from utils import configure
 
 
 async def test_local_client(unused_tcp_port: int, postgres_db: PostgresProc, database_name: str, async_finalizer) -> None:
-    """The the local clien"""
+    """Test the local client"""
     configure(unused_tcp_port, database_name, postgres_db.port)
 
     class ProjectServer(ServerSlice):
