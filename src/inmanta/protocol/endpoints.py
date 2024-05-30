@@ -494,7 +494,7 @@ class TypedClient(Client):
         match response.code:
             case 200:
                 if method_properties.envelope_key not in response.result:
-                    raise exceptions.BadRequest("No data was provided in the body. Make sure to only used typed methods.")
+                    raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
 
                 if method_properties.return_type is None:
                     return None
@@ -534,4 +534,4 @@ class TypedClient(Client):
         self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
     ) -> types.ReturnTypes:
         """Execute a call and return the result"""
-        return self._process_response(method_properties, await self._transport_instance.call(method_properties, args, kwargs))
+        return self._process_response(method_properties, await super()._call(method_properties, args, kwargs))
