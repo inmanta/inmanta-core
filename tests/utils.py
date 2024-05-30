@@ -783,7 +783,7 @@ def get_as_naive_datetime(timestamp: datetime) -> datetime:
     return timestamp.astimezone(timezone.utc).replace(tzinfo=None)
 
 
-def make_random_file(size=0):
+def make_random_file(size: int = 0) -> tuple[str, bytes, str]:
     """
     Generate a random file.
 
@@ -799,4 +799,4 @@ def make_random_file(size=0):
 
     body = base64.b64encode(content).decode("ascii")
 
-    return (hash, content, body)
+    return hash, content, body
