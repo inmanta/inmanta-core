@@ -535,7 +535,3 @@ class TypedClient(Client):
     ) -> types.ReturnTypes:
         """Execute a call and return the result"""
         return self._process_response(method_properties, await self._transport_instance.call(method_properties, args, kwargs))
-
-    def __getattr__(self, name: str) -> Callable[..., Coroutine[Any, Any, types.ReturnTypes]]:
-        """Chain the call through, this method mainly changes the return type"""
-        return super().__getattr__(name)
