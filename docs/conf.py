@@ -159,9 +159,10 @@ rst_prolog = f"""\
 
 # Make sure the lsm docs folder is excluded by default and only include it for iso builds
 # We do it this way instead of relying on the .. only:: iso
-exclude_patterns = ['adr/*.md', "lsm", "administrators/operational_procedures_with_lsm.rst", "administrators/support.rst"]
-if tags.has("iso"):
-    exclude_patterns = ['adr/*.md']
+# exclude_patterns = ['adr/*.md', "lsm", "administrators/operational_procedures_with_lsm.rst", "administrators/support.rst"]
+# if tags.has("iso"):
+
+exclude_patterns = ['adr/*.md']
 
 # The reST default role (used for this markup: `text`) to use for all documents.
 # default_role = None
