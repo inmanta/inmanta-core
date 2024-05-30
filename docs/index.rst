@@ -75,10 +75,21 @@
     language
     model_developers
     platform_developers
-    lsm/index
+
+.. only:: iso
+
+    .. toctree::
+        :maxdepth: 1
+
+        lsm/index
+
+.. toctree::
+    :maxdepth: 1
+
     administrators
     faq
     glossary
     reference/index
     troubleshooting
     changelogs
+

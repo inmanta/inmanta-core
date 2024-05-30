@@ -157,7 +157,9 @@ rst_prolog = f"""\
 # directories to ignore when looking for source files.
 # The documentation build tool overrides this when extensions are included in the documentation build.
 
-exclude_patterns = ['adr/*.md', "lsm"]
+# Make sure the lsm docs folder is excluded by default and only include it for iso builds
+# We do it this way instead of relying on the .. only:: iso
+exclude_patterns = ['adr/*.md', "lsm", "administrators/operational_procedures_with_lsm.rst", "administrators/support.rst"]
 if tags.has("iso"):
     exclude_patterns = ['adr/*.md']
 
