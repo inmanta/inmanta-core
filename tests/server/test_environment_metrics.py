@@ -54,6 +54,13 @@ async def env_metrics_service(server_config, init_dataclasses_and_load_schema) -
 
 
 @pytest.fixture
+def server_pre_start(disable_background_jobs, server_config):
+    """
+    This fixture is called before the server starts to disable all actions done
+    """
+
+
+@pytest.fixture
 async def env_with_uuid():
     project = data.Project(name="test")
     await project.insert()
