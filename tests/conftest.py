@@ -664,7 +664,8 @@ def disable_background_jobs(monkeypatch):
         ) -> None:
             pass
 
-    monkeypatch.setattr(inmanta.server.protocol, "ServerSlice", NoopScheduler)
+    # inmanta.server.config.server_cleanup_compiler_reports_interval.set("2")
+    # monkeypatch.setattr(inmanta.server.protocol, "ServerSlice", NoopScheduler)
 
 
 
