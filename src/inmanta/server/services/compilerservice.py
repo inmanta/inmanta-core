@@ -49,7 +49,6 @@ from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
-from inmanta.server import services
 from inmanta.server.protocol import ServerSlice
 from inmanta.server.services import environmentservice
 from inmanta.server.validate_filter import InvalidFilter
@@ -562,9 +561,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         await super().start()
         await self._recover()
 
-        self.schedule(
-            self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False
-        )
+        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:
         oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(

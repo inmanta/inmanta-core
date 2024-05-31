@@ -125,9 +125,9 @@ from inmanta.module import InmantaModuleRequirement, InstallMode, Project, Relat
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER, services
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import Server, SliceStartupException, ServerSlice
+from inmanta.server.protocol import Server, ServerSlice, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
@@ -666,7 +666,6 @@ def disable_background_jobs(monkeypatch):
 
     # inmanta.server.config.server_cleanup_compiler_reports_interval.set("2")
     # monkeypatch.setattr(inmanta.server.protocol, "ServerSlice", NoopScheduler)
-
 
 
 @pytest.fixture(scope="function")

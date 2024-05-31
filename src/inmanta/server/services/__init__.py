@@ -15,4 +15,3 @@
 
     Contact: code@inmanta.com
 """
-

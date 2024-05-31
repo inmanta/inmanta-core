@@ -43,7 +43,7 @@ from inmanta.data.model import EnvironmentMetricsResult
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
 from inmanta.protocol.exceptions import BadRequest
-from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol, services
+from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
 

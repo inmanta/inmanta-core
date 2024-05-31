@@ -26,7 +26,7 @@ from pyformance.meters import CallbackGauge
 from inmanta import data, util
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
-from inmanta.server import protocol, services
+from inmanta.server import protocol
 from inmanta.types import ArgumentTypes
 
 LOGGER = logging.getLogger(__name__)

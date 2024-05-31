@@ -31,7 +31,7 @@ from inmanta.data.model import Notification
 from inmanta.protocol import handle, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
-from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_NOTIFICATION, SLICE_TRANSPORT, protocol, services
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_NOTIFICATION, SLICE_TRANSPORT, protocol
 from inmanta.server.services.compilerservice import CompilerService, CompileStateListener
 from inmanta.server.validate_filter import InvalidFilter
 
