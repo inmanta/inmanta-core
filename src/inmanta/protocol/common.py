@@ -440,6 +440,7 @@ class MethodProperties:
         self.function = function
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
+        self._return_type: Optional[type] = None
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -460,6 +461,12 @@ class MethodProperties:
     @property
     def enforce_auth(self) -> bool:
         return self._enforce_auth
+
+    @property
+    def return_type(self) -> type:
+        if self._return_type is None:
+            raise InvalidMethodDefinition("Only typed methods have a return type")
+        return self._return_type
 
     def validate_arguments(self, values: dict[str, Any]) -> dict[str, Any]:
         """
@@ -551,9 +558,9 @@ class MethodProperties:
                 f"A key/value argument is only allowed when `varkw` is set to true in method {self.function}."
             )
 
-        self._validate_return_type(type_hints["return"], strict=self.strict_typing)
+        self._return_type = self._validate_return_type(type_hints["return"], strict=self.strict_typing)
 
-    def _validate_return_type(self, arg_type: type, *, strict: bool = True) -> None:
+    def _validate_return_type(self, arg_type: type, *, strict: bool = True) -> type:
         """Validate the return type"""
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
@@ -567,9 +574,9 @@ class MethodProperties:
                 return False
 
         if is_return_value_type(arg_type):
-            self._validate_type_arg(
-                arg, typing_inspect.get_args(arg_type, evaluate=True)[0], strict=strict, allow_none_type=True
-            )
+            return_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+            self._validate_type_arg(arg, return_type, strict=strict, allow_none_type=True)
+            return return_type
 
         elif (
             not typing_inspect.is_generic_type(arg_type)
@@ -580,6 +587,7 @@ class MethodProperties:
 
         else:
             self._validate_type_arg(arg, arg_type, allow_none_type=True, strict=strict)
+            return arg_type
 
     def _validate_type_arg(
         self, arg: str, arg_type: type, *, strict: bool = True, allow_none_type: bool = False, in_url: bool = False
