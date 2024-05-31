@@ -157,7 +157,10 @@ rst_prolog = f"""\
 # directories to ignore when looking for source files.
 # The documentation build tool overrides this when extensions are included in the documentation build.
 
-# Make sure iso-only documents are excluded from the doc build by default and only included for iso builds
+# Make sure iso-only documents are excluded from the doc build by default and only included for iso builds.
+# We can't use the  `.. only:: iso` directive here because it is only suited to control the content of
+# the documents and not their structure.
+
 
 default_pattern = ['adr/*.md']
 exclude_from_oss = [
