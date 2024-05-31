@@ -26,7 +26,7 @@ import toml
 from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
-from inmanta.util import TaskMethod
+from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -127,7 +127,7 @@ from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import Server, ServerSlice, SliceStartupException
+from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
@@ -596,7 +596,7 @@ def disable_isolated_env_builder_cache() -> None:
 @pytest.fixture(scope="function", autouse=True)
 def restore_cwd():
     """
-    Restore the current working directory after search test.
+    Restore the current working directory after each test.
     """
     yield
     os.chdir(initial_cwd)
@@ -653,19 +653,17 @@ def disable_background_jobs(monkeypatch):
     The job checking for database pool exhaustion is intentionally not disabled.
     """
 
-    class NoopScheduler(ServerSlice):
-        def schedule(
+    class NoopScheduler(Scheduler):
+        def add_action(
             self,
-            call: TaskMethod,
-            interval: float = 60,
-            initial_delay: Optional[float] = None,
+            action: TaskMethod,
+            schedule: Union[TaskSchedule, int],
             cancel_on_stop: bool = True,
             quiet_mode: bool = False,
-        ) -> None:
+        ) -> Optional[ScheduledTask]:
             pass
 
-    # inmanta.server.config.server_cleanup_compiler_reports_interval.set("2")
-    # monkeypatch.setattr(inmanta.server.protocol, "ServerSlice", NoopScheduler)
+    monkeypatch.setattr(inmanta.server.protocol, "Scheduler", NoopScheduler)
 
 
 @pytest.fixture(scope="function")
