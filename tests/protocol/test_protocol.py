@@ -60,26 +60,7 @@ from inmanta.server.config import server_bind_port
 from inmanta.server.protocol import Server, ServerSlice
 from inmanta.types import Apireturn
 from inmanta.util import hash_file
-from utils import configure
-
-
-def make_random_file(size=0):
-    """
-    Generate a random file.
-
-    :param size: If size is > 0 content is generated that is equal or more than size.
-    """
-    randomvalue = str(random.randint(0, 10000))
-    if size > 0:
-        while len(randomvalue) < size:
-            randomvalue += randomvalue
-
-    content = ("Hello world %s\n" % (randomvalue)).encode()
-    hash = hash_file(content)
-
-    body = base64.b64encode(content).decode("ascii")
-
-    return (hash, content, body)
+from utils import configure, make_random_file
 
 
 async def test_client_files(client):
