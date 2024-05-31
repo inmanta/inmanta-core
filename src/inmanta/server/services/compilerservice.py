@@ -561,13 +561,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         await super().start()
         await self._recover()
 
-        def noop():
-            pass
-
-        self.schedule(noop, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False)
+        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:
-        # breakpoint()
         oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(
             seconds=opt.server_compiler_report_retention.get()
         )

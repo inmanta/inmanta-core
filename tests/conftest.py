@@ -647,10 +647,7 @@ def server_pre_start(server_config):
 def disable_background_jobs(monkeypatch):
     """
     This fixture disables the scheduling of background jobs that could interfere with testing
-    e.g. cleanup jobs. The job to clean up old model versions and agent records that are no longer
-    used is already disabled by the ``disable_version_and_agent_cleanup_job`` fixture.
-
-    The job checking for database pool exhaustion is intentionally not disabled.
+    e.g. cleanup jobs.
     """
 
     class NoopScheduler(Scheduler):
