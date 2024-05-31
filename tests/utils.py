@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import base64
 import configparser
 import datetime
 import functools
@@ -24,6 +25,7 @@ import json
 import logging
 import math
 import os
+import random
 import shutil
 import uuid
 from collections import abc
@@ -46,7 +48,7 @@ from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
-from inmanta.util import get_compiler_version
+from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
 from packaging import version
 
@@ -779,3 +781,22 @@ def get_as_naive_datetime(timestamp: datetime) -> datetime:
     if timestamp.tzinfo is None:
         return timestamp
     return timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def make_random_file(size: int = 0) -> tuple[str, bytes, str]:
+    """
+    Generate a random file.
+
+    :param size: If size is > 0 content is generated that is equal or more than size.
+    """
+    randomvalue = str(random.randint(0, 10000))
+    if size > 0:
+        while len(randomvalue) < size:
+            randomvalue += randomvalue
+
+    content = ("Hello world %s\n" % (randomvalue)).encode()
+    hash = hash_file(content)
+
+    body = base64.b64encode(content).decode("ascii")
+
+    return hash, content, body
