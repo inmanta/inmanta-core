@@ -59,8 +59,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
 
     async def start(self) -> None:
         await super().start()
-        if not services.DONT_RUN_BACKGROUND_JOBS:
-            self.schedule(self._cleanup, 3600, initial_delay=0, cancel_on_stop=False)
+        self.schedule(self._cleanup, 3600, initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:
         await data.Notification.clean_up_notifications()

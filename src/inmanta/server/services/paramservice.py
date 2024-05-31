@@ -65,8 +65,7 @@ class ParameterService(protocol.ServerSlice):
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
 
     async def start(self) -> None:
-        if not services.DONT_RUN_BACKGROUND_JOBS:
-            self.schedule(self.renew_facts, self._fact_renew, cancel_on_stop=False)
+        self.schedule(self.renew_facts, self._fact_renew, cancel_on_stop=False)
         await super().start()
 
     async def renew_facts(self) -> None:

@@ -26,6 +26,7 @@ import toml
 from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
+from inmanta.util import TaskMethod
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -126,7 +127,7 @@ from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER, services
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import Server, SliceStartupException
+from inmanta.server.protocol import Server, SliceStartupException, ServerSlice
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
@@ -643,7 +644,7 @@ def server_pre_start(server_config):
 
 
 @pytest.fixture
-def disable_background_jobs():
+def disable_background_jobs(monkeypatch):
     """
     This fixture disables the scheduling of background jobs that could interfere with testing
     e.g. cleanup jobs. The job to clean up old model versions and agent records that are no longer
@@ -652,12 +653,19 @@ def disable_background_jobs():
     The job checking for database pool exhaustion is intentionally not disabled.
     """
 
-    old_dont_run_background_jobs = services.DONT_RUN_BACKGROUND_JOBS
-    services.DONT_RUN_BACKGROUND_JOBS = True
+    class NoopScheduler(ServerSlice):
+        def schedule(
+            self,
+            call: TaskMethod,
+            interval: float = 60,
+            initial_delay: Optional[float] = None,
+            cancel_on_stop: bool = True,
+            quiet_mode: bool = False,
+        ) -> None:
+            pass
 
-    yield
+    monkeypatch.setattr(inmanta.server.protocol, "ServerSlice", NoopScheduler)
 
-    services.DONT_RUN_BACKGROUND_JOBS = old_dont_run_background_jobs
 
 
 @pytest.fixture(scope="function")

@@ -562,10 +562,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         await super().start()
         await self._recover()
 
-        if not services.DONT_RUN_BACKGROUND_JOBS:
-            self.schedule(
-                self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False
-            )
+        self.schedule(
+            self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False
+        )
 
     async def _cleanup(self) -> None:
         oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(

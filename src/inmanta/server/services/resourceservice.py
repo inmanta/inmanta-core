@@ -150,10 +150,9 @@ class ResourceService(protocol.ServerSlice):
         self.agentmanager_service = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
 
     async def start(self) -> None:
-        if not services.DONT_RUN_BACKGROUND_JOBS:
-            self.schedule(
-                data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get(), cancel_on_stop=False
-            )
+        self.schedule(
+            data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get(), cancel_on_stop=False
+        )
         await super().start()
 
     async def stop(self) -> None:

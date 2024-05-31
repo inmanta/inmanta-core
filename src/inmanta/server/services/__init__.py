@@ -16,5 +16,3 @@
     Contact: code@inmanta.com
 """
 
-# This variable can be updated by the test suite to disable the scheduling of background jobs on service start.
-DONT_RUN_BACKGROUND_JOBS = False

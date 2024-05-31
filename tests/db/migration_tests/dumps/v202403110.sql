@@ -616,7 +616,7 @@ COPY public.dryrun (id, environment, model, date, total, todo, resources) FROM s
 
 COPY public.environment (id, name, project, repo_url, repo_branch, settings, last_version, halted, description, icon) FROM stdin;
 834fde5a-e5d3-4443-9ab7-04034bfdbec9	dev-2	0873d9b8-1964-4fbb-b26a-193ed5307d90			{"auto_full_compile": ""}	0	f		
-e03eabc9-5342-4e6b-b72e-6a062bab9e52	dev-1	0873d9b8-1964-4fbb-b26a-193ed5307d90			{"auto_deploy": false, "server_compile": true, "auto_full_compile": "", "recompile_backoff": 0.1, "autostart_agent_map": {"internal": "local:", "localhost": "local:"}, "autostart_agent_deploy_interval": "0", "autostart_agent_repair_interval": "600", "autostart_agent_deploy_splay_time": 0, "autostart_agent_repair_splay_time": 0}	7	t		
+e03eabc9-5342-4e6b-b72e-6a062bab9e52	dev-1	0873d9b8-1964-4fbb-b26a-193ed5307d90			{"auto_deploy": false, "server_compile": true, "auto_full_compile": "", "recompile_backoff": 0.1, "autostart_agent_map": {"internal": "local:", "localhost": "local:"}, "autostart_agent_deploy_interval": "0", "autostart_agent_repair_interval": "600", "autostart_agent_deploy_splay_time": 0, "autostart_agent_repair_splay_time": 0}	7	f		
 \.
 
 
