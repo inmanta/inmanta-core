@@ -663,6 +663,7 @@ def disable_background_jobs(monkeypatch):
 
     yield None
 
+
 @pytest.fixture(scope="function")
 async def agent_multi(server_multi, environment_multi):
     agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
