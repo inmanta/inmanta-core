@@ -560,7 +560,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     async def start(self) -> None:
         await super().start()
         await self._recover()
-
         self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:
