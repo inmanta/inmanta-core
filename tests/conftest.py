@@ -646,8 +646,7 @@ def server_pre_start(server_config):
 @pytest.fixture
 def disable_background_jobs(monkeypatch):
     """
-    This fixture disables the scheduling of background jobs that could interfere with testing
-    e.g. cleanup jobs.
+    This fixture disables the scheduling of all background jobs.
     """
 
     class NoopScheduler(Scheduler):
