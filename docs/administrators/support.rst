@@ -1,3 +1,5 @@
+..
+    This document is excluded from the oss doc build via the exclude_patterns variable in conf.py
 
 .. _administrators-support:
 

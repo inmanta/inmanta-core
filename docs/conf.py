@@ -162,16 +162,14 @@ rst_prolog = f"""\
 # the documents and not their structure.
 
 
-default_pattern = ['adr/*.md']
-exclude_from_oss = [
-    "lsm",
-    "administrators/operational_procedures_with_lsm.rst",
-    "administrators/support.rst"
-]
-exclude_patterns = default_pattern + exclude_from_oss
+exclude_patterns = ['adr/*.md']
 
-if tags.has("iso"):
-    exclude_patterns = default_pattern
+if not tags.has("iso"):
+    exclude_patterns += [
+        "lsm",
+        "administrators/operational_procedures_with_lsm.rst",
+        "administrators/support.rst"
+    ]
 
 # The reST default role (used for this markup: `text`) to use for all documents.
 # default_role = None

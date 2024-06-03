@@ -1,3 +1,6 @@
+..
+    This document is excluded from the oss doc build via the exclude_patterns variable in conf.py
+
 .. _operational_procedures_lsm:
 
 Operational Procedures With LSM

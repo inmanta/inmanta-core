@@ -1,3 +1,6 @@
+..
+    The lsm directory is excluded from the oss doc build via the exclude_patterns variable in conf.py
+
 Inmanta Lifecycle Service Manager
 *********************************
 
