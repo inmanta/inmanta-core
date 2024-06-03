@@ -661,6 +661,7 @@ def disable_background_jobs(monkeypatch):
 
     monkeypatch.setattr(inmanta.server.protocol, "Scheduler", NoopScheduler)
 
+    yield None
 
 @pytest.fixture(scope="function")
 async def agent_multi(server_multi, environment_multi):
