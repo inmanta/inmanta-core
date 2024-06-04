@@ -390,6 +390,14 @@ class MPExecutor(executor.Executor):
             return
         try:
             await asyncio.get_running_loop().run_in_executor(None, functools.partial(self.process.join, timeout))
+            if self.process.exitcode is None:
+                LOGGER.warning(
+                    "Executor for agent %s with id %s didn't stop after timeout of %d seconds. Killing it.",
+                    self.executor_id.agent_name,
+                    self.executor_id.identity(),
+                    timeout,
+                )
+                self.process.kill()
             self._set_closed()
         except ValueError as e:
             if "process object is closed" in str(e):
