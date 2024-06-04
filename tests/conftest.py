@@ -22,6 +22,7 @@ from tornado.httpclient import AsyncHTTPClient
 import toml
 from inmanta.config import AuthJWTConfig
 from inmanta.logging import InmantaLoggerConfig
+from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -590,7 +591,7 @@ def disable_isolated_env_builder_cache() -> None:
 @pytest.fixture(scope="function", autouse=True)
 def restore_cwd():
     """
-    Restore the current working directory after search test.
+    Restore the current working directory after each test.
     """
     yield
     os.chdir(initial_cwd)
@@ -635,6 +636,27 @@ def inmanta_config() -> Iterator[ConfigParser]:
 @pytest.fixture
 def server_pre_start(server_config):
     """This fixture is called by the server. Override this fixture to influence server config"""
+
+
+@pytest.fixture
+def disable_background_jobs(monkeypatch):
+    """
+    This fixture disables the scheduling of all background jobs.
+    """
+
+    class NoopScheduler(Scheduler):
+        def add_action(
+            self,
+            action: TaskMethod,
+            schedule: Union[TaskSchedule, int],
+            cancel_on_stop: bool = True,
+            quiet_mode: bool = False,
+        ) -> Optional[ScheduledTask]:
+            pass
+
+    monkeypatch.setattr(inmanta.server.protocol, "Scheduler", NoopScheduler)
+
+    yield None
 
 
 @pytest.fixture(scope="function")
@@ -1740,7 +1762,12 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
 
 @pytest.fixture
 async def migrate_db_from(
-    request: pytest.FixtureRequest, hard_clean_db, hard_clean_db_post, postgresql_client: asyncpg.Connection, server_pre_start
+    request: pytest.FixtureRequest,
+    hard_clean_db,
+    hard_clean_db_post,
+    postgresql_client: asyncpg.Connection,
+    disable_background_jobs,
+    server_pre_start,
 ) -> AsyncIterator[Callable[[], Awaitable[None]]]:
     """
     Restores a db dump and yields a function that starts the server and migrates the database schema to the latest version.
