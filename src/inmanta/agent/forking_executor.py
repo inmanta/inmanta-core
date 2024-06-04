@@ -398,6 +398,7 @@ class MPExecutor(executor.Executor):
                     timeout,
                 )
                 self.process.kill()
+                await asyncio.get_running_loop().run_in_executor(None, functools.partial(self.process.join, timeout))
             self._set_closed()
         except ValueError as e:
             if "process object is closed" in str(e):
