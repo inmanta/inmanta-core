@@ -48,9 +48,6 @@ from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRAN
 LOGGER = logging.getLogger(__name__)
 
 COLLECTION_INTERVAL_IN_SEC = 60
-# This variable can be updated by the test suite to disable all actions done by the server on the metric-related database
-# tables.
-DISABLE_ENV_METRICS_SERVICE = False
 
 # The category fields needs a default value in the DB as it is part of the PRIMARY KEY and can therefore not be NULL.
 DEFAULT_CATEGORY = "__None__"
@@ -196,12 +193,11 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         self.register_metric_collector(CompileWaitingTimeMetricsCollector())
         self.register_metric_collector(AgentCountMetricsCollector())
         self.register_metric_collector(CompileTimeMetricsCollector())
-        if not DISABLE_ENV_METRICS_SERVICE:
-            self.schedule(
-                self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=COLLECTION_INTERVAL_IN_SEC, cancel_on_stop=True
-            )
-            # Cleanup metrics once per hour
-            self.schedule(self._cleanup_old_metrics, interval=3600, initial_delay=0, cancel_on_stop=True)
+        self.schedule(
+            self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=COLLECTION_INTERVAL_IN_SEC, cancel_on_stop=True
+        )
+        # Cleanup metrics once per hour
+        self.schedule(self._cleanup_old_metrics, interval=3600, initial_delay=0, cancel_on_stop=True)
 
     async def _cleanup_old_metrics(self) -> None:
         """
