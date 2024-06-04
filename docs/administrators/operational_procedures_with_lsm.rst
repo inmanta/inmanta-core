@@ -138,13 +138,8 @@ Procedure
    To break this cycle, developers have to provide an alternative entry point into the code (other than `main.cf`) that loads only the definitions.
    We will assume this file is called `loader.cf`
 
-<<<<<<< HEAD
-       * `purge_on_delete = False`
-       * `protected_environment = True`
-=======
 3. Verify that environment safety settings are on (should always be the case)
->>>>>>> f164a1ab8 (Fix bug where clicking a sub-element from the ``Inmanta Lifecycle Service Manager`` menu would collapse the whole menu.)
-
+   * `purge_on_delete = False`
    * `protected_environment = True`
 
 4. Temporarily disable auto_deploy
