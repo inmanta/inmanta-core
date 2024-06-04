@@ -139,6 +139,7 @@ Procedure
    We will assume this file is called `loader.cf`
 
 3. Verify that environment safety settings are on (should always be the case)
+
    * `purge_on_delete = False`
    * `protected_environment = True`
 
