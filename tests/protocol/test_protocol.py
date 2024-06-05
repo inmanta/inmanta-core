@@ -136,6 +136,28 @@ async def test_client_files_stat(client):
     assert len(result.result["files"]) == len(other_files)
 
 
+async def test_race_condition_between_stat_file_and_upload_file(client):
+    """
+    This test checks the file exporter is idempotent
+    """
+
+    (hash, content, body) = make_random_file()
+
+    result = await client.stat_files(files=[hash])
+    assert result.code == 200
+    assert len(result.result["files"]) == 1
+    result = await client.upload_file(id=hash, content=body)
+    assert result.code == 200
+    result = await client.stat_files(files=[hash])
+    assert result.code == 200
+    assert len(result.result["files"]) == 0
+    result = await client.upload_file(id=hash, content=body)
+    assert result.code == 200
+    result = await client.stat_files(files=[hash])
+    assert result.code == 200
+    assert len(result.result["files"]) == 0
+
+
 async def test_diff(client):
     ca = b"Hello world\n"
     ha = hash_file(ca)

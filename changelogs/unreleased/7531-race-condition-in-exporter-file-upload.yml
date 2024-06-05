@@ -1,0 +1,9 @@
+description: Trying to upload a file that is already present in the database will now silently fail.
+issue-nr: 7531
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  minor-improvement: "{{description}}"
+  bugfix: >
+    Fix race condition where exporting a file might fail if a file with similar content
+    was uploaded between the file existence check in the database and the export itself.
