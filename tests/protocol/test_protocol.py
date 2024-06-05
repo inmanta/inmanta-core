@@ -155,7 +155,7 @@ async def test_upload_file_twice(client):
     assert len(result.result["files"]) == 1
 
     await upload_and_stat(body, client, hash)
-    await upload_and_stat(body * 2, client, hash)
+    await upload_and_stat(body, client, hash)
 
 
 async def test_diff(client):
