@@ -136,26 +136,26 @@ async def test_client_files_stat(client):
     assert len(result.result["files"]) == len(other_files)
 
 
-async def test_race_condition_between_stat_file_and_upload_file(client):
+async def test_upload_file_twice(client):
     """
-    This test checks the file exporter is idempotent
+    This test checks that attempts to re-upload the same file will be silently ignored.
     """
+
+    async def upload_and_stat(body: str, client, hash: str):
+        result = await client.upload_file(id=hash, content=body)
+        assert result.code == 200
+        result = await client.stat_files(files=[hash])
+        assert result.code == 200
+        assert len(result.result["files"]) == 0
 
     (hash, content, body) = make_random_file()
 
     result = await client.stat_files(files=[hash])
     assert result.code == 200
     assert len(result.result["files"]) == 1
-    result = await client.upload_file(id=hash, content=body)
-    assert result.code == 200
-    result = await client.stat_files(files=[hash])
-    assert result.code == 200
-    assert len(result.result["files"]) == 0
-    result = await client.upload_file(id=hash, content=body)
-    assert result.code == 200
-    result = await client.stat_files(files=[hash])
-    assert result.code == 200
-    assert len(result.result["files"]) == 0
+
+    await upload_and_stat(body, client, hash)
+    await upload_and_stat(body * 2, client, hash)
 
 
 async def test_diff(client):

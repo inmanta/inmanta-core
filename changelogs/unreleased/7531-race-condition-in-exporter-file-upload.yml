@@ -1,4 +1,6 @@
-description: Trying to upload a file that is already present in the database will now silently fail.
+description: >
+  The upload_file endpoint will now silently ignore attempts to upload a file if a file with the same
+  hash was previously uploaded.
 issue-nr: 7531
 change-type: minor
 destination-branches: [master, iso7]
