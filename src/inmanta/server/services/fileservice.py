@@ -61,6 +61,7 @@ class FileService(protocol.ServerSlice):
         try:
             await File(content_hash=file_hash, content=content).insert()
         except UniqueViolationError:
+            # Silently ignore attempts to upload the same file twice
             pass
 
     @handle(methods.stat_file, file_hash="id")
