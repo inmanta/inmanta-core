@@ -994,6 +994,9 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     env = await data.Environment.get_by_id(environment)
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
+    # Queue = [
+    #
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 0
     assert result.code == 200
@@ -1005,6 +1008,9 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     )
 
     # api should return one
+    # Queue = [
+    #   remote_id1 (Running)
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 1
     assert result.result["queue"][0]["remote_id"] == str(remote_id1)
@@ -1017,6 +1023,10 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     compile_id2, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=remote_id2)
 
     # api should return two
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting),
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 2
     assert result.result["queue"][1]["remote_id"] == str(remote_id2)
@@ -1028,6 +1038,11 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id3 = uuid.uuid4()
     compile_id3, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id3)
 
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting),
+    #   remote_id3 (Waiting),
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 3
     assert result.result["queue"][2]["remote_id"] == str(remote_id3)
@@ -1039,6 +1054,12 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id4 = uuid.uuid4()
     compile_id4, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=remote_id4)
 
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting), <--+
+    #   remote_id3 (Waiting),    |-- same _compile_merge_key
+    #   remote_id4 (Waiting), <--+
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 4
     assert result.result["queue"][3]["remote_id"] == str(remote_id4)
@@ -1052,11 +1073,32 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id6 = uuid.uuid4()
     compile_id6, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id6)
 
+
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting), <----------+
+    #   remote_id3 (Waiting), <----+     |-- same _compile_merge_key
+    #   remote_id4 (Waiting), <--- | ----+
+    #   remote_id5 (Waiting), <----+
+    #   remote_id6 (Waiting), <----+-- same _compile_merge_key
+    # ]
+
+
     # request with partial, will not be merged
     remote_id7 = uuid.uuid4()
     compile_id7, _ = await compilerslice.request_recompile(
         env=env, force_update=False, do_export=True, remote_id=remote_id7, partial=True
     )
+
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting), <----------+
+    #   remote_id3 (Waiting), <----+     |-- same _compile_merge_key
+    #   remote_id4 (Waiting), <--- | ----+
+    #   remote_id5 (Waiting), <----+
+    #   remote_id6 (Waiting), <----+-- same _compile_merge_key
+    #   remote_id7 (Waiting),
+    # ]
 
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 7
@@ -1074,20 +1116,35 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
     # api should return 6 when ready
+    # Queue = [
+    #   remote_id2 (Running), <----------+
+    #   remote_id3 (Waiting), <----+     |-- same _compile_merge_key
+    #   remote_id4 (Waiting), <--- | ----+
+    #   remote_id5 (Waiting), <----+
+    #   remote_id6 (Waiting), <----+-- same _compile_merge_key
+    #   remote_id7 (Waiting),
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 6
     assert result.result["queue"][0]["remote_id"] == str(remote_id2)
     assert result.code == 200
-    # 4 in the queue, 1 running
+    # 5 in the queue, 1 running
     await retry_limited(lambda: compilerslice._queue_count_cache == 5, 10)
 
     # finish second compile
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
+    # Queue = [
+    #   remote_id3 (Running), <----+
+    #   remote_id5 (Waiting), <----+-- same _compile_merge_key
+    #   remote_id6 (Waiting), <----+
+    #   remote_id7 (Waiting),
+    # ]
+
     # The "halted" field of a compile report is set asynchronously by a background task.
     # Use try_limited to prevent a race condition.
     await retry_limited(lambda: has_matching_compile_report(compile_id2, compile_id4), timeout=10)
-    # 2 in the queue, 1 running
+    # 3 in the queue, 1 running
     await retry_limited(lambda: compilerslice._queue_count_cache == 3, 10)
 
     # finish third compile
@@ -1096,6 +1153,9 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id6), timeout=10)
 
     # One left
+    # Queue = [
+    #   remote_id7 (Running),
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 1
 
