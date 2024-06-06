@@ -60,9 +60,6 @@ class FileService(protocol.ServerSlice):
     def upload_file_internal(self, file_hash: str, content: bytes) -> None:
         file_name = os.path.join(self.server_slice._server_storage["files"], file_hash)
 
-        if os.path.exists(file_name):
-            raise ServerError("A file with this id already exists.")
-
         if hash_file(content) != file_hash:
             raise BadRequest("The hash does not match the content")
 
