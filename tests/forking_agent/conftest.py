@@ -62,10 +62,10 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
         return manager
 
     yield make_mpmanager
+    await asyncio.gather(*(manager.stop() for manager in managers))
+    await asyncio.gather(*(manager.join(threadpools, 10) for manager in managers))
     for threadpool in threadpools:
         threadpool.shutdown(wait=False)
-    await asyncio.gather(*(manager.stop() for manager in managers))
-    await asyncio.gather(*(manager.join([], 10) for manager in managers))
 
 
 @pytest.fixture
