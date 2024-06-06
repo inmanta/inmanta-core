@@ -138,7 +138,7 @@ async def test_client_files_stat(client):
 
 async def test_upload_file_twice(client):
     """
-    This test checks that attempts to re-upload the same file will be silently ignored.
+    This test checks that attempts to upload the same file twice (concurrently) don't cause an exception.
     """
 
     async def upload_and_stat(body: str, client, hash: str):
@@ -154,8 +154,7 @@ async def test_upload_file_twice(client):
     assert result.code == 200
     assert len(result.result["files"]) == 1
 
-    await upload_and_stat(body, client, hash)
-    await upload_and_stat(body, client, hash)
+    await asyncio.gather(upload_and_stat(body, client, hash), upload_and_stat(body, client, hash))
 
 
 async def test_diff(client):
