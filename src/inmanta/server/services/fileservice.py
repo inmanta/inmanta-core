@@ -60,11 +60,11 @@ class FileService(protocol.ServerSlice):
     def upload_file_internal(self, file_hash: str, content: bytes) -> None:
         file_name = os.path.join(self.server_slice._server_storage["files"], file_hash)
 
-        if hash_file(content) != file_hash:
-            raise BadRequest("The hash does not match the content")
-
         if os.path.exists(file_name):
             return
+
+        if hash_file(content) != file_hash:
+            raise BadRequest("The hash does not match the content")
 
         with open(file_name, "wb+") as fd:
             fd.write(content)
