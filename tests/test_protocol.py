@@ -156,6 +156,27 @@ async def test_client_files_stat(client):
     assert len(result.result["files"]) == len(other_files)
 
 
+async def test_upload_file_twice(client):
+    """
+    This test checks that attempts to upload the same file twice (concurrently) don't cause an exception.
+    """
+
+    async def upload_and_stat(body: str, client, hash: str):
+        result = await client.upload_file(id=hash, content=body)
+        assert result.code == 200
+        result = await client.stat_files(files=[hash])
+        assert result.code == 200
+        assert len(result.result["files"]) == 0
+
+    (hash, content, body) = make_random_file()
+
+    result = await client.stat_files(files=[hash])
+    assert result.code == 200
+    assert len(result.result["files"]) == 1
+
+    await asyncio.gather(upload_and_stat(body, client, hash), upload_and_stat(body, client, hash))
+
+
 async def test_diff(client):
     ca = b"Hello world\n"
     ha = hash_file(ca)
