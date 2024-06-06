@@ -63,6 +63,9 @@ class FileService(protocol.ServerSlice):
         if hash_file(content) != file_hash:
             raise BadRequest("The hash does not match the content")
 
+        if os.path.exists(file_name):
+            return
+
         with open(file_name, "wb+") as fd:
             fd.write(content)
 
