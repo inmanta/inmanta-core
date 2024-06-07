@@ -4,7 +4,7 @@ click==8.1.7
 colorlog==6.8.2
 cookiecutter==2.6.0
 crontab==1.0.1
-cryptography==42.0.7
+cryptography==42.0.8
 docstring-parser==0.16
 email-validator==2.1.1
 execnet==1.9.0
