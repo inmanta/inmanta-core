@@ -61,7 +61,8 @@ class FileService(protocol.ServerSlice):
         file_name = os.path.join(self.server_slice._server_storage["files"], file_hash)
 
         if os.path.exists(file_name):
-            raise ServerError("A file with this id already exists.")
+            # Silently ignore attempts to upload the same file twice
+            return
 
         if hash_file(content) != file_hash:
             raise BadRequest("The hash does not match the content")
