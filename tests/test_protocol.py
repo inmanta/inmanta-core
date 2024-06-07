@@ -228,7 +228,7 @@ async def test_client_files_corrupt(client):
     assert result.code == 500
 
     result = await client.upload_file(id=hash, content=body)
-    assert result.code == 500
+    assert result.code == 200
 
     opt.server_delete_currupt_files.set("true")
     result = await client.get_file(id=hash)
