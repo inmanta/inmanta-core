@@ -731,7 +731,13 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         _compile_merge_key(c1) == _compile_merge_key(c2).
         """
         return c.to_dto().model_dump_json(
-            include={"environment" "started" "do_export" "requested_environment_variables" "partial"},
+            include={
+                "environment",
+                "started",
+                "do_export",
+                "requested_environment_variables",
+                "partial",
+            },
         )
 
     async def _process_next_compile_in_queue(
