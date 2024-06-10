@@ -698,10 +698,10 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
         :param report: Compile report for which to check if a resource set removal was requested
         """
         if not removed_sets:
-            return "ENV_REMOVED_SET_ID" in report["requested_environment_variables"]
+            return "INMANTA_REMOVED_SET_ID" in report["requested_environment_variables"]
 
-        assert "ENV_REMOVED_SET_ID" in report["requested_environment_variables"]
-        return set(report["requested_environment_variables"]["ENV_REMOVED_SET_ID"].split(" ")) == removed_sets
+        assert "INMANTA_REMOVED_SET_ID" in report["requested_environment_variables"]
+        return set(report["requested_environment_variables"]["INMANTA_REMOVED_SET_ID"].split()) == removed_sets
 
     # Do a compile
     compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
@@ -723,7 +723,12 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
 
     # Do a partial compile with removed resource_sets
     compile_id, _ = await compilerslice.request_recompile(
-        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True, env_vars={"ENV_REMOVED_SET_ID": "a b c"}
+        env,
+        force_update=False,
+        do_export=False,
+        remote_id=remote_id1,
+        partial=True,
+        env_vars={"INMANTA_REMOVED_SET_ID": "a b c"},
     )
 
     await retry_limited(wait_for_report, 10)

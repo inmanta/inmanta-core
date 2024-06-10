@@ -451,7 +451,7 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
     parser.add_argument(
         "--delete-resource-set",
         dest="delete_resource_set",
-        help="Remove resource set(s) passed in the ENV_REMOVED_SET_ID env variable as part of a partial compile. "
+        help="Remove resource set(s) passed in the INMANTA_REMOVED_SET_ID env variable as part of a partial compile. "
         "This option should always be used together with the --partial option",
         action="store_true",
         default=False,
@@ -476,13 +476,13 @@ def export(options: argparse.Namespace) -> None:
             )
         resource_sets_to_remove: list[str] = []
         if options.delete_resource_set is True:
-            if "ENV_REMOVED_SET_ID" not in os.environ or not (removed_sets := os.environ["ENV_REMOVED_SET_ID"]):
+            if "INMANTA_REMOVED_SET_ID" not in os.environ or not (removed_sets := os.environ["INMANTA_REMOVED_SET_ID"]):
                 raise CLIException(
                     "The --delete-resource-set cli option is set but no resource set was passed via "
-                    "the ENV_REMOVED_SET_ID env variable.",
+                    "the INMANTA_REMOVED_SET_ID env variable.",
                     exitcode=1,
                 )
-            resource_sets_to_remove = removed_sets.split(" ")
+            resource_sets_to_remove = removed_sets.split()
 
         if options.environment is not None:
             Config.set("config", "environment", options.environment)
