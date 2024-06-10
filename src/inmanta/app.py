@@ -479,7 +479,8 @@ def export(options: argparse.Namespace) -> None:
             if "ENV_REMOVED_SET_ID" not in os.environ or not (removed_sets := os.environ["ENV_REMOVED_SET_ID"]):
                 raise CLIException(
                     "The --delete-resource-set cli option is set but no resource set was passed via "
-                    "the ENV_REMOVED_SET_ID env variable."
+                    "the ENV_REMOVED_SET_ID env variable.",
+                    exitcode=1,
                 )
             resource_sets_to_remove = removed_sets.split(" ")
 

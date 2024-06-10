@@ -1,0 +1,11 @@
+description: >
+  Resource sets marked for deletion should no longer be passed via the ``--delete-resource-set`` parameter of the
+  ``export`` command. These resource sets should be passed via the ``ENV_REMOVED_SET_ID`` environment variable as
+  a space-separated list. The ``--delete-resource-set`` parameter of the ``export`` command is now a flag to control
+  resource set deletion.
+issue-nr: 736
+change-type: minor
+issue-repo: lsm
+destination-branches: [master, iso7]
+sections:
+  minor-improvement: "{{description}}"
