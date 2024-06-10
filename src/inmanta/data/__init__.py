@@ -3634,7 +3634,7 @@ class Compile(BaseDocument):
     compile_data: Optional[JsonType] = None
 
     partial: bool = False
-    removed_resource_sets: list[str] = []
+    removed_resource_sets: list[str] = []  # Deprecate but keep for backward compat?
 
     exporter_plugin: Optional[str] = None
 

@@ -451,9 +451,10 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
     parser.add_argument(
         "--delete-resource-set",
         dest="delete_resource_set",
-        help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
-        "be used together with the --partial option.",
-        action="append",
+        help="Remove resource set(s) passed in the ENV_REMOVED_SET_ID env variable as part of a partial compile. "
+        "This option should always be used together with the --partial option",
+        action="store_true",
+        default=False,
     )
     parser.add_argument(
         "--soft-delete",
@@ -473,6 +474,15 @@ def export(options: argparse.Namespace) -> None:
             raise CLIException(
                 "The --delete-resource-set option should always be used together with the --partial option", exitcode=1
             )
+        resource_sets_to_remove: list[str] = []
+        if options.delete_resource_set is True:
+            if "ENV_REMOVED_SET_ID" not in os.environ or not (removed_sets := os.environ["ENV_REMOVED_SET_ID"]):
+                raise CLIException(
+                    "The --delete-resource-set cli option is set but no resource set was passed via "
+                    "the ENV_REMOVED_SET_ID env variable."
+                )
+            resource_sets_to_remove = removed_sets.split(" ")
+
         if options.environment is not None:
             Config.set("config", "environment", options.environment)
 
@@ -551,7 +561,7 @@ def export(options: argparse.Namespace) -> None:
                 model_export=options.model_export,
                 export_plugin=options.export_plugin,
                 partial_compile=options.partial_compile,
-                resource_sets_to_remove=options.delete_resource_set,
+                resource_sets_to_remove=resource_sets_to_remove,
             )
 
         if not summary_reporter.is_failure() and options.deploy:

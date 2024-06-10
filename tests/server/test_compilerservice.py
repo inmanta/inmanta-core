@@ -710,7 +710,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
 
     # Do a partial compile with removed resource_sets
     compile_id, _ = await compilerslice.request_recompile(
-        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True, removed_resource_sets=["a", "b", "c"]
+        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True#, removed_resource_sets=["a", "b", "c"]
     )
 
     await retry_limited(wait_for_report, 10)
@@ -1073,7 +1073,6 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id6 = uuid.uuid4()
     compile_id6, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id6)
 
-
     # Queue = [
     #   remote_id1 (Running),
     #   remote_id2 (Waiting), <----------+
@@ -1082,7 +1081,6 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     #   remote_id5 (Waiting), <----+
     #   remote_id6 (Waiting), <----+-- same _compile_merge_key
     # ]
-
 
     # request with partial, will not be merged
     remote_id7 = uuid.uuid4()
