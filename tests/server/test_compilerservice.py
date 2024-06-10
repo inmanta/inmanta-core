@@ -690,7 +690,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
         report = [x for x in reports if x["name"] == "Recompiling configuration model"][0]
         return expected in report["command"]
 
-    def set_removal_was_requested(report: dict, removed_sets: Optional[set[str]]=None) -> bool:
+    def set_removal_was_requested(report: dict, removed_sets: Optional[set[str]] = None) -> bool:
         """
         Returns True if a resource set removal was requested for a given compile report.
         In addition, if the removed_sets param is set, the removal of these specific sets is checked.
@@ -701,7 +701,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
             return "ENV_REMOVED_SET_ID" in report["requested_environment_variables"]
 
         assert "ENV_REMOVED_SET_ID" in report["requested_environment_variables"]
-        return set(report["requested_environment_variables"]["ENV_REMOVED_SET_ID"].split(' ')) == removed_sets
+        return set(report["requested_environment_variables"]["ENV_REMOVED_SET_ID"].split(" ")) == removed_sets
 
     # Do a compile
     compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
@@ -729,7 +729,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
     await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
     assert verify_command_report(report, "--partial")
-    assert set_removal_was_requested(report.result["report"], {"a","b","c"})
+    assert set_removal_was_requested(report.result["report"], {"a", "b", "c"})
 
 
 @pytest.mark.slowtest
