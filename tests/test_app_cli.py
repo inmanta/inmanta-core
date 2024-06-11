@@ -438,10 +438,11 @@ std::testing::NullResource(name="test")
 
 async def test_export_invalid_argument_combination() -> None:
     """
-    Ensure that the `inmanta export` command exits with an error when the --delete-resource-set option is
-    provided without the --partial option being provided.
+    Ensure that the `inmanta export` command exits with an error when resource sets are marked for deletion
+    (either by the --delete-resource-set option or the INMANTA_REMOVED_SET_ID env variable) without the --partial
+    option being provided.
     """
-    args = [sys.executable, "-m", "inmanta.app", "export", "--delete-resource-set"]
+    args = [sys.executable, "-m", "inmanta.app", "export", "--delete-resource-set", "test"]
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=5)
@@ -450,26 +451,30 @@ async def test_export_invalid_argument_combination() -> None:
         await process.communicate()
         raise e
 
-    assert process.returncode == 1
-    assert "The --delete-resource-set option should always be used together with the --partial option" in stderr.decode("utf-8")
-
-    args = [sys.executable, "-m", "inmanta.app", "export", "--partial", "--delete-resource-set"]
-    process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    try:
-        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=5)
-    except asyncio.TimeoutError as e:
-        process.kill()
-        await process.communicate()
-        raise e
-
-    assert process.returncode == 1
-    assert (
-        "The --delete-resource-set cli option is set but no resource set "
-        "was passed via the INMANTA_REMOVED_SET_ID env variable." in stderr.decode("utf-8")
+    missing_partial_flag = (
+        "A full export was requested but resource sets were marked for deletion (via the --delete-resource-set cli option "
+        "or the INMANTA_REMOVED_SET_ID env variable). Deleting a resource set can only be performed during a partial export. "
+        "To trigger a partial export, use the --partial option."
     )
 
+    assert process.returncode == 1
+    assert missing_partial_flag in stderr.decode("utf-8")
 
-@pytest.mark.parametrize("set_keep_logger_names_option", [True, False])
+    args = [sys.executable, "-m", "inmanta.app", "export"]
+    env = os.environ.update({"INMANTA_REMOVED_SET_ID": "a b c"})
+    process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+    try:
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=5)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    assert process.returncode == 1
+    assert missing_partial_flag in stderr.decode("utf-8")
+
+
+@pytest.mark.parametrize("set_keep_logger_names_option", [True])
 async def test_logger_name_in_compiler_exporter_output(
     server,
     environment: str,
@@ -579,7 +584,7 @@ async def test_logger_name_in_compiler_exporter_output(
         *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, cwd=tmpdir
     )
     try:
-        (stdout, _) = await asyncio.wait_for(process.communicate(), timeout=30)
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
         await process.communicate()

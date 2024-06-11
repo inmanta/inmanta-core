@@ -476,7 +476,7 @@ def export(options: argparse.Namespace) -> None:
         if "INMANTA_REMOVED_SET_ID" in os.environ:
             removed_sets = set(os.environ["INMANTA_REMOVED_SET_ID"].split())
 
-        resource_sets_to_remove.update(removed_sets)
+            resource_sets_to_remove.update(removed_sets)
 
         if not options.partial_compile and resource_sets_to_remove:
             raise CLIException(
