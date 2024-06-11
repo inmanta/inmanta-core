@@ -442,8 +442,8 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         help=(
             "Execute a partial export. Does not upload new Python code to the server: it is assumed to be unchanged since the"
             " last full export. Multiple partial exports for disjunct resource sets may be performed concurrently but not"
-            " concurrent with a full export. When used in combination with the `--json` option, 0 is used as a placeholder for"
-            " the model version."
+            " concurrent with a full export. When used in combination with the ``--json`` option, 0 is used as a placeholder "
+            "for the model version."
         ),
         action="store_true",
         default=False,
@@ -451,15 +451,16 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
     parser.add_argument(
         "--delete-resource-set",
         dest="delete_resource_set",
-        help="Remove resource set(s) passed in the INMANTA_REMOVED_SET_ID env variable as part of a partial compile. "
-        "This option should always be used together with the --partial option",
-        action="store_true",
-        default=False,
+        help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
+        "be used together with the --partial option. Sets can also be marked for deletion via the INMANTA_REMOVED_SET_ID "
+        "env variable as a space separated list of set ids to remove.",
+        action="append",
     )
     parser.add_argument(
         "--soft-delete",
         dest="soft_delete",
-        help="Use in combination with --delete-resource-set to delete these resource sets only if they are not being exported",
+        help="This flag prevents the deletion of resource sets (marked for deletion via the ``--delete-resource-set`` cli"
+        "option or the INMANTA_REMOVED_SET_ID env variable) that contain resources that are currently being exported.",
         action="store_true",
         default=False,
     )
@@ -470,19 +471,20 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
 def export(options: argparse.Namespace) -> None:
     logger_mode_manager = LoggerModeManager.get_instance()
     with logger_mode_manager.run_in_logger_mode(LoggerMode.COMPILER):
-        if not options.partial_compile and options.delete_resource_set:
+        resource_sets_to_remove: set[str] = set(options.delete_resource_set) if options.delete_resource_set else set()
+
+        if "INMANTA_REMOVED_SET_ID" in os.environ:
+            removed_sets = set(os.environ["INMANTA_REMOVED_SET_ID"].split())
+
+        resource_sets_to_remove.update(removed_sets)
+
+        if not options.partial_compile and resource_sets_to_remove:
             raise CLIException(
-                "The --delete-resource-set option should always be used together with the --partial option", exitcode=1
+                "A full export was requested but resource sets were marked for deletion (via the --delete-resource-set cli "
+                "option or the INMANTA_REMOVED_SET_ID env variable). Deleting a resource set can only be performed during a "
+                "partial export. To trigger a partial export, use the --partial option.",
+                exitcode=1,
             )
-        resource_sets_to_remove: list[str] = []
-        if options.delete_resource_set is True:
-            if "INMANTA_REMOVED_SET_ID" not in os.environ or not (removed_sets := os.environ["INMANTA_REMOVED_SET_ID"]):
-                raise CLIException(
-                    "The --delete-resource-set cli option is set but no resource set was passed via "
-                    "the INMANTA_REMOVED_SET_ID env variable.",
-                    exitcode=1,
-                )
-            resource_sets_to_remove = removed_sets.split()
 
         if options.environment is not None:
             Config.set("config", "environment", options.environment)
@@ -562,7 +564,7 @@ def export(options: argparse.Namespace) -> None:
                 model_export=options.model_export,
                 export_plugin=options.export_plugin,
                 partial_compile=options.partial_compile,
-                resource_sets_to_remove=resource_sets_to_remove,
+                resource_sets_to_remove=list(resource_sets_to_remove),
             )
 
         if not summary_reporter.is_failure() and options.deploy:
