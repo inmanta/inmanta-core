@@ -74,7 +74,7 @@ class Commander:
     @classmethod
     def reset(cls) -> None:
         """
-        Return a list of commands
+        Resets the list of commands
         """
         cls.__command_functions = {}
 
