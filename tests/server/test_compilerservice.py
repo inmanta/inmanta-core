@@ -39,7 +39,7 @@ import inmanta.ast.export as ast_export
 import inmanta.data.model as model
 import utils
 from inmanta import config, data
-from inmanta.const import ParameterSource
+from inmanta.const import INMANTA_REMOVED_SET_ID, ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
 from inmanta.env import PythonEnvironment
@@ -698,10 +698,10 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
         :param report: Compile report for which to check if a resource set removal was requested
         """
         if not removed_sets:
-            return "INMANTA_REMOVED_SET_ID" in report["requested_environment_variables"]
+            return INMANTA_REMOVED_SET_ID in report["requested_environment_variables"]
 
-        assert "INMANTA_REMOVED_SET_ID" in report["requested_environment_variables"]
-        return set(report["requested_environment_variables"]["INMANTA_REMOVED_SET_ID"].split()) == removed_sets
+        assert INMANTA_REMOVED_SET_ID in report["requested_environment_variables"]
+        return set(report["requested_environment_variables"][INMANTA_REMOVED_SET_ID].split()) == removed_sets
 
     # Do a compile
     compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
@@ -728,7 +728,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
         do_export=False,
         remote_id=remote_id1,
         partial=True,
-        env_vars={"INMANTA_REMOVED_SET_ID": "a b c"},
+        env_vars={INMANTA_REMOVED_SET_ID: "a b c"},
     )
 
     await retry_limited(wait_for_report, 10)

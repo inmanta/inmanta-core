@@ -473,8 +473,8 @@ def export(options: argparse.Namespace) -> None:
     with logger_mode_manager.run_in_logger_mode(LoggerMode.COMPILER):
         resource_sets_to_remove: set[str] = set(options.delete_resource_set) if options.delete_resource_set else set()
 
-        if "INMANTA_REMOVED_SET_ID" in os.environ:
-            removed_sets = set(os.environ["INMANTA_REMOVED_SET_ID"].split())
+        if const.INMANTA_REMOVED_SET_ID in os.environ:
+            removed_sets = set(os.environ[const.INMANTA_REMOVED_SET_ID].split())
 
             resource_sets_to_remove.update(removed_sets)
 

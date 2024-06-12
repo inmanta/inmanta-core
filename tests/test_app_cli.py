@@ -32,7 +32,7 @@ from inmanta.app import cmd_parser
 from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
-from inmanta.const import VersionState
+from inmanta.const import INMANTA_REMOVED_SET_ID, VersionState
 from utils import v1_module_from_template
 
 
@@ -461,7 +461,7 @@ async def test_export_invalid_argument_combination() -> None:
     assert missing_partial_flag in stderr.decode("utf-8")
 
     args = [sys.executable, "-m", "inmanta.app", "export"]
-    env = os.environ.update({"INMANTA_REMOVED_SET_ID": "a b c"})
+    env = os.environ.update({INMANTA_REMOVED_SET_ID: "a b c"})
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     try:
         (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=5)
