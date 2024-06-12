@@ -361,7 +361,10 @@ class MPExecutor(executor.Executor):
 
     async def force_stop(self, grace_time: float = inmanta.const.SHUTDOWN_GRACE_HARD) -> None:
         """Stop by process close"""
-        await asyncio.get_running_loop().run_in_executor(None, functools.partial(self._force_stop, grace_time))
+        self.closing = True
+        await asyncio.get_running_loop().run_in_executor(
+            self.owner.thread_pool, functools.partial(self._force_stop, grace_time)
+        )
 
     def _force_stop(self, grace_time: float) -> None:
         if self.closed:
@@ -389,7 +392,9 @@ class MPExecutor(executor.Executor):
         if self.closed:
             return
         try:
-            await asyncio.get_running_loop().run_in_executor(None, functools.partial(self.process.join, timeout))
+            await asyncio.get_running_loop().run_in_executor(
+                self.owner.thread_pool, functools.partial(self.process.join, timeout)
+            )
             if self.process.exitcode is None:
                 LOGGER.warning(
                     "Executor for agent %s with id %s didn't stop after timeout of %d seconds. Killing it.",
@@ -398,7 +403,9 @@ class MPExecutor(executor.Executor):
                     timeout,
                 )
                 self.process.kill()
-                await asyncio.get_running_loop().run_in_executor(None, functools.partial(self.process.join, timeout))
+                await asyncio.get_running_loop().run_in_executor(
+                    self.owner.thread_pool, functools.partial(self.process.join, timeout)
+                )
             self._set_closed()
         except ValueError as e:
             if "process object is closed" in str(e):
@@ -638,6 +645,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
+        thread_pool_finalizer.append(self.thread_pool)
         await asyncio.gather(*(child.join(timeout) for child in self.children))
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
