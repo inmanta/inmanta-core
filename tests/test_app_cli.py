@@ -474,7 +474,7 @@ async def test_export_invalid_argument_combination() -> None:
     assert missing_partial_flag in stderr.decode("utf-8")
 
 
-@pytest.mark.parametrize("set_keep_logger_names_option", [True])
+@pytest.mark.parametrize("set_keep_logger_names_option", [True, False])
 async def test_logger_name_in_compiler_exporter_output(
     server,
     environment: str,
@@ -584,7 +584,7 @@ async def test_logger_name_in_compiler_exporter_output(
         *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, cwd=tmpdir
     )
     try:
-        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
+        (stdout, _) = await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
         await process.communicate()
