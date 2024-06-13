@@ -1,0 +1,3 @@
+description: Remove the ``removed_resource_sets`` deprecated parameter from the compilerservice's request_recompile method.
+change-type: patch
+destination-branches: [master, iso7]

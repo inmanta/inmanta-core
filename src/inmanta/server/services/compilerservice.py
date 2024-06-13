@@ -623,7 +623,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         metadata: Optional[JsonType] = None,
         env_vars: Optional[Mapping[str, str]] = None,
         partial: bool = False,
-        removed_resource_sets: Optional[list[str]] = None,
         exporter_plugin: Optional[str] = None,
         notify_failed_compile: Optional[bool] = None,
         failed_compile_message: Optional[str] = None,
@@ -649,8 +648,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             they contain resources that are being exported.
         :param mergeable_env_vars: a set of env vars that can be compacted over multiple compiles.
             If multiple values are compacted, they will be joined using spaces.
-        :param removed_resource_sets: [DEPRECATED] Resource sets marked for removal should be passed by setting the
-            INMANTA_REMOVED_RESOURCE_SET_ID environment variable in the env_vars or the mergeable_env_vars parameter.
         :return: the compile id of the requested compile and any warnings produced during the request
         """
         if in_db_transaction and not connection:
