@@ -32,7 +32,7 @@ from inmanta.app import cmd_parser
 from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
-from inmanta.const import VersionState
+from inmanta.const import INMANTA_REMOVED_SET_ID, VersionState
 from utils import v1_module_from_template
 
 
@@ -438,8 +438,9 @@ std::testing::NullResource(name="test")
 
 async def test_export_invalid_argument_combination() -> None:
     """
-    Ensure that the `inmanta export` command exits with an error when the --delete-resource-set option is
-    provided without the --partial option being provided.
+    Ensure that the `inmanta export` command exits with an error when resource sets are marked for deletion
+    (either by the --delete-resource-set option or the INMANTA_REMOVED_SET_ID env variable) without the --partial
+    option being provided.
     """
     args = [sys.executable, "-m", "inmanta.app", "export", "--delete-resource-set", "test"]
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -450,8 +451,27 @@ async def test_export_invalid_argument_combination() -> None:
         await process.communicate()
         raise e
 
+    missing_partial_flag = (
+        "A full export was requested but resource sets were marked for deletion (via the --delete-resource-set cli option "
+        "or the INMANTA_REMOVED_SET_ID env variable). Deleting a resource set can only be performed during a partial export. "
+        "To trigger a partial export, use the --partial option."
+    )
+
     assert process.returncode == 1
-    assert "The --delete-resource-set option should always be used together with the --partial option" in stderr.decode("utf-8")
+    assert missing_partial_flag in stderr.decode("utf-8")
+
+    args = [sys.executable, "-m", "inmanta.app", "export"]
+    env = {INMANTA_REMOVED_SET_ID: "a b c"}
+    process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+    try:
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=5)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    assert process.returncode == 1
+    assert missing_partial_flag in stderr.decode("utf-8")
 
 
 @pytest.mark.parametrize("set_keep_logger_names_option", [True, False])
