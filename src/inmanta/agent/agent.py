@@ -822,10 +822,10 @@ class AgentInstance:
         # Resource types for which no handler code exist for the given version
         # or for which the pip config couldn't be retrieved
         code, invalid_resource_types = await self.process.get_code(self._env_id, version, resource_types)
-        # Resource types for which an error occurred during handler code installation
 
         try:
             executor = await self.executor_manager.get_executor(self.name, self.uri, code)
+            # Resource types for which an error occurred during handler code installation
             failed_resource_types = executor.failed_resource_types
         except Exception:
             logging.warning("Could not set up executor for %s", self.name, exc_info=True)
