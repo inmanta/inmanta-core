@@ -32,7 +32,7 @@ Glossary
 
         A resource has attributes that express the desired value of a property of the resource it
         represents in the infrastructure. For example the
-        :inmanta:attribute:`memory_mb<vcenter::VirtualMachine.memory_mb>` attribute of the the :inmanta:entity:`vcenter::VirtualMachine`
+        :inmanta:attribute:`memory_mb<vcenter::VirtualMachine.memory_mb>` attribute of the :inmanta:entity:`vcenter::VirtualMachine`
         resource. This attribute indicates the memory size of a virtual machine.
 
         A resource needs to have a unique identifier in an environment. This identifier needs to be
