@@ -32,24 +32,24 @@ Glossary
 
         A resource has attributes that express the desired value of a property of the resource it
         represents in the infrastructure. For example the
-        :inmanta:attribute:`mode<std::File.mode>` attribute of the the :inmanta:entity:`std::File`
-        resource. This attribute indicates the desired permissions of a UNIX file.
+        :inmanta:attribute:`memory_mb<vcenter::VirtualMachine.memory_mb>` attribute of the the :inmanta:entity:`vcenter::VirtualMachine`
+        resource. This attribute indicates the memory size of a virtual machine.
 
         A resource needs to have a unique identifier in an environment. This identifier needs to be
         derived from attributes of the resource. This ensures that the orchestrator can (co-)manage
         existing resources and allows quick recovery of the orchestrator in failure conditions. This
         unique identifier consists of multiple fields. For example,
-        ``std::File[vm1,path="/etc/motd"]`` This id contains the type of the resource, the name of
+        ``vcenter::VirtualMachineFromTemplate[lab,name=srv_test]`` This id contains the type of the resource, the name of
         the :term:`agent` and the unique id with its value for this resource. The resource designer
         determines how this id is derived.
 
         The fields in the id are:
 
-        * The first field is the type of the resource. For example: ``std::File``
+        * The first field is the type of the resource. For example: ``vcenter::VirtualMachineFromTemplate``
         * The second field is the name of the agent that manages/groups the resource. For example:
-          the name of the machine on  which the file is defined ``vm1``
+          the name of the vcenter cluster on which the virtual machine is defined ``lab``
         * The third field is the identifying attribute and the value of this attribute. For example:
-          the ``path`` of the file uniquely identifies a file on a machine.
+          the ``name`` of the virtual machine uniquely identifies a virtual machine on a vcenter cluster.
 
     module
         A :term:`configuration model` consists of multiple configuration modules. A module provides
