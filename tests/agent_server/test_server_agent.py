@@ -1695,7 +1695,7 @@ async def test_autostart_mapping_overrides_config(server, client, environment, a
     )
 
 
-async def test_autostart_mapping_update_uri(server, client, environment, async_finalizer, caplog):
+async def test_autostart_mapping_update_uri(server, client, environment, async_finalizer, caplog, no_agent_backoff):
     caplog.set_level(logging.INFO)
     agent_config.use_autostart_agent_map.set("true")
     env_uuid = uuid.UUID(environment)
