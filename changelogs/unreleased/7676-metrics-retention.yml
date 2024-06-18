@@ -1,6 +1,6 @@
 description: Reduce metrics retention time to two weeks
 issue-nr: 7676
-change-type: minor
+change-type: patch
 destination-branches: [master, iso7, iso6]
 sections:
   upgrade-note: "The default retention time of the internal metrics store ('environment_metrics_retention') is reduced from one year to two weeks"
