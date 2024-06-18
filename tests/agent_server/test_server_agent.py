@@ -1559,7 +1559,7 @@ async def test_autostart_mapping_overrides_config(server, client, environment, a
 
 
 async def test_autostart_mapping_update_uri(
-    server, client, clienthelper, environment, async_finalizer, resource_container, caplog
+    server, client, clienthelper, environment, async_finalizer, resource_container, caplog, no_agent_backoff
 ):
     caplog.set_level(logging.INFO)
     agent_config.use_autostart_agent_map.set("true")
