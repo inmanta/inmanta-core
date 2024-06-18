@@ -63,7 +63,7 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
 
     yield make_mpmanager
     await asyncio.wait_for(asyncio.gather(*(manager.stop() for manager in managers)), 10)
-    await asyncio.wait_for(asyncio.gather(*(manager.join(threadpools, 10) for manager in managers)), 10)
+    await asyncio.wait_for(asyncio.gather(*(manager.join(threadpools, 3) for manager in managers)), 10)
     for threadpool in threadpools:
         threadpool.shutdown(wait=False)
 
