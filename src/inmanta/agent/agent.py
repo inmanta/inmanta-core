@@ -41,7 +41,14 @@ from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.reporting import collect_report
-from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import (
+    LEGACY_PIP_DEFAULT,
+    AttributeStateChange,
+    PipConfig,
+    ResourceIdStr,
+    ResourceType,
+    ResourceVersionIdStr,
+)
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id
@@ -742,7 +749,10 @@ class AgentInstance:
                 self.logger.debug("Pulled %d resources because %s", len(result.result["resources"]), deploy_request.reason)
                 if len(result.result["resources"]) > 0:
                     undeployable, resources, executor = await self.setup_executor(
-                        result.result["version"], const.ResourceAction.deploy, result.result["resources"]
+                        result.result["version"],
+                        const.ResourceAction.deploy,
+                        result.result["resources"],
+                        result.result["resource_types"],
                     )
                     if len(resources) > 0 and executor is not None:
                         self._nq.reload(resources, undeployable, deploy_request, executor)
@@ -764,7 +774,7 @@ class AgentInstance:
                     return
 
                 undeployable, resource_refs, executor = await self.setup_executor(
-                    version, const.ResourceAction.dryrun, response.result["resources"]
+                    version, const.ResourceAction.dryrun, response.result["resources"], response.result["resource_types"]
                 )
                 deployable_resources: list[ResourceDetails] = []
                 for resource in resource_refs:
@@ -787,7 +797,7 @@ class AgentInstance:
     async def get_facts(self, resource: JsonType) -> Apireturn:
         async with self.ratelimiter:
             undeployable, resource_refs, executor = await self.setup_executor(
-                resource["model"], const.ResourceAction.getfact, [resource]
+                resource["model"], const.ResourceAction.getfact, [resource], [resource["resource_type"]]
             )
 
             if undeployable or not resource_refs:
@@ -800,7 +810,7 @@ class AgentInstance:
             return await executor.get_facts(resource_refs[0])
 
     async def setup_executor(
-        self, version: int, action: const.ResourceAction, resources: list[JsonType]
+        self, version: int, action: const.ResourceAction, resources: list[JsonType], resource_types: Collection[ResourceType]
     ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], Optional[executor.Executor]]:
         # TODO refactor wiring of tuples around -> not sure how
 
@@ -816,8 +826,6 @@ class AgentInstance:
         """
         started = datetime.datetime.now().astimezone()
         code: Collection[ResourceInstallSpec]
-
-        resource_types = {res["resource_type"] for res in resources}
 
         # Resource types for which no handler code exist for the given version
         # or for which the pip config couldn't be retrieved
@@ -1156,7 +1164,7 @@ class Agent(SessionEndpoint):
             agent_instance.pause("Connection to server lost")
 
     async def get_code(
-        self, environment: uuid.UUID, version: int, resource_types: Collection[str]
+        self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
     ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResourcesSet]:
         """
         Get the collection of installation specifications (i.e. pip config, python package dependencies,

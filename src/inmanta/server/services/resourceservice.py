@@ -263,9 +263,12 @@ class ResourceService(protocol.ServerSlice):
         deploy_model = []
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
+        resource_types: set[ResourceType] = set()
 
         resource_ids = []
         for rv in resources:
+            resource_types.add(rv.resource_type)
+
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
@@ -289,7 +292,13 @@ class ResourceService(protocol.ServerSlice):
             )
             await ra.insert()
 
-        return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
+        return 200, {
+            "environment": env.id,
+            "agent": agent,
+            "version": version,
+            "resources": deploy_model,
+            "resource_types": resource_types,
+        }
 
     async def get_resource_increment_for_agent(self, env: data.Environment, agent: str) -> Apireturn:
         started = datetime.datetime.now().astimezone()
@@ -325,7 +334,10 @@ class ResourceService(protocol.ServerSlice):
         deploy_model: list[dict[str, Any]] = []
         resource_ids: list[str] = []
 
+        resource_types: set[ResourceType] = set()
+
         for rv in resources:
+            resource_types.add(rv.resource_type)
             if rv.resource_id not in increment_ids:
                 continue
 
@@ -355,7 +367,13 @@ class ResourceService(protocol.ServerSlice):
             )
             await ra.insert()
 
-        return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
+        return 200, {
+            "environment": env.id,
+            "agent": agent,
+            "version": version,
+            "resources": deploy_model,
+            "resource_types": resource_types,
+        }
 
     async def mark_deployed(
         self,
