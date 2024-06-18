@@ -797,7 +797,7 @@ class AgentInstance:
     async def get_facts(self, resource: JsonType) -> Apireturn:
         async with self.ratelimiter:
             undeployable, resource_refs, executor = await self.setup_executor(
-                resource["model"], const.ResourceAction.getfact, [resource], [resource["resource_type"]]
+                resource["model"], const.ResourceAction.getfact, [resource], {resource["resource_type"]}
             )
 
             if undeployable or not resource_refs:
@@ -810,7 +810,7 @@ class AgentInstance:
             return await executor.get_facts(resource_refs[0])
 
     async def setup_executor(
-        self, version: int, action: const.ResourceAction, resources: list[JsonType], resource_types: Collection[ResourceType]
+        self, version: int, action: const.ResourceAction, resources: list[JsonType], resource_types: set[ResourceType]
     ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], Optional[executor.Executor]]:
         # TODO refactor wiring of tuples around -> not sure how
 

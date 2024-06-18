@@ -36,7 +36,7 @@ import pkg_resources
 
 import inmanta.types
 from inmanta.agent import config as cfg
-from inmanta.data.model import PipConfig, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
@@ -45,7 +45,7 @@ from inmanta.util import NamedLock
 
 LOGGER = logging.getLogger(__name__)
 
-FailedResourcesSet: typing.TypeAlias = set[str]
+FailedResourcesSet: typing.TypeAlias = set[ResourceType]
 
 
 class AgentInstance(abc.ABC):
@@ -230,7 +230,7 @@ class ResourceInstallSpec:
 
     """
 
-    resource_type: str
+    resource_type: ResourceType
     model_version: int
     blueprint: ExecutorBlueprint
 
