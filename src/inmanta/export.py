@@ -179,20 +179,22 @@ class Exporter:
     def _load_resources(self, types: dict[str, Entity]) -> None:
         """
         Load all registered resources and resource_sets
+
+        :param types: All Inmanta types present in the model. Maps the name of the type to the corresponding entity.
         """
         resource.validate()
-        entities = resource.get_entity_resources()
+        resource_types = resource.get_entity_resources()
         resource_mapping: dict[Instance, Resource] = {}
         ignored_set = set()
 
-        for entity in entities:
-            if entity not in types:
+        for resource_type in resource_types:
+            if resource_type not in types:
                 continue
-            instances = types[entity].get_all_instances()
+            instances = types[resource_type].get_all_instances()
             if len(instances) > 0:
                 for instance in instances:
                     try:
-                        res = Resource.create_from_model(self, entity, DynamicProxy.return_value(instance))
+                        res = Resource.create_from_model(self, resource_type, DynamicProxy.return_value(instance))
                         resource_mapping[instance] = res
                         self.add_resource(res)
                     except UnknownException:
@@ -201,7 +203,7 @@ class Exporter:
                         # We can safely ignore this resource == prune it
                         LOGGER.debug(
                             "Skipped resource of type %s because its id contains an unknown (location: %s)",
-                            entity,
+                            resource_type,
                             instance.location,
                         )
 
@@ -209,7 +211,7 @@ class Exporter:
                         ignored_set.add(instance)
                         LOGGER.info(
                             "Ignoring resource of type %s because it requested to ignore it. (location: %s)",
-                            entity,
+                            resource_type,
                             instance.location,
                         )
 
@@ -221,6 +223,9 @@ class Exporter:
         load the resource_sets in a dict with as keys resource_ids and as values the name of the resource_set
         the resource belongs to.
         This method should only be called after all resources have been extracted from the model.
+
+        :param types: All Inmanta types present in the model. Maps the name of the type to the corresponding entity.
+        :param resource_mapping: Maps in-model instances of resources to their deserialized Resource representation.
         """
         resource_sets: dict[str, Optional[str]] = {}
         resource_set_instances: list["Instance"] = (

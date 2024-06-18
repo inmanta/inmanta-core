@@ -2641,9 +2641,9 @@ class Environment(BaseDocument):
         ENVIRONMENT_METRICS_RETENTION: Setting(
             name=ENVIRONMENT_METRICS_RETENTION,
             typ="int",
-            default=8760,
+            default=336,
             doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
-            "Default=8760 hours (1 year). Set to 0 to disable automatic cleanups.",
+            "Default=336 hours (2 weeks). Set to 0 to disable automatic cleanups.",
             validator=convert_int,
         ),
     }
@@ -3583,7 +3583,7 @@ class Compile(BaseDocument):
     :param requested: Time the compile was requested
     :param started: Time the compile started
     :param completed: Time to compile was completed
-    :param do_export: should this compiler perform an export
+    :param do_export: should this compile perform an export
     :param force_update: should this compile definitely update
     :param metadata: exporter metadata to be passed to the compiler
     :param requested_environment_variables: environment variables requested to be passed to the compiler
