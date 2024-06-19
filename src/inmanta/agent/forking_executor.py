@@ -20,6 +20,7 @@ import asyncio
 import collections
 import concurrent.futures
 import concurrent.futures.thread
+import datetime
 import functools
 import logging
 import logging.config
@@ -417,9 +418,11 @@ class MPExecutor(executor.Executor):
 
     async def close_version(self, version: int) -> None:
         await self.connection.call(CloseVersionCommand(version))
+        self.check_env_status()
 
     async def open_version(self, version: int) -> None:
         await self.connection.call(OpenVersionCommand(version))
+        self.check_env_status()
 
     async def dry_run(
         self,
@@ -427,6 +430,7 @@ class MPExecutor(executor.Executor):
         dry_run_id: uuid.UUID,
     ) -> None:
         await self.connection.call(DryRunCommand(resources, dry_run_id))
+        self.check_env_status()
 
     async def execute(
         self,
@@ -435,9 +439,24 @@ class MPExecutor(executor.Executor):
         reason: str,
     ) -> None:
         await self.connection.call(ExecuteCommand(gid, resource_details, reason))
+        self.check_env_status()
+
+    def check_env_status(self):
+        inmanta_env_status = os.path.join(self.executor_virtual_env.env_path, ".inmanta_env_status")
+        timestamp_env_modification = os.stat(inmanta_env_status).st_mtime
+        last_access_env_status = datetime.datetime.fromtimestamp(timestamp_env_modification)
+
+        current_datetime = datetime.datetime.now()
+        if ((current_datetime - last_access_env_status).seconds / 3600) < 2:
+            return
+
+        with open(inmanta_env_status, "w") as f:
+            f.write("running")
 
     async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> inmanta.types.Apireturn:
-        return await self.connection.call(FactsCommand(resource))
+        facts = await self.connection.call(FactsCommand(resource))
+        self.check_env_status()
+        return facts
 
 
 class MPManager(executor.ExecutorManager[MPExecutor]):

@@ -160,6 +160,16 @@ agent_get_resource_backoff: Option[float] = Option(
     is_float,
 )
 
+agent_virtual_environment_cleanup: Option[int] = Option(
+    "config",
+    "agent-venv-cleanup",
+    7,
+    "This is the number of days to wait before unused Python virtual environments are cleaned from the inmanta "
+    "server. Setting this option too low may result in a high load on the Inmanta server. Setting it too high"
+    " may result in long deployment times.",
+    is_int,
+)
+
 
 class AgentExcutorMode(str, enum.Enum):
     threaded = "threaded"

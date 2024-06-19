@@ -20,11 +20,14 @@ import abc
 import asyncio
 import contextlib
 import dataclasses
+import datetime
 import functools
 import hashlib
 import json
 import logging
 import os
+import pathlib
+import shutil
 import types
 import typing
 import uuid
@@ -311,6 +314,13 @@ class VirtualEnvironmentManager:
             )
             return env_dir, False  # Returning the path and False for existing directory
 
+    def read_environment_status(self, inmanta_env_status_file: str) -> Optional[str]:
+        current_status = None
+        if os.path.exists(inmanta_env_status_file):
+            with open(inmanta_env_status_file) as f:
+                current_status = f.read().strip()
+        return current_status
+
     async def create_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
         """
         Creates a new virtual environment based on the provided blueprint or reuses an existing one if suitable.
@@ -320,14 +330,29 @@ class VirtualEnvironmentManager:
         :param threadpool: A ThreadPoolExecutor
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
 
-        TODO: Improve handling of bad venv scenarios, such as when the folder exists but is empty or corrupted.
         """
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
+        inmanta_env_status = os.path.join(env_storage, ".inmanta_env_status")
+
+        if not is_new:
+            current_status = self.read_environment_status(inmanta_env_status)
+
+            match current_status:
+                case "built" | "running":
+                    pass
+                case _:
+                    shutil.rmtree(env_storage)
+                    os.makedirs(env_storage)
+                    is_new = True
+
         if is_new:
             LOGGER.info("Creating venv for content %s, content hash: %s", str(blueprint), blueprint.blueprint_hash())
             await process_environment.create_and_install_environment(blueprint)
         self._environment_map[blueprint] = process_environment
+
+        with open(inmanta_env_status, "w") as f:
+            f.write("built")
 
         return process_environment
 
@@ -355,6 +380,47 @@ class VirtualEnvironmentManager:
                 )
                 return self._environment_map[blueprint]
             return await self.create_environment(blueprint, threadpool)
+
+    async def clean_environments(self) -> None:
+        """
+        Retrieves an existing virtual environment that matches the given blueprint or creates a new one if no match is found.
+        Utilizes NamedLock to ensure thread-safe operations for each unique blueprint.
+        """
+
+        env_folder = pathlib.Path(self.envs_dir)
+        environments_to_clean: set[pathlib.Path] = set()
+        environments_to_clean_mapping: dict[str, EnvBlueprint] = dict()
+        number_days_before_venv_cleanup = cfg.agent_virtual_environment_cleanup.get()
+        for file in env_folder.iterdir():
+            if not file.is_dir():
+                continue
+
+            inmanta_env_status_file = file / ".inmanta_env_status"
+
+            # get modification time
+            # platform dependent (time of most recent metadata change on Unix, or the time of creation on Windows)
+            # Could cause issue one Windows systems
+            timestamp = inmanta_env_status_file.stat().st_mtime
+
+            # convert time to dd-mm-yyyy hh:mm:ss
+            modification_datetime = datetime.datetime.fromtimestamp(timestamp)
+            if (datetime.datetime.now() - modification_datetime).days >= number_days_before_venv_cleanup:
+                environments_to_clean.add(file)
+
+        for blueprint, env in self._environment_map.items():
+            env_path = env.env_path
+            if env_path not in environments_to_clean:
+                continue
+
+            environments_to_clean_mapping[env_path] = blueprint
+
+        for env_to_clean, blueprint in environments_to_clean_mapping.items():
+            async with self._locks.get(blueprint.blueprint_hash()):
+                shutil.rmtree(env_to_clean)
+                del self._environment_map[blueprint]
+
+        for env_to_clean in environments_to_clean:
+            shutil.rmtree(env_to_clean)
 
 
 class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):
