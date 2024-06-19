@@ -812,12 +812,15 @@ class AgentInstance:
     async def setup_executor(
         self, version: int, action: const.ResourceAction, resources: list[JsonType], resource_types: set[ResourceType]
     ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], Optional[executor.Executor]]:
-        # TODO refactor wiring of tuples around -> not sure how
-
         """
         Setup an executor for resource deployment
 
-        returns a tuple
+        :param version: model version being deployed
+        :param action: the resource action associated with this deploy
+        :param resources: list of resources in serialized form: a dict with information about
+            this resource and its desired state
+        :param resource_types: set of all resource types composing this version of the model
+        :return: Tuple of:
 
             - undeployable: resources for which code loading failed
             - loaded_resources: ALL resources from this batch
