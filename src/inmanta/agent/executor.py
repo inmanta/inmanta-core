@@ -404,8 +404,9 @@ class VirtualEnvironmentManager:
             if not file.is_dir():
                 continue
 
-            if file in reverse_environment_map:
-                blueprint = reverse_environment_map[file]
+            absolute_path_file = str(file.absolute())
+            if absolute_path_file in reverse_environment_map:
+                blueprint = reverse_environment_map[absolute_path_file]
                 async with self._locks.get(blueprint.blueprint_hash()):
                     del self._environment_map[blueprint]
 
@@ -417,10 +418,10 @@ class VirtualEnvironmentManager:
 
                 modification_datetime = datetime.datetime.fromtimestamp(timestamp)
                 if (current_datetime - modification_datetime).days >= number_days_before_venv_cleanup:
-                    environments_on_disk_to_clean.add(str(file.absolute()))
+                    environments_on_disk_to_clean.add(absolute_path_file)
             else:
                 # The Virtual Environment could be incomplete or broken
-                environments_on_disk_to_clean.add(str(file.absolute()))
+                environments_on_disk_to_clean.add(absolute_path_file)
 
         for path_env_to_clean in environments_on_disk_to_clean:
             shutil.rmtree(path_env_to_clean)

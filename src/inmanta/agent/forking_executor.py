@@ -442,7 +442,7 @@ class MPExecutor(executor.Executor):
         await self.connection.call(ExecuteCommand(gid, resource_details, reason))
         self.check_modification_time_venv()
 
-    def check_modification_time_venv(self):
+    def check_modification_time_venv(self) -> None:
         """
         Make sure that the time of most recent content modification of the `inmanta_env_status` file is within the last two
         hours. If it's not, the file is overwritten.
