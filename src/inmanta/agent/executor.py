@@ -383,44 +383,47 @@ class VirtualEnvironmentManager:
 
     async def clean_environments(self) -> None:
         """
-        Retrieves an existing virtual environment that matches the given blueprint or creates a new one if no match is found.
-        Utilizes NamedLock to ensure thread-safe operations for each unique blueprint.
+        Remove Python Virtual Environments that were not used since a number of days (configurable in the agent config).
         """
-
-        env_folder = pathlib.Path(self.envs_dir)
-        environments_to_clean: set[pathlib.Path] = set()
-        environments_to_clean_mapping: dict[str, EnvBlueprint] = dict()
         number_days_before_venv_cleanup = cfg.agent_virtual_environment_cleanup.get()
-        for file in env_folder.iterdir():
+        envs_dir = pathlib.Path(self.envs_dir)
+        environments_on_disk_to_clean: set[str] = set()
+        environments_in_memory_to_clean_mapping: dict[str, EnvBlueprint] = dict()
+
+        # We check every folder and we save the ones that contain the special file and that should be removed
+        current_datetime = datetime.datetime.now()
+        for file in envs_dir.iterdir():
             if not file.is_dir():
                 continue
 
             inmanta_env_status_file = file / ".inmanta_env_status"
 
-            # get modification time
-            # platform dependent (time of most recent metadata change on Unix, or the time of creation on Windows)
-            # Could cause issue one Windows systems
-            timestamp = inmanta_env_status_file.stat().st_mtime
+            if inmanta_env_status_file.exists():
+                # Retrieve modification time
+                timestamp = inmanta_env_status_file.stat().st_mtime
 
-            # convert time to dd-mm-yyyy hh:mm:ss
-            modification_datetime = datetime.datetime.fromtimestamp(timestamp)
-            if (datetime.datetime.now() - modification_datetime).days >= number_days_before_venv_cleanup:
-                environments_to_clean.add(file)
+                modification_datetime = datetime.datetime.fromtimestamp(timestamp)
+                if (current_datetime - modification_datetime).days >= number_days_before_venv_cleanup:
+                    environments_on_disk_to_clean.add(str(file.absolute()))
+            else:
+                # The Virtual Environment could be incomplete or broken
+                environments_on_disk_to_clean.add(str(file.absolute()))
 
         for blueprint, env in self._environment_map.items():
             env_path = env.env_path
-            if env_path not in environments_to_clean:
+            if env_path not in environments_on_disk_to_clean:
                 continue
 
-            environments_to_clean_mapping[env_path] = blueprint
+            # We need to save this information to remove the entry from `_environment_map`
+            environments_in_memory_to_clean_mapping[env_path] = blueprint
 
-        for env_to_clean, blueprint in environments_to_clean_mapping.items():
+        for path_env_to_clean, blueprint in environments_in_memory_to_clean_mapping.items():
             async with self._locks.get(blueprint.blueprint_hash()):
-                shutil.rmtree(env_to_clean)
                 del self._environment_map[blueprint]
+                shutil.rmtree(path_env_to_clean)
 
-        for env_to_clean in environments_to_clean:
-            shutil.rmtree(env_to_clean)
+        for path_env_to_clean in environments_on_disk_to_clean.difference(set(environments_in_memory_to_clean_mapping.keys())):
+            shutil.rmtree(path_env_to_clean)
 
 
 class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):

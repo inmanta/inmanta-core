@@ -346,54 +346,28 @@ def test():
     blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
     blueprint2 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
 
-    # class TestDatetime(datetime.datetime):
-    #     return_to_the_past = datetime.datetime(2015, 12, 25, 17, 5, 55)
-    #
-    #     @classmethod
-    #     def now(cls, tz=None):
-    #         return cls.return_to_the_past
-    #
-    # monkeypatch.setattr(datetime, "datetime", TestDatetime)
-
-
     executor_manager = mpmanager_light
     executor_1, executor_2 = await asyncio.gather(
         executor_manager.get_executor("agent1", "local:", code_for(blueprint1)),
         executor_manager.get_executor("agent1", "local:", code_for(blueprint2)),
     )
 
-    old_check_executor1 = executor_1.last_access_env_status
-    old_check_executor2 = executor_2.last_access_env_status
-
-    assert ((datetime.datetime.now() - old_check_executor1).seconds / 3600) < 2
-    assert ((datetime.datetime.now() - old_check_executor2).seconds / 3600) < 2
-
-    # subprocess.check_output(
-    #     ["touch", "-m", "-t", "202211161200.10", f"{executor_2.executor_virtual_env.env_path}/.inmanta_env_status"]
-    # )
-
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
     os.utime(f"{executor_2.executor_virtual_env.env_path}/.inmanta_env_status", (old_datetime.timestamp(), old_datetime.timestamp()))
-    # assert executor_1.last_access_env_status == TestDatetime.return_to_the_past
-    # assert executor_2.last_access_env_status == TestDatetime.return_to_the_past
-    #
-    # monkeypatch.undo()
+
+    def get_modification_datetime(file: str) -> datetime.datetime:
+        return datetime.datetime.fromtimestamp(os.stat(file).st_mtime)
+
+    old_check_executor1 = get_modification_datetime(f"{executor_1.executor_virtual_env.env_path}/.inmanta_env_status")
 
     executor_1.check_env_status()
     executor_2.check_env_status()
 
-    # old_check_executor1 = executor_1.last_access_env_status
-    # old_check_executor2 = executor_2.last_access_env_status
+    new_check_executor1 = get_modification_datetime(f"{executor_1.executor_virtual_env.env_path}/.inmanta_env_status")
+    new_check_executor2 = get_modification_datetime(f"{executor_2.executor_virtual_env.env_path}/.inmanta_env_status")
 
-    # assert ((datetime.datetime.now() - old_check_executor1).seconds / 3600) < 2
-    # assert ((datetime.datetime.now() - old_check_executor2).seconds / 3600) < 2
-
-    # This should not override `last_access_env_status`
-    # executor_1.check_env_status()
-    # executor_2.check_env_status()
-
-    assert executor_1.last_access_env_status == old_check_executor1
-    assert ((datetime.datetime.now() - old_check_executor2).seconds / 3600) < 2
+    assert new_check_executor1 == old_check_executor1
+    assert ((datetime.datetime.now() - new_check_executor2).seconds / 3600) < 2
 
     # Now we want to check if the cleanup is working correctly
     # First we want to override the modification date of the `inmanta_env_status` file
