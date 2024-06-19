@@ -297,7 +297,7 @@ class ResourceService(protocol.ServerSlice):
             "agent": agent,
             "version": version,
             "resources": deploy_model,
-            "resource_types": resource_types,
+            "resource_types": list(resource_types),  # cast to list since sets are not json serializable
         }
 
     async def get_resource_increment_for_agent(self, env: data.Environment, agent: str) -> Apireturn:
@@ -372,7 +372,7 @@ class ResourceService(protocol.ServerSlice):
             "agent": agent,
             "version": version,
             "resources": deploy_model,
-            "resource_types": resource_types,
+            "resource_types": list(resource_types),  # cast to list since sets are not json serializable
         }
 
     async def mark_deployed(
