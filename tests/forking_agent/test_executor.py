@@ -20,6 +20,7 @@ import asyncio
 import base64
 import logging
 
+import psutil
 import pytest
 
 import inmanta.agent
@@ -164,6 +165,9 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     result = await child1.connection.call(Echo(["aaaa"]))
     assert ["aaaa"] == result
     print("Child there")
+
+    process_name = psutil.Process(pid=child1.process.pid).name()
+    assert process_name == "inmanta: executor test - connected"
 
     await asyncio.get_running_loop().run_in_executor(None, child1.process.kill)
     print("Kill sent")

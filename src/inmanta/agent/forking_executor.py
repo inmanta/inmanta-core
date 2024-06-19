@@ -44,6 +44,7 @@ import inmanta.signals
 import inmanta.util
 from inmanta.agent import executor
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
+from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
     Pipe break: go to 3a and 3b
     """
 
-    def __init__(self, name: str, take_over_logging: bool = True) -> None:
+    def __init__(self, name: str, logger: logging.Logger, take_over_logging: bool = True) -> None:
         """
         :param take_over_logging: when we are connected and are able to stream logs, do we remove all other log handlers?
         """
@@ -101,6 +102,11 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.ctx = ExecutorContext(self)
         self.log_transport: typing.Optional[LogShipper] = None
         self.take_over_logging = take_over_logging
+        self.logger = logger
+
+    def set_status(self, status: str) -> None:
+        """Update the process name to reflect the identity and status of this executor"""
+        set_executor_status(self.name, status)
 
     def connection_made(self, transport: transports.Transport) -> None:
         super().connection_made(transport)
@@ -116,6 +122,8 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
         self.log_transport = LogShipper(self, asyncio.get_running_loop())
         logging.getLogger().addHandler(self.log_transport)
+        self.logger.info(f"Started executor with PID: {os.getpid()}")
+        self.set_status("connected")
 
     def _detach_log_shipper(self) -> None:
         # Once connection is lost, we want to detach asap to keep the logging clean and efficient
@@ -144,6 +152,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """We lost connection to the controler, bail out"""
         self._detach_log_shipper()
         self.logger.info("Connection lost", exc_info=exc)
+        self.set_status("disconnected")
         self._sync_stop()
         self.stopped.set()
 
@@ -287,6 +296,12 @@ class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta
         return await context.executor.get_facts(self.resource)
 
 
+def set_executor_status(name: str, status: str) -> None:
+    """Update the process name to reflect the identity and status of the executor"""
+    # Lives outside the ExecutorServer class, so we can set status early in the boot process
+    setproctitle(f"inmanta: executor {name} - {status}")
+
+
 def mp_worker_entrypoint(
     socket: socket.socket,
     name: str,
@@ -296,6 +311,7 @@ def mp_worker_entrypoint(
 ) -> None:
     """Entry point for child processes"""
 
+    set_executor_status(name, "connecting")
     # Set up logging stage 1
     # Basic config, starts on std.out
     config_builder = inmanta.logging.LoggingConfigBuilder()
@@ -305,7 +321,6 @@ def mp_worker_entrypoint(
 
     # Set up our own logger
     logger = logging.getLogger(f"agent.executor.{name}")
-    logger.info(f"Started with PID: {os.getpid()}")
 
     # Load config
     inmanta.config.Config.load_config_from_dict(config)
@@ -315,7 +330,9 @@ def mp_worker_entrypoint(
         # Start serving
         # also performs setup of log shipper
         # this is part of stage 2 logging setup
-        transport, protocol = await loop.connect_accepted_socket(functools.partial(ExecutorServer, name, not cli_log), socket)
+        transport, protocol = await loop.connect_accepted_socket(
+            functools.partial(ExecutorServer, name, logger, not cli_log), socket
+        )
         inmanta.signals.setup_signal_handlers(protocol.stop)
         await protocol.stopped.wait()
 
