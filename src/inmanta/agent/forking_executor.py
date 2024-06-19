@@ -44,6 +44,7 @@ import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
 from inmanta.agent import executor
+from inmanta.data.model import VirtualEnvStatus
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
 
 LOGGER = logging.getLogger(__name__)
@@ -418,11 +419,11 @@ class MPExecutor(executor.Executor):
 
     async def close_version(self, version: int) -> None:
         await self.connection.call(CloseVersionCommand(version))
-        self.check_env_status()
+        self.check_modification_time_venv()
 
     async def open_version(self, version: int) -> None:
         await self.connection.call(OpenVersionCommand(version))
-        self.check_env_status()
+        self.check_modification_time_venv()
 
     async def dry_run(
         self,
@@ -430,7 +431,7 @@ class MPExecutor(executor.Executor):
         dry_run_id: uuid.UUID,
     ) -> None:
         await self.connection.call(DryRunCommand(resources, dry_run_id))
-        self.check_env_status()
+        self.check_modification_time_venv()
 
     async def execute(
         self,
@@ -439,9 +440,13 @@ class MPExecutor(executor.Executor):
         reason: str,
     ) -> None:
         await self.connection.call(ExecuteCommand(gid, resource_details, reason))
-        self.check_env_status()
+        self.check_modification_time_venv()
 
-    def check_env_status(self):
+    def check_modification_time_venv(self):
+        """
+        Make sure that the time of most recent content modification of the `inmanta_env_status` file is within the last two
+        hours. If it's not, the file is overwritten.
+        """
         inmanta_env_status = os.path.join(self.executor_virtual_env.env_path, ".inmanta_env_status")
         timestamp_env_modification = os.stat(inmanta_env_status).st_mtime
         last_access_env_status = datetime.datetime.fromtimestamp(timestamp_env_modification)
@@ -451,11 +456,11 @@ class MPExecutor(executor.Executor):
             return
 
         with open(inmanta_env_status, "w") as f:
-            f.write("running")
+            f.write(VirtualEnvStatus.running)
 
     async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> inmanta.types.Apireturn:
         facts = await self.connection.call(FactsCommand(resource))
-        self.check_env_status()
+        self.check_modification_time_venv()
         return facts
 
 

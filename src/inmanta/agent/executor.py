@@ -39,7 +39,7 @@ import pkg_resources
 
 import inmanta.types
 from inmanta.agent import config as cfg
-from inmanta.data.model import PipConfig, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import PipConfig, ResourceIdStr, ResourceVersionIdStr, VirtualEnvStatus
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
@@ -315,10 +315,18 @@ class VirtualEnvironmentManager:
             return env_dir, False  # Returning the path and False for existing directory
 
     def read_environment_status(self, inmanta_env_status_file: str) -> Optional[str]:
-        current_status = None
-        if os.path.exists(inmanta_env_status_file):
-            with open(inmanta_env_status_file) as f:
-                current_status = f.read().strip()
+        """
+        Read the specific inmanta file which gives an indication on the status of the Python Virtual Environment:
+            - Is it broken / empty (no specific file)
+            - Is it created / running (should be complete and good to be used with an executor)
+
+        :param inmanta_env_status_file: The inmanta file that gives us the status of the Python Virtual Environment
+        """
+        if not os.path.exists(inmanta_env_status_file):
+            return None
+
+        with open(inmanta_env_status_file) as f:
+            current_status = f.read().strip()
         return current_status
 
     async def create_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
@@ -339,7 +347,7 @@ class VirtualEnvironmentManager:
             current_status = self.read_environment_status(inmanta_env_status)
 
             match current_status:
-                case "built" | "running":
+                case VirtualEnvStatus.created | VirtualEnvStatus.running:
                     pass
                 case _:
                     shutil.rmtree(env_storage)
@@ -352,7 +360,7 @@ class VirtualEnvironmentManager:
         self._environment_map[blueprint] = process_environment
 
         with open(inmanta_env_status, "w") as f:
-            f.write("built")
+            f.write(VirtualEnvStatus.created)
 
         return process_environment
 
@@ -388,13 +396,18 @@ class VirtualEnvironmentManager:
         number_days_before_venv_cleanup = cfg.agent_virtual_environment_cleanup.get()
         envs_dir = pathlib.Path(self.envs_dir)
         environments_on_disk_to_clean: set[str] = set()
-        environments_in_memory_to_clean_mapping: dict[str, EnvBlueprint] = dict()
+        reverse_environment_map = {v.env_path: k for k, v in self._environment_map.items()}
 
         # We check every folder and we save the ones that contain the special file and that should be removed
         current_datetime = datetime.datetime.now()
         for file in envs_dir.iterdir():
             if not file.is_dir():
                 continue
+
+            if file in reverse_environment_map:
+                blueprint = reverse_environment_map[file]
+                async with self._locks.get(blueprint.blueprint_hash()):
+                    del self._environment_map[blueprint]
 
             inmanta_env_status_file = file / ".inmanta_env_status"
 
@@ -409,20 +422,7 @@ class VirtualEnvironmentManager:
                 # The Virtual Environment could be incomplete or broken
                 environments_on_disk_to_clean.add(str(file.absolute()))
 
-        for blueprint, env in self._environment_map.items():
-            env_path = env.env_path
-            if env_path not in environments_on_disk_to_clean:
-                continue
-
-            # We need to save this information to remove the entry from `_environment_map`
-            environments_in_memory_to_clean_mapping[env_path] = blueprint
-
-        for path_env_to_clean, blueprint in environments_in_memory_to_clean_mapping.items():
-            async with self._locks.get(blueprint.blueprint_hash()):
-                del self._environment_map[blueprint]
-                shutil.rmtree(path_env_to_clean)
-
-        for path_env_to_clean in environments_on_disk_to_clean.difference(set(environments_in_memory_to_clean_mapping.keys())):
+        for path_env_to_clean in environments_on_disk_to_clean:
             shutil.rmtree(path_env_to_clean)
 
 

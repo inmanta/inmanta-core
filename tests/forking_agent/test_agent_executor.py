@@ -353,15 +353,17 @@ def test():
     )
 
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
-    os.utime(f"{executor_2.executor_virtual_env.env_path}/.inmanta_env_status", (old_datetime.timestamp(), old_datetime.timestamp()))
+    os.utime(
+        f"{executor_2.executor_virtual_env.env_path}/.inmanta_env_status", (old_datetime.timestamp(), old_datetime.timestamp())
+    )
 
     def get_modification_datetime(file: str) -> datetime.datetime:
         return datetime.datetime.fromtimestamp(os.stat(file).st_mtime)
 
     old_check_executor1 = get_modification_datetime(f"{executor_1.executor_virtual_env.env_path}/.inmanta_env_status")
 
-    executor_1.check_env_status()
-    executor_2.check_env_status()
+    executor_1.check_modification_time_venv()
+    executor_2.check_modification_time_venv()
 
     new_check_executor1 = get_modification_datetime(f"{executor_1.executor_virtual_env.env_path}/.inmanta_env_status")
     new_check_executor2 = get_modification_datetime(f"{executor_2.executor_virtual_env.env_path}/.inmanta_env_status")
@@ -371,7 +373,9 @@ def test():
 
     # Now we want to check if the cleanup is working correctly
     # First we want to override the modification date of the `inmanta_env_status` file
-    os.utime(f"{executor_1.executor_virtual_env.env_path}/.inmanta_env_status", (old_datetime.timestamp(), old_datetime.timestamp()))
+    os.utime(
+        f"{executor_1.executor_virtual_env.env_path}/.inmanta_env_status", (old_datetime.timestamp(), old_datetime.timestamp())
+    )
 
     venv_dir = pathlib.Path(mpmanager_light.environment_manager.envs_dir)
     assert len([e for e in venv_dir.iterdir()]) == 2, "We should have two Virtual Environments for our 2 executors!"
