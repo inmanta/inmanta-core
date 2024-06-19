@@ -32,6 +32,7 @@ from collections import abc
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timezone
+from logging import LogRecord
 from typing import Any, Optional, TypeVar, Union
 
 import pytest
@@ -225,6 +226,12 @@ class LogSequence:
                         continue
                     return i + after
         return -1
+
+    def get(self, loggerpart, level, msg, min_level: int = math.inf) -> LogRecord:
+        idx = self._find(loggerpart, level, msg, self.index, min_level)
+        if idx < 0:
+            raise KeyError()
+        return self.caplog.records[idx]
 
     def contains(self, loggerpart, level, msg, min_level: int = math.inf) -> "LogSequence":
         """
