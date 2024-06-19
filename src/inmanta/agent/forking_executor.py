@@ -105,6 +105,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.logger = logger
 
     def set_status(self, status: str) -> None:
+        """Update the process name to reflect the identity and status of this executor"""
         set_executor_status(self.name, status)
 
     def connection_made(self, transport: transports.Transport) -> None:
@@ -296,6 +297,8 @@ class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta
 
 
 def set_executor_status(name: str, status: str) -> None:
+    """Update the process name to reflect the identity and status of the executor"""
+    # Lives outside the ExecutorServer class, so we can set status early in the boot process
     setproctitle(f"inmanta: executor {name} - {status}")
 
 
