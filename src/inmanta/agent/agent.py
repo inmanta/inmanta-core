@@ -752,7 +752,7 @@ class AgentInstance:
                         result.result["version"],
                         const.ResourceAction.deploy,
                         result.result["resources"],
-                        result.result["resource_types"],
+                        set(result.result["resource_types"]),
                     )
                     if len(resources) > 0 and executor is not None:
                         self._nq.reload(resources, undeployable, deploy_request, executor)
@@ -774,7 +774,7 @@ class AgentInstance:
                     return
 
                 undeployable, resource_refs, executor = await self.setup_executor(
-                    version, const.ResourceAction.dryrun, response.result["resources"], response.result["resource_types"]
+                    version, const.ResourceAction.dryrun, response.result["resources"], set(response.result["resource_types"])
                 )
                 deployable_resources: list[ResourceDetails] = []
                 for resource in resource_refs:
