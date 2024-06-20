@@ -855,7 +855,7 @@ class AgentInstance:
     ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], Optional[executor.Executor]]:
         """
         Load (part of) a configuration model. This method is expected to be called as an
-        initialization step when interacting with resource desired state.
+        initialization step when interacting with resources.
 
         :param model_version: model version being loaded
         :param action: the reason why we are loading this model
