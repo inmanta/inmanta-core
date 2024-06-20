@@ -236,8 +236,31 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods.get_resources_for_agent, env="tid")
     async def get_resources_for_agent(
-        self, env: data.Environment, agent: str, version: int, sid: uuid.UUID, incremental_deploy: bool
+        self, env: data.Environment, agent: str, version: Optional[int], sid: uuid.UUID, incremental_deploy: bool
     ) -> Apireturn:
+        """
+        This method fetches the desired state of resources from the
+        database for a given (environment, agent, model version).
+
+        :param env: Only fetch resources from this environment.
+        :param agent: Only fetch resources this agent is responsible for.
+        :param version: Only fetch resources belonging to this version of
+            the model. Use the latest version by default.
+        :param sid: Session id for the agent.
+        :param incremental_deploy: Only fetch resources for which desired state has
+            changed since the last version.
+
+        :return: A tuple[int, Optional[JsonType]] with the http response code and a dict.
+
+        In case of success, this dict is expected to contain the following keys and associated types:
+        {
+            "environment": uuid.UUID,
+            "agent": str,
+            "version": int,
+            "resources": list[dict[str, object]]
+            "resource_types": list(ResourceType),  # cast to list since sets are not json serializable
+        }
+        """
         if not self.agentmanager_service.is_primary(env, sid, agent):
             return 409, {"message": f"This agent is not currently the primary for the endpoint {agent} (sid: {sid})"}
         if incremental_deploy:
