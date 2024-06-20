@@ -1,0 +1,3 @@
+description: Make log shipper include exceptions
+change-type: patch
+destination-branches: [master]

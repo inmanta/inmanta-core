@@ -21,6 +21,7 @@ import functools
 import logging
 import socket
 import struct
+import sys
 import threading
 
 import pytest
@@ -131,8 +132,18 @@ async def test_log_transport(caplog, request):
     log_shipper = inmanta.protocol.ipc_light.LogShipper(client_protocol, loop)
 
     with caplog.at_level(logging.INFO):
+        # Test exception capture and transport
+        try:
+            raise Exception("test the exception capture!")
+        except Exception:
+            log_shipper.handle(
+                logging.LogRecord("deep.in.exception", logging.INFO, "yyy", 5, "Test Exc %s", ("a",), exc_info=sys.exc_info())
+            )
+
+        # test normal log
         log_shipper.handle(logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("a",), exc_info=False))
 
+        # wait for normal log
         def has_log(msg: str) -> bool:
             try:
                 utils.log_contains(caplog, "deep.in.test", logging.INFO, f"Test {msg}")
@@ -141,6 +152,9 @@ async def test_log_transport(caplog, request):
                 return False
 
         await inmanta.util.retry_limited(functools.partial(has_log, "a"), 1)
+
+        logline = utils.LogSequence(caplog).get("deep.in.exception", logging.INFO, "Test Exc a")
+        assert logline.msg.startswith("Test Exc a\nTraceback (most recent call last):\n")
 
         # mess with threads, shows that we get at least no assertion errors
         # Also test against % injection in the format string

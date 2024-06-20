@@ -329,7 +329,7 @@ class LogShipper(logging.Handler):
                 IPCLogRecord(
                     record.name,
                     record.levelno,
-                    record.getMessage(),
+                    self.format(record),
                 ),
             )
         )
