@@ -821,18 +821,6 @@ class AgentInstance:
         """
         Set up an executor for resource deployment
 
-        :param version: model version being deployed
-        :param action: the resource action associated with this deploy
-        :param resources: list of resources in serialized form: a dict with information about
-            this resource and its desired state
-        :param resource_types: set of all resource types composing this version of the model
-            for this agent, even if they are not being deployed right now.
-        :return: Tuple of:
-
-            - undeployable: resources for which code loading failed
-            - loaded_resources: ALL resources from this batch
-            - the executor: with relevant handler code loaded, can be None if all are undeployable
-
         :param model_version: model version being loaded
         :param resource_types: set of all resource types we want to be able to interact with via this executor
         :return: A tuple of:
