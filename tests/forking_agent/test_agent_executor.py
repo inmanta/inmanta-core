@@ -14,16 +14,24 @@
 
 import asyncio
 import datetime
+import functools
 import hashlib
 import json
 import logging
 import os
 import pathlib
 import subprocess
+import time
+import typing
 
+import tornado
+
+import inmanta.env
 from inmanta.agent import executor, forking_executor
+from inmanta.agent.forking_executor import ExecutorContext, ExecutorServer, InitCommand
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
+from inmanta.protocol.ipc_light import LogShipper
 from utils import PipIndex, log_contains, log_doesnt_contain
 
 logger = logging.getLogger(__name__)
@@ -348,8 +356,8 @@ def test():
 
     executor_manager = mpmanager_light
     executor_1, executor_2 = await asyncio.gather(
-        executor_manager.get_executor("agent1", "local:", code_for(blueprint1)),
-        executor_manager.get_executor("agent1", "local:", code_for(blueprint2)),
+        executor_manager.get_executor("agent1", "local:", code_for(blueprint1), 1),
+        executor_manager.get_executor("agent2", "local:", code_for(blueprint2), 1),
     )
 
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
@@ -361,17 +369,21 @@ def test():
         return datetime.datetime.fromtimestamp(os.stat(file).st_mtime)
 
     old_check_executor1 = get_modification_datetime(f"{executor_1.executor_virtual_env.env_path}/.inmanta_env_status")
+    old_check_executor2 = get_modification_datetime(f"{executor_2.executor_virtual_env.env_path}/.inmanta_env_status")
 
-    executor_1.check_modification_time_venv()
-    executor_2.check_modification_time_venv()
+    time.sleep(2)
 
     new_check_executor1 = get_modification_datetime(f"{executor_1.executor_virtual_env.env_path}/.inmanta_env_status")
     new_check_executor2 = get_modification_datetime(f"{executor_2.executor_virtual_env.env_path}/.inmanta_env_status")
 
-    assert new_check_executor1 == old_check_executor1
-    assert ((datetime.datetime.now() - new_check_executor2).seconds / 3600) < 2
+    assert new_check_executor1 > old_check_executor1
+    assert new_check_executor2 > old_check_executor2
+    assert (datetime.datetime.now() - new_check_executor2).seconds <= 2
+
+    monkeypatch.undo()
 
     # Now we want to check if the cleanup is working correctly
+    await executor_manager.stop_for_agent("agent1")
     # First we want to override the modification date of the `inmanta_env_status` file
     os.utime(
         f"{executor_1.executor_virtual_env.env_path}/.inmanta_env_status", (old_datetime.timestamp(), old_datetime.timestamp())

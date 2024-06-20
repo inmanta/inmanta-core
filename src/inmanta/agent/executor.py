@@ -39,7 +39,7 @@ import pkg_resources
 
 import inmanta.types
 from inmanta.agent import config as cfg
-from inmanta.data.model import PipConfig, ResourceIdStr, ResourceVersionIdStr, VirtualEnvStatus
+from inmanta.data.model import PipConfig, ResourceIdStr, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
@@ -252,7 +252,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
         :param blueprint: An instance of EnvBlueprint containing the configuration for
             the pip installation and the requirements to install.
         """
-        loop = asyncio.get_running_loop()
         req: list[str] = list(blueprint.requirements)
         self.init_env()
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
@@ -261,7 +260,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
                 requirements=list(pkg_resources.parse_requirements(req)),
                 config=blueprint.pip_config,
             )
-            await loop.run_in_executor(self.thread_pool, install_for_config)
+            install_for_config()
 
 
 def initialize_envs_directory() -> str:
@@ -314,21 +313,6 @@ class VirtualEnvironmentManager:
             )
             return env_dir, False  # Returning the path and False for existing directory
 
-    def read_environment_status(self, inmanta_env_status_file: str) -> Optional[str]:
-        """
-        Read the specific inmanta file which gives an indication on the status of the Python Virtual Environment:
-            - Is it broken / empty (no specific file)
-            - Is it created / running (should be complete and good to be used with an executor)
-
-        :param inmanta_env_status_file: The inmanta file that gives us the status of the Python Virtual Environment
-        """
-        if not os.path.exists(inmanta_env_status_file):
-            return None
-
-        with open(inmanta_env_status_file) as f:
-            current_status = f.read().strip()
-        return current_status
-
     async def create_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
         """
         Creates a new virtual environment based on the provided blueprint or reuses an existing one if suitable.
@@ -341,26 +325,41 @@ class VirtualEnvironmentManager:
         """
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
-        inmanta_env_status = os.path.join(env_storage, ".inmanta_env_status")
+        inmanta_env_status = pathlib.Path(env_storage) / ".inmanta_env_status"
+
+        def reset_virtual_environment(current_env_storage: str) -> None:
+            shutil.rmtree(current_env_storage)
+            os.makedirs(env_storage)
+
+        loop = asyncio.get_running_loop()
 
         if not is_new:
-            current_status = self.read_environment_status(inmanta_env_status)
-
-            match current_status:
-                case VirtualEnvStatus.created | VirtualEnvStatus.running:
-                    pass
-                case _:
-                    shutil.rmtree(env_storage)
-                    os.makedirs(env_storage)
-                    is_new = True
+            if not inmanta_env_status.exists():
+                LOGGER.info(
+                    "Removing venv for content %s, content hash: %s located in",
+                    str(blueprint),
+                    blueprint.blueprint_hash(),
+                    env_storage,
+                )
+                await loop.run_in_executor(threadpool, reset_virtual_environment, env_storage)
+                is_new = True
 
         if is_new:
             LOGGER.info("Creating venv for content %s, content hash: %s", str(blueprint), blueprint.blueprint_hash())
-            await process_environment.create_and_install_environment(blueprint)
+
+            def async_func_wrapper(current_blueprint: EnvBlueprint) -> None:
+                new_loop = asyncio.new_event_loop()
+                try:
+                    new_loop.run_until_complete(process_environment.create_and_install_environment(current_blueprint))
+                except Exception:
+                    raise
+                finally:
+                    new_loop.close()
+
+            await loop.run_in_executor(threadpool, async_func_wrapper, blueprint)
         self._environment_map[blueprint] = process_environment
 
-        with open(inmanta_env_status, "w") as f:
-            f.write(VirtualEnvStatus.created)
+        inmanta_env_status.touch()
 
         return process_environment
 
@@ -405,11 +404,6 @@ class VirtualEnvironmentManager:
                 continue
 
             absolute_path_file = str(file.absolute())
-            if absolute_path_file in reverse_environment_map:
-                blueprint = reverse_environment_map[absolute_path_file]
-                async with self._locks.get(blueprint.blueprint_hash()):
-                    del self._environment_map[blueprint]
-
             inmanta_env_status_file = file / ".inmanta_env_status"
 
             if inmanta_env_status_file.exists():
@@ -423,8 +417,16 @@ class VirtualEnvironmentManager:
                 # The Virtual Environment could be incomplete or broken
                 environments_on_disk_to_clean.add(absolute_path_file)
 
+        loop = asyncio.get_running_loop()
         for path_env_to_clean in environments_on_disk_to_clean:
-            shutil.rmtree(path_env_to_clean)
+            # If the path to clean is part of the `_environment_map` then we can use the threadpool of the executor to clean
+            # the virtual environment
+            if path_env_to_clean in reverse_environment_map:
+                blueprint = reverse_environment_map[path_env_to_clean]
+                async with self._locks.get(blueprint.blueprint_hash()):
+                    await loop.run_in_executor(self._environment_map[blueprint].thread_pool, shutil.rmtree, path_env_to_clean)
+            else:
+                shutil.rmtree(path_env_to_clean)
 
 
 class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):

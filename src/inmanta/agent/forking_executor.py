@@ -26,10 +26,14 @@ import logging
 import logging.config
 import multiprocessing
 import os
+import pathlib
 import socket
 import typing
 import uuid
 from asyncio import transports
+
+import tornado
+from tornado.ioloop import IOLoop
 
 import inmanta.agent.cache
 import inmanta.agent.executor
@@ -44,7 +48,6 @@ import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
 from inmanta.agent import executor
-from inmanta.data.model import VirtualEnvStatus
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
 
 LOGGER = logging.getLogger(__name__)
@@ -103,13 +106,13 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.ctx = ExecutorContext(self)
         self.log_transport: typing.Optional[LogShipper] = None
         self.take_over_logging = take_over_logging
+        self.timer_venv_checkup: typing.Optional[tornado.ioloop.PeriodicCallback] = None
 
     def connection_made(self, transport: transports.Transport) -> None:
         super().connection_made(transport)
 
         # Second stage logging setup
         # Take over logger to ship to remote
-
         if self.take_over_logging:
             # Remove all loggers
             root_logger = logging.root
@@ -124,6 +127,10 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         if self.log_transport:
             logging.getLogger().removeHandler(self.log_transport)
             self.log_transport = None
+
+    def stop_timer_venv_checkup(self) -> None:
+        if self.timer_venv_checkup is not None and self.timer_venv_checkup.is_running():
+            self.timer_venv_checkup.stop()
 
     def get_context(self) -> ExecutorContext:
         return self.ctx
@@ -141,6 +148,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             self.stopping = True
             assert self.transport is not None  # Mypy
             self.transport.close()
+            self.stop_timer_venv_checkup()
 
     def connection_lost(self, exc: Exception | None) -> None:
         """We lost connection to the controler, bail out"""
@@ -148,6 +156,15 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.logger.info("Connection lost", exc_info=exc)
         self._sync_stop()
         self.stopped.set()
+        self.stop_timer_venv_checkup()
+
+    def touch_inmanta_env_status(self) -> None:
+        """
+        Touch the `inmanta_env_status` file.
+        """
+        # makes mypy happy
+        assert self.ctx.venv is not None
+        (pathlib.Path(self.ctx.venv.env_path) / ".inmanta_env_status").touch()
 
 
 class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
@@ -177,13 +194,19 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         sources: list[inmanta.loader.ModuleSource],
         environment: uuid.UUID,
         uri: str,
+        venv_checkup_interval: typing.Optional[int] = None,
     ):
+        """
+        :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
+        testing
+        """
         self.venv_path = venv_path
         self.storage_folder = storage_folder
         self.gid = session_gid
         self.sources = sources
         self.environment = environment
         self.uri = uri
+        self._venv_checkup_interval = venv_checkup_interval
 
     async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.ModuleSource]:
         loop = asyncio.get_running_loop()
@@ -223,6 +246,22 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
             except Exception:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
                 failed.append(module_source)
+
+        if context.server.timer_venv_checkup is not None:
+            context.server.stop_timer_venv_checkup()
+
+        # Only used for testing
+        if self._venv_checkup_interval is not None:
+            context.server.timer_venv_checkup = tornado.ioloop.PeriodicCallback(
+                callback=context.server.touch_inmanta_env_status,
+                callback_time=datetime.timedelta(seconds=self._venv_checkup_interval),
+            )
+        else:
+            context.server.timer_venv_checkup = tornado.ioloop.PeriodicCallback(
+                callback=context.server.touch_inmanta_env_status,
+                callback_time=datetime.timedelta(minutes=1),
+            )
+        context.server.timer_venv_checkup.start()
 
         return failed
 
@@ -419,11 +458,9 @@ class MPExecutor(executor.Executor):
 
     async def close_version(self, version: int) -> None:
         await self.connection.call(CloseVersionCommand(version))
-        self.check_modification_time_venv()
 
     async def open_version(self, version: int) -> None:
         await self.connection.call(OpenVersionCommand(version))
-        self.check_modification_time_venv()
 
     async def dry_run(
         self,
@@ -431,7 +468,6 @@ class MPExecutor(executor.Executor):
         dry_run_id: uuid.UUID,
     ) -> None:
         await self.connection.call(DryRunCommand(resources, dry_run_id))
-        self.check_modification_time_venv()
 
     async def execute(
         self,
@@ -440,28 +476,9 @@ class MPExecutor(executor.Executor):
         reason: str,
     ) -> None:
         await self.connection.call(ExecuteCommand(gid, resource_details, reason))
-        self.check_modification_time_venv()
-
-    def check_modification_time_venv(self) -> None:
-        """
-        Make sure that the time of most recent content modification of the `inmanta_env_status` file is within the last two
-        hours. If it's not, the file is overwritten.
-        """
-        inmanta_env_status = os.path.join(self.executor_virtual_env.env_path, ".inmanta_env_status")
-        timestamp_env_modification = os.stat(inmanta_env_status).st_mtime
-        last_access_env_status = datetime.datetime.fromtimestamp(timestamp_env_modification)
-
-        current_datetime = datetime.datetime.now()
-        if ((current_datetime - last_access_env_status).seconds / 3600) < 2:
-            return
-
-        with open(inmanta_env_status, "w") as f:
-            f.write(VirtualEnvStatus.running)
 
     async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> inmanta.types.Apireturn:
-        facts = await self.connection.call(FactsCommand(resource))
-        self.check_modification_time_venv()
-        return facts
+        return await self.connection.call(FactsCommand(resource))
 
 
 class MPManager(executor.ExecutorManager[MPExecutor]):
@@ -541,7 +558,11 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             pass
 
     async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
+        self,
+        agent_name: str,
+        agent_uri: str,
+        code: typing.Collection[executor.ResourceInstallSpec],
+        venv_checkup_interval: typing.Optional[int] = None,
     ) -> MPExecutor:
         """
         Retrieves an Executor based on the agent name and ResourceInstallSpec.
@@ -549,6 +570,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param code: The set of sources to be installed on the executor.
+        :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
+            testing
         :return: An Executor instance
         """
         blueprint = executor.ExecutorBlueprint.from_specs(code)
@@ -571,7 +594,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                         "Found stale executor for agent %s with id %s, waiting for close", agent_name, executor_id.identity()
                     )
                     await it.join(2.0)
-            my_executor = await self.create_executor(executor_id)
+            my_executor = await self.create_executor(executor_id, venv_checkup_interval)
             self.__add_executor(executor_id, my_executor)
             if my_executor.failed_resource_sources:
                 # If some code loading failed, resolve here
@@ -589,7 +612,13 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             # https://github.com/inmanta/inmanta-core/issues/7281
             return my_executor
 
-    async def create_executor(self, executor_id: executor.ExecutorId) -> MPExecutor:
+    async def create_executor(
+        self, executor_id: executor.ExecutorId, venv_checkup_interval: typing.Optional[int] = None
+    ) -> MPExecutor:
+        """
+        :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
+        testing
+        """
         LOGGER.info("Creating executor for agent %s with id %s", executor_id.agent_name, executor_id.identity())
         env_blueprint = executor_id.blueprint.to_env_blueprint()
         venv = await self.environment_manager.get_environment(env_blueprint, self.thread_pool)
@@ -610,6 +639,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                 [x.for_transport() for x in executor_id.blueprint.sources],
                 self.environment,
                 executor_id.agent_uri,
+                venv_checkup_interval,
             )
         )
         LOGGER.debug(

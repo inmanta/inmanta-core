@@ -830,8 +830,3 @@ class PipConfig(BaseModel):
 
 
 LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
-
-
-class VirtualEnvStatus(StrEnum):
-    created = "created"
-    running = "running"
