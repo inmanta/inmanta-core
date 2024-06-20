@@ -819,7 +819,8 @@ class AgentInstance:
         self, model_version: int, resource_types: set[ResourceType]
     ) -> tuple[Optional[executor.Executor], executor.FailedResourcesSet, executor.FailedResourcesSet]:
         """
-        Set up an executor for resource deployment
+        Set up an executor for a given version of a model. This executor is the interface
+        to interact with the resources.
 
         :param model_version: model version being loaded
         :param resource_types: set of all resource types we want to be able to interact with via this executor
