@@ -825,7 +825,8 @@ class AgentInstance:
         :param action: the resource action associated with this deploy
         :param resources: list of resources in serialized form: a dict with information about
             this resource and its desired state
-        :param resource_types: set of all resource types composing this version of the model for this agent, even if they are not being deployed right now.
+        :param resource_types: set of all resource types composing this version of the model
+            for this agent, even if they are not being deployed right now.
         :return: Tuple of:
 
             - undeployable: resources for which code loading failed
