@@ -14,7 +14,6 @@
 
 import asyncio
 import datetime
-import functools
 import hashlib
 import json
 import logging
@@ -22,16 +21,10 @@ import os
 import pathlib
 import subprocess
 import time
-import typing
 
-import tornado
-
-import inmanta.env
 from inmanta.agent import executor, forking_executor
-from inmanta.agent.forking_executor import ExecutorContext, ExecutorServer, InitCommand
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
-from inmanta.protocol.ipc_light import LogShipper
 from utils import PipIndex, log_contains, log_doesnt_contain
 
 logger = logging.getLogger(__name__)

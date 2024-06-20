@@ -33,7 +33,6 @@ import uuid
 from asyncio import transports
 
 import tornado
-from tornado.ioloop import IOLoop
 
 import inmanta.agent.cache
 import inmanta.agent.executor
