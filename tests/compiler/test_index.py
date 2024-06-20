@@ -667,7 +667,9 @@ def test_index_on_nullable(snippetcompiler) -> None:
 
 
 def test_lookup_on_float_with_int(snippetcompiler):
-    # TODO: docstring
+    """
+    Verify that index lookups work as expected on float-type attributes, both with float and equivalent int lookups.
+    """
     snippetcompiler.setup_for_snippet(
         """
 entity A:
