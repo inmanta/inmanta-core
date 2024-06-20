@@ -257,8 +257,8 @@ class ResourceService(protocol.ServerSlice):
             "environment": uuid.UUID,
             "agent": str,
             "version": int,
-            "resources": list[dict[str, object]]
-            "resource_types": list(ResourceType),  # cast to list since sets are not json serializable
+            "resources": list[dict[str, object]]  # The requested resources
+            "resource_types": list(ResourceType),  # ALL the types for this model version
         }
         """
         if not self.agentmanager_service.is_primary(env, sid, agent):
@@ -271,7 +271,7 @@ class ResourceService(protocol.ServerSlice):
             result = await self.get_all_resources_for_agent(env, agent, version)
         return result
 
-    async def get_all_resources_for_agent(self, env: data.Environment, agent: str, version: int) -> Apireturn:
+    async def get_all_resources_for_agent(self, env: data.Environment, agent: str, version: Optional[int]) -> Apireturn:
         started = datetime.datetime.now().astimezone()
         if version is None:
             version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
