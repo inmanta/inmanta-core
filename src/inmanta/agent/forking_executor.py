@@ -537,11 +537,14 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
     ) -> MPExecutor:
         """
-        Retrieves an Executor based on the agent name and ResourceInstallSpec.
+        Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
         If an Executor does not exist for the given configuration, a new one is created.
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
-        :param code: The set of sources to be installed on the executor.
+        :param agent_uri: The name of the host on which the agent is running.
+        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
+            which resource types it can act on and all necessary information to install the relevant
+            handler code in its venv.
         :return: An Executor instance
         """
         blueprint = executor.ExecutorBlueprint.from_specs(code)

@@ -465,11 +465,14 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
     @abc.abstractmethod
     async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]) -> E:
         """
-        Retrieves an Executor based on the agent name and blueprint.
+        Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
         If an Executor does not exist for the given configuration, a new one is created.
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
-        :param blueprint: The ExecutorBlueprint defining the configuration for the Executor.
+        :param agent_uri: The name of the host on which the agent is running.
+        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
+            which resource types it can act on and all necessary information to install the relevant
+            handler code in its venv.
         :return: An Executor instance
         """
         pass

@@ -474,10 +474,14 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
     ) -> InProcessExecutor:
         """
-        Creates an Executor based with the specified agent name and blueprint.
-        It ensures the required virtual environment is prepared and source code is loaded.
+        Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
+        If an Executor does not exist for the given configuration, a new one is created.
 
-        :param executor_id: executor identifier containing an agent name and a blueprint configuration.
+        :param agent_name: The name of the agent for which an Executor is being retrieved or created.
+        :param agent_uri: The name of the host on which the agent is running.
+        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
+            which resource types it can act on and all necessary information to install the relevant
+            handler code in its venv.
         :return: An Executor instance
         """
         if agent_name in self.executors:
