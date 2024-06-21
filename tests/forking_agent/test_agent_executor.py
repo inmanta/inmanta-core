@@ -20,8 +20,8 @@ import logging
 import os
 import pathlib
 import subprocess
-import time
 
+from inmanta import const
 from inmanta.agent import executor, forking_executor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
@@ -349,25 +349,34 @@ def test():
 
     executor_manager = mpmanager_light
     executor_1, executor_2 = await asyncio.gather(
-        executor_manager.get_executor("agent1", "local:", code_for(blueprint1), 1),
-        executor_manager.get_executor("agent2", "local:", code_for(blueprint2), 1),
+        executor_manager.get_executor("agent1", "local:", code_for(blueprint1), 0.1),
+        executor_manager.get_executor("agent2", "local:", code_for(blueprint2), 0.1),
     )
 
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
     os.utime(
-        f"{executor_2.executor_virtual_env.env_path}/.inmanta_env_status", (old_datetime.timestamp(), old_datetime.timestamp())
+        f"{executor_2.executor_virtual_env.env_path}/.{const.INMANTA_ENV_STATUS_FILENAME}",
+        (old_datetime.timestamp(), old_datetime.timestamp()),
     )
 
     def get_modification_datetime(file: str) -> datetime.datetime:
         return datetime.datetime.fromtimestamp(os.stat(file).st_mtime)
 
-    old_check_executor1 = get_modification_datetime(f"{executor_1.executor_virtual_env.env_path}/.inmanta_env_status")
-    old_check_executor2 = get_modification_datetime(f"{executor_2.executor_virtual_env.env_path}/.inmanta_env_status")
+    old_check_executor1 = get_modification_datetime(
+        f"{executor_1.executor_virtual_env.env_path}/.{const.INMANTA_ENV_STATUS_FILENAME}"
+    )
+    old_check_executor2 = get_modification_datetime(
+        f"{executor_2.executor_virtual_env.env_path}/.{const.INMANTA_ENV_STATUS_FILENAME}"
+    )
 
-    time.sleep(2)
+    await asyncio.sleep(0.2)
 
-    new_check_executor1 = get_modification_datetime(f"{executor_1.executor_virtual_env.env_path}/.inmanta_env_status")
-    new_check_executor2 = get_modification_datetime(f"{executor_2.executor_virtual_env.env_path}/.inmanta_env_status")
+    new_check_executor1 = get_modification_datetime(
+        f"{executor_1.executor_virtual_env.env_path}/.{const.INMANTA_ENV_STATUS_FILENAME}"
+    )
+    new_check_executor2 = get_modification_datetime(
+        f"{executor_2.executor_virtual_env.env_path}/.{const.INMANTA_ENV_STATUS_FILENAME}"
+    )
 
     assert new_check_executor1 > old_check_executor1
     assert new_check_executor2 > old_check_executor2

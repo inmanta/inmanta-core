@@ -46,6 +46,7 @@ import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
+from inmanta import const
 from inmanta.agent import executor
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
 
@@ -163,7 +164,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """
         # makes mypy happy
         assert self.ctx.venv is not None
-        (pathlib.Path(self.ctx.venv.env_path) / ".inmanta_env_status").touch()
+        (pathlib.Path(self.ctx.venv.env_path) / f".{const.INMANTA_ENV_STATUS_FILENAME}").touch()
 
 
 class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
@@ -246,20 +247,14 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
                 failed.append(module_source)
 
-        if context.server.timer_venv_checkup is not None:
-            context.server.stop_timer_venv_checkup()
+        assert context.server.timer_venv_checkup is None, "InitCommand should be only called once!"
 
-        # Only used for testing
-        if self._venv_checkup_interval is not None:
-            context.server.timer_venv_checkup = tornado.ioloop.PeriodicCallback(
-                callback=context.server.touch_inmanta_env_status,
-                callback_time=datetime.timedelta(seconds=self._venv_checkup_interval),
-            )
-        else:
-            context.server.timer_venv_checkup = tornado.ioloop.PeriodicCallback(
-                callback=context.server.touch_inmanta_env_status,
-                callback_time=datetime.timedelta(minutes=1),
-            )
+        interval = self._venv_checkup_interval or 60
+
+        context.server.timer_venv_checkup = tornado.ioloop.PeriodicCallback(
+            callback=context.server.touch_inmanta_env_status,
+            callback_time=datetime.timedelta(seconds=interval),
+        )
         context.server.timer_venv_checkup.start()
 
         return failed

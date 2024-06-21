@@ -38,6 +38,7 @@ from typing import Any, Dict, Optional, Sequence
 import pkg_resources
 
 import inmanta.types
+from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
@@ -245,7 +246,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
         super().__init__(env_path=env_path)
         self.thread_pool = threadpool
 
-    async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
+    def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
         Creates and configures the virtual environment according to the provided blueprint.
 
@@ -325,7 +326,7 @@ class VirtualEnvironmentManager:
         """
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
-        inmanta_env_status = pathlib.Path(env_storage) / ".inmanta_env_status"
+        inmanta_env_status = pathlib.Path(env_storage) / f".{const.INMANTA_ENV_STATUS_FILENAME}"
 
         def reset_virtual_environment(current_env_storage: str) -> None:
             shutil.rmtree(current_env_storage)
@@ -336,7 +337,7 @@ class VirtualEnvironmentManager:
         if not is_new:
             if not inmanta_env_status.exists():
                 LOGGER.info(
-                    "Removing venv for content %s, content hash: %s located in",
+                    "Removing venv for content %s, content hash: %s located in %s",
                     str(blueprint),
                     blueprint.blueprint_hash(),
                     env_storage,
@@ -346,17 +347,7 @@ class VirtualEnvironmentManager:
 
         if is_new:
             LOGGER.info("Creating venv for content %s, content hash: %s", str(blueprint), blueprint.blueprint_hash())
-
-            def async_func_wrapper(current_blueprint: EnvBlueprint) -> None:
-                new_loop = asyncio.new_event_loop()
-                try:
-                    new_loop.run_until_complete(process_environment.create_and_install_environment(current_blueprint))
-                except Exception:
-                    raise
-                finally:
-                    new_loop.close()
-
-            await loop.run_in_executor(threadpool, async_func_wrapper, blueprint)
+            await loop.run_in_executor(threadpool, process_environment.create_and_install_environment, blueprint)
         self._environment_map[blueprint] = process_environment
 
         inmanta_env_status.touch()
@@ -397,14 +388,14 @@ class VirtualEnvironmentManager:
         environments_on_disk_to_clean: set[str] = set()
         reverse_environment_map = {v.env_path: k for k, v in self._environment_map.items()}
 
-        # We check every folder and we save the ones that contain the special file and that should be removed
+        # We check every folder, and we save the ones that contain the special file and that should be removed
         current_datetime = datetime.datetime.now()
         for file in envs_dir.iterdir():
             if not file.is_dir():
                 continue
 
             absolute_path_file = str(file.absolute())
-            inmanta_env_status_file = file / ".inmanta_env_status"
+            inmanta_env_status_file = file / f".{const.INMANTA_ENV_STATUS_FILENAME}"
 
             if inmanta_env_status_file.exists():
                 # Retrieve modification time
@@ -426,7 +417,7 @@ class VirtualEnvironmentManager:
                 async with self._locks.get(blueprint.blueprint_hash()):
                     await loop.run_in_executor(self._environment_map[blueprint].thread_pool, shutil.rmtree, path_env_to_clean)
             else:
-                shutil.rmtree(path_env_to_clean)
+                await loop.run_in_executor(None, shutil.rmtree, path_env_to_clean)
 
 
 class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):

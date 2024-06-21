@@ -344,3 +344,6 @@ MODULE_PKG_NAME_PREFIX = "inmanta-module-"
 # Resource sets marked for deletion during a partial export can be passed via this env
 # variable as a space separated list of set ids.
 INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"
+
+
+INMANTA_ENV_STATUS_FILENAME = "inmanta_env_status"
