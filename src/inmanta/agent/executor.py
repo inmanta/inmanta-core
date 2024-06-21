@@ -36,6 +36,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence
 
 import pkg_resources
+import tornado
 
 import inmanta.types
 from inmanta import const
@@ -288,6 +289,11 @@ class VirtualEnvironmentManager:
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
         self.envs_dir: str = envs_dir
         self._locks: NamedLock = NamedLock()
+        self._cleanup_timer = tornado.ioloop.PeriodicCallback(
+            callback=self.clean_environments,
+            callback_time=datetime.timedelta(days=cfg.agent_virtual_environment_cleanup.get()),
+        )
+        self._cleanup_timer.start()
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
         """
@@ -418,6 +424,13 @@ class VirtualEnvironmentManager:
                     await loop.run_in_executor(self._environment_map[blueprint].thread_pool, shutil.rmtree, path_env_to_clean)
             else:
                 await loop.run_in_executor(None, shutil.rmtree, path_env_to_clean)
+
+    def stop_cleanup_timer(self) -> None:
+        """
+        Stop the cleanup timer of the environment manager if it is running.
+        """
+        if self._cleanup_timer.is_running():
+            self._cleanup_timer.stop()
 
 
 class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):
