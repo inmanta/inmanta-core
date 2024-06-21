@@ -288,6 +288,8 @@ class VirtualEnvironmentManager:
     def __init__(self, envs_dir: str) -> None:
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
         self.envs_dir: str = envs_dir
+        # We rely on a Named lock to be able to lock specific entries of the `_environment_map` dict. This allows us to prevent
+        # creating and deleting the same venv at a given time.
         self._locks: NamedLock = NamedLock()
         self._cleanup_timer = tornado.ioloop.PeriodicCallback(
             callback=self.clean_environments,
@@ -299,7 +301,7 @@ class VirtualEnvironmentManager:
         """
         Retrieves the directory path for a virtual environment based on the given blueprint.
         If the directory does not exist, it creates a new one. This method ensures that each
-        virtual environment has a unique storage location.
+        virtual environment has a unique storage location. This method is supposed to be used in a lock.
 
         :param blueprint: The blueprint of the environment for which the storage is being determined.
         :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
@@ -324,6 +326,7 @@ class VirtualEnvironmentManager:
         """
         Creates a new virtual environment based on the provided blueprint or reuses an existing one if suitable.
         This involves setting up the virtual environment and installing any required packages as specified in the blueprint.
+        This method is supposed to be used in a lock.
 
         :param blueprint: The blueprint specifying the configuration for the new virtual environment.
         :param threadpool: A ThreadPoolExecutor
@@ -393,17 +396,16 @@ class VirtualEnvironmentManager:
         """
         number_days_before_venv_cleanup = cfg.agent_virtual_environment_cleanup.get()
         envs_dir = pathlib.Path(self.envs_dir)
-        environments_on_disk_to_clean: set[str] = set()
-        reverse_environment_map = {v.env_path: k for k, v in self._environment_map.items()}
+        environments_on_disk_to_clean: set[pathlib.Path] = set()
+        reverse_environment_map = {pathlib.Path(v.env_path): k for k, v in self._environment_map.items()}
 
         # We check every folder, and we save the ones that contain the special file and that should be removed
         current_datetime = datetime.datetime.now()
-        for file in envs_dir.iterdir():
-            if not file.is_dir():
+        for folder in envs_dir.iterdir():
+            if not folder.is_dir():
                 continue
 
-            absolute_path_file = str(file.absolute())
-            inmanta_env_status_file = file / const.INMANTA_ENV_STATUS_FILENAME
+            inmanta_env_status_file = folder / const.INMANTA_ENV_STATUS_FILENAME
 
             if inmanta_env_status_file.exists():
                 # Retrieve modification time
@@ -411,22 +413,28 @@ class VirtualEnvironmentManager:
 
                 modification_datetime = datetime.datetime.fromtimestamp(timestamp)
                 if (current_datetime - modification_datetime).days >= number_days_before_venv_cleanup:
-                    environments_on_disk_to_clean.add(absolute_path_file)
+                    environments_on_disk_to_clean.add(folder)
             else:
                 # The Virtual Environment could be incomplete or broken
-                environments_on_disk_to_clean.add(absolute_path_file)
+                environments_on_disk_to_clean.add(folder)
 
         loop = asyncio.get_running_loop()
-        for path_env_to_clean in environments_on_disk_to_clean:
+        for folder in environments_on_disk_to_clean:
             # If the path to clean is part of the `_environment_map` then we can use the threadpool of the executor to clean
             # the virtual environment
-            if path_env_to_clean in reverse_environment_map:
-                blueprint = reverse_environment_map[path_env_to_clean]
-                async with self._locks.get(blueprint.blueprint_hash()):
-                    await loop.run_in_executor(self._environment_map[blueprint].thread_pool, shutil.rmtree, path_env_to_clean)
+            if folder in reverse_environment_map:
+                blueprint = reverse_environment_map[folder]
+                current_thread_pool = self._environment_map[blueprint].thread_pool
+                entry_to_remove = blueprint
+            # Otherwise, we know that the blueprint hash is used as the name for the venv folder, so as a safety measure, we
+            # can just lock on the name of the folder.
             else:
-                async with self._locks.get(path_env_to_clean):
-                    await loop.run_in_executor(None, shutil.rmtree, path_env_to_clean)
+                current_thread_pool = None
+                entry_to_remove = None
+            async with self._locks.get(folder.name):
+                await loop.run_in_executor(current_thread_pool, shutil.rmtree, folder)
+                if entry_to_remove is not None:
+                    del self._environment_map[entry_to_remove]
 
     def stop_cleanup_timer(self) -> None:
         """
