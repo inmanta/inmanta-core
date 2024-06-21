@@ -1080,6 +1080,7 @@ class AgentInstance:
                     loaded_resources.append(resource)
 
             except Exception:
+                LOGGER.exception("Failed to load resource %s", res["id"])
                 failed_resources.append(res["id"])
                 undeployable[res["id"]] = const.ResourceState.unavailable
                 resource = Resource.deserialize(res["attributes"], use_generic=True)
@@ -1406,6 +1407,13 @@ class Agent(SessionEndpoint):
                     except Exception:
                         LOGGER.exception("Failed to install handler %s version=%d", rt, version)
                         failed_to_load.add(rt)
+                else:
+                    LOGGER.error(
+                        "Failed to get source code for %s version=%d\n%s",
+                        rt,
+                        version,
+                        result.result,
+                    )
 
         return failed_to_load
 
