@@ -22,10 +22,12 @@ import functools
 import logging
 import pickle
 import struct
+import traceback
 import typing
 import uuid
 from asyncio import Future, Protocol, transports
 from dataclasses import dataclass
+from pickle import PicklingError
 from typing import Optional
 
 
@@ -158,7 +160,7 @@ class IPCFrameProtocol(Protocol):
             self.frame_received(frame)
         except Exception:
             # Failed to unpickle, drop connection
-            self.logger.exception("Unexpected exception while handling frame", self.name)
+            self.logger.exception("Unexpected exception while handling frame %s", self.name)
 
     def send_frame(self, frame: IPCFrame) -> None:
         """
@@ -166,7 +168,13 @@ class IPCFrameProtocol(Protocol):
         """
         if self.transport.is_closing():
             raise ConnectionLost()
-        buffer = pickle.dumps(frame)
+        try:
+            buffer = pickle.dumps(frame)
+        except PicklingError:
+            raise
+        except Exception as e:
+            # Pickle tends to raise other exceptions as well...
+            raise PicklingError() from e
         size = struct.pack("!L", len(buffer))
         self.transport.write(size + buffer)
 
@@ -204,7 +212,12 @@ class IPCServer(IPCFrameProtocol, abc.ABC, typing.Generic[ServerContext]):
         except Exception as e:
             self.logger.debug("Exception on rpc call", exc_info=True)
             if frame.id is not None:
-                self.send_frame(IPCReplyFrame(frame.id, e, is_exception=True))
+                try:
+                    self.send_frame(IPCReplyFrame(frame.id, e, is_exception=True))
+                except PicklingError:
+                    # Can't pickle it
+
+                    self.send_frame(IPCReplyFrame(frame.id, traceback.format_exception(e), is_exception=True))
 
 
 class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
@@ -248,7 +261,10 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
 
     def process_reply(self, frame: IPCReplyFrame) -> None:
         if frame.is_exception:
-            self.requests[frame.id].set_exception(frame.returnvalue)
+            if isinstance(frame.returnvalue, Exception):
+                self.requests[frame.id].set_exception(frame.returnvalue)
+            else:
+                self.requests[frame.id].set_exception(Exception(frame.returnvalue))
         else:
             self.requests[frame.id].set_result(frame.returnvalue)
         del self.requests[frame.id]

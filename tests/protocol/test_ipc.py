@@ -19,10 +19,12 @@
 import asyncio
 import functools
 import logging
+import re
 import socket
 import struct
 import sys
 import threading
+from socket import socketpair
 
 import pytest
 
@@ -86,6 +88,13 @@ class Echo(inmanta.protocol.ipc_light.IPCMethod[list[int], None]):
         return self.args
 
 
+class UnPicleableError(inmanta.protocol.ipc_light.IPCMethod[None, None]):
+    async def call(self, ctx: None) -> None:
+        a, b = socketpair()
+        a.close()
+        b.close()
+        raise Exception(a)
+
 async def test_normal_flow(request):
     loop = asyncio.get_running_loop()
     parent_conn, child_conn = socket.socketpair()
@@ -104,6 +113,9 @@ async def test_normal_flow(request):
 
     with pytest.raises(Exception, match="raise"):
         await client_protocol.call(Error())
+
+    with pytest.raises(Exception, match=re.escape("<socket.socket [closed]")):
+        await client_protocol.call(UnPicleableError())
 
     args = [1, 2, 3, 4]
     result = await client_protocol.call(Echo(args))
