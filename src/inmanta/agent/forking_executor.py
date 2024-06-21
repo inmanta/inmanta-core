@@ -231,7 +231,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
                 failed.append(module_source)
 
-        # then try to load them
+        # then try to import them
         for module_source in in_place:
             try:
                 await loop.run_in_executor(
