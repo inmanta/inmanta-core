@@ -1,0 +1,4 @@
+---
+description: Clean the old virtual environments and make sure they are consistent when we get an executor.
+change-type: minor
+destination-branches: [master]
