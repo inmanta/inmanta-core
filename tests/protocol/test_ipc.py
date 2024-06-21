@@ -88,7 +88,7 @@ class Echo(inmanta.protocol.ipc_light.IPCMethod[list[int], None]):
         return self.args
 
 
-class UnPicleableError(inmanta.protocol.ipc_light.IPCMethod[None, None]):
+class UnPicklableError(inmanta.protocol.ipc_light.IPCMethod[None, None]):
     async def call(self, ctx: None) -> None:
         a, b = socketpair()
         a.close()
@@ -116,7 +116,7 @@ async def test_normal_flow(request):
         await client_protocol.call(Error())
 
     with pytest.raises(Exception, match=re.escape("<socket.socket [closed]")):
-        await client_protocol.call(UnPicleableError())
+        await client_protocol.call(UnPicklableError())
 
     args = [1, 2, 3, 4]
     result = await client_protocol.call(Echo(args))
