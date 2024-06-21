@@ -346,4 +346,6 @@ MODULE_PKG_NAME_PREFIX = "inmanta-module-"
 INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"
 
 
-INMANTA_ENV_STATUS_FILENAME = "inmanta_env_status"
+# File to know the status of a python Virtual Environment created by Inmanta. It also gives the information of when this
+# venv was last used.
+INMANTA_ENV_STATUS_FILENAME = ".inmanta_env_status"

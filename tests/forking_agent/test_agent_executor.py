@@ -355,7 +355,7 @@ def test():
 
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
     os.utime(
-        f"{executor_2.executor_virtual_env.env_path}/.{const.INMANTA_ENV_STATUS_FILENAME}",
+        f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_ENV_STATUS_FILENAME}",
         (old_datetime.timestamp(), old_datetime.timestamp()),
     )
 
@@ -363,19 +363,19 @@ def test():
         return datetime.datetime.fromtimestamp(os.stat(file).st_mtime)
 
     old_check_executor1 = get_modification_datetime(
-        f"{executor_1.executor_virtual_env.env_path}/.{const.INMANTA_ENV_STATUS_FILENAME}"
+        f"{executor_1.executor_virtual_env.env_path}/{const.INMANTA_ENV_STATUS_FILENAME}"
     )
     old_check_executor2 = get_modification_datetime(
-        f"{executor_2.executor_virtual_env.env_path}/.{const.INMANTA_ENV_STATUS_FILENAME}"
+        f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_ENV_STATUS_FILENAME}"
     )
 
     await asyncio.sleep(0.2)
 
     new_check_executor1 = get_modification_datetime(
-        f"{executor_1.executor_virtual_env.env_path}/.{const.INMANTA_ENV_STATUS_FILENAME}"
+        f"{executor_1.executor_virtual_env.env_path}/{const.INMANTA_ENV_STATUS_FILENAME}"
     )
     new_check_executor2 = get_modification_datetime(
-        f"{executor_2.executor_virtual_env.env_path}/.{const.INMANTA_ENV_STATUS_FILENAME}"
+        f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_ENV_STATUS_FILENAME}"
     )
 
     assert new_check_executor1 > old_check_executor1

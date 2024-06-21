@@ -332,7 +332,7 @@ class VirtualEnvironmentManager:
         """
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
-        inmanta_env_status = pathlib.Path(env_storage) / f".{const.INMANTA_ENV_STATUS_FILENAME}"
+        inmanta_env_status = pathlib.Path(env_storage) / const.INMANTA_ENV_STATUS_FILENAME
 
         def reset_virtual_environment(current_env_storage: str) -> None:
             shutil.rmtree(current_env_storage)
@@ -383,6 +383,8 @@ class VirtualEnvironmentManager:
                     blueprint.blueprint_hash(),
                 )
                 return self._environment_map[blueprint]
+            # The whole creation of the virtual environment is under lock. Therefore, we know that it will not race with the
+            # cleanup as the `INMANTA_ENV_STATUS_FILENAME` will be touched at the end of the creation.
             return await self.create_environment(blueprint, threadpool)
 
     async def clean_environments(self) -> None:
@@ -401,7 +403,7 @@ class VirtualEnvironmentManager:
                 continue
 
             absolute_path_file = str(file.absolute())
-            inmanta_env_status_file = file / f".{const.INMANTA_ENV_STATUS_FILENAME}"
+            inmanta_env_status_file = file / const.INMANTA_ENV_STATUS_FILENAME
 
             if inmanta_env_status_file.exists():
                 # Retrieve modification time
@@ -423,7 +425,8 @@ class VirtualEnvironmentManager:
                 async with self._locks.get(blueprint.blueprint_hash()):
                     await loop.run_in_executor(self._environment_map[blueprint].thread_pool, shutil.rmtree, path_env_to_clean)
             else:
-                await loop.run_in_executor(None, shutil.rmtree, path_env_to_clean)
+                async with self._locks.get(path_env_to_clean):
+                    await loop.run_in_executor(None, shutil.rmtree, path_env_to_clean)
 
     def stop_cleanup_timer(self) -> None:
         """
