@@ -209,6 +209,16 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         self._venv_checkup_interval = venv_checkup_interval
 
     async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.ModuleSource]:
+        assert context.server.timer_venv_checkup is None, "InitCommand should be only called once!"
+
+        interval = self._venv_checkup_interval or 60
+
+        context.server.timer_venv_checkup = tornado.ioloop.PeriodicCallback(
+            callback=context.server.touch_inmanta_env_status,
+            callback_time=datetime.timedelta(seconds=interval),
+        )
+        context.server.timer_venv_checkup.start()
+
         loop = asyncio.get_running_loop()
         parent_logger = logging.getLogger("agent.executor")
         logger = parent_logger.getChild(context.name)
@@ -246,16 +256,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
             except Exception:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
                 failed.append(module_source)
-
-        assert context.server.timer_venv_checkup is None, "InitCommand should be only called once!"
-
-        interval = self._venv_checkup_interval or 60
-
-        context.server.timer_venv_checkup = tornado.ioloop.PeriodicCallback(
-            callback=context.server.touch_inmanta_env_status,
-            callback_time=datetime.timedelta(seconds=interval),
-        )
-        context.server.timer_venv_checkup.start()
 
         return failed
 
