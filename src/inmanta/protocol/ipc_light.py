@@ -159,7 +159,7 @@ class IPCFrameProtocol(Protocol):
         try:
             self.frame_received(frame)
         except Exception:
-            # Failed to unpickle, drop connection
+            # Failed to unpickle, drop frame
             self.logger.exception("Unexpected exception while handling frame %s", self.name)
 
     def send_frame(self, frame: IPCFrame) -> None:

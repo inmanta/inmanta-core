@@ -95,6 +95,7 @@ class UnPicleableError(inmanta.protocol.ipc_light.IPCMethod[None, None]):
         b.close()
         raise Exception(a)
 
+
 async def test_normal_flow(request):
     loop = asyncio.get_running_loop()
     parent_conn, child_conn = socket.socketpair()
