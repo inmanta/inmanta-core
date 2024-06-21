@@ -1203,6 +1203,7 @@ class Agent(SessionEndpoint):
                     try:
                         pip_config = await self._get_pip_config(environment, version)
                     except Exception:
+                        LOGGER.exception("Failed to load resources due to missing pip config for type %s", resource_type)
                         invalid_resource_types.add(resource_type)
                         continue
 
@@ -1215,6 +1216,12 @@ class Agent(SessionEndpoint):
                 # TODO: this cache is a slight memory leak
                 self._previously_loaded[(resource_type, version)] = resource_install_spec
             else:
+                LOGGER.error(
+                    "Failed to get source code for %s version=%d\n%s",
+                    resource_type,
+                    version,
+                    result.result,
+                )
                 invalid_resource_types.add(resource_type)
 
         return resource_install_specs, invalid_resource_types
