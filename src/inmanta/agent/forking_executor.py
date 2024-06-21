@@ -221,9 +221,19 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         sources = [s.with_client(sync_client) for s in self.sources]
 
         failed: list[inmanta.loader.ModuleSource] = []
+        in_place: list[inmanta.loader.ModuleSource] = []
+        # First put all files on disk
         for module_source in sources:
             try:
                 await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
+                in_place.append(module_source)
+            except Exception:
+                logger.info("Failed to load sources: %s", module_source, exc_info=True)
+                failed.append(module_source)
+
+        # then try to import them
+        for module_source in in_place:
+            try:
                 await loop.run_in_executor(
                     context.threadpool, functools.partial(loader._load_module, module_source.name, module_source.hash_value)
                 )
