@@ -22,7 +22,7 @@ from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import timedelta
 from functools import wraps
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import inmanta.agent.cache
 import inmanta.protocol
@@ -41,7 +41,7 @@ if typing.TYPE_CHECKING:
     import inmanta.agent.agent as agent
 
 
-def atomic_unit_of_work(method):
+def atomic_unit_of_work(method: Callable):
     """
     decorator to denote that a coroutine is an atomic unit of work:
         - execute it under the execution lock
@@ -99,7 +99,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         # Timestamp of the last performed task. Used by the cleanup mechanism
         # to remove inactive executors.
-        self.last_job_timestamp: Optional[datetime.datetime] = None
+        self.last_job_timestamp: datetime.datetime = datetime.datetime.now().astimezone()
 
     def stop(self) -> None:
         self._stopped = True
@@ -472,7 +472,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             now = datetime.datetime.now().astimezone()
             return now - self.last_job_timestamp > timedelta(seconds=allowed_idle_time)
 
-    async def stop_if_inactive(self, allowed_idle_time: int):
+    async def stop_if_inactive(self, allowed_idle_time: int) -> None:
         """
         Stop this executor if it has been inactive for more than a given amount of time.
         Perform this check under the execution lock to make sure we don't clean up an
@@ -557,4 +557,4 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         return out
 
     async def cleanup_inactive_executors(self, reference_time: datetime.datetime, retention_time: int) -> None:
-        await asyncio.gather(*(executor.stop_if_inactive() for executor in self.executors.values()))
+        await asyncio.gather(*(executor.stop_if_inactive(retention_time) for executor in self.executors.values()))

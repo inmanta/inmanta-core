@@ -169,6 +169,8 @@ class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
 class CleanInactiveCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
     async def call(self, context: ExecutorContext) -> None:
+        assert context.executor is not None
+
         if await context.executor.is_idle():
             await context.stop()
 
@@ -700,4 +702,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         return children
 
     async def cleanup_inactive_executors(self, reference_time: datetime.datetime, retention_time: int) -> None:
-        await asyncio.gather(*(executor.connection.call(CleanInactiveCommand()) for executor in self.executor_map.values()))
+        await asyncio.gather(
+            *(executor.connection.call(CleanInactiveCommand(retention_time)) for executor in self.executor_map.values())
+        )
