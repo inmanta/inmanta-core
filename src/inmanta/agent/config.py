@@ -162,10 +162,10 @@ agent_get_resource_backoff: Option[float] = Option(
 
 agent_virtual_environment_cleanup: Option[float] = Option(
     "config",
-    "agent-venv-cleanup",
+    "executor-venv-retention-time",
     7,
-    "This is the number of days to wait before unused Python virtual environments are cleaned from the inmanta "
-    "server. Setting this option too low may result in a high load on the Inmanta server. Setting it too high"
+    "This is the number of days to wait before unused Python virtual environments of an executor are removed from "
+    "the inmanta server. Setting this option too low may result in a high load on the Inmanta server. Setting it too high"
     " may result in increased disk usage.",
     is_float,
 )

@@ -346,6 +346,8 @@ MODULE_PKG_NAME_PREFIX = "inmanta-module-"
 INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"
 
 
-# File to know the status of a python Virtual Environment created by Inmanta. It also gives the information of when this
+# File present in the root of a virtual environment of an executor.
+# This file is created after the venv is correctly created and touched at regular intervals while it's actively used.
+# It's used to determine whether a venv is only partially created (due to a server crash for example) or to determine when the
 # venv was last used.
-INMANTA_ENV_STATUS_FILENAME = ".inmanta_env_status"
+INMANTA_VENV_STATUS_FILENAME = ".inmanta_env_status"

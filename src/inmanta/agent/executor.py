@@ -301,7 +301,8 @@ class VirtualEnvironmentManager:
         """
         Retrieves the directory path for a virtual environment based on the given blueprint.
         If the directory does not exist, it creates a new one. This method ensures that each
-        virtual environment has a unique storage location. This method is supposed to be used in a lock.
+        virtual environment has a unique storage location. This method is supposed to be used in an allocated lock in
+        `self._locks`.
 
         :param blueprint: The blueprint of the environment for which the storage is being determined.
         :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
@@ -326,8 +327,7 @@ class VirtualEnvironmentManager:
         """
         Creates a new virtual environment based on the provided blueprint or reuses an existing one if suitable.
         This involves setting up the virtual environment and installing any required packages as specified in the blueprint.
-        This method is supposed to be used in a lock.
-
+        This method is supposed to be used in an allocated lock in `self._locks`.
         :param blueprint: The blueprint specifying the configuration for the new virtual environment.
         :param threadpool: A ThreadPoolExecutor
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
@@ -335,7 +335,7 @@ class VirtualEnvironmentManager:
         """
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
-        inmanta_env_status = pathlib.Path(env_storage) / const.INMANTA_ENV_STATUS_FILENAME
+        inmanta_venv_status = pathlib.Path(env_storage) / const.INMANTA_VENV_STATUS_FILENAME
 
         def reset_virtual_environment(current_env_storage: str) -> None:
             shutil.rmtree(current_env_storage)
@@ -343,23 +343,23 @@ class VirtualEnvironmentManager:
 
         loop = asyncio.get_running_loop()
 
-        if not is_new:
-            if not inmanta_env_status.exists():
-                LOGGER.info(
-                    "Removing venv for content %s, content hash: %s located in %s",
-                    str(blueprint),
-                    blueprint.blueprint_hash(),
-                    env_storage,
-                )
-                await loop.run_in_executor(threadpool, reset_virtual_environment, env_storage)
-                is_new = True
+        if not is_new and not inmanta_venv_status.exists():
+            LOGGER.info(
+                "Venv is already present but the inmanta venv status file is not. Removing venv for content %s, "
+                "content hash: %s located in %s",
+                str(blueprint),
+                blueprint.blueprint_hash(),
+                env_storage,
+            )
+            await loop.run_in_executor(threadpool, reset_virtual_environment, env_storage)
+            is_new = True
 
         if is_new:
             LOGGER.info("Creating venv for content %s, content hash: %s", str(blueprint), blueprint.blueprint_hash())
             await loop.run_in_executor(threadpool, process_environment.create_and_install_environment, blueprint)
         self._environment_map[blueprint] = process_environment
 
-        inmanta_env_status.touch()
+        inmanta_venv_status.touch()
 
         return process_environment
 
@@ -397,7 +397,7 @@ class VirtualEnvironmentManager:
         number_days_before_venv_cleanup = cfg.agent_virtual_environment_cleanup.get()
         envs_dir = pathlib.Path(self.envs_dir)
         environments_on_disk_to_clean: set[pathlib.Path] = set()
-        reverse_environment_map = {pathlib.Path(v.env_path): k for k, v in self._environment_map.items()}
+        venv_path_to_blueprint = {pathlib.Path(v.env_path): k for k, v in self._environment_map.items()}
 
         # We check every folder, and we save the ones that contain the special file and that should be removed
         current_datetime = datetime.datetime.now()
@@ -405,11 +405,11 @@ class VirtualEnvironmentManager:
             if not folder.is_dir():
                 continue
 
-            inmanta_env_status_file = folder / const.INMANTA_ENV_STATUS_FILENAME
+            inmanta_venv_status_file = folder / const.INMANTA_VENV_STATUS_FILENAME
 
-            if inmanta_env_status_file.exists():
+            if inmanta_venv_status_file.exists():
                 # Retrieve modification time
-                timestamp = inmanta_env_status_file.stat().st_mtime
+                timestamp = inmanta_venv_status_file.stat().st_mtime
 
                 modification_datetime = datetime.datetime.fromtimestamp(timestamp)
                 if (current_datetime - modification_datetime).days >= number_days_before_venv_cleanup:
@@ -419,11 +419,27 @@ class VirtualEnvironmentManager:
                 environments_on_disk_to_clean.add(folder)
 
         loop = asyncio.get_running_loop()
+
+        def remove_venv(current_folder: pathlib.Path) -> None:
+            """
+            Remove the given venv
+
+            :param current_folder: The venv to remove
+            """
+            try:
+                shutil.rmtree(current_folder)
+            except Exception as e:
+                LOGGER.error(
+                    "An error occurred while removing the venv located %s: %s",
+                    str(current_folder.absolute()),
+                    str(e),
+                )
+
         for folder in environments_on_disk_to_clean:
             # If the path to clean is part of the `_environment_map` then we can use the threadpool of the executor to clean
             # the virtual environment
-            if folder in reverse_environment_map:
-                blueprint = reverse_environment_map[folder]
+            if folder in venv_path_to_blueprint:
+                blueprint = venv_path_to_blueprint[folder]
                 current_thread_pool = self._environment_map[blueprint].thread_pool
                 entry_to_remove = blueprint
             # Otherwise, we know that the blueprint hash is used as the name for the venv folder, so as a safety measure, we
@@ -432,7 +448,7 @@ class VirtualEnvironmentManager:
                 current_thread_pool = None
                 entry_to_remove = None
             async with self._locks.get(folder.name):
-                await loop.run_in_executor(current_thread_pool, shutil.rmtree, folder)
+                await loop.run_in_executor(current_thread_pool, remove_venv, folder)
                 if entry_to_remove is not None:
                     del self._environment_map[entry_to_remove]
 

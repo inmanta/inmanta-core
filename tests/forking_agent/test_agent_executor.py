@@ -272,7 +272,7 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     assert env_same_1 is not env_diff_1, "Expected different instances for different blueprints"
 
 
-async def test_executor_creation_and_reuse(pip_index, mpmanager_light) -> None:
+async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
@@ -317,7 +317,9 @@ def test():
     assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
 
 
-async def test_executor_creation_and_venv_usage(pip_index, mpmanager_light, monkeypatch) -> None:
+async def test_executor_creation_and_venv_usage(
+    pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, monkeypatch
+) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
@@ -349,33 +351,33 @@ def test():
 
     executor_manager = mpmanager_light
     executor_1, executor_2 = await asyncio.gather(
-        executor_manager.get_executor("agent1", "local:", code_for(blueprint1), 0.1),
-        executor_manager.get_executor("agent2", "local:", code_for(blueprint2), 0.1),
+        executor_manager.get_executor("agent1", "local:", code_for(blueprint1), venv_checkup_interval=0.1),
+        executor_manager.get_executor("agent2", "local:", code_for(blueprint2), venv_checkup_interval=0.1),
     )
 
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
     os.utime(
-        f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_ENV_STATUS_FILENAME}",
-        (old_datetime.timestamp(), old_datetime.timestamp()),
+        f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_VENV_STATUS_FILENAME}",
+        (datetime.datetime.now().timestamp(), old_datetime.timestamp()),
     )
 
     def get_modification_datetime(file: str) -> datetime.datetime:
         return datetime.datetime.fromtimestamp(os.stat(file).st_mtime)
 
     old_check_executor1 = get_modification_datetime(
-        f"{executor_1.executor_virtual_env.env_path}/{const.INMANTA_ENV_STATUS_FILENAME}"
+        f"{executor_1.executor_virtual_env.env_path}/{const.INMANTA_VENV_STATUS_FILENAME}"
     )
     old_check_executor2 = get_modification_datetime(
-        f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_ENV_STATUS_FILENAME}"
+        f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_VENV_STATUS_FILENAME}"
     )
 
     await asyncio.sleep(0.2)
 
     new_check_executor1 = get_modification_datetime(
-        f"{executor_1.executor_virtual_env.env_path}/{const.INMANTA_ENV_STATUS_FILENAME}"
+        f"{executor_1.executor_virtual_env.env_path}/{const.INMANTA_VENV_STATUS_FILENAME}"
     )
     new_check_executor2 = get_modification_datetime(
-        f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_ENV_STATUS_FILENAME}"
+        f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_VENV_STATUS_FILENAME}"
     )
 
     assert new_check_executor1 > old_check_executor1
@@ -395,4 +397,6 @@ def test():
     assert len([e for e in venv_dir.iterdir()]) == 2, "We should have two Virtual Environments for our 2 executors!"
     # We remove the old VirtualEnvironment
     await mpmanager_light.environment_manager.clean_environments()
-    assert len([e for e in venv_dir.iterdir()]) == 1, "Only one Virtual Environment should exist!"
+    venvs = [str(e) for e in venv_dir.iterdir()]
+    assert len(venvs) == 1, "Only one Virtual Environment should exist!"
+    assert [executor_2.executor_virtual_env.env_path] == venvs

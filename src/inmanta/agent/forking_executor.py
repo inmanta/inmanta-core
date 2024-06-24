@@ -164,7 +164,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """
         # makes mypy happy
         assert self.ctx.venv is not None
-        (pathlib.Path(self.ctx.venv.env_path) / const.INMANTA_ENV_STATUS_FILENAME).touch()
+        (pathlib.Path(self.ctx.venv.env_path) / const.INMANTA_VENV_STATUS_FILENAME).touch()
 
 
 class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
