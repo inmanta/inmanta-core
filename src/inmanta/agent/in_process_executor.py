@@ -17,8 +17,11 @@ import datetime
 import logging
 import typing
 import uuid
+from asyncio import Semaphore
 from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
+from datetime import timedelta
+from functools import wraps
 from typing import Any, Optional
 
 import inmanta.agent.cache
@@ -36,6 +39,23 @@ from inmanta.types import Apireturn
 
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent as agent
+
+
+def atomic_unit_of_work(method):
+    """
+    decorator to denote that a coroutine is an atomic unit of work:
+        - execute it under the execution lock
+        - update the last_job_timestamp
+    """
+
+    @wraps(method)
+    async def _impl(self, *args, **kwargs):
+        async with self._execution_lock:
+            result = await method(self, *args, **kwargs)
+            self.last_job_timestamp = datetime.datetime.now().astimezone()
+            return result
+
+    return _impl
 
 
 class InProcessExecutor(executor.Executor, executor.AgentInstance):
@@ -73,6 +93,13 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self._stopped = False
 
         self.failed_resource_types: FailedResourcesSet = set()
+
+        # Active work is being done by the executor
+        self._execution_lock = Semaphore(1)
+
+        # Timestamp of the last performed task. Used by the cleanup mechanism
+        # to remove inactive executors.
+        self.last_job_timestamp: Optional[datetime.datetime] = None
 
     def stop(self) -> None:
         self._stopped = True
@@ -220,6 +247,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             )
             raise
 
+    @atomic_unit_of_work
     async def execute(
         self,
         gid: uuid.UUID,
@@ -265,6 +293,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         await self._report_resource_deploy_done(resource_details, ctx)
 
+    @atomic_unit_of_work
     async def dry_run(
         self,
         resources: Sequence[ResourceDetails],
@@ -355,6 +384,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         status=const.ResourceState.dry,
                     )
 
+    @atomic_unit_of_work
     async def get_facts(self, resource: ResourceDetails) -> Apireturn:
         """
         Get facts for a given resource
@@ -429,6 +459,33 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         # https://github.com/inmanta/inmanta-core/issues/833
         self._cache.close_version(version)
 
+    async def is_idle(self, allowed_idle_time: int) -> bool:
+        """
+        Check if this executor was inactive for more than a given amount of time.
+        Perform this check under the execution lock to make sure we don't clean up an
+        executor that is currently working.
+
+        :param allowed_idle_time: Stop the executor if it is inactive for more than
+            this number of seconds.
+        """
+        async with self._execution_lock:
+            now = datetime.datetime.now().astimezone()
+            return now - self.last_job_timestamp > timedelta(seconds=allowed_idle_time)
+
+    async def stop_if_inactive(self, allowed_idle_time: int):
+        """
+        Stop this executor if it has been inactive for more than a given amount of time.
+        Perform this check under the execution lock to make sure we don't clean up an
+        executor that is currently working.
+
+        :param allowed_idle_time: Stop the executor if it is inactive for more than
+            this number of seconds.
+        """
+        async with self._execution_lock:
+            now = datetime.datetime.now().astimezone()
+            if now - self.last_job_timestamp > timedelta(seconds=allowed_idle_time):
+                self.stop()
+
 
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
     """
@@ -498,3 +555,6 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         out.failed_resource_types = failed_resource_types
 
         return out
+
+    async def cleanup_inactive_executors(self, reference_time: datetime.datetime, retention_time: int) -> None:
+        await asyncio.gather(*(executor.stop_if_inactive() for executor in self.executors.values()))

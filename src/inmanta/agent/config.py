@@ -149,6 +149,22 @@ This option is ignored and a splay of 0 is used if 'agent_repair_interval' is a 
     is_time,
 )
 
+executor_cap_per_agent = Option[int](
+    "config",
+    "executor-cap-per-agent",
+    3,
+    "Number of executors to keep per environment, per agent.",
+    is_int,
+)
+
+executor_retention = Option[int](
+    "config",
+    "executor-retention",
+    60,
+    "Amount of time (in seconds) to wait before cleaning up an inactive executor.",
+    is_time,
+)
+
 agent_get_resource_backoff: Option[float] = Option(
     "config",
     "agent-get-resource-backoff",

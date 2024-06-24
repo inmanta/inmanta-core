@@ -615,6 +615,7 @@ class AgentManager(ServerSlice, SessionListener):
         current_active_session = self.tid_endpoint_to_session[(tid, endpoint)]
         for session in self.sessions.values():
             if endpoint in session.endpoint_names and session.tid == tid:
+                # not current_active_session below redundant ??
                 if not current_active_session or session.id != current_active_session.id:
                     return session
         return None
@@ -1213,6 +1214,9 @@ class AutostartedAgentManager(ServerSlice):
         agent_repair_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME, connection=connection))
         agent_repair_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection))
 
+        executor_cap_per_agent: int = cast(int, await env.get(data.EXECUTOR_CAP_PER_AGENT, connection=connection))
+        executor_retention: int = cast(int, await env.get(data.EXECUTOR_RETENTION, connection=connection))
+
         # generate config file
         config = f"""[config]
 state-dir=%(statedir)s
@@ -1225,6 +1229,8 @@ agent-deploy-splay-time=%(agent_deploy_splay)d
 agent-deploy-interval=%(agent_deploy_interval)s
 agent-repair-splay-time=%(agent_repair_splay)d
 agent-repair-interval=%(agent_repair_interval)s
+executor-cap-per-agent=%(executor_cap_per_agent)d
+executor-retention=%(executor_retention)d
 
 agent-get-resource-backoff=%(agent_get_resource_backoff)f
 
@@ -1244,6 +1250,8 @@ host=%(serveradress)s
             "agent_repair_interval": agent_repair_interval,
             "serveradress": server_config.server_address.get(),
             "agent_get_resource_backoff": agent_cfg.agent_get_resource_backoff.get(),
+            "executor_cap_per_agent": executor_cap_per_agent,
+            "executor_retention": executor_retention,
         }
 
         if server_config.server_enable_auth.get():

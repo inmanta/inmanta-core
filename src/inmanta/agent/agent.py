@@ -536,6 +536,9 @@ class AgentInstance:
         repair_splay_time = cfg.agent_repair_splay_time.get()
         self._repair_splay_value = random.randint(0, repair_splay_time)
 
+        self._executor_retention: int = cfg.executor_retention.get()
+        self._executor_cap_per_agent: int = cfg.executor_cap_per_agent.get()
+
         self._getting_resources = False
         self._get_resource_timeout = 0
 
@@ -627,6 +630,10 @@ class AgentInstance:
                 )
             )
 
+        async def cleanup_executors_action() -> None:
+            now = datetime.datetime.now().astimezone()
+            await self.executor_manager.cleanup_inactive_executors(now, self._executor_retention)
+
         def periodic_schedule(
             kind: str,
             action: Callable[[], Coroutine[object, None, object]],
@@ -667,8 +674,10 @@ class AgentInstance:
                 )
             )
             self.ensure_deploy_on_start = False
+
         periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
         periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value, now)
+        periodic_schedule("executor cleanup", cleanup_executors_action, self._executor_retention, 0, now)
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self.process._sched.add_action(action, schedule)
@@ -896,6 +905,7 @@ class Agent(SessionEndpoint):
         :param environment: environment id
         """
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
+        # agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
 
         self.hostname = hostname
         self.ratelimiter = asyncio.Semaphore(1)

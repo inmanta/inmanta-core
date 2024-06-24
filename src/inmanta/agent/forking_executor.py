@@ -20,6 +20,7 @@ import asyncio
 import collections
 import concurrent.futures
 import concurrent.futures.thread
+import datetime
 import functools
 import logging
 import logging.config
@@ -164,6 +165,12 @@ class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
 class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
     async def call(self, context: ExecutorContext) -> None:
         await context.stop()
+
+
+class CleanInactiveCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+    async def call(self, context: ExecutorContext) -> None:
+        if await context.executor.is_idle():
+            await context.stop()
 
 
 class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.ModuleSource]]):
@@ -620,7 +627,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
     async def make_child_and_connect(
         self, executor_id: executor.ExecutorId, venv: executor.ExecutorVirtualEnvironment
     ) -> MPExecutor:
-        """Async code to make a child process as share a socker with it"""
+        """Async code to make a child process and share a socket with it"""
         loop = asyncio.get_running_loop()
         name = executor_id.agent_name
 
@@ -649,13 +656,21 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
     def _make_child(self, name: str, log_level: int, cli_log: bool) -> tuple[multiprocessing.Process, socket.socket]:
         """Sync code to make a child process and share a socket with it"""
         parent_conn, child_conn = socket.socketpair()
+        # Fork an ExecutorServer
         p = multiprocessing.Process(
             target=mp_worker_entrypoint,
             args=(child_conn, name, log_level, cli_log, inmanta.config.Config.config_as_dict()),
             name=f"agent.executor.{name}",
         )
         p.start()
-        child_conn.close()
+        # child_conn.close() -> Why ?
+
+        # https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.connect_accepted_socket
+        #
+        # Note
+        #
+        # The sock argument transfers ownership of the socket to the transport created.
+        # To close the socket, call the transport’s close() method.
         return p, parent_conn
 
     async def stop(self) -> None:
@@ -673,3 +688,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         children = [self.executor_map[child_id] for child_id in children_ids]
         await asyncio.gather(*(child.stop() for child in children))
         return children
+
+    async def cleanup_inactive_executors(self, reference_time: datetime.datetime, retention_time: int) -> None:
+        await asyncio.gather(*(executor.connection.call(CleanInactiveCommand()) for executor in self.executor_map.values()))

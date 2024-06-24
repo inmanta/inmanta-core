@@ -2363,6 +2363,8 @@ NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
 RECOMPILE_BACKOFF = "recompile_backoff"
 ENVIRONMENT_METRICS_RETENTION = "environment_metrics_retention"
+EXECUTOR_CAP_PER_AGENT = "executor_cap_per_agent"
+EXECUTOR_RETENTION = "executor_retention"
 
 
 class Setting:
@@ -2644,6 +2646,25 @@ class Environment(BaseDocument):
             default=336,
             doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
             "Default=336 hours (2 weeks). Set to 0 to disable automatic cleanups.",
+            validator=convert_int,
+        ),
+        EXECUTOR_CAP_PER_AGENT: Setting(
+            name=EXECUTOR_CAP_PER_AGENT,
+            typ="int",
+            default=3,
+            doc="Set the upper bound on the number of concurrent executors per agent for this environment."
+            "New executors cannot be created if this limit is already reached for this agent. This setting "
+            "can be used in combination with the :inmanta.environment-settings:setting:`executor_retention` "
+            "setting to define a policy to manage executors.",
+            validator=convert_int,
+        ),
+        EXECUTOR_RETENTION: Setting(
+            name=EXECUTOR_RETENTION,
+            typ="int",
+            default=60,
+            doc="The number of seconds to wait before cleaning up inactive executors. This setting "
+            "can be used in combination with the :inmanta.environment-settings:setting:`executor_cap_per_agent` "
+            "setting to define a policy to manage executors.",
             validator=convert_int,
         ),
     }
