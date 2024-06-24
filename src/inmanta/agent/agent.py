@@ -1202,9 +1202,14 @@ class Agent(SessionEndpoint):
                 if pip_config is None:
                     try:
                         pip_config = await self._get_pip_config(environment, version)
-                    except Exception:
+                    except Exception as e:
                         LOGGER.exception("Failed to load resources due to missing pip config for type %s", resource_type)
-                        invalid_resource_types.add(resource_type)
+                        invalid_resource_types.add(
+                            executor.FailedResource(
+                                id=resource_type,
+                                exception=e,
+                            )
+                        )
                         continue
 
                 resource_install_spec = ResourceInstallSpec(
@@ -1222,7 +1227,12 @@ class Agent(SessionEndpoint):
                     version,
                     result.result,
                 )
-                invalid_resource_types.add(resource_type)
+                invalid_resource_types.add(
+                    executor.FailedResource(
+                        id=resource_type,
+                        exception=Exception(f"Failed to get source code for {resource_type} version={version}, result={result.get_result()}"),
+                    )
+                )
 
         return resource_install_specs, invalid_resource_types
 
@@ -1262,13 +1272,18 @@ class Agent(SessionEndpoint):
                     )
 
                     self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
-                except Exception:
+                except Exception as e:
                     LOGGER.exception(
                         "Failed to install handler %s version=%d",
                         resource_install_spec.resource_type,
                         resource_install_spec.model_version,
                     )
-                    failed_to_load.add(resource_install_spec.resource_type)
+                    failed_to_load.add(
+                        executor.FailedResource(
+                            id=resource_install_spec.resource_type,
+                            exception=e,
+                        )
+                    )
                     self._last_loaded_version[resource_install_spec.resource_type] = None
 
         return failed_to_load

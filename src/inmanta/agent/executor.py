@@ -45,7 +45,14 @@ from inmanta.util import NamedLock
 
 LOGGER = logging.getLogger(__name__)
 
-FailedResourcesSet: typing.TypeAlias = set[str]
+
+@dataclass
+class FailedResource:
+    id: str
+    exception: Exception
+
+
+FailedResourcesSet: typing.TypeAlias = set[FailedResource]
 
 
 class AgentInstance(abc.ABC):
