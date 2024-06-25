@@ -56,6 +56,7 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
             log_folder=str(log_folder),
             storage_folder=str(storage_folder),
             cli_log=True,
+            max_executors_per_agent=inmanta.agent.config.executor_cap_per_agent.get(),
         )
         managers.append(manager)
         threadpools.append(threadpool)

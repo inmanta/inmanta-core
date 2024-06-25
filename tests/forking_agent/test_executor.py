@@ -32,8 +32,9 @@ import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
 from inmanta.agent import executor
-from inmanta.agent.forking_executor import MPManager
+from inmanta.agent.forking_executor import CleanInactiveCommand, MPManager
 from inmanta.protocol.ipc_light import ConnectionLost
+from utils import retry_limited
 
 
 class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
@@ -43,6 +44,13 @@ class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
     async def call(self, ctx) -> list[str]:
         logging.getLogger(__name__).info("Echo ")
         return self.args
+
+
+class GetLastJobTimeStamp(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
+
+    async def call(self, ctx) -> list[str]:
+        logging.getLogger(__name__).info(f"LJTS {ctx.executor.last_job_timestamp}")
+        return ctx.executor.last_job_timestamp
 
 
 class GetConfig(inmanta.protocol.ipc_light.IPCMethod[str, None]):
@@ -74,7 +82,21 @@ class TestLoader(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
         return [inmanta_plugins.test.testA.test(), inmanta_plugins.test.testB.test()]
 
 
-async def test_executor_server(mpmanager: MPManager, client):
+@pytest.fixture
+def set_max_executor_per_agent():
+    old_cap_value = inmanta.agent.config.executor_cap_per_agent.get()
+    inmanta.agent.config.executor_cap_per_agent.set("1")
+
+    old_retention_value = inmanta.agent.config.executor_retention.get()
+    inmanta.agent.config.executor_retention.set("5")
+
+    yield
+
+    inmanta.agent.config.executor_cap_per_agent.set(str(old_cap_value))
+    inmanta.agent.config.executor_retention.set(str(old_retention_value))
+
+
+async def test_executor_server(set_max_executor_per_agent, mpmanager: MPManager, client):
     """
     Test the MPManager, this includes
 
@@ -131,6 +153,7 @@ def test():
         pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct, via_server]
     )
     full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
+    result = await full_runner.connection.call(GetLastJobTimeStamp())
 
     # assert loaded
     result2 = await full_runner.connection.call(TestLoader())
@@ -139,11 +162,32 @@ def test():
     # assert they are distinct
     assert await simplest.connection.call(GetName()) == "agent1"
     assert await full_runner.connection.call(GetName()) == "agent2"
+    result = await full_runner.connection.call(GetLastJobTimeStamp())
+
+    # Test executor cap:
+    # Dummy config, different enough to require a new executor:
+    dummy = executor.ExecutorBlueprint(
+        pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct]
+    )
+
+    with pytest.raises(Exception) as info:
+        await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
+        expected_output = (
+            "Agent agent2 has reached the allowed executor cap of 1. Either retry later when an idle executor"
+            " for this agent has been recycled or update the policy to manage executors via the EXECUTOR_CAP_PER_AGENT "
+            "and EXECUTOR_RETENTION config options."
+        )
+        assert expected_output in info
 
     # Assert shutdown and back up
     await mpmanager.stop_for_agent("agent2")
+    await retry_limited(lambda: len(manager.agent_map["agent2"]) == 0, 10)
+
     full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
 
+    await retry_limited(lambda: len(manager.agent_map["agent2"]) != 0, 1)
+
+    assert manager.agent_map["agent2"]
     await simplest.stop()
     await simplest.join(2)
     with pytest.raises(ConnectionLost):
@@ -152,6 +196,21 @@ def test():
     with pytest.raises(ImportError):
         # we aren't leaking into this venv
         import lorem  # noqa: F401, F811
+
+    id = manager.agent_map["agent2"]
+    for d in id:
+        exec_id = d
+    print(manager.executor_map[exec_id])
+
+    async def perform_clean_up() -> bool:
+        try:
+            await full_runner.connection.call(CleanInactiveCommand(inmanta.agent.config.executor_retention.get()))
+        except inmanta.protocol.ipc_light.ConnectionLost:
+            # Executor was cleaned up
+            pass
+        return len(manager.agent_map["agent2"]) == 0
+
+    await retry_limited(perform_clean_up, 10)
 
 
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):

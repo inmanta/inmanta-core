@@ -173,8 +173,10 @@ class CleanInactiveCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext,
 
     async def call(self, context: ExecutorContext) -> None:
         assert context.executor is not None
+        logging.getLogger(__name__).info(f"CleanInactiveCommand {context.executor.last_job_timestamp}")
 
-        await context.executor.stop_if_inactive(self.allowed_idle_time)
+        if await context.executor.is_idle(self.allowed_idle_time):
+            await context.stop()
 
 
 class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.ModuleSource]]):
@@ -578,8 +580,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             if not it.closing:
                 LOGGER.debug("Found existing executor for agent %s with id %s", agent_name, executor_id.identity())
                 return it
-        # Acquire a lock based on the blueprint's hash
-        # We don't care about URI here
+        # Acquire a lock based on the executor's identity (agent name, agent uri and blueprint hash)
         async with self._locks.get(executor_id.identity()):
             if executor_id in self.executor_map:
                 it = self.executor_map[executor_id]

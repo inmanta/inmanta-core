@@ -22,7 +22,7 @@ from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import timedelta
 from functools import wraps
-from typing import Any, Callable, Optional, Coroutine, TypeVar, Self, cast
+from typing import Any, Callable, Optional, TypeVar, cast
 
 import inmanta.agent.cache
 import inmanta.protocol
@@ -42,7 +42,8 @@ if typing.TYPE_CHECKING:
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
-def atomic_unit_of_work(method:FuncT) -> FuncT:
+
+def atomic_unit_of_work(method: FuncT) -> FuncT:
     """
     decorator to denote that a coroutine is an atomic unit of work:
         - execute it under the execution lock
@@ -476,27 +477,15 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
     async def is_idle(self, allowed_idle_time: int) -> bool:
         """
         Check if this executor was inactive for more than a given amount of time.
-        Perform this check under the execution lock to make sure we don't clean up an
-        executor that is currently working.
 
-        :param allowed_idle_time: Stop the executor if it is inactive for more than
-            this number of seconds.
+        :param allowed_idle_time: Duration of time (in seconds) before considering
+            that this executor is inactive.
         """
+
+        # Do the check under the execution lock to make sure the executor
+        # is not actively doing work during the check.
         async with self._execution_lock:
             return self._idle_check(allowed_idle_time)
-
-    async def stop_if_inactive(self, allowed_idle_time: int) -> None:
-        """
-        Stop this executor if it has been inactive for more than a given amount of time.
-        Perform this check under the execution lock to make sure we don't clean up an
-        executor that is currently working.
-
-        :param allowed_idle_time: Stop the executor if it is inactive for more than
-            this number of seconds.
-        """
-        async with self._execution_lock:
-            if self._idle_check(allowed_idle_time):
-                self.stop()
 
 
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
@@ -569,4 +558,6 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         return out
 
     async def cleanup_inactive_executors(self, retention_time: int) -> None:
-        await asyncio.gather(*(executor.stop_if_inactive(retention_time) for executor in self.executors.values()))
+        for _agent, _executor in self.executors:
+            if await _executor.is_idle():
+                await self.stop_for_agent(_agent)
