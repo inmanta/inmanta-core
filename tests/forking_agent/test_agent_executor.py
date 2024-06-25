@@ -356,29 +356,20 @@ def test():
     )
 
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
+    # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
+    # modification override of the inmanta file and the retrieval of the last modification of the file
     os.utime(
         f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_VENV_STATUS_FILENAME}",
         (datetime.datetime.now().timestamp(), old_datetime.timestamp()),
     )
 
-    def get_modification_datetime(file: str) -> datetime.datetime:
-        return datetime.datetime.fromtimestamp(os.stat(file).st_mtime)
-
-    old_check_executor1 = get_modification_datetime(
-        f"{executor_1.executor_virtual_env.env_path}/{const.INMANTA_VENV_STATUS_FILENAME}"
-    )
-    old_check_executor2 = get_modification_datetime(
-        f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_VENV_STATUS_FILENAME}"
-    )
+    old_check_executor1 = executor_1.executor_virtual_env.get_last_modified_datetime_venv_status()
+    old_check_executor2 = executor_2.executor_virtual_env.get_last_modified_datetime_venv_status()
 
     await asyncio.sleep(0.2)
 
-    new_check_executor1 = get_modification_datetime(
-        f"{executor_1.executor_virtual_env.env_path}/{const.INMANTA_VENV_STATUS_FILENAME}"
-    )
-    new_check_executor2 = get_modification_datetime(
-        f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_VENV_STATUS_FILENAME}"
-    )
+    new_check_executor1 = executor_1.executor_virtual_env.get_last_modified_datetime_venv_status()
+    new_check_executor2 = executor_2.executor_virtual_env.get_last_modified_datetime_venv_status()
 
     assert new_check_executor1 > old_check_executor1
     assert new_check_executor2 > old_check_executor2

@@ -262,25 +262,20 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
                 config=blueprint.pip_config,
             )
 
-    def should_remove_venv(self) -> bool:
+    def is_functional(self) -> bool:
         """
-        Should this Venv be removed? True if incomplete / broken (Inmanta venv status file not present) or if exceeding the
-        number of days before removal
+        Was the venv correctly created: the inmanta status file exists
         """
-        current_datetime = datetime.datetime.now()
         inmanta_venv_status_file = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        return inmanta_venv_status_file.exists()
 
-        if inmanta_venv_status_file.exists():
-            # Retrieve modification time
-            timestamp = inmanta_venv_status_file.stat().st_mtime
-
-            modification_datetime = datetime.datetime.fromtimestamp(timestamp)
-            if (current_datetime - modification_datetime).days >= cfg.agent_virtual_environment_cleanup.get():
-                return True
-            return False
-        else:
-            # The Virtual Environment could be incomplete or broken
-            return True
+    def get_last_modified_datetime_venv_status(self) -> datetime.datetime:
+        """
+        Retrieve the last modified timestamp of the inmanta status file
+        """
+        inmanta_venv_status_file = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        assert inmanta_venv_status_file.exists()
+        return datetime.datetime.fromtimestamp(inmanta_venv_status_file.stat().st_mtime)
 
     def remove_venv(self) -> None:
         """
@@ -334,9 +329,9 @@ class VirtualEnvironmentManager:
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
         """
         Retrieves the directory path for a virtual environment based on the given blueprint.
-        If the directory does not exist, it creates a new one. This method ensures that each
-        virtual environment has a unique storage location. This method is supposed to be used in an allocated lock in
-        `self._locks`.
+        If the directory does not exist, it creates a new one. This method ensures that each virtual environment has a unique
+        storage location. This method should use a NamedLock to ensure thread-safe operations for each unique blueprint.
+
 
         :param blueprint: The blueprint of the environment for which the storage is being determined.
         :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
@@ -361,7 +356,8 @@ class VirtualEnvironmentManager:
         """
         Creates a new virtual environment based on the provided blueprint or reuses an existing one if suitable.
         This involves setting up the virtual environment and installing any required packages as specified in the blueprint.
-        This method is supposed to be used in an allocated lock in `self._locks`.
+        This method should use a NamedLock to ensure thread-safe operations for each unique blueprint.
+
         :param blueprint: The blueprint specifying the configuration for the new virtual environment.
         :param threadpool: A ThreadPoolExecutor
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
@@ -428,6 +424,8 @@ class VirtualEnvironmentManager:
         """
         Remove Python Virtual Environments that were not used since a number of days (configurable in the agent config).
         """
+        current_datetime = datetime.datetime.now()
+        executor_venv_retention_time = cfg.agent_virtual_environment_cleanup.get()
         envs_dir = pathlib.Path(self.envs_dir)
         executor_environment_to_clean: set[ExecutorVirtualEnvironment] = set()
         venv_path_to_blueprint = {pathlib.Path(v.env_path): k for k, v in self._environment_map.items()}
@@ -439,7 +437,8 @@ class VirtualEnvironmentManager:
             if folder in venv_path_to_blueprint:
                 blueprint = venv_path_to_blueprint[folder]
                 current_executor_environment = self._environment_map[blueprint]
-                if current_executor_environment.should_remove_venv():
+                modification_datetime = current_executor_environment.get_last_modified_datetime_venv_status()
+                if (current_datetime - modification_datetime).days >= executor_venv_retention_time:
                     executor_environment_to_clean.add(current_executor_environment)
             else:
                 executor_environment_to_clean.add(ExecutorVirtualEnvironment(env_path=str(folder.absolute()), threadpool=None))
