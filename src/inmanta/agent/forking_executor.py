@@ -128,6 +128,13 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             logging.getLogger().removeHandler(self.log_transport)
             self.log_transport = None
 
+    def start_timer_venv_checkup(self, interval: int) -> None:
+        self.timer_venv_checkup = tornado.ioloop.PeriodicCallback(
+            callback=self.touch_inmanta_venv_status,
+            callback_time=datetime.timedelta(seconds=interval),
+        )
+        self.timer_venv_checkup.start()
+
     def stop_timer_venv_checkup(self) -> None:
         if self.timer_venv_checkup is not None and self.timer_venv_checkup.is_running():
             self.timer_venv_checkup.stop()
@@ -158,9 +165,9 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.stopped.set()
         self.stop_timer_venv_checkup()
 
-    def touch_inmanta_env_status(self) -> None:
+    def touch_inmanta_venv_status(self) -> None:
         """
-        Touch the `inmanta_env_status` file.
+        Touch the `inmanta_venv_status` file.
         """
         # makes mypy happy
         assert self.ctx.venv is not None
@@ -212,12 +219,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         assert context.server.timer_venv_checkup is None, "InitCommand should be only called once!"
 
         interval = self._venv_checkup_interval or 60
-
-        context.server.timer_venv_checkup = tornado.ioloop.PeriodicCallback(
-            callback=context.server.touch_inmanta_env_status,
-            callback_time=datetime.timedelta(seconds=interval),
-        )
-        context.server.timer_venv_checkup.start()
+        context.server.start_timer_venv_checkup(interval)
 
         loop = asyncio.get_running_loop()
         parent_logger = logging.getLogger("agent.executor")
@@ -697,7 +699,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
         thread_pool_finalizer.append(self.thread_pool)
         await asyncio.gather(*(child.join(timeout) for child in self.children))
-        self.environment_manager.stop_cleanup_timer()
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children_ids = self.agent_map[agent_name]

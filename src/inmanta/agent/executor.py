@@ -21,7 +21,6 @@ import asyncio
 import contextlib
 import dataclasses
 import datetime
-import functools
 import hashlib
 import json
 import logging
@@ -36,10 +35,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence
 
 import pkg_resources
-import tornado
 
 import inmanta.types
-from inmanta import const
+from inmanta import const, util
 from inmanta.agent import config as cfg
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
@@ -240,10 +238,12 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
     including the creation and installation of packages based on a blueprint.
 
     :param env_path: The file system path where the virtual environment should be created or exists.
-    :param threadpool: A ThreadPoolExecutor instance
+    :param threadpool: A ThreadPoolExecutor instance. Can only be optional if the ExecutorVirtualEnvironment wasn't present
+        in the dict of the VirtualEnvironmentManager instance: a new ExecutorVirtualEnvironment will be created only for the
+        cleanup
     """
 
-    def __init__(self, env_path: str, threadpool: ThreadPoolExecutor):
+    def __init__(self, env_path: str, threadpool: Optional[ThreadPoolExecutor]):
         super().__init__(env_path=env_path)
         self.thread_pool = threadpool
 
@@ -257,12 +257,43 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
         req: list[str] = list(blueprint.requirements)
         self.init_env()
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
-            install_for_config = functools.partial(
-                self.install_for_config,
+            self.install_for_config(
                 requirements=list(pkg_resources.parse_requirements(req)),
                 config=blueprint.pip_config,
             )
-            install_for_config()
+
+    def should_remove_venv(self) -> bool:
+        """
+        Should this Venv be removed? True if incomplete / broken (Inmanta venv status file not present) or if exceeding the
+        number of days before removal
+        """
+        current_datetime = datetime.datetime.now()
+        inmanta_venv_status_file = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+
+        if inmanta_venv_status_file.exists():
+            # Retrieve modification time
+            timestamp = inmanta_venv_status_file.stat().st_mtime
+
+            modification_datetime = datetime.datetime.fromtimestamp(timestamp)
+            if (current_datetime - modification_datetime).days >= cfg.agent_virtual_environment_cleanup.get():
+                return True
+            return False
+        else:
+            # The Virtual Environment could be incomplete or broken
+            return True
+
+    def remove_venv(self) -> None:
+        """
+        Remove the venv of the executor
+        """
+        try:
+            shutil.rmtree(self.env_path)
+        except Exception as e:
+            LOGGER.error(
+                "An error occurred while removing the venv located %s: %s",
+                self.env_path,
+                str(e),
+            )
 
 
 def initialize_envs_directory() -> str:
@@ -291,11 +322,14 @@ class VirtualEnvironmentManager:
         # We rely on a Named lock to be able to lock specific entries of the `_environment_map` dict. This allows us to prevent
         # creating and deleting the same venv at a given time.
         self._locks: NamedLock = NamedLock()
-        self._cleanup_timer = tornado.ioloop.PeriodicCallback(
-            callback=self.clean_environments,
-            callback_time=datetime.timedelta(days=cfg.agent_virtual_environment_cleanup.get()),
+        interval = datetime.timedelta(days=cfg.agent_virtual_environment_cleanup.get()).total_seconds()
+        self._cleanup_scheduler = util.Scheduler("venv_cleanup_scheduler")
+        self._cleanup_scheduler.add_action(
+            action=self.clean_virtual_environments,
+            schedule=util.IntervalSchedule(
+                interval=interval,
+            ),
         )
-        self._cleanup_timer.start()
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
         """
@@ -390,74 +424,39 @@ class VirtualEnvironmentManager:
             # cleanup as the `INMANTA_ENV_STATUS_FILENAME` will be touched at the end of the creation.
             return await self.create_environment(blueprint, threadpool)
 
-    async def clean_environments(self) -> None:
+    async def clean_virtual_environments(self) -> None:
         """
         Remove Python Virtual Environments that were not used since a number of days (configurable in the agent config).
         """
-        number_days_before_venv_cleanup = cfg.agent_virtual_environment_cleanup.get()
         envs_dir = pathlib.Path(self.envs_dir)
-        environments_on_disk_to_clean: set[pathlib.Path] = set()
+        executor_environment_to_clean: set[ExecutorVirtualEnvironment] = set()
         venv_path_to_blueprint = {pathlib.Path(v.env_path): k for k, v in self._environment_map.items()}
 
-        # We check every folder, and we save the ones that contain the special file and that should be removed
-        current_datetime = datetime.datetime.now()
         for folder in envs_dir.iterdir():
             if not folder.is_dir():
                 continue
 
-            inmanta_venv_status_file = folder / const.INMANTA_VENV_STATUS_FILENAME
-
-            if inmanta_venv_status_file.exists():
-                # Retrieve modification time
-                timestamp = inmanta_venv_status_file.stat().st_mtime
-
-                modification_datetime = datetime.datetime.fromtimestamp(timestamp)
-                if (current_datetime - modification_datetime).days >= number_days_before_venv_cleanup:
-                    environments_on_disk_to_clean.add(folder)
-            else:
-                # The Virtual Environment could be incomplete or broken
-                environments_on_disk_to_clean.add(folder)
-
-        loop = asyncio.get_running_loop()
-
-        def remove_venv(current_folder: pathlib.Path) -> None:
-            """
-            Remove the given venv
-
-            :param current_folder: The venv to remove
-            """
-            try:
-                shutil.rmtree(current_folder)
-            except Exception as e:
-                LOGGER.error(
-                    "An error occurred while removing the venv located %s: %s",
-                    str(current_folder.absolute()),
-                    str(e),
-                )
-
-        for folder in environments_on_disk_to_clean:
-            # If the path to clean is part of the `_environment_map` then we can use the threadpool of the executor to clean
-            # the virtual environment
             if folder in venv_path_to_blueprint:
                 blueprint = venv_path_to_blueprint[folder]
-                current_thread_pool = self._environment_map[blueprint].thread_pool
-                entry_to_remove = blueprint
-            # Otherwise, we know that the blueprint hash is used as the name for the venv folder, so as a safety measure, we
-            # can just lock on the name of the folder.
+                current_executor_environment = self._environment_map[blueprint]
+                if current_executor_environment.should_remove_venv():
+                    executor_environment_to_clean.add(current_executor_environment)
             else:
-                current_thread_pool = None
-                entry_to_remove = None
-            async with self._locks.get(folder.name):
-                await loop.run_in_executor(current_thread_pool, remove_venv, folder)
-                if entry_to_remove is not None:
-                    del self._environment_map[entry_to_remove]
+                executor_environment_to_clean.add(ExecutorVirtualEnvironment(env_path=str(folder.absolute()), threadpool=None))
+
+        loop = asyncio.get_running_loop()
+        for executor in executor_environment_to_clean:
+            current_path = pathlib.Path(executor.env_path)
+            async with self._locks.get(current_path.name):
+                await loop.run_in_executor(executor.thread_pool, executor.remove_venv)
+                if current_path in venv_path_to_blueprint:
+                    del self._environment_map[venv_path_to_blueprint[current_path]]
 
     def stop_cleanup_timer(self) -> None:
         """
         Stop the cleanup timer of the environment manager if it is running.
         """
-        if self._cleanup_timer.is_running():
-            self._cleanup_timer.stop()
+        self._cleanup_scheduler.stop()
 
 
 class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):

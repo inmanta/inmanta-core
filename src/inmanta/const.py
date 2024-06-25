@@ -350,4 +350,4 @@ INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"
 # This file is created after the venv is correctly created and touched at regular intervals while it's actively used.
 # It's used to determine whether a venv is only partially created (due to a server crash for example) or to determine when the
 # venv was last used.
-INMANTA_VENV_STATUS_FILENAME = ".inmanta_env_status"
+INMANTA_VENV_STATUS_FILENAME = ".inmanta_venv_status"

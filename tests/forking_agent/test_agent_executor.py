@@ -388,15 +388,15 @@ def test():
 
     # Now we want to check if the cleanup is working correctly
     await executor_manager.stop_for_agent("agent1")
-    # First we want to override the modification date of the `inmanta_env_status` file
+    # First we want to override the modification date of the `inmanta_venv_status` file
     os.utime(
-        f"{executor_1.executor_virtual_env.env_path}/.inmanta_env_status", (old_datetime.timestamp(), old_datetime.timestamp())
+        f"{executor_1.executor_virtual_env.env_path}/.inmanta_venv_status", (old_datetime.timestamp(), old_datetime.timestamp())
     )
 
     venv_dir = pathlib.Path(mpmanager_light.environment_manager.envs_dir)
     assert len([e for e in venv_dir.iterdir()]) == 2, "We should have two Virtual Environments for our 2 executors!"
     # We remove the old VirtualEnvironment
-    await mpmanager_light.environment_manager.clean_environments()
+    await mpmanager_light.environment_manager.clean_virtual_environments()
     venvs = [str(e) for e in venv_dir.iterdir()]
     assert len(venvs) == 1, "Only one Virtual Environment should exist!"
     assert [executor_2.executor_virtual_env.env_path] == venvs
