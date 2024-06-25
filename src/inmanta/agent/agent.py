@@ -537,7 +537,6 @@ class AgentInstance:
         self._repair_splay_value = random.randint(0, repair_splay_time)
 
         self._executor_retention: int = cfg.executor_retention.get()
-        self._executor_cap_per_agent: int = cfg.executor_cap_per_agent.get()
 
         self._getting_resources = False
         self._get_resource_timeout = 0
@@ -631,23 +630,33 @@ class AgentInstance:
             )
 
         async def cleanup_executors_action() -> None:
-            now = datetime.datetime.now().astimezone()
-            await self.executor_manager.cleanup_inactive_executors(now, self._executor_retention)
+            await self.executor_manager.cleanup_inactive_executors(self._executor_retention)
 
         def periodic_schedule(
             kind: str,
             action: Callable[[], Coroutine[object, None, object]],
             interval: Union[int, str],
             splay_value: int,
-            initial_time: datetime.datetime,
         ) -> bool:
+            """
+            Schedule a periodic task
+
+            :param kind: Name of the task (value to display in logs)
+            :param action: The action to schedule periodically
+            :param interval: The interval at which to schedule the task. Can be specified as either a number of
+                seconds, or a cron string.
+            :param splay_value: When specifying the interval as a number of seconds, this parameter specifies
+                the number of seconds by which to delay the initial execution of this action.
+            """
+            now = datetime.datetime.now().astimezone()
+
             if isinstance(interval, int) and interval > 0:
                 self.logger.info(
                     "Scheduling periodic %s with interval %d and splay %d (first run at %s)",
                     kind,
                     interval,
                     splay_value,
-                    (initial_time + datetime.timedelta(seconds=splay_value)).strftime(const.TIME_LOGFMT),
+                    (now + datetime.timedelta(seconds=splay_value)).strftime(const.TIME_LOGFMT),
                 )
                 interval_schedule: IntervalSchedule = IntervalSchedule(
                     interval=float(interval), initial_delay=float(splay_value)
@@ -675,9 +684,9 @@ class AgentInstance:
             )
             self.ensure_deploy_on_start = False
 
-        periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
-        periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value, now)
-        periodic_schedule("executor cleanup", cleanup_executors_action, self._executor_retention, 0, now)
+        periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value)
+        periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value)
+        periodic_schedule("executor cleanup", cleanup_executors_action, self._executor_retention, 0)
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self.process._sched.add_action(action, schedule)
@@ -905,7 +914,6 @@ class Agent(SessionEndpoint):
         :param environment: environment id
         """
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
-        # agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
 
         self.hostname = hostname
         self.ratelimiter = asyncio.Semaphore(1)
@@ -959,6 +967,7 @@ class Agent(SessionEndpoint):
                 self._storage["executor"],
                 LOGGER.level,
                 False,
+                max_executors_per_agent=cfg.executor_cap_per_agent,
             )
         else:
             LOGGER.info("Selected threaded agent executor mode")

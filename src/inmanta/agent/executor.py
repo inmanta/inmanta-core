@@ -20,7 +20,6 @@ import abc
 import asyncio
 import contextlib
 import dataclasses
-import datetime
 import functools
 import hashlib
 import json
@@ -508,11 +507,10 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         pass
 
     @abc.abstractmethod
-    async def cleanup_inactive_executors(self, reference_time: datetime.datetime, retention_time: int) -> None:
+    async def cleanup_inactive_executors(self, retention_time: int) -> None:
         """
         Cleanup executors that were not active in the past retention_time seconds.
 
-        :param reference_time: Time of reference.
         :param retention_time: Executors that are inactive for longer that this
             number of seconds will be cleaned up.
         """

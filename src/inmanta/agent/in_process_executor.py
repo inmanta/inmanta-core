@@ -459,6 +459,19 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         # https://github.com/inmanta/inmanta-core/issues/833
         self._cache.close_version(version)
 
+    def _idle_check(self, allowed_idle_time: int) -> bool:
+        """
+        Check if this executor was inactive for more than a given amount of time.
+        It is the responsibility of the caller to perform this check under the
+        execution lock to make sure the executor is not actively doing work during
+        the check.
+
+        :param allowed_idle_time: Duration of time (in seconds) before considering
+            that this executor is inactive.
+        """
+        now = datetime.datetime.now().astimezone()
+        return now - self.last_job_timestamp > timedelta(seconds=allowed_idle_time)
+
     async def is_idle(self, allowed_idle_time: int) -> bool:
         """
         Check if this executor was inactive for more than a given amount of time.
@@ -469,8 +482,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             this number of seconds.
         """
         async with self._execution_lock:
-            now = datetime.datetime.now().astimezone()
-            return now - self.last_job_timestamp > timedelta(seconds=allowed_idle_time)
+            return self._idle_check(allowed_idle_time)
 
     async def stop_if_inactive(self, allowed_idle_time: int) -> None:
         """
@@ -482,8 +494,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             this number of seconds.
         """
         async with self._execution_lock:
-            now = datetime.datetime.now().astimezone()
-            if now - self.last_job_timestamp > timedelta(seconds=allowed_idle_time):
+            if self._idle_check(allowed_idle_time):
                 self.stop()
 
 
@@ -556,5 +567,5 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         return out
 
-    async def cleanup_inactive_executors(self, reference_time: datetime.datetime, retention_time: int) -> None:
+    async def cleanup_inactive_executors(self, retention_time: int) -> None:
         await asyncio.gather(*(executor.stop_if_inactive(retention_time) for executor in self.executors.values()))

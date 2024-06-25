@@ -20,7 +20,6 @@ import asyncio
 import collections
 import concurrent.futures
 import concurrent.futures.thread
-import datetime
 import functools
 import logging
 import logging.config
@@ -168,11 +167,14 @@ class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
 
 class CleanInactiveCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+
+    def __init__(self, allowed_idle_time: int) -> None:
+        self.allowed_idle_time = allowed_idle_time
+
     async def call(self, context: ExecutorContext) -> None:
         assert context.executor is not None
 
-        if await context.executor.is_idle():
-            await context.stop()
+        await context.executor.stop_if_inactive(self.allowed_idle_time)
 
 
 class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.ModuleSource]]):
@@ -492,6 +494,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         storage_folder: str,
         log_level: int = logging.INFO,
         cli_log: bool = False,
+        max_executors_per_agent: int = 3,
     ) -> None:
         """
         :param thread_pool:  threadpool to perform work on
@@ -501,6 +504,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         :param log_folder: folder to place log files for the executors
         :param storage_folder: folder to place code files
         :param log_level: log level for the executors
+        :param max_executors_per_agent: Only allow up to this many executors per agent
         :param cli_log: do we also want to echo the log to std_err
 
         """
@@ -521,6 +525,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         # This means it can contain closing entries
         self.executor_map: dict[executor.ExecutorId, MPExecutor] = {}
         self.agent_map: dict[str, set[executor.ExecutorId]] = collections.defaultdict(set)
+        self.max_executors_per_agent = max_executors_per_agent
 
         self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
@@ -586,6 +591,13 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                         "Found stale executor for agent %s with id %s, waiting for close", agent_name, executor_id.identity()
                     )
                     await it.join(2.0)
+            n_executors_for_agent = len(self.agent_map[executor_id.agent_name])
+            if n_executors_for_agent >= self.max_executors_per_agent:
+                raise Exception(
+                    f"Agent {executor_id.agent_name} has reached the allowed executor cap of {self.max_executors_per_agent}. "
+                    "Either retry later when an idle executor for this agent has been recycled or update the policy to manage "
+                    "executors via the EXECUTOR_CAP_PER_AGENT and EXECUTOR_RETENTION config options."
+                )
             my_executor = await self.create_executor(executor_id)
             self.__add_executor(executor_id, my_executor)
             if my_executor.failed_resource_sources:
@@ -701,7 +713,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         await asyncio.gather(*(child.stop() for child in children))
         return children
 
-    async def cleanup_inactive_executors(self, reference_time: datetime.datetime, retention_time: int) -> None:
+    async def cleanup_inactive_executors(self, retention_time: int) -> None:
         await asyncio.gather(
             *(executor.connection.call(CleanInactiveCommand(retention_time)) for executor in self.executor_map.values())
         )
