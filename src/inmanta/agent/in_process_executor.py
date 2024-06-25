@@ -558,6 +558,6 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         return out
 
     async def cleanup_inactive_executors(self, retention_time: int) -> None:
-        for _agent, _executor in self.executors:
-            if await _executor.is_idle():
+        for _agent, _executor in self.executors.items():
+            if await _executor.is_idle(retention_time):
                 await self.stop_for_agent(_agent)
