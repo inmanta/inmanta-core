@@ -3,4 +3,4 @@ description: >
   a new venv/executor each time we deploy a subset of these types.
 issue-nr: 7722
 change-type: patch
-destination-branches: [master, iso7]
+destination-branches: [master]
