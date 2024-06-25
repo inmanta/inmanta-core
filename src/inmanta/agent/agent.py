@@ -967,7 +967,7 @@ class Agent(SessionEndpoint):
                 self._storage["executor"],
                 LOGGER.level,
                 False,
-                max_executors_per_agent=cfg.executor_cap_per_agent,
+                max_executors_per_agent=cfg.executor_cap_per_agent.get(),
             )
         else:
             LOGGER.info("Selected threaded agent executor mode")

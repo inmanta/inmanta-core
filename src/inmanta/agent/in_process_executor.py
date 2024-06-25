@@ -22,7 +22,7 @@ from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import timedelta
 from functools import wraps
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Coroutine, TypeVar, Self, cast
 
 import inmanta.agent.cache
 import inmanta.protocol
@@ -40,8 +40,9 @@ from inmanta.types import Apireturn
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent as agent
 
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
-def atomic_unit_of_work(method: Callable):
+def atomic_unit_of_work(method:FuncT) -> FuncT:
     """
     decorator to denote that a coroutine is an atomic unit of work:
         - execute it under the execution lock
@@ -49,13 +50,13 @@ def atomic_unit_of_work(method: Callable):
     """
 
     @wraps(method)
-    async def _impl(self, *args, **kwargs):
+    async def _impl(self: Any, *args: Any, **kwargs: Any) -> Any:
         async with self._execution_lock:
             result = await method(self, *args, **kwargs)
             self.last_job_timestamp = datetime.datetime.now().astimezone()
             return result
 
-    return _impl
+    return cast(FuncT, _impl)
 
 
 class InProcessExecutor(executor.Executor, executor.AgentInstance):
