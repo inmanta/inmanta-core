@@ -173,7 +173,6 @@ class CleanInactiveCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext,
 
     async def call(self, context: ExecutorContext) -> None:
         assert context.executor is not None
-        logging.getLogger(__name__).info(f"CleanInactiveCommand {context.executor.last_job_timestamp}")
 
         if await context.executor.is_idle(self.allowed_idle_time):
             await context.stop()
