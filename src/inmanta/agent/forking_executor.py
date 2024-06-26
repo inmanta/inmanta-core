@@ -20,6 +20,7 @@ import asyncio
 import collections
 import concurrent.futures
 import concurrent.futures.thread
+import datetime
 import functools
 import logging
 import logging.config
@@ -29,6 +30,7 @@ import socket
 import typing
 import uuid
 from asyncio import transports
+from datetime import timedelta
 
 import inmanta.agent.cache
 import inmanta.agent.executor
@@ -530,6 +532,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
         self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
+        self.executor_retention_time = inmanta.agent.config.executor_retention.get()
+
     def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
         self.executor_map[theid] = the_executor
         self.agent_map[theid.agent_name].add(theid)
@@ -593,11 +597,12 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                     await it.join(2.0)
             n_executors_for_agent = len(self.agent_map[executor_id.agent_name])
             if n_executors_for_agent >= self.max_executors_per_agent:
-                raise Exception(
-                    f"Agent {executor_id.agent_name} has reached the allowed executor cap of {self.max_executors_per_agent}. "
-                    "Either retry later when an idle executor for this agent has been recycled or update the policy to manage "
-                    "executors via the EXECUTOR_CAP_PER_AGENT and EXECUTOR_RETENTION config options."
-                )
+                # Close oldest executor:
+                executor_ids = self.agent_map[executor_id.agent_name]
+                oldest_executor = min([self.executor_map[id] for id in executor_ids], key=lambda e: e.connection.last_used_at)
+
+                await oldest_executor.stop()
+
             my_executor = await self.create_executor(executor_id)
             self.__add_executor(executor_id, my_executor)
             if my_executor.failed_resource_sources:
@@ -687,14 +692,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             name=f"agent.executor.{name}",
         )
         p.start()
-        # child_conn.close() -> Why ?
+        child_conn.close()
 
-        # https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.connect_accepted_socket
-        #
-        # Note
-        #
-        # The sock argument transfers ownership of the socket to the transport created.
-        # To close the socket, call the transport’s close() method.
         return p, parent_conn
 
     async def stop(self) -> None:
@@ -713,7 +712,9 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         await asyncio.gather(*(child.stop() for child in children))
         return children
 
-    async def cleanup_inactive_executors(self, retention_time: int) -> None:
-        await asyncio.gather(
-            *(executor.connection.call(CleanInactiveCommand(retention_time)) for executor in self.executor_map.values())
-        )
+    async def cleanup_inactive_executors(self) -> None:
+        now = datetime.datetime.now().astimezone()
+
+        for executor in self.executor_map.values():
+            if now - executor.connection.last_used_at > timedelta(seconds=self.executor_retention_time):
+                await executor.stop()

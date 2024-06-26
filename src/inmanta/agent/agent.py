@@ -536,7 +536,6 @@ class AgentInstance:
         repair_splay_time = cfg.agent_repair_splay_time.get()
         self._repair_splay_value = random.randint(0, repair_splay_time)
 
-        self._executor_retention: int = cfg.executor_retention.get()
 
         self._getting_resources = False
         self._get_resource_timeout = 0
@@ -630,7 +629,7 @@ class AgentInstance:
             )
 
         async def cleanup_executors_action() -> None:
-            await self.executor_manager.cleanup_inactive_executors(self._executor_retention)
+            await self.executor_manager.cleanup_inactive_executors()
 
         def periodic_schedule(
             kind: str,
@@ -686,7 +685,7 @@ class AgentInstance:
 
         periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value)
         periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value)
-        periodic_schedule("executor cleanup", cleanup_executors_action, self._executor_retention, 0)
+        periodic_schedule("executor cleanup", 2, self._executor_retention, 0)
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self.process._sched.add_action(action, schedule)

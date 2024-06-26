@@ -18,6 +18,7 @@
 
 import abc
 import asyncio
+import datetime
 import functools
 import logging
 import pickle
@@ -226,8 +227,12 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
     def __init__(self, name: str):
         super().__init__(name)
         # TODO timeouts
-        self.requests: dict[uuid.UUID, Future[object]] = {}
+
         # All outstanding calls
+        self.requests: dict[uuid.UUID, Future[object]] = {}
+
+        # Keeps track of when this client was active last
+        self.last_used_at = datetime.datetime.now().astimezone()
 
     @typing.overload
     def call(
@@ -239,6 +244,8 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
 
     def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None:
         """Call a method with given arguments"""
+        self.last_used_at = datetime.datetime.now().astimezone()
+
         request = IPCRequestFrame(
             id=uuid.uuid4() if has_reply else None,
             method=method,
@@ -258,6 +265,9 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
             self.process_reply(frame)
         else:
             super().frame_received(frame)
+
+    def has_outstanding_calls(self) -> bool:
+        return len(self.requests) > 0
 
     def process_reply(self, frame: IPCReplyFrame) -> None:
         if frame.is_exception:

@@ -96,7 +96,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self.failed_resource_types: FailedResourcesSet = set()
 
-        # Active work is being done by the executor
+        # This lock makes sure the executor can't be deleted when it is executing
         self._execution_lock = Semaphore(1)
 
         # Timestamp of the last performed task. Used by the cleanup mechanism
@@ -557,7 +557,5 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         return out
 
-    async def cleanup_inactive_executors(self, retention_time: int) -> None:
-        for _agent, _executor in self.executors.items():
-            if await _executor.is_idle(retention_time):
-                await self.stop_for_agent(_agent)
+    async def cleanup_inactive_executors(self) -> None:
+        pass

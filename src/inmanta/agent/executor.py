@@ -507,11 +507,8 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         pass
 
     @abc.abstractmethod
-    async def cleanup_inactive_executors(self, retention_time: int) -> None:
+    async def cleanup_inactive_executors(self) -> None:
         """
-        Cleanup executors that were not active in the past retention_time seconds.
-
-        :param retention_time: Executors that are inactive for longer that this
-            number of seconds will be cleaned up.
+        Clean up inactive executors
         """
         pass

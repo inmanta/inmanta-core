@@ -170,12 +170,12 @@ def test():
 
     with pytest.raises(Exception) as info:
         await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
-        expected_output = (
-            "Agent agent2 has reached the allowed executor cap of 1. Either retry later when an idle executor"
-            " for this agent has been recycled or update the policy to manage executors via the EXECUTOR_CAP_PER_AGENT "
-            "and EXECUTOR_RETENTION config options."
-        )
-        assert expected_output in info
+    expected_output = (
+        "Agent agent2 has reached the allowed executor cap of 1. Either retry later when an idle executor"
+        " for this agent has been recycled or update the policy to manage executors via the EXECUTOR_CAP_PER_AGENT "
+        "and EXECUTOR_RETENTION config options."
+    )
+    assert expected_output in str(info.value)
 
     # Assert shutdown and back up
     await mpmanager.stop_for_agent("agent2")
