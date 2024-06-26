@@ -992,7 +992,6 @@ class Agent(SessionEndpoint):
         can_have_remote_executor = code_loader
 
         self.executor_manager: executor.ExecutorManager[executor.Executor]
-        LOGGER.error(f"{LOGGER.level=}")
         if remote_executor and can_have_remote_executor:
             LOGGER.info("Selected forking agent executor mode")
             env_manager = inmanta.agent.executor.VirtualEnvironmentManager(self._storage["executor"])
