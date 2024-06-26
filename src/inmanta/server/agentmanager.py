@@ -615,7 +615,6 @@ class AgentManager(ServerSlice, SessionListener):
         current_active_session = self.tid_endpoint_to_session[(tid, endpoint)]
         for session in self.sessions.values():
             if endpoint in session.endpoint_names and session.tid == tid:
-                # not current_active_session below redundant ??
                 if not current_active_session or session.id != current_active_session.id:
                     return session
         return None
@@ -1226,8 +1225,6 @@ agent-deploy-splay-time=%(agent_deploy_splay)d
 agent-deploy-interval=%(agent_deploy_interval)s
 agent-repair-splay-time=%(agent_repair_splay)d
 agent-repair-interval=%(agent_repair_interval)s
-
-
 
 agent-get-resource-backoff=%(agent_get_resource_backoff)f
 

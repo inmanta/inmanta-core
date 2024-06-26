@@ -34,7 +34,7 @@ import utils
 from inmanta.agent import executor
 from inmanta.agent.forking_executor import MPManager
 from inmanta.protocol.ipc_light import ConnectionLost
-from utils import retry_limited
+from utils import log_contains, retry_limited
 
 
 class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
@@ -92,7 +92,7 @@ def set_custom_executor_policy():
     inmanta.agent.config.agent_executor_retention_time.set(str(old_retention_value))
 
 
-async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client):
+async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, caplog):
     """
     Test the MPManager, this includes
 
@@ -106,6 +106,7 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
         - the agent_executor_cap option correctly stops the oldest executor.
         - the agent_executor_retention_time option is used to clean up old executors.
     """
+
     with pytest.raises(ImportError):
         # make sure lorem isn't installed at the start of the test.
         import lorem  # noqa: F401
@@ -177,9 +178,18 @@ def test():
     dummy = executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[via_server]
     )
-
-    _ = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
-    assert oldest_executor.executor_id not in manager.agent_map["agent2"]
+    with caplog.at_level(logging.INFO):
+        _ = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
+        assert oldest_executor.executor_id not in manager.agent_map["agent2"]
+        log_contains(
+            caplog,
+            "inmanta.agent.forking_executor",
+            logging.INFO,
+            (
+                f"Reached executor cap for agent agent2. Stopping oldest executor "
+                f"{oldest_executor.executor_id.identity()} to make room for a new one."
+            ),
+        )
 
     # Assert shutdown and back up
     await mpmanager.stop_for_agent("agent2")
@@ -201,7 +211,17 @@ def test():
     async def check_automatic_clean_up() -> bool:
         return len(manager.agent_map["agent2"]) == 0
 
-    await retry_limited(check_automatic_clean_up, 10)
+    with caplog.at_level(logging.INFO):
+        await retry_limited(check_automatic_clean_up, 10)
+        log_contains(
+            caplog,
+            "inmanta.agent.forking_executor",
+            logging.INFO,
+            (
+                f"Stopping executor {full_runner.executor_id.identity()} because it was inactive for longer "
+                f"than the configured allowed idling time."
+            ),
+        )
 
 
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
