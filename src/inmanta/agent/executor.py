@@ -314,10 +314,15 @@ class VirtualEnvironmentManager:
     def __init__(self, envs_dir: str) -> None:
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
         self.envs_dir: str = envs_dir
-        # We rely on a Named lock to be able to lock specific entries of the `_environment_map` dict. This allows us to prevent
-        # creating and deleting the same venv at a given time.
+        # We rely on a Named lock (`self._locks`) to be able to lock specific entries of the `_environment_map` dict. This
+        # allows us to prevent creating and deleting the same venv at a given time. The keys of this named lock are the hash of
+        # venv
         self._locks: NamedLock = NamedLock()
-        interval = datetime.timedelta(days=cfg.agent_virtual_environment_cleanup.get()).total_seconds()
+        interval = datetime.timedelta(days=1).total_seconds()
+        executor_venv_retention_time = cfg.agent_virtual_environment_cleanup.get()
+        assert datetime.timedelta(days=executor_venv_retention_time).total_seconds() > interval, (
+            "The `executor-venv-retention-time` should be larger than the period " "with which the executor touches its file!"
+        )
         self._cleanup_scheduler = util.Scheduler("venv_cleanup_scheduler")
         self._cleanup_scheduler.add_action(
             action=self.clean_virtual_environments,
@@ -451,7 +456,7 @@ class VirtualEnvironmentManager:
                 if current_path in venv_path_to_blueprint:
                     del self._environment_map[venv_path_to_blueprint[current_path]]
 
-    def stop_cleanup_timer(self) -> None:
+    def stop(self) -> None:
         """
         Stop the cleanup timer of the environment manager if it is running.
         """

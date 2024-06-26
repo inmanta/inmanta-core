@@ -161,7 +161,7 @@ agent_get_resource_backoff: Option[float] = Option(
 )
 
 agent_virtual_environment_cleanup: Option[float] = Option(
-    "config",
+    "agent",
     "executor-venv-retention-time",
     7,
     "This is the number of days to wait before unused Python virtual environments of an executor are removed from "

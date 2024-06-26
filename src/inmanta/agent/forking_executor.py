@@ -20,7 +20,6 @@ import asyncio
 import collections
 import concurrent.futures
 import concurrent.futures.thread
-import datetime
 import functools
 import logging
 import logging.config
@@ -31,8 +30,6 @@ import socket
 import typing
 import uuid
 from asyncio import transports
-
-import tornado
 
 import inmanta.agent.cache
 import inmanta.agent.executor
@@ -46,7 +43,7 @@ import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
-from inmanta import const
+from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
 
@@ -106,7 +103,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.ctx = ExecutorContext(self)
         self.log_transport: typing.Optional[LogShipper] = None
         self.take_over_logging = take_over_logging
-        self.timer_venv_checkup: typing.Optional[tornado.ioloop.PeriodicCallback] = None
+        self.timer_venv_checkup: typing.Optional[util.Scheduler] = None
 
     def connection_made(self, transport: transports.Transport) -> None:
         super().connection_made(transport)
@@ -129,14 +126,16 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             self.log_transport = None
 
     def start_timer_venv_checkup(self, interval: int) -> None:
-        self.timer_venv_checkup = tornado.ioloop.PeriodicCallback(
-            callback=self.touch_inmanta_venv_status,
-            callback_time=datetime.timedelta(seconds=interval),
+        self.timer_venv_checkup = util.Scheduler("venv_checkup_scheduler")
+        self.timer_venv_checkup.add_action(
+            action=self.touch_inmanta_venv_status,
+            schedule=util.IntervalSchedule(
+                interval=interval,
+            ),
         )
-        self.timer_venv_checkup.start()
 
     def stop_timer_venv_checkup(self) -> None:
-        if self.timer_venv_checkup is not None and self.timer_venv_checkup.is_running():
+        if self.timer_venv_checkup is not None:
             self.timer_venv_checkup.stop()
 
     def get_context(self) -> ExecutorContext:
@@ -165,7 +164,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.stopped.set()
         self.stop_timer_venv_checkup()
 
-    def touch_inmanta_venv_status(self) -> None:
+    async def touch_inmanta_venv_status(self) -> None:
         """
         Touch the `inmanta_venv_status` file.
         """
@@ -690,11 +689,11 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
     async def stop(self) -> None:
         await asyncio.gather(*(child.stop() for child in self.children))
-        self.environment_manager.stop_cleanup_timer()
+        self.environment_manager.stop()
 
     async def force_stop(self, grace_time: float) -> None:
         await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
-        self.environment_manager.stop_cleanup_timer()
+        self.environment_manager.stop()
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
         thread_pool_finalizer.append(self.thread_pool)
