@@ -536,7 +536,6 @@ class AgentInstance:
         repair_splay_time = cfg.agent_repair_splay_time.get()
         self._repair_splay_value = random.randint(0, repair_splay_time)
 
-
         self._getting_resources = False
         self._get_resource_timeout = 0
 

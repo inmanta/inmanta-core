@@ -47,9 +47,8 @@ import inmanta.util
 from inmanta import util
 from inmanta.agent import executor
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
-from setproctitle import setproctitle
-
 from inmanta.util import IntervalSchedule
+from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(__name__)
 
@@ -708,6 +707,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
     async def cleanup_inactive_executors(self) -> None:
         now = datetime.datetime.now().astimezone()
 
-        for executor in self.executor_map.values():
-            if now - executor.connection.last_used_at > timedelta(seconds=self.executor_retention_time):
-                await executor.stop()
+        for _executor in self.executor_map.values():
+            if now - _executor.connection.last_used_at > timedelta(seconds=self.executor_retention_time):
+                await _executor.stop()

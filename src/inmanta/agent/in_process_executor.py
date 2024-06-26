@@ -17,12 +17,9 @@ import datetime
 import logging
 import typing
 import uuid
-from asyncio import Semaphore
 from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
-from datetime import timedelta
-from functools import wraps
-from typing import Any, Callable, Optional, TypeVar, cast
+from typing import Any, Optional
 
 import inmanta.agent.cache
 import inmanta.protocol
@@ -39,8 +36,6 @@ from inmanta.types import Apireturn
 
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent as agent
-
-
 
 
 class InProcessExecutor(executor.Executor, executor.AgentInstance):
@@ -78,7 +73,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self._stopped = False
 
         self.failed_resource_types: FailedResourcesSet = set()
-
 
     def stop(self) -> None:
         self._stopped = True

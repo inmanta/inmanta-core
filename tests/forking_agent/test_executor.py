@@ -163,6 +163,7 @@ def test():
     )
     full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
 
+    assert oldest_executor.executor_id in manager.agent_map["agent2"]
     # assert loaded
     result2 = await full_runner.connection.call(TestLoader())
     assert ["DIRECT", "server"] == result2
@@ -172,13 +173,13 @@ def test():
     assert await full_runner.connection.call(GetName()) == "agent2"
 
     # Request a third executor:
-    # The executor cap is reached -> check that the first dummy executor got correctly stopped
+    # The executor cap is reached -> check that the oldest executor got correctly stopped
     dummy = executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[via_server]
     )
 
-    dummy_executor = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
-
+    _ = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
+    assert oldest_executor.executor_id not in manager.agent_map["agent2"]
 
     # Assert shutdown and back up
     await mpmanager.stop_for_agent("agent2")
