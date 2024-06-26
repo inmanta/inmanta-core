@@ -715,7 +715,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         for _executor in self.executor_map.values():
             if now - _executor.connection.last_used_at > timedelta(seconds=self.executor_retention_time):
                 LOGGER.info(
-                    f"Cleaning up executor {_executor.executor_id.identity()} because it was inactive for longer "
+                    f"Stopping executor {_executor.executor_id.identity()} because it was inactive for longer "
                     f"than the configured allowed idling time."
                 )
                 await _executor.stop()
