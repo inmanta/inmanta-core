@@ -44,9 +44,12 @@ import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
+from inmanta import util
 from inmanta.agent import executor
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
 from setproctitle import setproctitle
+
+from inmanta.util import IntervalSchedule
 
 LOGGER = logging.getLogger(__name__)
 
@@ -166,18 +169,6 @@ class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
 class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
     async def call(self, context: ExecutorContext) -> None:
         await context.stop()
-
-
-class CleanInactiveCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
-
-    def __init__(self, allowed_idle_time: int) -> None:
-        self.allowed_idle_time = allowed_idle_time
-
-    async def call(self, context: ExecutorContext) -> None:
-        assert context.executor is not None
-
-        if await context.executor.is_idle(self.allowed_idle_time):
-            await context.stop()
 
 
 class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.ModuleSource]]):
@@ -497,7 +488,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         storage_folder: str,
         log_level: int = logging.INFO,
         cli_log: bool = False,
-        max_executors_per_agent: int = 3,
     ) -> None:
         """
         :param thread_pool:  threadpool to perform work on
@@ -507,7 +497,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         :param log_folder: folder to place log files for the executors
         :param storage_folder: folder to place code files
         :param log_level: log level for the executors
-        :param max_executors_per_agent: Only allow up to this many executors per agent
         :param cli_log: do we also want to echo the log to std_err
 
         """
@@ -528,11 +517,15 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         # This means it can contain closing entries
         self.executor_map: dict[executor.ExecutorId, MPExecutor] = {}
         self.agent_map: dict[str, set[executor.ExecutorId]] = collections.defaultdict(set)
-        self.max_executors_per_agent = max_executors_per_agent
 
         self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
         self.executor_retention_time = inmanta.agent.config.executor_retention.get()
+        self.max_executors_per_agent = inmanta.agent.config.executor_cap_per_agent.get()
+
+        self._sched = util.Scheduler("MP manager")
+
+        self._sched.add_action(self.cleanup_inactive_executors, IntervalSchedule(2))
 
     def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
         self.executor_map[theid] = the_executor

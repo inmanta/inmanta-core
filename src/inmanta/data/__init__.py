@@ -2652,10 +2652,11 @@ class Environment(BaseDocument):
             name=EXECUTOR_CAP_PER_AGENT,
             typ="int",
             default=3,
-            doc="Set the upper bound on the number of concurrent executors per agent for this environment."
-            "New executors cannot be created if this limit is already reached for this agent. This setting "
-            "can be used in combination with the :inmanta.environment-settings:setting:`executor_retention` "
-            "setting to define a policy to manage executors.",
+            doc="Set the upper bound on the number of concurrent executors per agent for this environment. "
+            "If this limit is already reached for this agent when attempting to create a new executor, the "
+            "oldest executor of this agent will be stopped. This setting can be used in combination with "
+            "the :inmanta.environment-settings:setting:`executor_retention` setting to define a policy to "
+            "manage executors.",
             validator=convert_int,
         ),
         EXECUTOR_RETENTION: Setting(

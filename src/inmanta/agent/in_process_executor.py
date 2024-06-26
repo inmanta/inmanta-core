@@ -40,24 +40,7 @@ from inmanta.types import Apireturn
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent as agent
 
-FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
-
-def atomic_unit_of_work(method: FuncT) -> FuncT:
-    """
-    decorator to denote that a coroutine is an atomic unit of work:
-        - execute it under the execution lock
-        - update the last_job_timestamp
-    """
-
-    @wraps(method)
-    async def _impl(self: Any, *args: Any, **kwargs: Any) -> Any:
-        async with self._execution_lock:
-            result = await method(self, *args, **kwargs)
-            self.last_job_timestamp = datetime.datetime.now().astimezone()
-            return result
-
-    return cast(FuncT, _impl)
 
 
 class InProcessExecutor(executor.Executor, executor.AgentInstance):
@@ -96,12 +79,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self.failed_resource_types: FailedResourcesSet = set()
 
-        # This lock makes sure the executor can't be deleted when it is executing
-        self._execution_lock = Semaphore(1)
-
-        # Timestamp of the last performed task. Used by the cleanup mechanism
-        # to remove inactive executors.
-        self.last_job_timestamp: datetime.datetime = datetime.datetime.now().astimezone()
 
     def stop(self) -> None:
         self._stopped = True
@@ -249,7 +226,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             )
             raise
 
-    @atomic_unit_of_work
     async def execute(
         self,
         gid: uuid.UUID,
@@ -295,7 +271,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         await self._report_resource_deploy_done(resource_details, ctx)
 
-    @atomic_unit_of_work
     async def dry_run(
         self,
         resources: Sequence[ResourceDetails],
@@ -386,7 +361,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         status=const.ResourceState.dry,
                     )
 
-    @atomic_unit_of_work
     async def get_facts(self, resource: ResourceDetails) -> Apireturn:
         """
         Get facts for a given resource
@@ -460,32 +434,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         # Needs to run on threadpool due to finalizers?
         # https://github.com/inmanta/inmanta-core/issues/833
         self._cache.close_version(version)
-
-    def _idle_check(self, allowed_idle_time: int) -> bool:
-        """
-        Check if this executor was inactive for more than a given amount of time.
-        It is the responsibility of the caller to perform this check under the
-        execution lock to make sure the executor is not actively doing work during
-        the check.
-
-        :param allowed_idle_time: Duration of time (in seconds) before considering
-            that this executor is inactive.
-        """
-        now = datetime.datetime.now().astimezone()
-        return now - self.last_job_timestamp > timedelta(seconds=allowed_idle_time)
-
-    async def is_idle(self, allowed_idle_time: int) -> bool:
-        """
-        Check if this executor was inactive for more than a given amount of time.
-
-        :param allowed_idle_time: Duration of time (in seconds) before considering
-            that this executor is inactive.
-        """
-
-        # Do the check under the execution lock to make sure the executor
-        # is not actively doing work during the check.
-        async with self._execution_lock:
-            return self._idle_check(allowed_idle_time)
 
 
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):

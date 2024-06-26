@@ -628,9 +628,6 @@ class AgentInstance:
                 )
             )
 
-        async def cleanup_executors_action() -> None:
-            await self.executor_manager.cleanup_inactive_executors()
-
         def periodic_schedule(
             kind: str,
             action: Callable[[], Coroutine[object, None, object]],
@@ -685,7 +682,6 @@ class AgentInstance:
 
         periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value)
         periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value)
-        periodic_schedule("executor cleanup", 2, self._executor_retention, 0)
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self.process._sched.add_action(action, schedule)
@@ -966,7 +962,6 @@ class Agent(SessionEndpoint):
                 self._storage["executor"],
                 LOGGER.level,
                 False,
-                max_executors_per_agent=cfg.executor_cap_per_agent.get(),
             )
         else:
             LOGGER.info("Selected threaded agent executor mode")

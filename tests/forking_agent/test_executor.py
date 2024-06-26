@@ -32,7 +32,7 @@ import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
 from inmanta.agent import executor
-from inmanta.agent.forking_executor import CleanInactiveCommand, MPManager
+from inmanta.agent.forking_executor import MPManager
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import retry_limited
 
@@ -81,10 +81,10 @@ def set_custom_executor_policy():
     Fixture to temporarily set the policy for executor management.
     """
     old_cap_value = inmanta.agent.config.executor_cap_per_agent.get()
-    inmanta.agent.config.executor_cap_per_agent.set("1")
+    inmanta.agent.config.executor_cap_per_agent.set("2")
 
     old_retention_value = inmanta.agent.config.executor_retention.get()
-    inmanta.agent.config.executor_retention.set("5")
+    inmanta.agent.config.executor_retention.set("2")
 
     yield
 
@@ -103,7 +103,7 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     5. check that code is loaded correctly
 
     Also test that an executor policy can be set:
-        - the executor_cap_per_agent option disallows creating more than N executors.
+        - the executor_cap_per_agent option correctly stops the oldest executor.
         - the executor_retention option is used to clean up old executors.
     """
     with pytest.raises(ImportError):
@@ -148,6 +148,15 @@ def test():
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
     assert res.code == 200
 
+    # Dummy executor to test executor cap:
+    # Create this one first to make sure this is the one being stopped
+    # when the cap is reached
+    dummy = executor.ExecutorBlueprint(
+        pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct]
+    )
+
+    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
+
     # Full config: 2 source files, one python dependency
     full = executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct, via_server]
@@ -162,20 +171,14 @@ def test():
     assert await simplest.connection.call(GetName()) == "agent1"
     assert await full_runner.connection.call(GetName()) == "agent2"
 
-    # Test executor cap:
-    # Dummy config, different enough to require a new executor:
+    # Request a third executor:
+    # The executor cap is reached -> check that the first dummy executor got correctly stopped
     dummy = executor.ExecutorBlueprint(
-        pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct]
+        pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[via_server]
     )
 
-    with pytest.raises(Exception) as info:
-        await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
-    expected_output = (
-        "Agent agent2 has reached the allowed executor cap of 1. Either retry later when an idle executor"
-        " for this agent has been recycled or update the policy to manage executors via the EXECUTOR_CAP_PER_AGENT "
-        "and EXECUTOR_RETENTION config options."
-    )
-    assert expected_output in str(info.value)
+    dummy_executor = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
+
 
     # Assert shutdown and back up
     await mpmanager.stop_for_agent("agent2")
@@ -183,7 +186,7 @@ def test():
 
     full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
 
-    await retry_limited(lambda: len(manager.agent_map["agent2"]) != 0, 1)
+    await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)
 
     await simplest.stop()
     await simplest.join(2)
@@ -194,15 +197,10 @@ def test():
         # we aren't leaking into this venv
         import lorem  # noqa: F401, F811
 
-    async def perform_clean_up() -> bool:
-        try:
-            await full_runner.connection.call(CleanInactiveCommand(inmanta.agent.config.executor_retention.get()))
-        except inmanta.protocol.ipc_light.ConnectionLost:
-            # Executor was cleaned up
-            pass
+    async def check_automatic_clean_up() -> bool:
         return len(manager.agent_map["agent2"]) == 0
 
-    await retry_limited(perform_clean_up, 10)
+    await retry_limited(check_automatic_clean_up, 10)
 
 
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
