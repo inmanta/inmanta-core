@@ -1214,9 +1214,6 @@ class AutostartedAgentManager(ServerSlice):
         agent_repair_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME, connection=connection))
         agent_repair_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection))
 
-        executor_cap_per_agent: int = cast(int, await env.get(data.AGENT_EXECUTOR_CAP, connection=connection))
-        executor_retention: int = cast(int, await env.get(data.AGENT_EXECUTOR_RETENTION_TIME, connection=connection))
-
         # generate config file
         config = f"""[config]
 state-dir=%(statedir)s
@@ -1236,8 +1233,8 @@ agent-get-resource-backoff=%(agent_get_resource_backoff)f
 
 [agent]
 executor-mode={agent_cfg.agent_executor_mode.get().name}
-executor-cap=%(executor_cap_per_agent)d
-executor-retention-time=%(executor_retention)d
+executor-cap={agent_cfg.agent_executor_cap.get()}
+executor-retention-time={agent_cfg.agent_executor_retention_time.get()}
 
 [agent_rest_transport]
 port=%(port)s
@@ -1252,8 +1249,6 @@ host=%(serveradress)s
             "agent_repair_interval": agent_repair_interval,
             "serveradress": server_config.server_address.get(),
             "agent_get_resource_backoff": agent_cfg.agent_get_resource_backoff.get(),
-            "executor_cap_per_agent": executor_cap_per_agent,
-            "executor_retention": executor_retention,
         }
 
         if server_config.server_enable_auth.get():

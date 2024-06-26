@@ -988,7 +988,7 @@ class Agent(SessionEndpoint):
 
         self.agent_map: Optional[dict[str, str]] = agent_map
 
-        remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExcutorMode.forking
+        remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExecutorMode.forking
         can_have_remote_executor = code_loader
 
         self.executor_manager: executor.ExecutorManager[executor.Executor]

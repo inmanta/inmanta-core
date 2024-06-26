@@ -162,22 +162,22 @@ agent_get_resource_backoff: Option[float] = Option(
 )
 
 
-class AgentExcutorMode(str, enum.Enum):
+class AgentExecutorMode(str, enum.Enum):
     threaded = "threaded"
     forking = "forking"
 
 
-def is_executor_mode(value: str | AgentExcutorMode) -> AgentExcutorMode:
+def is_executor_mode(value: str | AgentExecutorMode) -> AgentExecutorMode:
     """threaded | forking"""
-    if isinstance(value, AgentExcutorMode):
+    if isinstance(value, AgentExecutorMode):
         return value
-    return AgentExcutorMode(value)
+    return AgentExecutorMode(value)
 
 
 agent_executor_mode = Option(
     "agent",
     "executor-mode",
-    AgentExcutorMode.threaded,
+    AgentExecutorMode.threaded,
     "EXPERIMENTAL: set the agent to use threads or fork subprocesses to create workers.",
     is_executor_mode,
 )
