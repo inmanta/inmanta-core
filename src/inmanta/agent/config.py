@@ -149,18 +149,18 @@ This option is ignored and a splay of 0 is used if 'agent_repair_interval' is a 
     is_time,
 )
 
-executor_cap_per_agent = Option[int](
+agent_executor_cap = Option[int](
     "config",
-    "executor-cap-per-agent",
+    "agent-executor-cap",
     3,
     "Maximum number of concurrent executors to keep per environment, per agent. If this limit is already reached "
     "when creating a new executor, the oldest one will be stopped first.",
     is_int,
 )
 
-executor_retention = Option[int](
+agent_executor_retention_time = Option[int](
     "config",
-    "executor-retention",
+    "agent-executor-retention-time",
     60,
     "Amount of time (in seconds) to wait before cleaning up inactive executors.",
     is_time,

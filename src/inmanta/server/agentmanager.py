@@ -1250,8 +1250,8 @@ host=%(serveradress)s
             "agent_repair_interval": agent_repair_interval,
             "serveradress": server_config.server_address.get(),
             "agent_get_resource_backoff": agent_cfg.agent_get_resource_backoff.get(),
-            "executor_cap_per_agent": executor_cap_per_agent,
-            "executor_retention": executor_retention,
+            "agent_executor_cap": executor_cap_per_agent,
+            "agent_executor_retention_time": executor_retention,
         }
 
         if server_config.server_enable_auth.get():

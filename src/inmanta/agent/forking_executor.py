@@ -520,8 +520,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
         self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
-        self.executor_retention_time = inmanta.agent.config.executor_retention.get()
-        self.max_executors_per_agent = inmanta.agent.config.executor_cap_per_agent.get()
+        self.executor_retention_time = inmanta.agent.config.agent_executor_retention_time.get()
+        self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
 
         self._sched = util.Scheduler("MP manager")
 
@@ -593,6 +593,10 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                 # Close oldest executor:
                 executor_ids = self.agent_map[executor_id.agent_name]
                 oldest_executor = min([self.executor_map[id] for id in executor_ids], key=lambda e: e.connection.last_used_at)
+                LOGGER.info(
+                    f"Reached executor cap for agent {executor_id.agent_name}. Stopping oldest executor "
+                    f"{oldest_executor.executor_id.identity()} to make room for a new one."
+                    )
 
                 await oldest_executor.stop()
 
@@ -710,4 +714,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
         for _executor in self.executor_map.values():
             if now - _executor.connection.last_used_at > timedelta(seconds=self.executor_retention_time):
+                LOGGER.info(
+                    f"Cleaning up executor {_executor.executor_id.identity()} because it was inactive for longer "
+                    f"than the configured allowed idling time."
+                )
                 await _executor.stop()

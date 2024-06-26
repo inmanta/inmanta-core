@@ -80,16 +80,16 @@ def set_custom_executor_policy():
     """
     Fixture to temporarily set the policy for executor management.
     """
-    old_cap_value = inmanta.agent.config.executor_cap_per_agent.get()
-    inmanta.agent.config.executor_cap_per_agent.set("2")
+    old_cap_value = inmanta.agent.config.agent_executor_cap.get()
+    inmanta.agent.config.agent_executor_cap.set("2")
 
-    old_retention_value = inmanta.agent.config.executor_retention.get()
-    inmanta.agent.config.executor_retention.set("2")
+    old_retention_value = inmanta.agent.config.agent_executor_retention_time.get()
+    inmanta.agent.config.agent_executor_retention_time.set("2")
 
     yield
 
-    inmanta.agent.config.executor_cap_per_agent.set(str(old_cap_value))
-    inmanta.agent.config.executor_retention.set(str(old_retention_value))
+    inmanta.agent.config.agent_executor_cap.set(str(old_cap_value))
+    inmanta.agent.config.agent_executor_retention_time.set(str(old_retention_value))
 
 
 async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client):
@@ -103,8 +103,8 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     5. check that code is loaded correctly
 
     Also test that an executor policy can be set:
-        - the executor_cap_per_agent option correctly stops the oldest executor.
-        - the executor_retention option is used to clean up old executors.
+        - the agent_executor_cap option correctly stops the oldest executor.
+        - the agent_executor_retention_time option is used to clean up old executors.
     """
     with pytest.raises(ImportError):
         # make sure lorem isn't installed at the start of the test.
