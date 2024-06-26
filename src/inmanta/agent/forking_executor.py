@@ -706,9 +706,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         return children
 
     async def cleanup_inactive_executors(self) -> None:
-        """
-        Clean
-        """
         now = datetime.datetime.now().astimezone()
 
         for _executor in self.executor_map.values():

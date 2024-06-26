@@ -266,8 +266,6 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
         else:
             super().frame_received(frame)
 
-    def has_outstanding_calls(self) -> bool:
-        return len(self.requests) > 0
 
     def process_reply(self, frame: IPCReplyFrame) -> None:
         if frame.is_exception:
