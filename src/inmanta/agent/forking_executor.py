@@ -596,7 +596,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                 LOGGER.info(
                     f"Reached executor cap for agent {executor_id.agent_name}. Stopping oldest executor "
                     f"{oldest_executor.executor_id.identity()} to make room for a new one."
-                    )
+                )
 
                 await oldest_executor.stop()
 
