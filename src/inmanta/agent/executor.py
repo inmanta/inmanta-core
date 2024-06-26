@@ -36,7 +36,7 @@ import pkg_resources
 
 import inmanta.types
 from inmanta.agent import config as cfg
-from inmanta.data.model import PipConfig, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
@@ -45,7 +45,7 @@ from inmanta.util import NamedLock
 
 LOGGER = logging.getLogger(__name__)
 
-FailedResourcesSet: typing.TypeAlias = set[str]
+FailedResourcesSet: typing.TypeAlias = set[ResourceType]
 
 
 class AgentInstance(abc.ABC):
@@ -134,6 +134,12 @@ class ExecutorBlueprint(EnvBlueprint):
 
     @classmethod
     def from_specs(cls, code: typing.Collection["ResourceInstallSpec"]) -> "ExecutorBlueprint":
+        """
+        Create a single ExecutorBlueprint by combining the blueprint(s) of several
+        ResourceInstallSpec by merging respectively their module sources and their
+        requirements and making sure they all share the same pip config.
+        """
+
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
         pip_configs = [cd.blueprint.pip_config for cd in code]
@@ -224,7 +230,7 @@ class ResourceInstallSpec:
 
     """
 
-    resource_type: str
+    resource_type: ResourceType
     model_version: int
     blueprint: ExecutorBlueprint
 

@@ -81,21 +81,6 @@ def test_issue_140_index_error(snippetcompiler):
         assert re.match(".*No index defined on std::Service for this lookup:.*", str(e))
 
 
-def test_issue_745_index_on_nullable(snippetcompiler):
-    with pytest.raises(IndexException):
-        snippetcompiler.setup_for_snippet(
-            """
-entity A:
-    string name
-    string? opt
-end
-
-index A(name,opt)
-"""
-        )
-        compiler.do_compile()
-
-
 @pytest.mark.parametrize("explicit", [True, False])
 def test_issue_745_2689_index_on_optional(snippetcompiler, explicit: bool):
     with pytest.raises(IndexException):
@@ -592,3 +577,128 @@ The constructor `A(id=1,left='LL',right='RR',other_id=3)` ({snippetcompiler.proj
 - index A(other_id) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:17)
 """  # noqa: E501
     )
+
+
+def test_index_on_nullable(snippetcompiler) -> None:
+    """
+    Verify that indexes on nullable attributes are allowed and behave as expected.
+
+    Indexes on optional relations are not supported and are tested in test_issue_745_2689_index_on_optional.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        entity A:
+            int? n = null
+        end
+        index A(n)
+
+        entity B:
+            int? m = null
+            int? n = null
+        end
+        index B(m, n)
+
+        entity C:
+            string? s = null
+        end
+        index C(s)
+
+        entity D:
+            # this may be deprecated but best to make sure it behaves consistently nonetheless
+            list? l = null
+        end
+        index D(l)
+
+        implement A using std::none
+        implement B using std::none
+        implement C using std::none
+        implement D using std::none
+
+        assert = true
+
+        a_default = A()
+        a_null = A(n=null)
+        a_zero = A(n=0)
+        a_one = A(n=1)
+
+        assert = (a_default == a_null)
+        assert = (a_default == A())
+        assert = (a_null == A(n=null))
+        assert = (a_zero == A(n=0))
+        assert = (a_one == A(n=1))
+        assert = (a_null == A[n=null])
+        assert = (a_zero == A[n=0])
+        assert = (a_one == A[n=1])
+        assert = (a_default != a_zero)
+        assert = (a_default != a_one)
+        assert = (a_zero != a_one)
+
+        # concept is trivially the same: only test that basic behavior
+        b_default = B()
+        assert = (b_default == B[m=null,n=null])
+        assert = (b_default == B(n=null))
+        assert = (b_default != B(n=0))
+
+        # guard against some plausible implementation errors, especially given that we use `repr` for index matching
+        c_null = C()
+        c_null_str = C(s="null")
+        c_None = C(s="None")
+        c_none = C(s="none")
+
+        assert = (c_null != c_null_str)
+        assert = (c_null != c_None)
+        assert = (c_null != c_none)
+        assert = (c_null == C[s=null])
+        assert = (c_null_str == C[s="null"])
+
+        d_default = D()
+        d_null = D(l=null)
+        d_empty = D(l=[])
+        d_one = D(l=[1])
+
+        assert = (d_null == d_default)
+        assert = (d_null != d_empty)
+        assert = (d_null != d_one)
+        assert = (d_null == D[l=null])
+        assert = (d_empty == D[l=[]])
+        """
+    )
+    compiler.do_compile()
+
+
+def test_lookup_on_float_with_int(snippetcompiler):
+    """
+    Verify that index lookups work as expected on float-type attributes, both with float and equivalent int lookups.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    float x
+end
+index A(x)
+
+entity B:
+    float? x
+end
+index B(x)
+
+implement A using std::none
+implement B using std::none
+
+assert = true
+
+a_one = A(x=1.0)
+
+assert = (a_one == A[x=1.0])
+assert = (a_one == A[x=1])
+
+b_null = B(x=null)
+b_one = B(x=1.0)
+
+assert = (b_null != b_one)
+assert = (b_null == B[x=null])
+assert = (b_one == B[x=1.0])
+assert = (b_one == B[x=1])
+        """,
+    )
+    compiler.do_compile()
