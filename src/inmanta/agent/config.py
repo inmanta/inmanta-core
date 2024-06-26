@@ -149,22 +149,6 @@ This option is ignored and a splay of 0 is used if 'agent_repair_interval' is a 
     is_time,
 )
 
-agent_executor_cap = Option[int](
-    "config",
-    "agent-executor-cap",
-    3,
-    "Maximum number of concurrent executors to keep per environment, per agent. If this limit is already reached "
-    "when creating a new executor, the oldest one will be stopped first.",
-    is_int,
-)
-
-agent_executor_retention_time = Option[int](
-    "config",
-    "agent-executor-retention-time",
-    60,
-    "Amount of time (in seconds) to wait before cleaning up inactive executors.",
-    is_time,
-)
 
 agent_get_resource_backoff: Option[float] = Option(
     "config",
@@ -198,6 +182,22 @@ agent_executor_mode = Option(
     is_executor_mode,
 )
 
+agent_executor_cap = Option[int](
+    "agent",
+    "executor-cap",
+    3,
+    "Maximum number of concurrent executors to keep per environment, per agent. If this limit is already reached "
+    "when creating a new executor, the oldest one will be stopped first.",
+    is_int,
+)
+
+agent_executor_retention_time = Option[int](
+    "agent",
+    "executor-retention-time",
+    60,
+    "Amount of time (in seconds) to wait before cleaning up inactive executors.",
+    is_time,
+)
 
 ##############################
 # agent_rest_transport

@@ -1229,13 +1229,15 @@ agent-deploy-splay-time=%(agent_deploy_splay)d
 agent-deploy-interval=%(agent_deploy_interval)s
 agent-repair-splay-time=%(agent_repair_splay)d
 agent-repair-interval=%(agent_repair_interval)s
-agent-executor-cap=%(executor_cap_per_agent)d
-agent-executor-retention-time=%(executor_retention)d
+
+
 
 agent-get-resource-backoff=%(agent_get_resource_backoff)f
 
 [agent]
 executor-mode={agent_cfg.agent_executor_mode.get().name}
+executor-cap=%(executor_cap_per_agent)d
+executor-retention-time=%(executor_retention)d
 
 [agent_rest_transport]
 port=%(port)s

@@ -2363,8 +2363,6 @@ NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
 RECOMPILE_BACKOFF = "recompile_backoff"
 ENVIRONMENT_METRICS_RETENTION = "environment_metrics_retention"
-AGENT_EXECUTOR_CAP = "agent_executor_cap"
-AGENT_EXECUTOR_RETENTION_TIME = "agent_executor_retention_time"
 
 
 class Setting:
@@ -2646,13 +2644,6 @@ class Environment(BaseDocument):
             default=336,
             doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
             "Default=336 hours (2 weeks). Set to 0 to disable automatic cleanups.",
-            validator=convert_int,
-        ),
-        AGENT_EXECUTOR_RETENTION_TIME: Setting(
-            name=AGENT_EXECUTOR_RETENTION_TIME,
-            typ="int",
-            default=60,
-            doc="The number of seconds to wait before cleaning up inactive executors",
             validator=convert_int,
         ),
     }
