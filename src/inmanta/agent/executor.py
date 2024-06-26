@@ -511,10 +511,3 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         Any threadpools that need to be closed can be handed of to the parent via thread_pool_finalizer
         """
         pass
-
-    @abc.abstractmethod
-    async def cleanup_inactive_executors(self) -> None:
-        """
-        Clean up inactive executors
-        """
-        pass

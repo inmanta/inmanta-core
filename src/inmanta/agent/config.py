@@ -153,7 +153,8 @@ executor_cap_per_agent = Option[int](
     "config",
     "executor-cap-per-agent",
     3,
-    "Number of executors to keep per environment, per agent.",
+    "Maximum number of concurrent executors to keep per environment, per agent. If this limit is already reached "
+    "when creating a new executor, the oldest one will be stopped first.",
     is_int,
 )
 
@@ -161,7 +162,7 @@ executor_retention = Option[int](
     "config",
     "executor-retention",
     60,
-    "Amount of time (in seconds) to wait before cleaning up an inactive executor.",
+    "Amount of time (in seconds) to wait before cleaning up inactive executors.",
     is_time,
 )
 

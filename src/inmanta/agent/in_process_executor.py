@@ -498,6 +498,3 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         out.failed_resource_types = failed_resource_types
 
         return out
-
-    async def cleanup_inactive_executors(self) -> None:
-        pass
