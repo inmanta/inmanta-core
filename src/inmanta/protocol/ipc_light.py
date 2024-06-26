@@ -266,7 +266,6 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
         else:
             super().frame_received(frame)
 
-
     def process_reply(self, frame: IPCReplyFrame) -> None:
         if frame.is_exception:
             if isinstance(frame.returnvalue, Exception):
