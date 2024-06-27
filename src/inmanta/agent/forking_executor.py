@@ -535,12 +535,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self.executor_retention_time = inmanta.agent.config.agent_executor_retention_time.get()
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
 
-        # self._sched.add_action(self.cleanup_inactive_executors, IntervalSchedule(2))
-
-        # Schedule executor cleanup
-        LOGGER.error("CALL to cleanup_inactive_executors")
-
-        # asyncio.get_running_loop().call_soon(self.cleanup_inactive_executors)
         asyncio.create_task(self.cleanup_inactive_executors())
 
     def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
@@ -609,7 +603,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                 # Close oldest executor:
                 executor_ids = self.agent_map[executor_id.agent_name]
                 oldest_executor = min([self.executor_map[id] for id in executor_ids], key=lambda e: e.connection.last_used_at)
-                LOGGER.info(
+                LOGGER.debug(
                     f"Reached executor cap for agent {executor_id.agent_name}. Stopping oldest executor "
                     f"{oldest_executor.executor_id.identity()} to make room for a new one."
                 )
