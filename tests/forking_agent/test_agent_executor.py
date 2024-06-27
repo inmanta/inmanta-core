@@ -373,7 +373,6 @@ def test():
     new_check_executor1 = executor_1.executor_virtual_env.get_last_used_timestamp()
     new_check_executor2 = executor_2.executor_virtual_env.get_last_used_timestamp()
 
-    # breakpoint()
     assert new_check_executor1 > old_check_executor1
     assert new_check_executor2 > old_check_executor2
     assert (datetime.datetime.now() - new_check_executor2).seconds <= 2

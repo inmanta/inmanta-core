@@ -1450,8 +1450,6 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
         async def _check_wait_condition() -> bool:
             result = await client.list_agents(tid=environment)
             assert result.code == 200
-            a = [x for x in result.result["agents"]]
-            breakpoint()
             return len([x for x in result.result["agents"] if x["state"] == "up"]) == nr_agents
 
         return _check_wait_condition

@@ -20,7 +20,6 @@ import asyncio
 import collections
 import concurrent.futures
 import concurrent.futures.thread
-import datetime
 import functools
 import logging
 import logging.config
@@ -137,8 +136,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
     def stop_timer_venv_checkup(self) -> None:
         if self.timer_venv_checkup is not None:
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(self.timer_venv_checkup.stop)
+            asyncio.ensure_future(self.timer_venv_checkup.stop())
 
     def get_context(self) -> ExecutorContext:
         return self.ctx
@@ -151,19 +149,19 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """Actual shutdown, not async"""
         if not self.stopping:
             # detach logger
-            self.stop_timer_venv_checkup()
             self._detach_log_shipper()
             self.logger.info("Stopping")
             self.stopping = True
             assert self.transport is not None  # Mypy
             self.transport.close()
+            self.stop_timer_venv_checkup()
 
     def connection_lost(self, exc: Exception | None) -> None:
         """We lost connection to the controler, bail out"""
-        self.stop_timer_venv_checkup()
         self._detach_log_shipper()
         self.logger.info("Connection lost", exc_info=exc)
         self._sync_stop()
+        self.stop_timer_venv_checkup()
         self.stopped.set()
 
     async def touch_inmanta_venv_status(self) -> None:

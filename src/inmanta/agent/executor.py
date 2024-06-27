@@ -330,12 +330,15 @@ class VirtualEnvironmentManager:
         # allows us to prevent creating and deleting the same venv at a given time. The keys of this named lock are the hash of
         # venv
         self._locks: NamedLock = NamedLock()
+        self._cleanup_scheduler = util.Scheduler("venv_cleanup_scheduler")
+
+    async def start(self) -> None:
         interval = datetime.timedelta(days=1).total_seconds()
         executor_venv_retention_time = cfg.executor_venv_retention_time.get()
         assert datetime.timedelta(days=executor_venv_retention_time).total_seconds() > interval, (
             "The `executor-venv-retention-time` should be larger than the period " "with which the executor touches its file!"
         )
-        self._cleanup_scheduler = util.Scheduler("venv_cleanup_scheduler")
+
         self._cleanup_scheduler.add_action(
             action=self.clean_virtual_environments,
             schedule=util.IntervalSchedule(
