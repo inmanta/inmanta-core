@@ -204,7 +204,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
     ):
         """
         :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
-        testing
+            testing. The default value is set to None as it should not be used except for testing purposes. It can be
+            overridden to speed up the tests
         """
         self.venv_path = venv_path
         self.storage_folder = storage_folder
@@ -566,7 +567,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param code: The set of sources to be installed on the executor.
         :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
-            testing
+            testing. The default value is set to None as it should not be used except for testing purposes.
+            It can be overridden to speed up the tests
         :return: An Executor instance
         """
         blueprint = executor.ExecutorBlueprint.from_specs(code)
@@ -612,7 +614,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
     ) -> MPExecutor:
         """
         :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
-        testing
+            testing. The default value is set to None as it should not be used except for testing purposes. It can be
+            overridden to speed up the tests
         """
         LOGGER.info("Creating executor for agent %s with id %s", executor_id.agent_name, executor_id.identity())
         env_blueprint = executor_id.blueprint.to_env_blueprint()

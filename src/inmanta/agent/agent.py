@@ -940,6 +940,7 @@ class Agent(SessionEndpoint):
         if remote_executor and can_have_remote_executor:
             LOGGER.info("Selected forking agent executor mode")
             env_manager = inmanta.agent.executor.VirtualEnvironmentManager(self._storage["executor"])
+            # We need to do this otherwise, the scheduler would crash because no event loop would be running
             IOLoop.current().add_callback(env_manager.start)
             assert self.environment is not None  # Mypy
             self.executor_manager = forking_executor.MPManager(

@@ -265,13 +265,13 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
 
     def is_correctly_initialized(self) -> bool:
         """
-        Was the venv correctly created: the inmanta status file exists
+        Was the venv correctly initialized: the inmanta status file exists
         """
         return self.inmanta_venv_status_file.exists()
 
     def touch_status_file(self) -> None:
         """
-        Was the venv correctly created: the inmanta status file exists
+        Touch the inmanta status file
         """
         return self.inmanta_venv_status_file.touch()
 
@@ -457,12 +457,14 @@ class VirtualEnvironmentManager:
                         current_executor_environment = ExecutorVirtualEnvironment(
                             env_path=str(current_folder.absolute()), threadpool=None
                         )
+
                     if current_executor_environment.is_correctly_initialized():
                         modification_datetime = current_executor_environment.get_last_used_timestamp()
                         should_remove_venv = (current_datetime - modification_datetime).days >= executor_venv_retention_time
                     else:
-                        # The venv was badly initialized
+                        # The venv was badly initialized -> the inmanta venv status file does not exist
                         should_remove_venv = True
+
                     if should_remove_venv:
                         await loop.run_in_executor(
                             current_executor_environment.thread_pool, current_executor_environment.remove_venv

@@ -1859,8 +1859,8 @@ def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> list[p
     def try_get_cmd(p: psutil.Process) -> str:
         try:
             return p.cmdline()
-        except Exception as e:
-            logger.warning(f"A child process is gone! pid=%d, exception={e}", p.pid)
+        except Exception:
+            logger.warning("A child process is gone! pid=%d", p.pid)
             """If a child process is gone, p.cmdline() raises an exception"""
             return ""
 
