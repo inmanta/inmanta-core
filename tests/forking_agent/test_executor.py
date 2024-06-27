@@ -211,16 +211,13 @@ def test():
     async def check_automatic_clean_up() -> bool:
         return len(manager.agent_map["agent2"]) == 0
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         await retry_limited(check_automatic_clean_up, 10)
         log_contains(
             caplog,
             "inmanta.agent.forking_executor",
-            logging.INFO,
-            (
-                f"Stopping executor {full_runner.executor_id.identity()} because it was inactive for longer "
-                f"than the configured allowed idling time."
-            ),
+            logging.DEBUG,
+            (f"Stopping executor {full_runner.executor_id.identity()} because it was inactive for"),
         )
 
 

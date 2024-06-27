@@ -259,6 +259,10 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
         self.requests[request.id] = done  # Mypy can't do it
         return done
 
+    def has_outstanding_calls(self) -> bool:
+        """Is this client still waiting for replies"""
+        return len(self.requests) > 0
+
     def frame_received(self, frame: IPCFrame) -> None:
         """Handle replies"""
         if isinstance(frame, IPCReplyFrame):
@@ -267,6 +271,7 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
             super().frame_received(frame)
 
     def process_reply(self, frame: IPCReplyFrame) -> None:
+        self.last_used_at = datetime.datetime.now().astimezone()
         if frame.is_exception:
             if isinstance(frame.returnvalue, Exception):
                 self.requests[frame.id].set_exception(frame.returnvalue)
