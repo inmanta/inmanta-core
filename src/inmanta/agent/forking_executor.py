@@ -726,7 +726,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
         now = datetime.datetime.now().astimezone()
         reschedule_interval: float = self.executor_retention_time
-        asyncio.get_running_loop().set_debug(enabled=True)
+
         for _executor in self.executor_map.values():
             if _executor.can_be_cleaned_up(now, self.executor_retention_time):
                 LOGGER.debug(
