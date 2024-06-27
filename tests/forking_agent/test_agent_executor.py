@@ -354,23 +354,26 @@ def test():
         executor_manager.get_executor("agent1", "local:", code_for(blueprint1), venv_checkup_interval=0.1),
         executor_manager.get_executor("agent2", "local:", code_for(blueprint2), venv_checkup_interval=0.1),
     )
+    executor_1_venv_status_file = pathlib.Path(executor_1.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+    executor_2_venv_status_file = pathlib.Path(executor_2.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
 
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
     # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
     # modification override of the inmanta file and the retrieval of the last modification of the file
     os.utime(
-        f"{executor_2.executor_virtual_env.env_path}/{const.INMANTA_VENV_STATUS_FILENAME}",
+        executor_2_venv_status_file,
         (datetime.datetime.now().timestamp(), old_datetime.timestamp()),
     )
 
-    old_check_executor1 = executor_1.executor_virtual_env.get_last_modified_datetime_venv_status()
-    old_check_executor2 = executor_2.executor_virtual_env.get_last_modified_datetime_venv_status()
+    old_check_executor1 = executor_1.executor_virtual_env.get_last_used_timestamp()
+    old_check_executor2 = executor_2.executor_virtual_env.get_last_used_timestamp()
 
     await asyncio.sleep(0.2)
 
-    new_check_executor1 = executor_1.executor_virtual_env.get_last_modified_datetime_venv_status()
-    new_check_executor2 = executor_2.executor_virtual_env.get_last_modified_datetime_venv_status()
+    new_check_executor1 = executor_1.executor_virtual_env.get_last_used_timestamp()
+    new_check_executor2 = executor_2.executor_virtual_env.get_last_used_timestamp()
 
+    # breakpoint()
     assert new_check_executor1 > old_check_executor1
     assert new_check_executor2 > old_check_executor2
     assert (datetime.datetime.now() - new_check_executor2).seconds <= 2
@@ -380,9 +383,7 @@ def test():
     # Now we want to check if the cleanup is working correctly
     await executor_manager.stop_for_agent("agent1")
     # First we want to override the modification date of the `inmanta_venv_status` file
-    os.utime(
-        f"{executor_1.executor_virtual_env.env_path}/.inmanta_venv_status", (old_datetime.timestamp(), old_datetime.timestamp())
-    )
+    os.utime(executor_1_venv_status_file, (datetime.datetime.now().timestamp(), old_datetime.timestamp()))
 
     venv_dir = pathlib.Path(mpmanager_light.environment_manager.envs_dir)
     assert len([e for e in venv_dir.iterdir()]) == 2, "We should have two Virtual Environments for our 2 executors!"
@@ -391,3 +392,10 @@ def test():
     venvs = [str(e) for e in venv_dir.iterdir()]
     assert len(venvs) == 1, "Only one Virtual Environment should exist!"
     assert [executor_2.executor_virtual_env.env_path] == venvs
+
+    # Let's stop the other agent and pretend that the venv is broken
+    await executor_manager.stop_for_agent("agent2")
+    executor_2_venv_status_file.unlink()
+    await mpmanager_light.environment_manager.clean_virtual_environments()
+    venvs = [str(e) for e in venv_dir.iterdir()]
+    assert len(venvs) == 0, "No Virtual Environment should exist!"

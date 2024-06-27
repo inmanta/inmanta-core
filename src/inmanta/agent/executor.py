@@ -246,6 +246,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
     def __init__(self, env_path: str, threadpool: Optional[ThreadPoolExecutor]):
         super().__init__(env_path=env_path)
         self.thread_pool = threadpool
+        self.inmanta_venv_status_file = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
 
     def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
@@ -262,20 +263,24 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
                 config=blueprint.pip_config,
             )
 
-    def is_functional(self) -> bool:
+    def is_correctly_initialized(self) -> bool:
         """
         Was the venv correctly created: the inmanta status file exists
         """
-        inmanta_venv_status_file = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
-        return inmanta_venv_status_file.exists()
+        return self.inmanta_venv_status_file.exists()
 
-    def get_last_modified_datetime_venv_status(self) -> datetime.datetime:
+    def touch_status_file(self) -> None:
+        """
+        Was the venv correctly created: the inmanta status file exists
+        """
+        return self.inmanta_venv_status_file.touch()
+
+    def get_last_used_timestamp(self) -> datetime.datetime:
         """
         Retrieve the last modified timestamp of the inmanta status file
         """
-        inmanta_venv_status_file = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
-        assert inmanta_venv_status_file.exists()
-        return datetime.datetime.fromtimestamp(inmanta_venv_status_file.stat().st_mtime)
+        assert self.is_correctly_initialized()
+        return datetime.datetime.fromtimestamp(self.inmanta_venv_status_file.stat().st_mtime)
 
     def remove_venv(self) -> None:
         """
@@ -289,6 +294,13 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
                 self.env_path,
                 str(e),
             )
+
+    def reset(self) -> None:
+        """
+        Remove the venv of the executor and recreate the directory of the venv
+        """
+        self.remove_venv()
+        os.makedirs(self.env_path)
 
 
 def initialize_envs_directory() -> str:
@@ -319,7 +331,7 @@ class VirtualEnvironmentManager:
         # venv
         self._locks: NamedLock = NamedLock()
         interval = datetime.timedelta(days=1).total_seconds()
-        executor_venv_retention_time = cfg.agent_virtual_environment_cleanup.get()
+        executor_venv_retention_time = cfg.executor_venv_retention_time.get()
         assert datetime.timedelta(days=executor_venv_retention_time).total_seconds() > interval, (
             "The `executor-venv-retention-time` should be larger than the period " "with which the executor touches its file!"
         )
@@ -335,8 +347,8 @@ class VirtualEnvironmentManager:
         """
         Retrieves the directory path for a virtual environment based on the given blueprint.
         If the directory does not exist, it creates a new one. This method ensures that each virtual environment has a unique
-        storage location. This method should use a NamedLock to ensure thread-safe operations for each unique blueprint.
-
+        storage location. This method must be executed under the self._locks.get(<blueprint-hash>) lock to ensure thread-safe
+        operations for each unique blueprint
 
         :param blueprint: The blueprint of the environment for which the storage is being determined.
         :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
@@ -361,7 +373,8 @@ class VirtualEnvironmentManager:
         """
         Creates a new virtual environment based on the provided blueprint or reuses an existing one if suitable.
         This involves setting up the virtual environment and installing any required packages as specified in the blueprint.
-        This method should use a NamedLock to ensure thread-safe operations for each unique blueprint.
+        This method must execute under the self._locks.get(<blueprint-hash>) lock to ensure thread-safe operations for each
+        unique blueprint.
 
         :param blueprint: The blueprint specifying the configuration for the new virtual environment.
         :param threadpool: A ThreadPoolExecutor
@@ -370,23 +383,18 @@ class VirtualEnvironmentManager:
         """
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
-        inmanta_venv_status = pathlib.Path(env_storage) / const.INMANTA_VENV_STATUS_FILENAME
-
-        def reset_virtual_environment(current_env_storage: str) -> None:
-            shutil.rmtree(current_env_storage)
-            os.makedirs(env_storage)
 
         loop = asyncio.get_running_loop()
 
-        if not is_new and not inmanta_venv_status.exists():
+        if not is_new and not process_environment.is_correctly_initialized():
             LOGGER.info(
-                "Venv is already present but the inmanta venv status file is not. Removing venv for content %s, "
+                "Venv is already present but it was not correctly initialized. Re-creating it for content %s, "
                 "content hash: %s located in %s",
                 str(blueprint),
                 blueprint.blueprint_hash(),
                 env_storage,
             )
-            await loop.run_in_executor(threadpool, reset_virtual_environment, env_storage)
+            await loop.run_in_executor(process_environment.thread_pool, process_environment.reset)
             is_new = True
 
         if is_new:
@@ -394,7 +402,7 @@ class VirtualEnvironmentManager:
             await loop.run_in_executor(threadpool, process_environment.create_and_install_environment, blueprint)
         self._environment_map[blueprint] = process_environment
 
-        inmanta_venv_status.touch()
+        process_environment.touch_status_file()
 
         return process_environment
 
@@ -430,37 +438,42 @@ class VirtualEnvironmentManager:
         Remove Python Virtual Environments that were not used since a number of days (configurable in the agent config).
         """
         current_datetime = datetime.datetime.now()
-        executor_venv_retention_time = cfg.agent_virtual_environment_cleanup.get()
+        executor_venv_retention_time = cfg.executor_venv_retention_time.get()
         envs_dir = pathlib.Path(self.envs_dir)
-        executor_environment_to_clean: set[ExecutorVirtualEnvironment] = set()
         venv_path_to_blueprint = {pathlib.Path(v.env_path): k for k, v in self._environment_map.items()}
 
-        for folder in envs_dir.iterdir():
-            if not folder.is_dir():
-                continue
-
-            if folder in venv_path_to_blueprint:
-                blueprint = venv_path_to_blueprint[folder]
-                current_executor_environment = self._environment_map[blueprint]
-                modification_datetime = current_executor_environment.get_last_modified_datetime_venv_status()
-                if (current_datetime - modification_datetime).days >= executor_venv_retention_time:
-                    executor_environment_to_clean.add(current_executor_environment)
-            else:
-                executor_environment_to_clean.add(ExecutorVirtualEnvironment(env_path=str(folder.absolute()), threadpool=None))
-
         loop = asyncio.get_running_loop()
-        for executor in executor_environment_to_clean:
-            current_path = pathlib.Path(executor.env_path)
-            async with self._locks.get(current_path.name):
-                await loop.run_in_executor(executor.thread_pool, executor.remove_venv)
-                if current_path in venv_path_to_blueprint:
-                    del self._environment_map[venv_path_to_blueprint[current_path]]
+        for root, folders, _ in os.walk(self.envs_dir):
+            for folder in folders:
+                async with self._locks.get(folder):
+                    current_folder = envs_dir / folder
+                    blueprint = venv_path_to_blueprint.get(current_folder, None)
+                    if blueprint is not None and blueprint in self._environment_map:
+                        current_executor_environment = self._environment_map[blueprint]
+                    else:
+                        current_executor_environment = ExecutorVirtualEnvironment(
+                            env_path=str(current_folder.absolute()), threadpool=None
+                        )
+                    if current_executor_environment.is_correctly_initialized():
+                        modification_datetime = current_executor_environment.get_last_used_timestamp()
+                        should_remove_venv = (current_datetime - modification_datetime).days >= executor_venv_retention_time
+                    else:
+                        # The venv was badly initialized
+                        should_remove_venv = True
+                    if should_remove_venv:
+                        await loop.run_in_executor(
+                            current_executor_environment.thread_pool, current_executor_environment.remove_venv
+                        )
+                        if blueprint is not None:
+                            self._environment_map.pop(blueprint)
+            # We should walk only the first-level of folders!
+            break
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """
         Stop the cleanup timer of the environment manager if it is running.
         """
-        self._cleanup_scheduler.stop()
+        await self._cleanup_scheduler.stop()
 
 
 class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):

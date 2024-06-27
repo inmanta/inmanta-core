@@ -1450,6 +1450,8 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
         async def _check_wait_condition() -> bool:
             result = await client.list_agents(tid=environment)
             assert result.code == 200
+            a = [x for x in result.result["agents"]]
+            breakpoint()
             return len([x for x in result.result["agents"] if x["state"] == "up"]) == nr_agents
 
         return _check_wait_condition
@@ -1859,8 +1861,8 @@ def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> list[p
     def try_get_cmd(p: psutil.Process) -> str:
         try:
             return p.cmdline()
-        except Exception:
-            logger.warning("A child process is gone! pid=%d", p.pid)
+        except Exception as e:
+            logger.warning(f"A child process is gone! pid=%d, exception={e}", p.pid)
             """If a child process is gone, p.cmdline() raises an exception"""
             return ""
 

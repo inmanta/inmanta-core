@@ -20,6 +20,7 @@ import asyncio
 import collections
 import concurrent.futures
 import concurrent.futures.thread
+import datetime
 import functools
 import logging
 import logging.config
@@ -136,7 +137,8 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
     def stop_timer_venv_checkup(self) -> None:
         if self.timer_venv_checkup is not None:
-            self.timer_venv_checkup.stop()
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(self.timer_venv_checkup.stop)
 
     def get_context(self) -> ExecutorContext:
         return self.ctx
@@ -149,20 +151,20 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """Actual shutdown, not async"""
         if not self.stopping:
             # detach logger
+            self.stop_timer_venv_checkup()
             self._detach_log_shipper()
             self.logger.info("Stopping")
             self.stopping = True
             assert self.transport is not None  # Mypy
             self.transport.close()
-            self.stop_timer_venv_checkup()
 
     def connection_lost(self, exc: Exception | None) -> None:
         """We lost connection to the controler, bail out"""
+        self.stop_timer_venv_checkup()
         self._detach_log_shipper()
         self.logger.info("Connection lost", exc_info=exc)
         self._sync_stop()
         self.stopped.set()
-        self.stop_timer_venv_checkup()
 
     async def touch_inmanta_venv_status(self) -> None:
         """
@@ -689,11 +691,11 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
     async def stop(self) -> None:
         await asyncio.gather(*(child.stop() for child in self.children))
-        self.environment_manager.stop()
+        await self.environment_manager.stop()
 
     async def force_stop(self, grace_time: float) -> None:
         await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
-        self.environment_manager.stop()
+        await self.environment_manager.stop()
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
         thread_pool_finalizer.append(self.thread_pool)

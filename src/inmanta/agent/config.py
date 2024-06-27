@@ -160,7 +160,7 @@ agent_get_resource_backoff: Option[float] = Option(
     is_float,
 )
 
-agent_virtual_environment_cleanup: Option[float] = Option(
+executor_venv_retention_time: Option[float] = Option(
     "agent",
     "executor-venv-retention-time",
     7,
