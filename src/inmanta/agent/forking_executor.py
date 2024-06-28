@@ -636,9 +636,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             # https://github.com/inmanta/inmanta-core/issues/7281
             return my_executor
 
-    async def create_executor(
-        self, executor_id: executor.ExecutorId, venv_checkup_interval: int = 60
-    ) -> MPExecutor:
+    async def create_executor(self, executor_id: executor.ExecutorId, venv_checkup_interval: int = 60) -> MPExecutor:
         """
         :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
             testing. The default value is set to 60. It should not be used except for testing purposes. It can be
