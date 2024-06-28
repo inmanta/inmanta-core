@@ -49,6 +49,8 @@ from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(__name__)
 
+import asyncio
+
 
 class ExecutorContext:
     """The context object used by the executor to expose state to the incoming calls"""
@@ -236,7 +238,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         for module_source in in_place:
             try:
                 await loop.run_in_executor(
-                    context.threadpool, functools.partial(loader._load_module, module_source.name, module_source.hash_value)
+                    context.threadpool,
+                    functools.partial(loader._load_module, module_source.name, module_source.hash_value, False),
                 )
             except Exception:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
