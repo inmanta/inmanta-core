@@ -200,11 +200,11 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         sources: list[inmanta.loader.ModuleSource],
         environment: uuid.UUID,
         uri: str,
-        venv_checkup_interval: typing.Optional[int] = None,
+        venv_checkup_interval: int = 60,
     ):
         """
         :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
-            testing. The default value is set to None as it should not be used except for testing purposes. It can be
+            testing. The default value is set to 60. It should not be used except for testing purposes. It can be
             overridden to speed up the tests
         """
         self.venv_path = venv_path
@@ -217,9 +217,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
 
     async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.ModuleSource]:
         assert context.server.timer_venv_checkup is None, "InitCommand should be only called once!"
-
-        interval = self._venv_checkup_interval or 60
-        context.server.start_timer_venv_checkup(interval)
 
         loop = asyncio.get_running_loop()
         parent_logger = logging.getLogger("agent.executor")
@@ -241,6 +238,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         # activate venv
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
+
+        context.server.start_timer_venv_checkup(self._venv_checkup_interval)
 
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
@@ -558,7 +557,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         agent_name: str,
         agent_uri: str,
         code: typing.Collection[executor.ResourceInstallSpec],
-        venv_checkup_interval: typing.Optional[int] = None,
+        venv_checkup_interval: int = 60,
     ) -> MPExecutor:
         """
         Retrieves an Executor based on the agent name and ResourceInstallSpec.
@@ -567,7 +566,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param code: The set of sources to be installed on the executor.
         :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
-            testing. The default value is set to None as it should not be used except for testing purposes.
+            testing. The default value is set to 60. It should not be used except for testing purposes. It can be
             It can be overridden to speed up the tests
         :return: An Executor instance
         """
@@ -610,11 +609,11 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             return my_executor
 
     async def create_executor(
-        self, executor_id: executor.ExecutorId, venv_checkup_interval: typing.Optional[int] = None
+        self, executor_id: executor.ExecutorId, venv_checkup_interval: int = 60
     ) -> MPExecutor:
         """
         :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
-            testing. The default value is set to None as it should not be used except for testing purposes. It can be
+            testing. The default value is set to 60. It should not be used except for testing purposes. It can be
             overridden to speed up the tests
         """
         LOGGER.info("Creating executor for agent %s with id %s", executor_id.agent_name, executor_id.identity())

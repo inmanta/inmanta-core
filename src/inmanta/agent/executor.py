@@ -333,16 +333,16 @@ class VirtualEnvironmentManager:
         self._cleanup_scheduler = util.Scheduler("venv_cleanup_scheduler")
 
     async def start(self) -> None:
-        interval = datetime.timedelta(days=1).total_seconds()
+        interval_cleanup_check = datetime.timedelta(days=1).total_seconds()
         executor_venv_retention_time = cfg.executor_venv_retention_time.get()
-        assert datetime.timedelta(days=executor_venv_retention_time).total_seconds() > interval, (
-            "The `executor-venv-retention-time` should be larger than the period " "with which the executor touches its file!"
-        )
+        assert (
+            datetime.timedelta(days=executor_venv_retention_time).total_seconds() > interval_cleanup_check
+        ), "The `executor-venv-retention-time` should be larger than 1 day!"
 
         self._cleanup_scheduler.add_action(
             action=self.clean_virtual_environments,
             schedule=util.IntervalSchedule(
-                interval=interval,
+                interval=interval_cleanup_check,
             ),
         )
 
@@ -356,6 +356,8 @@ class VirtualEnvironmentManager:
         :param blueprint: The blueprint of the environment for which the storage is being determined.
         :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
         """
+        # The folder name has to be the hash, otherwise this would break the whole locking mechanism used to create / clean
+        # (remove) venv
         env_dir_name: str = blueprint.blueprint_hash()
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
@@ -448,6 +450,7 @@ class VirtualEnvironmentManager:
         loop = asyncio.get_running_loop()
         for root, folders, _ in os.walk(self.envs_dir):
             for folder in folders:
+                # the name of the folder is the hash!
                 async with self._locks.get(folder):
                     current_folder = envs_dir / folder
                     blueprint = venv_path_to_blueprint.get(current_folder, None)
