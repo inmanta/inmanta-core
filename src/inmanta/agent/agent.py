@@ -1066,6 +1066,7 @@ class Agent(SessionEndpoint):
         # cache reference to THIS ioloop for handlers to push requests on it
         self._io_loop = asyncio.get_running_loop()
         await super().start()
+        breakpoint()
         if self.environment_manager is not None:
             # We need to do this here, otherwise, the scheduler would crash because no event loop would be running
             await self.environment_manager.start()

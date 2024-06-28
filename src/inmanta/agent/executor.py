@@ -37,7 +37,7 @@ from typing import Any, Dict, Optional, Sequence
 import pkg_resources
 
 import inmanta.types
-from inmanta import const, util
+from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
@@ -338,7 +338,8 @@ class VirtualEnvironmentManager:
         self._locks: NamedLock = NamedLock()
         # We know that the .inmanta venv status file is touched every minute, so `61` seconds is the lowest default we can use
         self._default_expiry_cleanup = 61
-        self._cleanup_scheduler = util.Scheduler("venv_cleanup_scheduler")
+        # self._cleanup_scheduler = util.Scheduler("venv_cleanup_scheduler")
+        asyncio.ensure_future(self.start())
 
     async def start(self) -> None:
         interval_cleanup_check = datetime.timedelta(days=1).total_seconds()
@@ -349,11 +350,7 @@ class VirtualEnvironmentManager:
         ), "The `executor-venv-retention-time` should be larger than 1 day!"
 
         next_expiry = min(executor_venv_retention_time_seconds, self._default_expiry_cleanup)
-
-        self._cleanup_scheduler.add_call_later_action(
-            action=self.clean_virtual_environments,
-            initial_delay=next_expiry,
-        )
+        asyncio.get_running_loop().call_later(next_expiry, self.schedule_cleanup_virtual_environments)
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
         """
@@ -447,7 +444,7 @@ class VirtualEnvironmentManager:
             # cleanup as the `INMANTA_ENV_STATUS_FILENAME` will be touched at the end of the creation.
             return await self.create_environment(blueprint, threadpool)
 
-    async def clean_virtual_environments(self) -> None:
+    async def cleanup_virtual_environments(self) -> float:
         """
         Remove Python Virtual Environments that were not used since a number of days (configurable in the agent config).
         """
@@ -492,17 +489,13 @@ class VirtualEnvironmentManager:
                             self._environment_map.pop(blueprint)
             # We should walk only the first-level of folders!
             break
+        return next_expiry
 
-        self._cleanup_scheduler.add_call_later_action(
-            action=self.clean_virtual_environments,
-            initial_delay=next_expiry,
-        )
-
-    async def stop(self) -> None:
-        """
-        Stop the cleanup timer of the environment manager if it is running.
-        """
-        await self._cleanup_scheduler.stop()
+    async def schedule_cleanup_virtual_environments(self) -> None:
+        next_expiry = await self.cleanup_virtual_environments()
+        LOGGER.debug(f"Scheduling next clean_virtual_environments in {next_expiry} s.")
+        await asyncio.sleep(next_expiry)
+        await asyncio.create_task(self.schedule_cleanup_virtual_environments())
 
 
 class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):

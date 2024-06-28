@@ -395,7 +395,7 @@ def test():
     venv_dir = pathlib.Path(mpmanager_light.environment_manager.envs_dir)
     assert len([e for e in venv_dir.iterdir()]) == 2, "We should have two Virtual Environments for our 2 executors!"
     # We remove the old VirtualEnvironment
-    await mpmanager_light.environment_manager.clean_virtual_environments()
+    await mpmanager_light.environment_manager.cleanup_virtual_environments()
     venvs = [str(e) for e in venv_dir.iterdir()]
     assert len(venvs) == 1, "Only one Virtual Environment should exist!"
     assert [executor_2.executor_virtual_env.env_path] == venvs
@@ -403,6 +403,6 @@ def test():
     # Let's stop the other agent and pretend that the venv is broken
     await executor_manager.stop_for_agent("agent2")
     executor_2_venv_status_file.unlink()
-    await mpmanager_light.environment_manager.clean_virtual_environments()
+    await mpmanager_light.environment_manager.cleanup_virtual_environments()
     venvs = [str(e) for e in venv_dir.iterdir()]
     assert len(venvs) == 0, "No Virtual Environment should exist!"

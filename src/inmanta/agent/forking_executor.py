@@ -717,11 +717,9 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
     async def stop(self) -> None:
         await asyncio.gather(*(child.stop() for child in self.children))
-        await self.environment_manager.stop()
 
     async def force_stop(self, grace_time: float) -> None:
         await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
-        await self.environment_manager.stop()
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
         thread_pool_finalizer.append(self.thread_pool)
