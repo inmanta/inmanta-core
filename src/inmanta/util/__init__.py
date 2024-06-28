@@ -374,7 +374,6 @@ class Scheduler:
                     )
                     self._add_to_executing_tasks(action, task, cancel_on_stop)
                 except Exception:
-                    breakpoint()
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
                     # next iteration
