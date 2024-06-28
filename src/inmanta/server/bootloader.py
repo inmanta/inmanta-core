@@ -108,7 +108,6 @@ class InmantaBootloader:
         childwatcher.attach_loop(asyncio.get_running_loop())
         asyncio.set_child_watcher(childwatcher)
 
-
         db_wait_time: int = config.db_wait_time.get()
         if db_wait_time != 0:
             # Wait for the database to be up before starting the server
