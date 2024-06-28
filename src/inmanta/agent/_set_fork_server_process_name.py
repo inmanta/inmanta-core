@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from setproctitle import setproctitle
 
-setproctitle(f"inmanta: multiprocessing fork server")
+setproctitle("inmanta: multiprocessing fork server")
