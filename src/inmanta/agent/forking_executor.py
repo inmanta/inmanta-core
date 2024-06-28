@@ -43,6 +43,7 @@ import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
 from inmanta.agent import executor
+from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
 from setproctitle import setproctitle
 
@@ -375,7 +376,7 @@ class MPExecutor(executor.Executor):
 
         # Set by init and parent class that const
         self.failed_resource_sources: typing.Sequence[inmanta.loader.ModuleSource] = list()
-        self.failed_resource_types: set[str] = set()
+        self.failed_resource_types: set[ResourceType] = set()
 
     async def stop(self) -> None:
         """Stop by shutdown"""
@@ -579,7 +580,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             if my_executor.failed_resource_sources:
                 # If some code loading failed, resolve here
                 # reverse index
-                type_for_spec: dict[inmanta.loader.ModuleSource, list[str]] = collections.defaultdict(list)
+                type_for_spec: dict[inmanta.loader.ModuleSource, list[ResourceType]] = collections.defaultdict(list)
                 for spec in code:
                     for source in spec.blueprint.sources:
                         type_for_spec[source].append(spec.resource_type)

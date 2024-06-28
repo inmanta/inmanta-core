@@ -41,7 +41,14 @@ from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.reporting import collect_report
-from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import (
+    LEGACY_PIP_DEFAULT,
+    AttributeStateChange,
+    PipConfig,
+    ResourceIdStr,
+    ResourceType,
+    ResourceVersionIdStr,
+)
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id
@@ -741,8 +748,11 @@ class AgentInstance:
             else:
                 self.logger.debug("Pulled %d resources because %s", len(result.result["resources"]), deploy_request.reason)
                 if len(result.result["resources"]) > 0:
-                    undeployable, resources, executor = await self.setup_executor(
-                        result.result["version"], const.ResourceAction.deploy, result.result["resources"]
+                    undeployable, resources, executor = await self.prepare_resources(
+                        model_version=result.result["version"],
+                        action=const.ResourceAction.deploy,
+                        resource_batch=result.result["resources"],
+                        resource_types=set(result.result["resource_types"]),
                     )
                     if len(resources) > 0 and executor is not None:
                         self._nq.reload(resources, undeployable, deploy_request, executor)
@@ -763,8 +773,11 @@ class AgentInstance:
                     self.logger.warning("Got an error while pulling resources and version %s", version)
                     return
 
-                undeployable, resource_refs, executor = await self.setup_executor(
-                    version, const.ResourceAction.dryrun, response.result["resources"]
+                undeployable, resource_refs, executor = await self.prepare_resources(
+                    model_version=version,
+                    action=const.ResourceAction.dryrun,
+                    resource_batch=response.result["resources"],
+                    resource_types=set(response.result["resource_types"]),
                 )
                 deployable_resources: list[ResourceDetails] = []
                 for resource in resource_refs:
@@ -786,8 +799,11 @@ class AgentInstance:
 
     async def get_facts(self, resource: JsonType) -> Apireturn:
         async with self.ratelimiter:
-            undeployable, resource_refs, executor = await self.setup_executor(
-                resource["model"], const.ResourceAction.getfact, [resource]
+            undeployable, resource_refs, executor = await self.prepare_resources(
+                model_version=resource["model"],
+                action=const.ResourceAction.getfact,
+                resource_batch=[resource],
+                resource_types={resource["resource_type"]},
             )
 
             if undeployable or not resource_refs:
@@ -800,14 +816,56 @@ class AgentInstance:
             return await executor.get_facts(resource_refs[0])
 
     async def setup_executor(
-        self, version: int, action: const.ResourceAction, resources: list[JsonType]
-    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], Optional[executor.Executor]]:
-        # TODO refactor wiring of tuples around -> not sure how
-
+        self, model_version: int, resource_types: set[ResourceType]
+    ) -> tuple[Optional[executor.Executor], executor.FailedResourcesSet]:
         """
-        Setup an executor for resource deployment
+        Set up an executor for a given version of a model. This executor is the interface
+        to interact with the resources.
 
-        returns a tuple
+        :param model_version: model version being loaded
+        :param resource_types: set of all resource types we want to be able to interact with via this executor
+        :return: A tuple of:
+            - The executor (if creation/retrieval was successful)
+            - invalid_resource_types: resource types for which we're missing a handler or pip config
+                or for which handler code installation failed
+        """
+        code: Collection[ResourceInstallSpec]
+
+        # Resource types for which no handler code exist for the given model_version
+        # or for which the pip config couldn't be retrieved
+        code, invalid_resource_types = await self.process.get_code(self._env_id, model_version, resource_types)
+
+        try:
+            executor = await self.executor_manager.get_executor(self.name, self.uri, code)
+            # Resource types for which an error occurred during handler code installation
+            failed_resource_types = executor.failed_resource_types
+        except Exception:
+            logging.warning("Could not set up executor for %s", self.name, exc_info=True)
+            executor = None
+            failed_resource_types = resource_types
+
+        invalid_resource_types.update(failed_resource_types)
+
+        return executor, invalid_resource_types
+
+    async def prepare_resources(
+        self,
+        model_version: int,
+        action: const.ResourceAction,
+        resource_batch: list[JsonType],
+        resource_types: set[ResourceType],
+    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], Optional[executor.Executor]]:
+        """
+        This method is expected to be called as an initialization step when interacting with resources.
+        It prepares resources by parsing them into ResourceDetails and setting up an executor that will
+        be the interface to perform further work on them.
+
+        :param model_version: prepare resources belonging to this model version
+        :param action: the action these resources are being prepared for
+        :param resource_batch: list of resources in serialized form: a dict with information about
+            this resource and its desired state
+        :param resource_types: set of ALL resource types composing this version of the model
+        :return: Tuple of:
 
             - undeployable: resources for which code loading failed
             - loaded_resources: ALL resources from this batch
@@ -815,29 +873,15 @@ class AgentInstance:
 
         """
         started = datetime.datetime.now().astimezone()
-        code: Collection[ResourceInstallSpec]
 
-        resource_types = {res["resource_type"] for res in resources}
-
-        # Resource types for which no handler code exist for the given version
-        # or for which the pip config couldn't be retrieved
-        code, invalid_resource_types = await self.process.get_code(self._env_id, version, resource_types)
-        # Resource types for which an error occurred during handler code installation
-
-        try:
-            executor = await self.executor_manager.get_executor(self.name, self.uri, code)
-            failed_resource_types = executor.failed_resource_types
-        except Exception:
-            logging.warning("Could not set up executor for %s", self.name, exc_info=True)
-            executor = None
-            failed_resource_types = resource_types
+        executor, invalid_resource_types = await self.setup_executor(model_version, resource_types)
 
         loaded_resources: list[ResourceDetails] = []
         failed_resources: list[ResourceVersionIdStr] = []
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
-        for res in resources:
-            if res["resource_type"] not in (invalid_resource_types | failed_resource_types):
+        for res in resource_batch:
+            if res["resource_type"] not in invalid_resource_types:
                 loaded_resources.append(ResourceDetails(res))
 
                 state = const.ResourceState[res["status"]]
@@ -1156,7 +1200,7 @@ class Agent(SessionEndpoint):
             agent_instance.pause("Connection to server lost")
 
     async def get_code(
-        self, environment: uuid.UUID, version: int, resource_types: Collection[str]
+        self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
     ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResourcesSet]:
         """
         Get the collection of installation specifications (i.e. pip config, python package dependencies,

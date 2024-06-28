@@ -236,8 +236,31 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods.get_resources_for_agent, env="tid")
     async def get_resources_for_agent(
-        self, env: data.Environment, agent: str, version: int, sid: uuid.UUID, incremental_deploy: bool
+        self, env: data.Environment, agent: str, version: Optional[int], sid: uuid.UUID, incremental_deploy: bool
     ) -> Apireturn:
+        """
+        This method fetches the desired state of resources from the
+        database for a given (environment, agent, model version).
+
+        :param env: Only fetch resources from this environment.
+        :param agent: Only fetch resources this agent is responsible for.
+        :param version: Only fetch resources belonging to this version of
+            the model. Use the latest version by default.
+        :param sid: Session id for the agent.
+        :param incremental_deploy: Only fetch resources for which desired state has
+            changed since the last version.
+
+        :return: A tuple[int, Optional[JsonType]] with the http response code and a dict.
+
+        In case of success, this dict is expected to contain the following keys and associated types:
+        {
+            "environment": uuid.UUID,
+            "agent": str,
+            "version": int,
+            "resources": list[dict[str, object]]  # The requested resources
+            "resource_types": list(ResourceType),  # ALL the types for this model version
+        }
+        """
         if not self.agentmanager_service.is_primary(env, sid, agent):
             return 409, {"message": f"This agent is not currently the primary for the endpoint {agent} (sid: {sid})"}
         if incremental_deploy:
@@ -248,7 +271,7 @@ class ResourceService(protocol.ServerSlice):
             result = await self.get_all_resources_for_agent(env, agent, version)
         return result
 
-    async def get_all_resources_for_agent(self, env: data.Environment, agent: str, version: int) -> Apireturn:
+    async def get_all_resources_for_agent(self, env: data.Environment, agent: str, version: Optional[int]) -> Apireturn:
         started = datetime.datetime.now().astimezone()
         if version is None:
             version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
@@ -263,9 +286,12 @@ class ResourceService(protocol.ServerSlice):
         deploy_model = []
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
+        resource_types: set[ResourceType] = set()
 
         resource_ids = []
         for rv in resources:
+            resource_types.add(rv.resource_type)
+
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
@@ -289,7 +315,13 @@ class ResourceService(protocol.ServerSlice):
             )
             await ra.insert()
 
-        return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
+        return 200, {
+            "environment": env.id,
+            "agent": agent,
+            "version": version,
+            "resources": deploy_model,
+            "resource_types": list(resource_types),  # cast to list since sets are not json serializable
+        }
 
     async def get_resource_increment_for_agent(self, env: data.Environment, agent: str) -> Apireturn:
         started = datetime.datetime.now().astimezone()
@@ -325,7 +357,10 @@ class ResourceService(protocol.ServerSlice):
         deploy_model: list[dict[str, Any]] = []
         resource_ids: list[str] = []
 
+        resource_types: set[ResourceType] = set()
+
         for rv in resources:
+            resource_types.add(rv.resource_type)
             if rv.resource_id not in increment_ids:
                 continue
 
@@ -355,7 +390,13 @@ class ResourceService(protocol.ServerSlice):
             )
             await ra.insert()
 
-        return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
+        return 200, {
+            "environment": env.id,
+            "agent": agent,
+            "version": version,
+            "resources": deploy_model,
+            "resource_types": list(resource_types),  # cast to list since sets are not json serializable
+        }
 
     async def mark_deployed(
         self,
