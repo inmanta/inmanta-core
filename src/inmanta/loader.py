@@ -280,22 +280,28 @@ class CodeLoader:
         if not os.path.exists(os.path.join(self.__code_dir, MODULE_DIR)):
             os.makedirs(os.path.join(self.__code_dir, MODULE_DIR), exist_ok=True)
 
-    def _load_module(self, mod_name: str, hv: str) -> None:
+    def _load_module(self, mod_name: str, hv: str, require_reload: bool = True) -> None:
         """
         Load or reload a module
+
+        :arg require_reload: if set to true, we will explcitly reload modules, otherwise we keep them as is
         """
 
         # Importing a module -> only the first import loads the code
         # cache of loaded modules mechanism -> starts afresh when agent is restarted
         try:
             if mod_name in self.__modules:
-                mod = importlib.reload(self.__modules[mod_name][1])
+                if require_reload:
+                    mod = importlib.reload(self.__modules[mod_name][1])
+                else:
+                    LOGGER.debug("Not reloading module %s", mod_name)
+                    return
             else:
                 mod = importlib.import_module(mod_name)
             self.__modules[mod_name] = (hv, mod)
-            LOGGER.info("Loaded module %s" % mod_name)
+            LOGGER.info("Loaded module %s", mod_name)
         except ImportError:
-            LOGGER.exception("Unable to load module %s" % mod_name)
+            LOGGER.exception("Unable to load module %s", mod_name)
 
     def install_source(self, module_source: ModuleSource) -> bool:
         """
