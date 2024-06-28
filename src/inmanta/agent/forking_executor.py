@@ -43,7 +43,9 @@ import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
 from inmanta.agent import executor
+from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
+from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(__name__)
 
@@ -91,7 +93,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
     Pipe break: go to 3a and 3b
     """
 
-    def __init__(self, name: str, take_over_logging: bool = True) -> None:
+    def __init__(self, name: str, logger: logging.Logger, take_over_logging: bool = True) -> None:
         """
         :param take_over_logging: when we are connected and are able to stream logs, do we remove all other log handlers?
         """
@@ -101,6 +103,11 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.ctx = ExecutorContext(self)
         self.log_transport: typing.Optional[LogShipper] = None
         self.take_over_logging = take_over_logging
+        self.logger = logger
+
+    def set_status(self, status: str) -> None:
+        """Update the process name to reflect the identity and status of this executor"""
+        set_executor_status(self.name, status)
 
     def connection_made(self, transport: transports.Transport) -> None:
         super().connection_made(transport)
@@ -116,6 +123,8 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
         self.log_transport = LogShipper(self, asyncio.get_running_loop())
         logging.getLogger().addHandler(self.log_transport)
+        self.logger.info(f"Started executor with PID: {os.getpid()}")
+        self.set_status("connected")
 
     def _detach_log_shipper(self) -> None:
         # Once connection is lost, we want to detach asap to keep the logging clean and efficient
@@ -144,6 +153,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """We lost connection to the controler, bail out"""
         self._detach_log_shipper()
         self.logger.info("Connection lost", exc_info=exc)
+        self.set_status("disconnected")
         self._sync_stop()
         self.stopped.set()
 
@@ -212,9 +222,19 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         sources = [s.with_client(sync_client) for s in self.sources]
 
         failed: list[inmanta.loader.ModuleSource] = []
+        in_place: list[inmanta.loader.ModuleSource] = []
+        # First put all files on disk
         for module_source in sources:
             try:
                 await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
+                in_place.append(module_source)
+            except Exception:
+                logger.info("Failed to load sources: %s", module_source, exc_info=True)
+                failed.append(module_source)
+
+        # then try to import them
+        for module_source in in_place:
+            try:
                 await loop.run_in_executor(
                     context.threadpool, functools.partial(loader._load_module, module_source.name, module_source.hash_value)
                 )
@@ -287,6 +307,12 @@ class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta
         return await context.executor.get_facts(self.resource)
 
 
+def set_executor_status(name: str, status: str) -> None:
+    """Update the process name to reflect the identity and status of the executor"""
+    # Lives outside the ExecutorServer class, so we can set status early in the boot process
+    setproctitle(f"inmanta: executor {name} - {status}")
+
+
 def mp_worker_entrypoint(
     socket: socket.socket,
     name: str,
@@ -296,6 +322,7 @@ def mp_worker_entrypoint(
 ) -> None:
     """Entry point for child processes"""
 
+    set_executor_status(name, "connecting")
     # Set up logging stage 1
     # Basic config, starts on std.out
     config_builder = inmanta.logging.LoggingConfigBuilder()
@@ -305,7 +332,6 @@ def mp_worker_entrypoint(
 
     # Set up our own logger
     logger = logging.getLogger(f"agent.executor.{name}")
-    logger.info(f"Started with PID: {os.getpid()}")
 
     # Load config
     inmanta.config.Config.load_config_from_dict(config)
@@ -315,7 +341,9 @@ def mp_worker_entrypoint(
         # Start serving
         # also performs setup of log shipper
         # this is part of stage 2 logging setup
-        transport, protocol = await loop.connect_accepted_socket(functools.partial(ExecutorServer, name, not cli_log), socket)
+        transport, protocol = await loop.connect_accepted_socket(
+            functools.partial(ExecutorServer, name, logger, not cli_log), socket
+        )
         inmanta.signals.setup_signal_handlers(protocol.stop)
         await protocol.stopped.wait()
 
@@ -348,7 +376,7 @@ class MPExecutor(executor.Executor):
 
         # Set by init and parent class that const
         self.failed_resource_sources: typing.Sequence[inmanta.loader.ModuleSource] = list()
-        self.failed_resource_types: set[str] = set()
+        self.failed_resource_types: set[ResourceType] = set()
 
     async def stop(self) -> None:
         """Stop by shutdown"""
@@ -361,7 +389,10 @@ class MPExecutor(executor.Executor):
 
     async def force_stop(self, grace_time: float = inmanta.const.SHUTDOWN_GRACE_HARD) -> None:
         """Stop by process close"""
-        await asyncio.get_running_loop().run_in_executor(None, functools.partial(self._force_stop, grace_time))
+        self.closing = True
+        await asyncio.get_running_loop().run_in_executor(
+            self.owner.thread_pool, functools.partial(self._force_stop, grace_time)
+        )
 
     def _force_stop(self, grace_time: float) -> None:
         if self.closed:
@@ -389,7 +420,20 @@ class MPExecutor(executor.Executor):
         if self.closed:
             return
         try:
-            await asyncio.get_running_loop().run_in_executor(None, functools.partial(self.process.join, timeout))
+            await asyncio.get_running_loop().run_in_executor(
+                self.owner.thread_pool, functools.partial(self.process.join, timeout)
+            )
+            if self.process.exitcode is None:
+                LOGGER.warning(
+                    "Executor for agent %s with id %s didn't stop after timeout of %d seconds. Killing it.",
+                    self.executor_id.agent_name,
+                    self.executor_id.identity(),
+                    timeout,
+                )
+                self.process.kill()
+                await asyncio.get_running_loop().run_in_executor(
+                    self.owner.thread_pool, functools.partial(self.process.join, timeout)
+                )
             self._set_closed()
         except ValueError as e:
             if "process object is closed" in str(e):
@@ -536,7 +580,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             if my_executor.failed_resource_sources:
                 # If some code loading failed, resolve here
                 # reverse index
-                type_for_spec: dict[inmanta.loader.ModuleSource, list[str]] = collections.defaultdict(list)
+                type_for_spec: dict[inmanta.loader.ModuleSource, list[ResourceType]] = collections.defaultdict(list)
                 for spec in code:
                     for source in spec.blueprint.sources:
                         type_for_spec[source].append(spec.resource_type)
@@ -629,6 +673,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
+        thread_pool_finalizer.append(self.thread_pool)
         await asyncio.gather(*(child.join(timeout) for child in self.children))
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:

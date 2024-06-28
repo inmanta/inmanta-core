@@ -878,7 +878,7 @@ def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
     :param tid: The id of the environment to which the code belongs.
     :param id: The version number of the configuration model.
     :param resources: A dictionary where each key is a string representing a resource type.
-                  For each resource type, the value is a dictionary. This nested dictionary's keys are file names,
+                  For each resource type, the value is a dictionary. This nested dictionary's keys are file hashes,
                   and each key maps to a tuple. This tuple contains three elements: the file name, the module name,
                   and a list of requirements.
 

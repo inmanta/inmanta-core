@@ -434,7 +434,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
     """
-    This is the executor that provides the backward compatible behavior, confirming to the agent in ISO7.
+    This is the executor that provides the backward compatible behavior, conforming to the agent in ISO7.
 
     It spawns an InProcessExecutor and makes sure all code is installed and loadable locally.
     """

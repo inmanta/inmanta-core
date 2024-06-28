@@ -1,0 +1,6 @@
+description: >
+  Fix bug where clicking a sub-element from the ``Inmanta Lifecycle Service Manager``
+  menu would collapse the whole menu.
+issue-nr: 7498
+change-type: patch
+destination-branches: [master, iso7, iso6]

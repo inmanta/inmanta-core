@@ -39,7 +39,7 @@ from packaging import version
 @pytest.fixture
 async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.UUID], MPManager]]:
     managers = []
-    threadpools = []
+    threadpools: list[concurrent.futures.thread.ThreadPoolExecutor] = []
     MPManager.init_once()
 
     def make_mpmanager(agent_session_id: uuid.UUID) -> MPManager:
@@ -62,10 +62,10 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
         return manager
 
     yield make_mpmanager
+    await asyncio.wait_for(asyncio.gather(*(manager.stop() for manager in managers)), 10)
+    await asyncio.wait_for(asyncio.gather(*(manager.join(threadpools, 3) for manager in managers)), 10)
     for threadpool in threadpools:
         threadpool.shutdown(wait=False)
-    await asyncio.gather(*(manager.stop() for manager in managers))
-    await asyncio.gather(*(manager.join([], 10) for manager in managers))
 
 
 @pytest.fixture

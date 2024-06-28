@@ -26,7 +26,7 @@ from asyncpg.exceptions import UniqueViolationError
 
 from inmanta.data import File
 from inmanta.protocol import handle, methods
-from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.server import Server
 from inmanta.types import Apireturn
@@ -61,7 +61,8 @@ class FileService(protocol.ServerSlice):
         try:
             await File(content_hash=file_hash, content=content).insert()
         except UniqueViolationError:
-            raise ServerError("A file with this id already exists.")
+            # Silently ignore attempts to upload the same file twice
+            pass
 
     @handle(methods.stat_file, file_hash="id")
     async def stat_file(self, file_hash: str) -> Apireturn:
