@@ -249,6 +249,12 @@ class ModuleSource:
         )
 
 
+@dataclass(frozen=True)
+class FailedModuleSource:
+    module_source: ModuleSource
+    exception: Exception
+
+
 class CodeLoader:
     """
     Class responsible for managing code loaded from modules received from the compiler

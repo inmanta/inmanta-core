@@ -48,7 +48,7 @@ LOGGER = logging.getLogger(__name__)
 
 @dataclass
 class FailedResource:
-    id: str
+    resource_type: ResourceType
     exception: Exception
 
 
@@ -402,7 +402,7 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    failed_resource_types: FailedResourcesSet
+    failed_resources: FailedResourcesSet
 
     def cache(self, model_version: int) -> CacheVersionContext:
         """
