@@ -750,7 +750,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         await asyncio.gather(*(child.stop() for child in children))
         return children
 
-    def start_periodic_executor_cleanup(self):
+    def start_periodic_executor_cleanup(self) -> None:
         async def cleanup_inactive_executors() -> None:
             """
             This task cleans up idle executors and reschedules itself
@@ -779,6 +779,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
             LOGGER.debug(f"Scheduling next cleanup_inactive_executors in {reschedule_interval} s.")
             await asyncio.sleep(reschedule_interval)
-            asyncio.create_task(self.cleanup_inactive_executors())
+            asyncio.create_task(cleanup_inactive_executors())
 
         asyncio.ensure_future(cleanup_inactive_executors())
