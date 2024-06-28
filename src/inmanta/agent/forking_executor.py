@@ -49,8 +49,6 @@ from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(__name__)
 
-import asyncio
-
 
 class ExecutorContext:
     """The context object used by the executor to expose state to the incoming calls"""

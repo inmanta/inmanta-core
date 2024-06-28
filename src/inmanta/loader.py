@@ -37,7 +37,6 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
