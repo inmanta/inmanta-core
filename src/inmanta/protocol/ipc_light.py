@@ -18,7 +18,6 @@
 
 import abc
 import asyncio
-import datetime
 import functools
 import logging
 import pickle
@@ -231,9 +230,6 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
         # All outstanding calls
         self.requests: dict[uuid.UUID, Future[object]] = {}
 
-        # Keeps track of when this client was active last
-        self.last_used_at = datetime.datetime.now().astimezone()
-
     @typing.overload
     def call(
         self, method: IPCMethod[ServerContext, ReturnType], has_reply: typing.Literal[True] = True
@@ -244,8 +240,6 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
 
     def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None:
         """Call a method with given arguments"""
-        self.last_used_at = datetime.datetime.now().astimezone()
-
         request = IPCRequestFrame(
             id=uuid.uuid4() if has_reply else None,
             method=method,
@@ -259,10 +253,6 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
         self.requests[request.id] = done  # Mypy can't do it
         return done
 
-    def has_outstanding_calls(self) -> bool:
-        """Is this client still waiting for replies"""
-        return len(self.requests) > 0
-
     def frame_received(self, frame: IPCFrame) -> None:
         """Handle replies"""
         if isinstance(frame, IPCReplyFrame):
@@ -271,7 +261,6 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
             super().frame_received(frame)
 
     def process_reply(self, frame: IPCReplyFrame) -> None:
-        self.last_used_at = datetime.datetime.now().astimezone()
         if frame.is_exception:
             if isinstance(frame.returnvalue, Exception):
                 self.requests[frame.id].set_exception(frame.returnvalue)
