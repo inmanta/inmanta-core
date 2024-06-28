@@ -292,7 +292,7 @@ class CodeLoader:
         # cache of loaded modules mechanism -> starts afresh when agent is restarted
         try:
             if mod_name in self.__modules:
-                if allow_reload:
+                if require_reload:
                     mod = importlib.reload(self.__modules[mod_name][1])
                 else:
                     LOGGER.debug("Not reloading module %s", mod_name)
