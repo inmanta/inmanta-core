@@ -187,8 +187,8 @@ class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
     def call(self, method: IPCMethod[ExecutorContext, ReturnType], has_reply: typing.Literal[False]) -> None: ...
 
     @typing.overload
-    def call(self, method: IPCMethod[ExecutorContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None:
-        
+    def call(self, method: IPCMethod[ExecutorContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None: ...
+
     def call(self, method: IPCMethod[ExecutorContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None:
         """Call a method with given arguments"""
         self.last_used_at = datetime.datetime.now().astimezone()
@@ -774,7 +774,9 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                         try:
                             await _executor.stop()
                         except Exception:
-                            LOGGER.debug("Unexpected error during executor %s cleanup:", _executor.executor_id.identity(), exc_info=True)
+                            LOGGER.debug(
+                                "Unexpected error during executor %s cleanup:", _executor.executor_id.identity(), exc_info=True
+                            )
                 else:
                     reschedule_interval = min(
                         reschedule_interval,
