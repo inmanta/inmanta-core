@@ -54,7 +54,6 @@ from inmanta.protocol.ipc_light import (
     LogReceiver,
     LogShipper,
     ReturnType,
-    ServerContext,
 )
 from setproctitle import setproctitle
 
@@ -181,15 +180,18 @@ class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
 
     @typing.overload
     def call(
-        self, method: IPCMethod[ServerContext, ReturnType], has_reply: typing.Literal[True] = True
+        self, method: IPCMethod[ExecutorContext, ReturnType], has_reply: typing.Literal[True] = True
     ) -> Future[ReturnType]: ...
+
     @typing.overload
-    def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: typing.Literal[False]) -> None: ...
+    def call(self, method: IPCMethod[ExecutorContext, ReturnType], has_reply: typing.Literal[False]) -> None: ...
 
     def call(self, method: IPCMethod[ExecutorContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None:
         """Call a method with given arguments"""
         self.last_used_at = datetime.datetime.now().astimezone()
-        return super().call(method, has_reply)
+        response = super().call(method, has_reply)
+        assert response is None or isinstance(response, Future)
+        return response
 
     def has_outstanding_calls(self) -> bool:
         """Is this client still waiting for replies"""

@@ -81,9 +81,12 @@ def set_custom_executor_policy():
     Fixture to temporarily set the policy for executor management.
     """
     old_cap_value = inmanta.agent.config.agent_executor_cap.get()
+
+    # Keep only 2 executors per agent
     inmanta.agent.config.agent_executor_cap.set("2")
 
     old_retention_value = inmanta.agent.config.agent_executor_retention_time.get()
+    # Clean up executors after 2s of inactivity
     inmanta.agent.config.agent_executor_retention_time.set("2")
 
     yield
