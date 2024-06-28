@@ -238,6 +238,10 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
     @typing.overload
     def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: typing.Literal[False]) -> None: ...
 
+    @typing.overload
+    def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None:
+        ...
+
     def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None:
         """Call a method with given arguments"""
         request = IPCRequestFrame(
