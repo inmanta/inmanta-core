@@ -336,20 +336,23 @@ class VirtualEnvironmentManager:
         # allows us to prevent creating and deleting the same venv at a given time. The keys of this named lock are the hash of
         # venv
         self._locks: NamedLock = NamedLock()
+        # We know that the .inmanta venv status file is touched every minute, so `61` seconds is the lowest default we can use
+        self._default_expiry_cleanup = 61
         self._cleanup_scheduler = util.Scheduler("venv_cleanup_scheduler")
 
     async def start(self) -> None:
         interval_cleanup_check = datetime.timedelta(days=1).total_seconds()
         executor_venv_retention_time = cfg.executor_venv_retention_time.get()
+        executor_venv_retention_time_seconds = datetime.timedelta(days=executor_venv_retention_time).total_seconds()
         assert (
-            datetime.timedelta(days=executor_venv_retention_time).total_seconds() > interval_cleanup_check
+            executor_venv_retention_time_seconds > interval_cleanup_check
         ), "The `executor-venv-retention-time` should be larger than 1 day!"
 
-        self._cleanup_scheduler.add_action(
+        next_expiry = min(executor_venv_retention_time_seconds, self._default_expiry_cleanup)
+
+        self._cleanup_scheduler.add_call_later_action(
             action=self.clean_virtual_environments,
-            schedule=util.IntervalSchedule(
-                interval=interval_cleanup_check,
-            ),
+            initial_delay=next_expiry,
         )
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
@@ -450,8 +453,10 @@ class VirtualEnvironmentManager:
         """
         current_datetime = datetime.datetime.now()
         executor_venv_retention_time = cfg.executor_venv_retention_time.get()
+        executor_venv_retention_time_seconds = datetime.timedelta(days=executor_venv_retention_time).total_seconds()
         envs_dir = pathlib.Path(self.envs_dir)
         venv_path_to_blueprint = {pathlib.Path(v.env_path): k for k, v in self._environment_map.items()}
+        next_expiry = min(executor_venv_retention_time_seconds, self._default_expiry_cleanup)
 
         loop = asyncio.get_running_loop()
         for root, folders, _ in os.walk(self.envs_dir):
@@ -470,6 +475,11 @@ class VirtualEnvironmentManager:
                     if current_executor_environment.is_correctly_initialized():
                         modification_datetime = current_executor_environment.get_last_used_timestamp()
                         should_remove_venv = (current_datetime - modification_datetime).days >= executor_venv_retention_time
+                        if not should_remove_venv:
+                            # We do not want negative number, so we should not consider venv that need to be removed
+                            diff_modification_from_now_seconds = (current_datetime - modification_datetime).seconds
+                            potential_new_expiry = executor_venv_retention_time_seconds - diff_modification_from_now_seconds
+                            next_expiry = min(next_expiry, potential_new_expiry)
                     else:
                         # The venv was badly initialized -> the inmanta venv status file does not exist
                         should_remove_venv = True
@@ -482,6 +492,11 @@ class VirtualEnvironmentManager:
                             self._environment_map.pop(blueprint)
             # We should walk only the first-level of folders!
             break
+
+        self._cleanup_scheduler.add_call_later_action(
+            action=self.clean_virtual_environments,
+            initial_delay=next_expiry,
+        )
 
     async def stop(self) -> None:
         """

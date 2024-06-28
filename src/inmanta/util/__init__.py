@@ -384,6 +384,59 @@ class Scheduler:
         self._scheduled[task_spec] = handle
         return task_spec
 
+    def add_call_later_action(
+        self,
+        action: TaskMethod,
+        initial_delay: float,
+        cancel_on_stop: bool = True,
+        quiet_mode: bool = False,
+    ) -> Optional[ScheduledTask]:
+        """
+        Add a new action that will be only called once
+
+        :param action: A function to call periodically
+        :param initial_delay: The schedule for this action
+        :param cancel_on_stop: Cancel the task when the scheduler is stopped. If false, the coroutine will be awaited.
+        :param quiet_mode: Set to true to disable logging the recurring  notification that the action is being called.
+        Use this to avoid polluting the server log for very frequent actions.
+        """
+        assert is_coroutine(action)
+
+        if self._stopped:
+            LOGGER.warning("Scheduling action '%s', while scheduler is stopped", action.__name__)
+            return None
+
+        schedule_typed: TaskSchedule = IntervalSchedule(initial_delay)
+
+        schedule_typed.log(action)
+
+        task_spec: ScheduledTask = ScheduledTask(action, schedule_typed)
+        if task_spec in self._scheduled:
+            # start fresh to respect initial delay, if set
+            self.remove(task_spec)
+
+        def action_function() -> None:
+            if not quiet_mode:
+                LOGGER.info("Calling %s", action.__name__)
+            if task_spec in self._scheduled:
+                try:
+                    task = ensure_future_and_handle_exception(
+                        logger=LOGGER,
+                        msg="Uncaught exception while executing scheduled action",
+                        action=action(),
+                        notify_done_callback=functools.partial(self._notify_done, action),
+                    )
+                    self._add_to_executing_tasks(action, task, cancel_on_stop)
+                except Exception:
+                    LOGGER.exception("Uncaught exception while executing scheduled action")
+                finally:
+                    # Final iteration
+                    del self._scheduled[task_spec]
+
+        handle: asyncio.TimerHandle = asyncio.get_running_loop().call_later(schedule_typed.get_initial_delay(), action_function)
+        self._scheduled[task_spec] = handle
+        return task_spec
+
     @stable_api
     def remove(self, task: ScheduledTask) -> None:
         """
