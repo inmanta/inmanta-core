@@ -29,9 +29,9 @@ from typing import Any, Callable, Optional
 from urllib import parse
 
 import pydantic
+
 import logfire
 import logfire.propagate
-
 from inmanta import config as inmanta_config
 from inmanta import types, util
 from inmanta.protocol import common, exceptions
