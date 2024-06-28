@@ -44,25 +44,37 @@ async def test_process_manager(environment, pip_index, mpmanager_light: forking_
     requirements2 = ("pkg1", "pkg2")
     pip_config = PipConfig(index_url=pip_index.url)
 
+    def make_module_source(name: str, content: str) -> ModuleSource:
+        code = content.encode()
+        sha1sum = hashlib.new("sha1")
+        sha1sum.update(code)
+        hv: str = sha1sum.hexdigest()
+        return ModuleSource(
+            name=name,
+            hash_value=hv,
+            is_byte_code=False,
+            source=code,
+        )
+
     # Prepare a source module and its hash
-    code = """
+    module_source1 = make_module_source(
+        "inmanta_plugins.test",
+        """\
+import inmanta
+inmanta.test_agent_code_loading = 5
+
 def test():
     return 10
 
-import inmanta
-inmanta.test_agent_code_loading = 5
-    """.encode()
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(code)
-    hv: str = sha1sum.hexdigest()
-    module_source1 = ModuleSource(
-        name="inmanta_plugins.test",
-        hash_value=hv,
-        is_byte_code=False,
-        source=code,
+import inmanta_plugins.sub
+assert inmanta_plugins.sub.a == 1""",
     )
-    sources1 = ()
-    sources2 = (module_source1,)
+
+    # Prepare a cross module import, this should work
+    module_source2 = make_module_source("inmanta_plugins.sub", """a=1""")
+
+    sources1 = []
+    sources2 = [module_source1, module_source2]
 
     # Define blueprints for executors and environments
     blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)

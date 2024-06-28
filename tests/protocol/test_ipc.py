@@ -19,9 +19,12 @@
 import asyncio
 import functools
 import logging
+import re
 import socket
 import struct
+import sys
 import threading
+from socket import socketpair
 
 import pytest
 
@@ -85,6 +88,14 @@ class Echo(inmanta.protocol.ipc_light.IPCMethod[list[int], None]):
         return self.args
 
 
+class UnPicklableError(inmanta.protocol.ipc_light.IPCMethod[None, None]):
+    async def call(self, ctx: None) -> None:
+        a, b = socketpair()
+        a.close()
+        b.close()
+        raise Exception(a)
+
+
 async def test_normal_flow(request):
     loop = asyncio.get_running_loop()
     parent_conn, child_conn = socket.socketpair()
@@ -103,6 +114,9 @@ async def test_normal_flow(request):
 
     with pytest.raises(Exception, match="raise"):
         await client_protocol.call(Error())
+
+    with pytest.raises(Exception, match=re.escape("<socket.socket [closed]")):
+        await client_protocol.call(UnPicklableError())
 
     args = [1, 2, 3, 4]
     result = await client_protocol.call(Echo(args))
@@ -131,8 +145,18 @@ async def test_log_transport(caplog, request):
     log_shipper = inmanta.protocol.ipc_light.LogShipper(client_protocol, loop)
 
     with caplog.at_level(logging.INFO):
+        # Test exception capture and transport
+        try:
+            raise Exception("test the exception capture!")
+        except Exception:
+            log_shipper.handle(
+                logging.LogRecord("deep.in.exception", logging.INFO, "yyy", 5, "Test Exc %s", ("a",), exc_info=sys.exc_info())
+            )
+
+        # test normal log
         log_shipper.handle(logging.LogRecord("deep.in.test", logging.INFO, "xxx", 5, "Test %s", ("a",), exc_info=False))
 
+        # wait for normal log
         def has_log(msg: str) -> bool:
             try:
                 utils.log_contains(caplog, "deep.in.test", logging.INFO, f"Test {msg}")
@@ -141,6 +165,9 @@ async def test_log_transport(caplog, request):
                 return False
 
         await inmanta.util.retry_limited(functools.partial(has_log, "a"), 1)
+
+        logline = utils.LogSequence(caplog).get("deep.in.exception", logging.INFO, "Test Exc a")
+        assert logline.msg.startswith("Test Exc a\nTraceback (most recent call last):\n")
 
         # mess with threads, shows that we get at least no assertion errors
         # Also test against % injection in the format string

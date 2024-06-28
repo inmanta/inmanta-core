@@ -15,7 +15,7 @@ requires = [
     "docstring-parser>=0.10,<0.17",
     "email-validator>=1,<3",
     "execnet>=1,<2",
-    "importlib_metadata>=4,<8",
+    "importlib_metadata>=4,<9",
     "jinja2~=3.0",
     "more-itertools>=8,<11",
     # leave upper bound floating for fast-moving and extremely stable packaging
@@ -36,6 +36,7 @@ requires = [
     "typing_inspect~=0.9",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
+    "setproctitle~=1.3"
 ]
 
 
