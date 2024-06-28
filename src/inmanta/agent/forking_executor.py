@@ -425,11 +425,8 @@ class MPExecutor(executor.Executor):
             # Already gone
             pass
 
-    def is_busy(self) -> bool:
-        return self.connection.has_outstanding_calls()
-
-    def can_be_cleaned_up(self, reference_time: datetime.datetime, retention_time: int) -> bool:
-        if self.is_busy():
+    def can_be_cleaned_up(self, retention_time: int) -> bool:
+        if self.connection.has_outstanding_calls():
             return False
 
         return self.connection.get_idle_time() > timedelta(seconds=retention_time)
@@ -759,7 +756,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             now = datetime.datetime.now().astimezone()
             reschedule_interval: float = self.executor_retention_time
             for _executor in self.executor_map.values():
-                if _executor.can_be_cleaned_up(now, self.executor_retention_time):
+                if _executor.can_be_cleaned_up(self.executor_retention_time):
                     LOGGER.debug(
                         "Stopping executor %s because it "
                         "was inactive for %d s, which is longer then the retention time of %d s.",
