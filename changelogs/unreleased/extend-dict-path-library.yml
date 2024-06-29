@@ -1,0 +1,4 @@
+---
+description: Add get_paths method to dict path library.
+change-type: minor
+destination-branches: [master, iso7]
