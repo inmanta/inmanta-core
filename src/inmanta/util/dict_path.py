@@ -224,6 +224,17 @@ class WildDictPath(abc.ABC):
         """
 
     @abc.abstractmethod
+    def get_paths(self, container: object) -> list["DictPath"]:
+        """
+        Get all the dict paths that this wild dict path contains, in the given
+        containers.  That is, the set of dict path that would resolve the same
+        set of elements as this wild dict path, when searching in the given
+        container.
+
+        :param container: the container to search in
+        """
+
+    @abc.abstractmethod
     def to_str(self) -> str:
         """
         Returns the dict path expression represented by this instance.
@@ -307,6 +318,15 @@ class WildInDict(WildDictPath):
         if self._validate_container(container):
             try:
                 return [value for key, value in container.items() if self.key.matches(key)]
+            except KeyError:
+                return []
+        else:
+            raise ContainerStructureException(f"{container} is not a Dict")
+
+    def get_paths(self, container: object) -> list["InDict"]:
+        if self._validate_container(container):
+            try:
+                return [InDict(key) for key in container if self.key.matches(key)]
             except KeyError:
                 return []
         else:
@@ -489,6 +509,38 @@ class WildKeyedList(WildDictPath):
             and all(any(key.matches(k) and value.matches(v) for k, v in dct.items()) for key, value in self.key_value_pairs)
         ]
 
+    def get_paths(self, container: object) -> list["KeyedList"]:
+        outer = self._validate_outer_container(container)
+        try:
+            inner = outer[self.relation.value]
+        except KeyError:
+            return []
+
+        # Save here all the KeyedList that can be constructed
+        matches = []
+        for dct in self._validate_inner_container(inner):
+            if not isinstance(dct, dict):
+                # Can't be a match, it is not even a dict
+                continue
+
+            # Save here all the key-value pairs that will compose our
+            # KeyedList dict path
+            pairs = []
+            for key, value in self.key_value_pairs:
+                for k, v in dct.items():
+                    if key.matches(k) and value.matches(v):
+                        pairs.append((k, v))
+                        break
+                else:
+                    # Didn't find any key-value pair to be matching our filter
+                    break
+            else:
+                # All filters have been matched
+                assert len(pairs) == len(self.key_value_pairs), "All matched pairs should correspond to a filter"
+                matches.append(KeyedList(self.relation.value, pairs))
+
+        return matches
+
     def to_str(self) -> str:
         escaped_relation: str = self.relation.escape()
         escaped_key_value_pairs: str = "][".join(key.escape() + "=" + value.escape() for key, value in self.key_value_pairs)
@@ -593,6 +645,24 @@ class WildComposedPath(WildDictPath):
 
         return containers
 
+    def get_paths(self, container: object) -> list["ComposedPath"]:
+        if container is None:
+            raise IndexError("Can not get anything from None")
+
+        if len(self.expanded_path) == 0:
+            # No need to dig further
+            return []
+
+        if len(self.expanded_path) == 1:
+            # The path is equivalent to its unique element
+            return self.expanded_path[0].get_paths(container)
+
+        return [
+            path + next_part
+            for path in self.expanded_path[0].get_paths(container)
+            for next_part in WildComposedPath(path=self.expanded_path[1:]).get_paths(path.get_element(container))
+        ]
+
     def to_str(self) -> str:
         return self.path
 
@@ -617,6 +687,12 @@ class WildNullPath(WildDictPath):
     def get_elements(self, container: object) -> list[object]:
         if self._validate_container(container):
             return [container]
+        else:
+            raise ContainerStructureException(f"{container} is not a Dict")
+
+    def get_paths(self, container: object) -> list["NullPath"]:
+        if self._validate_container(container):
+            return [NullPath()]
         else:
             raise ContainerStructureException(f"{container} is not a Dict")
 
