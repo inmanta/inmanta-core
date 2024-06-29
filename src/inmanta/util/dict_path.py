@@ -326,7 +326,7 @@ class WildInDict(WildDictPath):
     def get_paths(self, container: object) -> list["InDict"]:
         if self._validate_container(container):
             try:
-                return [InDict(key) for key in container if self.key.matches(key)]
+                return [InDict(str(key)) for key in container if self.key.matches(key)]
             except KeyError:
                 return []
         else:
@@ -529,7 +529,7 @@ class WildKeyedList(WildDictPath):
             for key, value in self.key_value_pairs:
                 for k, v in dct.items():
                     if key.matches(k) and value.matches(v):
-                        pairs.append((k, v))
+                        pairs.append((str(k), str(v)))
                         break
                 else:
                     # Didn't find any key-value pair to be matching our filter

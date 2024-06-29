@@ -465,6 +465,28 @@ def test_dict_path_get_elements(
 
 
 @pytest.mark.parametrize(
+    ("wild_path", "dict_paths"),
+    [
+        (".", ["."]),
+        (".*", list(str(InDict(str(k))) for k in WILD_PATH_TEST_CONTAINER.keys())),
+        ("mylist[k1=*][k2=*]", ["mylist[k1=0][k2=0]", "mylist[k1=0][k2=1]", "mylist[k1=1][k2=0]"]),
+        (
+            "mylist[k1=*][k2=*].nested.value",
+            ["mylist[k1=0][k2=0].nested.value", "mylist[k1=0][k2=1].nested.value", "mylist[k1=1][k2=0].nested.value"],
+        ),
+    ],
+)
+def test_dict_path_get_paths(
+    wild_path: str,
+    dict_paths: list[str],
+) -> None:
+    """ """
+    container_copy: object = copy.deepcopy(WILD_PATH_TEST_CONTAINER)
+    all_paths = to_wild_path(wild_path).get_paths(container_copy)
+    assert {str(p) for p in all_paths} == set(dict_paths)
+
+
+@pytest.mark.parametrize(
     "container, dict_path, result",
     [
         (None, "three", {**WILD_PATH_TEST_CONTAINER, "three": {}}),
