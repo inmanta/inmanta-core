@@ -467,12 +467,35 @@ def test_dict_path_get_elements(
 @pytest.mark.parametrize(
     ("wild_path", "dict_paths"),
     [
+        # NullPath should give a NullPath
         (".", ["."]),
+        # Any keys should give one path by key
         (".*", list(str(InDict(str(k))) for k in WILD_PATH_TEST_CONTAINER.keys())),
+        # Matching all items of a keyed list should give one path by item
         ("mylist[k1=*][k2=*]", ["mylist[k1=0][k2=0]", "mylist[k1=0][k2=1]", "mylist[k1=1][k2=0]"]),
         (
             "mylist[k1=*][k2=*].nested.value",
             ["mylist[k1=0][k2=0].nested.value", "mylist[k1=0][k2=1].nested.value", "mylist[k1=1][k2=0].nested.value"],
+        ),
+        # A normal dict path should give a copy of itself
+        ("mylist[k1=0][k2=0].nested.value", ["mylist[k1=0][k2=0].nested.value"]),
+        # Combine wild keyed list and wild in dict
+        (
+            "mylist[k1=0][k2=*].*",
+            [
+                "mylist[k1=0][k2=0].k1",
+                "mylist[k1=0][k2=0].k2",
+                "mylist[k1=0][k2=0].nested",
+                "mylist[k1=0][k2=1].k1",
+                "mylist[k1=0][k2=1].k2",
+                "mylist[k1=0][k2=1].nested",
+            ],
+        ),
+        (
+            "special_list[*=just-a-string][key=*]",
+            [
+                "special_list[value=just-a-string][key=None]",
+            ],
         ),
     ],
 )
@@ -480,10 +503,23 @@ def test_dict_path_get_paths(
     wild_path: str,
     dict_paths: list[str],
 ) -> None:
-    """ """
+    """
+    Test the get_paths method of the WildDictPath object.
+    """
     container_copy: object = copy.deepcopy(WILD_PATH_TEST_CONTAINER)
-    all_paths = to_wild_path(wild_path).get_paths(container_copy)
+
+    # Compile the wild path
+    path = to_wild_path(wild_path)
+    all_paths = path.get_paths(container_copy)
+
+    # Assert that all the paths which are resolved match what is expected
     assert {str(p) for p in all_paths} == set(dict_paths)
+
+    # Assert that all the elements we get with the wild path, we also
+    # get with the combination of all the resolved paths
+    assert {id(elem) for elem in path.get_elements(container_copy)} == {
+        id(path.get_element(container_copy)) for path in all_paths
+    }
 
 
 @pytest.mark.parametrize(
