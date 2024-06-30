@@ -17,6 +17,7 @@
 """
 
 import abc
+import itertools
 import logging
 import re
 from collections.abc import Sequence
@@ -324,6 +325,34 @@ class WildInDict(WildDictPath):
             raise ContainerStructureException(f"{container} is not a Dict")
 
     def get_paths(self, container: object) -> list["InDict"]:
+        """
+        Get one InDict by key matching the wild key of this object.
+
+        ..code-block:: python
+
+            assert WildInDict("a").get_paths(
+                {
+                    "a": "b",
+                    "aa": "bb",
+                    "c": "d",
+                }
+            ) == [
+                InDict("a"),
+            ]
+
+            assert WildInDict("*").get_paths(
+                {
+                    "a": "b",
+                    "aa": "bb",
+                    "c": "d",
+                }
+            ) == [
+                InDict("a"),
+                InDict("aa"),
+                InDict("c"),
+            ]
+
+        """
         if self._validate_container(container):
             try:
                 return [InDict(str(key)) for key in container if self.key.matches(key)]
@@ -510,38 +539,100 @@ class WildKeyedList(WildDictPath):
         ]
 
     def get_paths(self, container: object) -> list["KeyedList"]:
+        """
+        Get one KeyedList by set of of matching key value pairs that can be found
+        in the given container at the relation specified in this object.
+
+        ..code-block:: python
+
+            assert WildKeyedList("relation","key_attribute","*").get_paths(
+                {
+                    "relation":[
+                        {
+                            "key_attribute":"key_value",
+                            "other_attribute":"other_value",
+                        },
+                        {
+                            "key_attribute":"other_value",
+                        },
+                        {
+                            "other_key_attribute":"other_value",
+                        },
+                    [
+                }
+            ) == [
+                KeyedList("relation", "key_attribute", "key_value"),
+                KeyedList("relation", "key_attribute", "other_value"),
+            ]
+
+            assert WildKeyedList("relation",[("key_attribute","*"), ("other_attribute", "*")]).get_paths(
+                {
+                    "relation":[
+                        {
+                            "key_attribute":"key_value",
+                            "other_attribute":"other_value",
+                        },
+                        {
+                            "key_attribute":"other_value",
+                        },
+                        {
+                            "other_key_attribute":"other_value",
+                        },
+                    [
+                }
+            ) == [
+                KeyedList("relation", [("key_attribute","key_value"), ("other_attribute", "other_value")]),
+            ]
+
+            assert WildKeyedList("relation",[("*","other_value")]).get_paths(
+                {
+                    "relation":[
+                        {
+                            "key_attribute":"key_value",
+                            "other_attribute":"other_value",
+                        },
+                        {
+                            "key_attribute":"other_value",
+                        },
+                        {
+                            "other_key_attribute":"other_value",
+                        },
+                    [
+                }
+            ) == [
+                KeyedList("relation", [("other_attribute","other_value")]),
+                KeyedList("relation", [("key_attribute","other_value")]),
+                KeyedList("relation", [("other_key_attribute","other_value")]),
+            ]
+
+            assert WildKeyedList("relation",[("*","*")]).get_paths(
+                {
+                    "relation":[
+                        {
+                            "key_attribute":"key_value",
+                            "other_attribute":"other_value",
+                        },
+                        {
+                            "key_attribute":"other_value",
+                        },
+                        {
+                            "other_key_attribute":"other_value",
+                        },
+                    [
+                }
+            ) == [
+                KeyedList("relation", [("key_attribute","key_value")]),
+                KeyedList("relation", [("other_attribute","other_value")]),
+                KeyedList("relation", [("key_attribute","other_value")]),
+                KeyedList("relation", [("other_key_attribute","other_value")]),
+            ]
+
+        """
         outer = self._validate_outer_container(container)
         try:
             inner = outer[self.relation.value]
         except KeyError:
             return []
-
-        def emit_all_paths(pairs: list[list[tuple[str, str]]]) -> Iterator[tuple[str, str]]:
-            # TODO is this all really required? Is there a use case?
-            counters = [0 for _ in range(len(pairs))]
-            selected = []
-            while True:
-                if len(selected) == len(pairs):
-                    # We have selected a full set of pairs, we can emit it
-                    # and reset the selection
-                    counters[-1] += 1
-                    yield selected
-                    selected = []
-
-                pair = len(selected)
-                pos = counters[pair]
-                if pos >= len(pairs[pair]):
-                    # We reached the end of this list of pairs
-                    # Reset its counter and increase the root one
-                    counters[pair] = 0
-                    if pair == 0:
-                        break
-                    else:
-                        selected.pop()
-                        counters[pair - 1] += 1
-                else:
-                    # Add this item of the pair in the selection
-                    selected.append(pairs[pair][pos])
 
         # Save here all the KeyedList that can be constructed
         matches = []
@@ -561,6 +652,8 @@ class WildKeyedList(WildDictPath):
             for i, (key, value) in enumerate(self.key_value_pairs):
                 for k, v in dct.items():
                     if key.matches(k) and value.matches(v):
+                        # Get all the key-value pairs from the dict which match
+                        # this filter key-value pair
                         pairs[i].append((str(k), str(v)))
                 if not pairs[i]:
                     # This key-value filter pair didn't match any of the dict entries
@@ -573,7 +666,7 @@ class WildKeyedList(WildDictPath):
                         self.relation.value,
                         path,
                     )
-                    for path in emit_all_paths(pairs)
+                    for path in itertools.product(*pairs)
                 )
 
         return matches
@@ -691,8 +784,9 @@ class WildComposedPath(WildDictPath):
             return []
 
         if len(self.expanded_path) == 1:
-            # The path is equivalent to its unique element
-            return self.expanded_path[0].get_paths(container)
+            # The path is equivalent to its unique element, but we have to wrap
+            # each of the possible path into a ComposedPath object to be consistent
+            return [ComposedPath(path) for path in self.expanded_path[0].get_paths(container)]
 
         return [
             path + next_part

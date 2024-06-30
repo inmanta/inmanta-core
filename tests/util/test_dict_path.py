@@ -477,6 +477,18 @@ def test_dict_path_get_elements(
             "mylist[k1=*][k2=*].nested.value",
             ["mylist[k1=0][k2=0].nested.value", "mylist[k1=0][k2=1].nested.value", "mylist[k1=1][k2=0].nested.value"],
         ),
+        (
+            "mylist[*=*]",
+            [
+                "mylist[k1=0]",
+                "mylist[k2=0]",
+                "mylist[k1=1]",
+                "mylist[k2=1]",
+                "mylist[nested={'value': 10}]",
+                "mylist[nested={'value': 20}]",
+                "mylist[nested={'value': 30}]",
+            ],
+        ),
         # A normal dict path should give a copy of itself
         ("mylist[k1=0][k2=0].nested.value", ["mylist[k1=0][k2=0].nested.value"]),
         # Combine wild keyed list and wild in dict
@@ -518,7 +530,7 @@ def test_dict_path_get_paths(
     # Assert that all the elements we get with the wild path, we also
     # get with the combination of all the resolved paths
     assert {id(elem) for elem in path.get_elements(container_copy)} == {
-        id(path.get_element(container_copy)) for path in all_paths
+        id(elem) for path in all_paths for elem in path.get_elements(container_copy)
     }
 
 
