@@ -225,7 +225,7 @@ class WildDictPath(abc.ABC):
         """
 
     @abc.abstractmethod
-    def get_paths(self, container: object) -> list["DictPath"]:
+    def get_paths(self, container: object) -> Sequence["DictPath"]:
         """
         Get all the dict paths that this wild dict path contains, in the given
         container.  That is, the set of dict path that would resolve the same
@@ -324,7 +324,7 @@ class WildInDict(WildDictPath):
         else:
             raise ContainerStructureException(f"{container} is not a Dict")
 
-    def get_paths(self, container: object) -> list["InDict"]:
+    def get_paths(self, container: object) -> Sequence["InDict"]:
         """
         Get one InDict by key matching the wild key of this object.
 
@@ -538,7 +538,7 @@ class WildKeyedList(WildDictPath):
             and all(any(key.matches(k) and value.matches(v) for k, v in dct.items()) for key, value in self.key_value_pairs)
         ]
 
-    def get_paths(self, container: object) -> list["KeyedList"]:
+    def get_paths(self, container: object) -> Sequence["KeyedList"]:
         """
         Get one KeyedList by set of of matching key value pairs that can be found
         in the given container at the relation specified in this object.
@@ -635,7 +635,7 @@ class WildKeyedList(WildDictPath):
             return []
 
         # Save here all the KeyedList that can be constructed
-        matches = []
+        matches: list[KeyedList] = []
 
         # Check each of the inner values, and emit as many paths for it
         # as can be created to match it (within the constraints of this path
@@ -775,7 +775,7 @@ class WildComposedPath(WildDictPath):
 
         return containers
 
-    def get_paths(self, container: object) -> list["ComposedPath"]:
+    def get_paths(self, container: object) -> Sequence["ComposedPath"]:
         if container is None:
             raise IndexError("Can not get anything from None")
 
@@ -786,10 +786,10 @@ class WildComposedPath(WildDictPath):
         if len(self.expanded_path) == 1:
             # The path is equivalent to its unique element, but we have to wrap
             # each of the possible path into a ComposedPath object to be consistent
-            return [ComposedPath(path) for path in self.expanded_path[0].get_paths(container)]
+            return [ComposedPath(path=[path]) for path in self.expanded_path[0].get_paths(container)]
 
         return [
-            path + next_part
+            ComposedPath(path=[path, next_part])
             for path in self.expanded_path[0].get_paths(container)
             for next_part in WildComposedPath(path=self.expanded_path[1:]).get_paths(path.get_element(container))
         ]
@@ -821,7 +821,7 @@ class WildNullPath(WildDictPath):
         else:
             raise ContainerStructureException(f"{container} is not a Dict")
 
-    def get_paths(self, container: object) -> list["NullPath"]:
+    def get_paths(self, container: object) -> Sequence["NullPath"]:
         if self._validate_container(container):
             return [NullPath()]
         else:
