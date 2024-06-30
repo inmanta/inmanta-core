@@ -228,7 +228,7 @@ class WildDictPath(abc.ABC):
     def get_paths(self, container: object) -> list["DictPath"]:
         """
         Get all the dict paths that this wild dict path contains, in the given
-        containers.  That is, the set of dict path that would resolve the same
+        container.  That is, the set of dict path that would resolve the same
         set of elements as this wild dict path, when searching in the given
         container.
 
