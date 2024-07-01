@@ -67,3 +67,42 @@ def test_2787_function_rescheduling(snippetcompiler):
     )
 
     compiler.do_compile()
+
+
+def test_function_rescheduling_with_side_effect(snippetcompiler):
+    """
+    This would cause an infinite loop because:
+
+    std::key_sort([Child()], "name")
+
+    is evaluated as a single expression the name="x" is evaluated separately.
+    This means that when executing this statement:
+
+    - a child is constructed  , name="x" is emitted
+    - list is constructed
+    - key_sort is called
+    - key_sort raises exception because it can't find name , statement is queued, waiting for name
+    - name="x" is called
+    - statement is rescheduled, back to 1 (which constructs a new child)
+    """
+
+    snippetcompiler.setup_for_snippet(
+        """entity Test:
+
+        end
+
+        entity Child:
+            string name
+        end
+
+        Test.child [0:] -- Child
+
+        Test(
+            child=std::key_sort([Child(name="x")], "name")
+        )
+
+        implement Child using std::none
+        implement Test using std::none
+        """
+    )
+    compiler.do_compile()
