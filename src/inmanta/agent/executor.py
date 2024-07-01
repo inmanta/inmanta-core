@@ -338,8 +338,6 @@ class VirtualEnvironmentManager:
         self._locks: NamedLock = NamedLock()
         # We know that the .inmanta venv status file is touched every minute, so `61` seconds is the lowest default we can use
         self._default_expiry_cleanup = 61
-        # self._cleanup_scheduler = util.Scheduler("venv_cleanup_scheduler")
-        asyncio.ensure_future(self.start())
 
     async def start(self) -> None:
         interval_cleanup_check = datetime.timedelta(days=1).total_seconds()

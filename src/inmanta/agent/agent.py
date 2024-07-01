@@ -984,6 +984,7 @@ class Agent(SessionEndpoint):
         if remote_executor and can_have_remote_executor:
             LOGGER.info("Selected forking agent executor mode")
             self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(self._storage["executor"])
+            asyncio.ensure_future(self.environment_manager.start())
             assert self.environment is not None  # Mypy
             self.executor_manager = forking_executor.MPManager(
                 self.thread_pool,
