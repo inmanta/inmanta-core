@@ -482,11 +482,31 @@ def test_dict_path_get_elements(
             [
                 "mylist[k1=0]",
                 "mylist[k2=0]",
-                "mylist[k1=1]",
-                "mylist[k2=1]",
                 "mylist[nested={'value': 10}]",
+                "mylist[k1=1]",
+                "mylist[k2=0]",
                 "mylist[nested={'value': 20}]",
+                "mylist[k1=0]",
+                "mylist[k2=1]",
                 "mylist[nested={'value': 30}]",
+            ],
+        ),
+        (
+            "mylist[*=*].k1",
+            [
+                "mylist[k1=0].k1",
+                "mylist[k1=0].k1",
+                "mylist[k2=0].k1",
+                "mylist[k2=0].k1",
+                "mylist[nested={'value': 10}].k1",
+                "mylist[k1=1].k1",
+                "mylist[k2=0].k1",
+                "mylist[k2=0].k1",
+                "mylist[nested={'value': 20}].k1",
+                "mylist[k1=0].k1",
+                "mylist[k1=0].k1",
+                "mylist[k2=1].k1",
+                "mylist[nested={'value': 30}].k1",
             ],
         ),
         # A normal dict path should give a copy of itself
@@ -522,10 +542,10 @@ def test_dict_path_get_paths(
 
     # Compile the wild path
     path = to_wild_path(wild_path)
-    all_paths = path.get_paths(container_copy)
+    all_paths = path.resolve_wild_cards(container_copy)
 
     # Assert that all the paths which are resolved match what is expected
-    assert {str(p) for p in all_paths} == set(dict_paths)
+    assert sorted(str(p) for p in all_paths) == sorted(dict_paths)
 
     # Assert that all the elements we get with the wild path, we also
     # get with the combination of all the resolved paths
