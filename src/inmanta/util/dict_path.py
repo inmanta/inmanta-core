@@ -21,7 +21,7 @@ import itertools
 import logging
 import re
 from collections.abc import Sequence
-from typing import Iterator, Optional, TypeGuard, TypeVar, Union, overload
+from typing import Optional, TypeGuard, TypeVar, Union, overload
 
 from inmanta.stable_api import stable_api
 
