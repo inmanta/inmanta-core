@@ -647,27 +647,19 @@ class WildKeyedList(WildDictPath):
 
             # Save here all the key-value pairs that will compose our
             # KeyedList dict path
-            pairs: list[list[tuple[str, str]]] = [[] for _ in range(len(self.key_value_pairs))]
+            pairs = [
+                [(str(k), str(v)) for k, v in dct.items() if key.matches(k) and value.matches(v)]
+                for key, value in self.key_value_pairs
+            ]
 
-            for i, (key, value) in enumerate(self.key_value_pairs):
-                for k, v in dct.items():
-                    if key.matches(k) and value.matches(v):
-                        # Get all the key-value pairs from the dict which match
-                        # this filter key-value pair
-                        pairs[i].append((str(k), str(v)))
-                if not pairs[i]:
-                    # This key-value filter pair didn't match any of the dict entries
-                    break
-            else:
-                # All filters have been matched at least once, emit one set of key value pair
-                # for each possibility that was matched
-                matches.extend(
-                    KeyedList(
-                        self.relation.value,
-                        path,
-                    )
-                    for path in itertools.product(*pairs)
+            # Emit one KeyedList for each combination of matched key-value pairs
+            matches.extend(
+                KeyedList(
+                    self.relation.value,
+                    path,
                 )
+                for path in itertools.product(*pairs)
+            )
 
         return matches
 
