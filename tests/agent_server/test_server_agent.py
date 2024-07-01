@@ -3904,7 +3904,6 @@ async def test_failing_deploy(
 ):
     """
     Test goal: make sure that failed resources are correctly logged by the `resource_action` logger.
-    We don't need anymore to go into to the agent to have an idea on what's going on
     """
 
     caplog.set_level(logging.INFO)
