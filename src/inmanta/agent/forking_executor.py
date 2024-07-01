@@ -272,7 +272,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         for module_source in in_place:
             try:
                 await loop.run_in_executor(
-                    context.threadpool, functools.partial(loader._load_module, module_source.name, module_source.hash_value)
+                    context.threadpool,
+                    functools.partial(loader._load_module, module_source.name, module_source.hash_value, require_reload=False),
                 )
             except Exception:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
@@ -575,7 +576,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             multiprocessing.set_start_method("forkserver")
             # Load common modules
             # Including this one
-            multiprocessing.set_forkserver_preload(["inmanta.config", __name__])
+            multiprocessing.set_forkserver_preload(["inmanta.config", __name__, "inmanta.agent._set_fork_server_process_name"])
         except RuntimeError:
             # already set
             pass
