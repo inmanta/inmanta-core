@@ -19,7 +19,7 @@
 import logging
 from collections import abc
 from itertools import chain
-from typing import Optional
+from typing import Optional, Sequence, Tuple
 
 import inmanta.ast.type as InmantaType
 import inmanta.execute.dataflow as dataflow
@@ -114,10 +114,8 @@ class FunctionCall(ReferenceStatement):
                 kwargs[k] = v
         return self.function.call_direct(arguments, kwargs)
 
-    def resume(self, requires, resolver, queue, result):
-        """
-        Evaluate this statement.
-        """
+    def execute_args(self, requires:  abc.Mapping[str, object], resolver: Resolver, queue: QueueScheduler) -> Tuple[Sequence[object], dict[str, object]]:
+        """ Execute the argument expessions and return a tuple of args-kwargs"""
         arguments = [a.execute(requires, resolver, queue) for a in self.arguments]
         kwargs = {k: v.execute(requires, resolver, queue) for k, v in self.kwargs.items()}
         for wrapped_kwarg_expr in self.wrapped_kwargs:
@@ -125,6 +123,12 @@ class FunctionCall(ReferenceStatement):
                 if k in kwargs:
                     raise RuntimeException(self, "Keyword argument %s repeated in function call" % k)
                 kwargs[k] = v
+        return arguments, kwargs
+
+    def execute_call(self,arguments: Sequence[object], kwargs: dict[str, object],resolver: Resolver, queue: QueueScheduler, result: ResultVariable) -> None:
+        """
+        Evaluate this statement, using the output of execute_args
+        """
         self.function.call_in_context(arguments, kwargs, resolver, queue, result)
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
@@ -262,7 +266,7 @@ class PluginFunction(Function):
 
 
 class FunctionUnit(Waiter):
-    __slots__ = ("result", "base_requires", "function", "resolver")
+    __slots__ = ("result", "base_requires", "function", "resolver", "args", "kwargs")
 
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall) -> None:
         Waiter.__init__(self, queue_scheduler)
@@ -277,11 +281,24 @@ class FunctionUnit(Waiter):
         for r in requires.values():
             self.waitfor(r)
         self.ready(self)
+        # resolved args and kwargs
+        self.args = None
+        self.kwargs = None
 
     def execute(self) -> None:
-        requires = {k: v.get_value() for (k, v) in self.base_requires.items()}
+        # Execution in two stages to prevent re-execution of argument expressions
+        if self.args is None:
+            # stage one: arguments
+            # execute once and cache results
+            requires = {k: v.get_value() for (k, v) in self.base_requires.items()}
+            try:
+                self.args, self.kwargs = self.function.execute_args(requires, self.resolver, self.queue)
+            except RuntimeException as e:
+                e.set_statement(self.function)
+                raise e
+
         try:
-            self.function.resume(requires, self.resolver, self.queue, self.result)
+            self.function.execute_call(self.args, self.kwargs, self.resolver, self.queue, self.result)
             self.done = True
         except RuntimeException as e:
             e.set_statement(self.function)
