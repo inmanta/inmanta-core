@@ -87,7 +87,7 @@ def set_custom_executor_policy():
 
     old_retention_value = inmanta.agent.config.agent_executor_retention_time.get()
     # Clean up executors after 2s of inactivity
-    inmanta.agent.config.agent_executor_retention_time.set("2")
+    inmanta.agent.config.agent_executor_retention_time.set("20")
 
     yield
 
@@ -214,6 +214,7 @@ def test():
         import lorem  # noqa: F401, F811
 
     async def check_automatic_clean_up() -> bool:
+        inmanta.agent.config.agent_executor_retention_time.set("2")
         return len(manager.agent_map["agent2"]) == 0
 
     with caplog.at_level(logging.DEBUG):
