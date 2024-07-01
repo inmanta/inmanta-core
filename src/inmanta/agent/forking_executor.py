@@ -158,20 +158,20 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """Actual shutdown, not async"""
         if not self.stopping:
             # detach logger
+            self.stop_timer_venv_checkup()
             self._detach_log_shipper()
             self.logger.info("Stopping")
             self.stopping = True
             assert self.transport is not None  # Mypy
             self.transport.close()
-            self.stop_timer_venv_checkup()
 
     def connection_lost(self, exc: Exception | None) -> None:
         """We lost connection to the controler, bail out"""
+        self.stop_timer_venv_checkup()
         self._detach_log_shipper()
         self.logger.info("Connection lost", exc_info=exc)
         self.set_status("disconnected")
         self._sync_stop()
-        self.stop_timer_venv_checkup()
         self.stopped.set()
 
     async def touch_inmanta_venv_status(self) -> None:

@@ -480,6 +480,7 @@ class VirtualEnvironmentManager:
                         should_remove_venv = True
 
                     if should_remove_venv:
+                        # TODO if
                         await loop.run_in_executor(
                             current_executor_environment.thread_pool, current_executor_environment.remove_venv
                         )
