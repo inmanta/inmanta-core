@@ -173,10 +173,10 @@ If no instance updates are expected use:
 
 7. Verify that automation setting are on
 
-    * :inmanta.environment-settings:setting:`agent_trigger_method_on_auto_deploy` = push_incremental_deploy
-    * :inmanta.environment-settings:setting:`auto_deploy` = True
-    * :inmanta.environment-settings:setting:`push_on_auto_deploy` = True
-    * :inmanta.environment-settings:setting:`server_compile` = True
+   * :inmanta.environment-settings:setting:`agent_trigger_method_on_auto_deploy` = push_incremental_deploy
+   * :inmanta.environment-settings:setting:`auto_deploy` = True
+   * :inmanta.environment-settings:setting:`push_on_auto_deploy` = True
+   * :inmanta.environment-settings:setting:`server_compile` = True
 
 8. Perform initial tests of all services via the API.
 
