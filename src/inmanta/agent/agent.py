@@ -1077,6 +1077,8 @@ class Agent(SessionEndpoint):
         # cache reference to THIS ioloop for handlers to push requests on it
         self._io_loop = asyncio.get_running_loop()
         await super().start()
+        await self.executor_manager.start()
+
 
     async def add_end_point_name(self, name: str) -> None:
         async with self._instances_lock:

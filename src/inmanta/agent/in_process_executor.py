@@ -457,6 +457,8 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
     async def stop(self) -> None:
         for child in self.executors.values():
             child.stop()
+    async def start(self) -> None:
+        pass
 
     async def stop_for_agent(self, agent_name: str) -> list[InProcessExecutor]:
         if agent_name in self.executors:

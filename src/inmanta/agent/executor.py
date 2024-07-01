@@ -495,6 +495,12 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         pass
 
     @abc.abstractmethod
+    async def start(self) -> None:
+        """
+        Start the manager.
+        """
+        pass
+    @abc.abstractmethod
     async def stop(self) -> None:
         """
         Stop all executors.

@@ -30,7 +30,6 @@ import socket
 import typing
 import uuid
 from asyncio import Future, transports
-from datetime import timedelta
 
 import inmanta.agent.cache
 import inmanta.agent.executor
@@ -175,7 +174,7 @@ class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
         # Keeps track of when this client was active last
         self.last_used_at: datetime.datetime = datetime.datetime.now().astimezone()
 
-    def get_idle_time(self) -> timedelta:
+    def get_idle_time(self) -> datetime.timedelta:
         return datetime.datetime.now().astimezone() - self.last_used_at
 
     @typing.overload
@@ -201,8 +200,8 @@ class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
         return len(self.requests) > 0
 
     def process_reply(self, frame: IPCReplyFrame) -> None:
-        self.last_used_at = datetime.datetime.now().astimezone()
         super().process_reply(frame)
+        self.last_used_at = datetime.datetime.now().astimezone()
 
 
 class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
@@ -435,7 +434,7 @@ class MPExecutor(executor.Executor):
         if self.connection.has_outstanding_calls():
             return False
 
-        return self.connection.get_idle_time() > timedelta(seconds=retention_time)
+        return self.connection.get_idle_time() > datetime.timedelta(seconds=retention_time)
 
     async def force_stop(self, grace_time: float = inmanta.const.SHUTDOWN_GRACE_HARD) -> None:
         """Stop by process close"""
@@ -569,7 +568,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self.executor_retention_time = inmanta.agent.config.agent_executor_retention_time.get()
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
 
-        self.start_periodic_executor_cleanup()
+        self.stopping: bool = False
+
 
     def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
         self.executor_map[theid] = the_executor
@@ -737,7 +737,12 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
         return p, parent_conn
 
+    async def start(self) -> None:
+        self.start_periodic_executor_cleanup()
+
+
     async def stop(self) -> None:
+        self.stopping = True
         await asyncio.gather(*(child.stop() for child in self.children))
 
     async def force_stop(self, grace_time: float) -> None:
@@ -754,39 +759,45 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         return children
 
     def start_periodic_executor_cleanup(self) -> None:
+        asyncio.get_running_loop().set_debug(True)
         async def cleanup_inactive_executors() -> None:
             """
             This task cleans up idle executors and reschedules itself
             """
+            if self.stopping:
+                # Stop periodic re-scheduling when the manager is shutting down
+                return
 
             now = datetime.datetime.now().astimezone()
             reschedule_interval: float = self.executor_retention_time
             for _executor in self.executor_map.values():
                 if _executor.can_be_cleaned_up(self.executor_retention_time):
-                    LOGGER.debug(
-                        "Stopping executor %s because it "
-                        "was inactive for %d s, which is longer then the retention time of %d s.",
-                        _executor.executor_id.identity(),
-                        _executor.connection.get_idle_time().total_seconds(),
-                        self.executor_retention_time,
-                    )
                     async with self._locks.get(_executor.executor_id.identity()):
-                        try:
-                            await _executor.stop()
-                        except Exception:
-                            LOGGER.debug(
-                                "Unexpected error during executor %s cleanup:", _executor.executor_id.identity(), exc_info=True
-                            )
+                        # Check that the executor can still be cleaned up by the time we have acquired the lock
+                        if _executor.can_be_cleaned_up(self.executor_retention_time):
+                            try:
+                                LOGGER.debug(
+                                    "Stopping executor %s because it "
+                                    "was inactive for %d s, which is longer then the retention time of %d s.",
+                                    _executor.executor_id.identity(),
+                                    _executor.connection.get_idle_time().total_seconds(),
+                                    self.executor_retention_time,
+                                )
+                                await _executor.stop()
+                            except Exception:
+                                LOGGER.debug(
+                                    "Unexpected error during executor %s cleanup:", _executor.executor_id.identity(), exc_info=True
+                                )
                 else:
                     reschedule_interval = min(
                         reschedule_interval,
                         (
-                            now - _executor.connection.last_used_at + timedelta(seconds=self.executor_retention_time)
+                            now - _executor.connection.last_used_at + datetime.timedelta(seconds=self.executor_retention_time)
                         ).total_seconds(),
                     )
 
             LOGGER.debug(f"Scheduling next cleanup_inactive_executors in {reschedule_interval} s.")
             await asyncio.sleep(reschedule_interval)
-            asyncio.create_task(cleanup_inactive_executors())
+            _task = asyncio.create_task(cleanup_inactive_executors())
 
-        asyncio.ensure_future(cleanup_inactive_executors())
+        _task = asyncio.create_task(cleanup_inactive_executors())

@@ -115,6 +115,8 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
         import lorem  # noqa: F401
 
     manager = mpmanager
+    await manager.start()
+
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
     # Simple empty venv
