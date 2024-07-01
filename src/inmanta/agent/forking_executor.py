@@ -540,7 +540,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             multiprocessing.set_start_method("forkserver")
             # Load common modules
             # Including this one
-            multiprocessing.set_forkserver_preload(["inmanta.config", __name__])
+            multiprocessing.set_forkserver_preload(["inmanta.config", __name__, "inmanta.agent._set_fork_server_process_name"])
         except RuntimeError:
             # already set
             pass
