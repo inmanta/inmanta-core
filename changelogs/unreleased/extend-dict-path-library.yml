@@ -1,4 +1,6 @@
 ---
-description: Add get_paths method to dict path library.
+description: Add resolve_wild_cards method to dict path library.
 change-type: minor
 destination-branches: [master, iso7]
+sections:
+  minor-improvement: Extend dict_path library, allow to resolve the wild cards of a wild dict path for a specific container.
