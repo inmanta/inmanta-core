@@ -402,7 +402,7 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    failed_resources: FailedResourcesSet
+    failed_resource_types: FailedResourcesSet
 
     def cache(self, model_version: int) -> CacheVersionContext:
         """

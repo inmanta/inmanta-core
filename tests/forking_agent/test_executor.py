@@ -179,6 +179,3 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
         await child1.connection.call("echo", ["aaaa"])
 
     utils.assert_no_warning(caplog)
-
-
-# TODO here

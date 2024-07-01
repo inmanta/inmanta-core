@@ -834,19 +834,19 @@ class AgentInstance:
         # Resource types for which no handler code exist for the given model_version
         # or for which the pip config couldn't be retrieved
         code, invalid_resources = await self.process.get_code(self._env_id, model_version, resource_types)
-        failed_resources: executor.FailedResourcesSet = set()
+        failed_resource_types: executor.FailedResourcesSet = set()
 
         try:
             current_executor = await self.executor_manager.get_executor(self.name, self.uri, code)
             # Resource types for which an error occurred during handler code installation
-            failed_resources = current_executor.failed_resources
+            failed_resource_types = current_executor.failed_resource_types
         except Exception as e:
             invalid_resource_types: set[ResourceType] = {e.resource_type for e in invalid_resources}
             logging.warning("Could not set up executor for %s", self.name, exc_info=True)
             current_executor = None
             # If the failed resource type is not present in `failed_resources`, then we add it with the current exception
-            # If it was already present, we preserve the old error
-            failed_resources = {
+            # If it was already present, we only keep the old error
+            failed_resource_types = {
                 executor.FailedResource(
                     resource_type=resource_type,
                     exception=e,
@@ -855,7 +855,7 @@ class AgentInstance:
                 if resource_type not in invalid_resource_types
             }
 
-        invalid_resources.update(failed_resources)
+        invalid_resources.update(failed_resource_types)
 
         return current_executor, invalid_resources
 
@@ -887,9 +887,7 @@ class AgentInstance:
 
         executor, invalid_resources = await self.setup_executor(model_version, resource_types)
 
-        invalid_resources_to_dict: dict[ResourceType, Optional[Exception]] = {
-            e.resource_type: e.exception for e in invalid_resources
-        }
+        invalid_resources_types: dict[ResourceType, Exception] = {e.resource_type: e.exception for e in invalid_resources}
         loaded_resources: list[ResourceDetails] = []
         failed_resource_ids: list[ResourceVersionIdStr] = []
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
@@ -899,7 +897,7 @@ class AgentInstance:
             res_id = res["id"]
             res_type = res["resource_type"]
 
-            if res_type not in invalid_resources_to_dict:
+            if res_type not in invalid_resources_types:
                 loaded_resources.append(ResourceDetails(res))
 
                 state = const.ResourceState[res["status"]]
@@ -911,7 +909,7 @@ class AgentInstance:
                         logging.ERROR,
                         "%(res_id)s failed due to `%(error)s`.",
                         res_id=res_id,
-                        error=str(invalid_resources_to_dict[res_type]),
+                        error=str(invalid_resources_types[res_type]),
                     )
                 )
                 failed_resource_ids.append(res_id)

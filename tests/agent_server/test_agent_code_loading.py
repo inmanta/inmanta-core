@@ -381,10 +381,10 @@ async def test_agent_code_loading_with_failure(
     assert len(invalid_resource_types_1) == 3
     for invalid_resource in invalid_resource_types_1:
         assert (
-            f"Failed to get source code for {invalid_resource.resource_type} version=-1, "
-            "result={'message': 'Request or referenced resource does not exist: The version of the code does not exist. "
-            f"{invalid_resource.resource_type},"
-            " -1'}"
+            "Failed to get source code for " + invalid_resource.resource_type + " version=-1, result={'message': 'Request or "
+            "referenced resource does not exist: The version of the code does not exist. "
+            + invalid_resource.resource_type
+            + ", -1'}"
         ) == str(invalid_resource.exception)
 
     await agent.ensure_code(
