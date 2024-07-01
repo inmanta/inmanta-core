@@ -1,3 +1,3 @@
 description: Use mypy baseline instead of mypy-diff
 change-type: patch
-destination-branches: [master, iso7, iso6]
+destination-branches: [master, iso7]
