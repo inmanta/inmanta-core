@@ -18,10 +18,10 @@
 
 import base64
 import hashlib
+import logging
 import os
 import py_compile
 import tempfile
-import typing
 import uuid
 from logging import DEBUG, INFO
 
@@ -32,8 +32,9 @@ from inmanta.agent import Agent, executor
 from inmanta.agent.executor import ResourceInstallSpec
 from inmanta.data import PipConfig
 from inmanta.protocol import Client
+from inmanta.server.protocol import Server
 from inmanta.util import get_compiler_version
-from utils import LogSequence
+from utils import ClientHelper, LogSequence, log_index
 
 
 async def make_source_structure(
@@ -326,54 +327,22 @@ def test():
 
 
 async def test_agent_code_loading_with_failure(
-    caplog, server, agent_factory, client, environment: uuid.UUID, monkeypatch, clienthelper
+    caplog,
+    server: Server,
+    agent_factory: Agent,
+    client: Client,
+    environment: uuid.UUID,
+    monkeypatch,
+    clienthelper: ClientHelper,
 ) -> None:
     """
-    Test goals:
-    1. ensure the agent doesn't re-load the same code if not required
-       1a. because the resource-version is exactly the same
-       1b. because the underlying code is the same
-    even when loading is done in very short succession
+    Test goal: make sure that failed resources are correctly returned by `get_code` and `ensure_code` methods.
+    The failed resources should have the right exception contained in the returned object.
     """
 
     caplog.set_level(DEBUG)
 
-    codea = """
-def test():
-    return 10
-
-import inmanta
-inmanta.test_agent_code_loading = 5
-    """
-
-    codeb = """
-def test():
-    return 10
-def xx():
-    pass
-
-import inmanta
-inmanta.test_agent_code_loading = 10
-    """
-
-    codec = """
-import inmanta
-inmanta.test_agent_code_loading = 15
-    """
-    # set a different value to check if the agent has loaded the code.
-    # use monkeypatch for cleanup
-    monkeypatch.setattr(inmanta, "test_agent_code_loading", 0, raising=False)
-
     sources = {}
-    sources2 = {}
-    sources3 = {}
-    hv1 = await make_source_structure(sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", codea, client=client)
-    hv2 = await make_source_structure(
-        sources2, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codeb, client=client
-    )
-    hv3 = await make_source_structure(
-        sources3, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codec, byte_code=True, client=client
-    )
 
     async def get_version() -> int:
         version = await clienthelper.get_version()
@@ -388,31 +357,15 @@ inmanta.test_agent_code_loading = 15
         return version
 
     version_1 = await get_version()
-    version_2 = await get_version()
-    version_3 = await get_version()
 
     res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test": sources})
     assert res.code == 200
 
-    # 2 identical versions
     res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test2": sources})
     assert res.code == 200
-    res = await client.upload_code_batched(tid=environment, id=version_2, resources={"test::Test2": sources})
-    assert res.code == 200
 
-    # two distinct versions
     res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test3": sources})
     assert res.code == 200
-    res = await client.upload_code_batched(tid=environment, id=version_2, resources={"test::Test3": sources2})
-    assert res.code == 200
-
-    # bytecompile version
-    res = await client.upload_code_batched(tid=environment, id=version_3, resources={"test::Test4": sources3})
-    assert res.code == 200
-
-    # Try to pull binary file via v1 API, get a 400
-    # result = await client.get_code(tid=environment, id=version_3, resource="test::Test4")
-    # assert result.code == 400
 
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
@@ -421,11 +374,18 @@ inmanta.test_agent_code_loading = 15
     resource_install_specs_1: list[ResourceInstallSpec]
     resource_install_specs_2: list[ResourceInstallSpec]
 
+    # We want to test
     resource_install_specs_1, invalid_resource_types_1 = await agent.get_code(
         environment=environment, version=-1, resource_types=["test::Test", "test::Test2", "test::Test3"]
     )
     assert len(invalid_resource_types_1) == 3
-
+    for invalid_resource in invalid_resource_types_1:
+        assert (
+            f"Failed to get source code for {invalid_resource.resource_type} version=-1, "
+            "result={'message': 'Request or referenced resource does not exist: The version of the code does not exist. "
+            f"{invalid_resource.resource_type},"
+            " -1'}"
+        ) == str(invalid_resource.exception)
 
     await agent.ensure_code(
         code=resource_install_specs_1,
@@ -436,7 +396,7 @@ inmanta.test_agent_code_loading = 15
     )
 
     async def _install(blueprint: executor.ExecutorBlueprint) -> None:
-        raise Exception("Unable to load code when agent is started with code loading disabled.")
+        raise Exception("MKPTCH: Unable to load code when agent is started with code loading disabled.")
 
     monkeypatch.setattr(agent, "_install", _install)
 
@@ -444,5 +404,18 @@ inmanta.test_agent_code_loading = 15
         code=resource_install_specs_2,
     )
     assert len(failed_to_load) == 2
+    for failed_resource in failed_to_load:
+        assert "MKPTCH: Unable to load code when agent is started with code loading disabled" in str(failed_resource.exception)
 
     monkeypatch.undo()
+
+    idx1 = log_index(
+        caplog,
+        "inmanta.agent.agent",
+        logging.ERROR,
+        "Failed to get source code for test::Test2 version=-1",
+    )
+
+    log_index(caplog, "inmanta.agent.agent", logging.ERROR, "Failed to install handler test::Test version=1", idx1)
+
+    log_index(caplog, "inmanta.agent.agent", logging.ERROR, "Failed to install handler test::Test2 version=1", idx1)

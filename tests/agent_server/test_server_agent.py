@@ -26,19 +26,20 @@ from collections.abc import Mapping
 from functools import partial
 from itertools import groupby
 from logging import DEBUG
-from typing import Any, Optional, Collection
+from typing import Any, Collection, Optional
 from uuid import UUID
 
 import psutil
 import pytest
-from inmanta.agent.executor import ResourceInstallSpec
 from psutil import NoSuchProcess, Process
 
 import utils
 from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent, wait_for_n_deployed_resources
 from inmanta import agent, config, const, data, execute
-from inmanta.agent import config as agent_config, executor
+from inmanta.agent import config as agent_config
+from inmanta.agent import executor
 from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deploy_response_matrix
+from inmanta.agent.executor import ResourceInstallSpec
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
@@ -49,6 +50,7 @@ from inmanta.data import (
     Setting,
     convert_boolean,
 )
+from inmanta.protocol import Client
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -3890,7 +3892,21 @@ def test_deploy_response_matrix_invariants():
             assert not condition[1][1], "Invariant violation, regression on #6202"
 
 
-async def test_failing_deploy(resource_container, agent, client, clienthelper, environment, no_agent_backoff, caplog, monkeypatch):
+async def test_failing_deploy(
+    resource_container,
+    agent: Agent,
+    client: Client,
+    clienthelper: ClientHelper,
+    environment: uuid.UUID,
+    no_agent_backoff: None,
+    caplog,
+    monkeypatch,
+):
+    """
+    Test goal: make sure that failed resources are correctly logged by the resource_action_logger.
+    We don't need anymore to go into to the agent to have an idea on what's going on
+    """
+
     caplog.set_level(logging.INFO)
     resource_container.Provider.reset()
     config.Config.set("config", "agent-deploy-interval", "0")
@@ -3947,8 +3963,31 @@ async def test_failing_deploy(resource_container, agent, client, clienthelper, e
 
     monkeypatch.undo()
 
-    idx1 = log_index(caplog, "resource_action_logger", logging.ERROR, "multiple resources: test::Resource[agent1,key=key1],v=1 failed due to `Failed to install handler `test` version=1`.")
-    idx2 = log_index(caplog, "resource_action_logger", logging.ERROR, "multiple resources: test::Wait[agent1,key=key2],v=1 failed due to `Failed to install handler `test` version=1`.", idx1)
-    idx3 = log_index(caplog, "resource_action_logger", logging.ERROR, "multiple resources: test::Resource[agent1,key=key3],v=1 failed due to `Failed to install handler `test` version=1`.", idx2)
-    log_index(caplog, "resource_action_logger", logging.ERROR, "multiple resources: Failed to load handler code or install handler code dependencies. Check the agent log for additional details.", idx3)
-
+    idx1 = log_index(
+        caplog,
+        "resource_action_logger",
+        logging.ERROR,
+        "multiple resources: test::Resource[agent1,key=key1],v=1 failed due to `Failed to install handler `test` version=1`.",
+    )
+    idx2 = log_index(
+        caplog,
+        "resource_action_logger",
+        logging.ERROR,
+        "multiple resources: test::Wait[agent1,key=key2],v=1 failed due to `Failed to install handler `test` version=1`.",
+        idx1,
+    )
+    idx3 = log_index(
+        caplog,
+        "resource_action_logger",
+        logging.ERROR,
+        "multiple resources: test::Resource[agent1,key=key3],v=1 failed due to `Failed to install handler `test` version=1`.",
+        idx2,
+    )
+    log_index(
+        caplog,
+        "resource_action_logger",
+        logging.ERROR,
+        "multiple resources: Failed to load handler code or install handler code dependencies. Check the agent log for "
+        "additional details.",
+        idx3,
+    )
