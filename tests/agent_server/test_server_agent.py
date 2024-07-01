@@ -3887,3 +3887,5 @@ def test_deploy_response_matrix_invariants():
     for condition, reaction in deploy_response_matrix.items():
         if (reaction in [DeployRequestAction.interrupt, DeployRequestAction.terminate]) and condition[0][0] and condition[0][1]:
             assert not condition[1][1], "Invariant violation, regression on #6202"
+
+# TODO get_latest_version_for_agent
