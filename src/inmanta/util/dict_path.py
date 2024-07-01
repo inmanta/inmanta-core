@@ -540,7 +540,7 @@ class WildKeyedList(WildDictPath):
 
     def get_paths(self, container: object) -> Sequence["KeyedList"]:
         """
-        Get one KeyedList by set of of matching key value pairs that can be found
+        Get one KeyedList by set of matching key value pairs that can be found
         in the given container at the relation specified in this object.
 
         ..code-block:: python
