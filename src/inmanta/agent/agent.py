@@ -909,7 +909,7 @@ class AgentInstance:
                 logs.append(
                     data.LogLine.log(
                         logging.ERROR,
-                        "%(res_id)s failed due to %(error)s.",
+                        "%(res_id)s failed due to `%(error)s`.",
                         res_id=res_id,
                         error=str(invalid_resources_to_dict[res_type]),
                     )

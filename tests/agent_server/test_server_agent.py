@@ -26,17 +26,18 @@ from collections.abc import Mapping
 from functools import partial
 from itertools import groupby
 from logging import DEBUG
-from typing import Any, Optional
+from typing import Any, Optional, Collection
 from uuid import UUID
 
 import psutil
 import pytest
+from inmanta.agent.executor import ResourceInstallSpec
 from psutil import NoSuchProcess, Process
 
 import utils
 from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent, wait_for_n_deployed_resources
 from inmanta import agent, config, const, data, execute
-from inmanta.agent import config as agent_config
+from inmanta.agent import config as agent_config, executor
 from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deploy_response_matrix
 from inmanta.ast import CompilerException
 from inmanta.config import Config
@@ -3888,4 +3889,66 @@ def test_deploy_response_matrix_invariants():
         if (reaction in [DeployRequestAction.interrupt, DeployRequestAction.terminate]) and condition[0][0] and condition[0][1]:
             assert not condition[1][1], "Invariant violation, regression on #6202"
 
-# TODO get_latest_version_for_agent
+
+async def test_failing_deploy(resource_container, agent, client, clienthelper, environment, no_agent_backoff, caplog, monkeypatch):
+    caplog.set_level(logging.INFO)
+    resource_container.Provider.reset()
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+    agent_name = "agent1"
+    myagent_instance = agent._instances[agent_name]
+
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key1", "value1")
+
+    def get_resources(version, value_resource_three):
+        return [
+            {
+                "key": "key1",
+                "value": "value2",
+                "id": "test::Resource[agent1,key=key1],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key2",
+                "value": "value2",
+                "id": "test::Wait[agent1,key=key2],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
+            },
+            {
+                "key": "key3",
+                "value": value_resource_three,
+                "id": "test::Resource[agent1,key=key3],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
+            },
+        ]
+
+    version1 = await clienthelper.get_version()
+    resources_version_1 = get_resources(version1, "value2")
+
+    # Initial deploy
+    await _deploy_resources(client, environment, resources_version_1, version1, False)
+
+    async def ensure_code(code: Collection[ResourceInstallSpec]) -> executor.FailedResourcesSet:
+        raise RuntimeError(f"Failed to install handler `test` version={version1}")
+
+    monkeypatch.setattr(myagent_instance.executor_manager.process, "ensure_code", ensure_code)
+
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Deploy 1", is_full_deploy=False, is_periodic=False)
+    )
+
+    monkeypatch.undo()
+
+    idx1 = log_index(caplog, "resource_action_logger", logging.ERROR, "multiple resources: test::Resource[agent1,key=key1],v=1 failed due to `Failed to install handler `test` version=1`.")
+    idx2 = log_index(caplog, "resource_action_logger", logging.ERROR, "multiple resources: test::Wait[agent1,key=key2],v=1 failed due to `Failed to install handler `test` version=1`.", idx1)
+    idx3 = log_index(caplog, "resource_action_logger", logging.ERROR, "multiple resources: test::Resource[agent1,key=key3],v=1 failed due to `Failed to install handler `test` version=1`.", idx2)
+    log_index(caplog, "resource_action_logger", logging.ERROR, "multiple resources: Failed to load handler code or install handler code dependencies. Check the agent log for additional details.", idx3)
+
