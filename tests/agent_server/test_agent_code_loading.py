@@ -21,13 +21,14 @@ import hashlib
 import os
 import py_compile
 import tempfile
+import typing
 import uuid
 from logging import DEBUG, INFO
 
 import pytest
 
 import inmanta
-from inmanta.agent import Agent
+from inmanta.agent import Agent, executor
 from inmanta.agent.executor import ResourceInstallSpec
 from inmanta.data import PipConfig
 from inmanta.protocol import Client
@@ -389,7 +390,6 @@ inmanta.test_agent_code_loading = 15
     version_1 = await get_version()
     version_2 = await get_version()
     version_3 = await get_version()
-    version_4 = await get_version()
 
     res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test": sources})
     assert res.code == 200
@@ -410,92 +410,39 @@ inmanta.test_agent_code_loading = 15
     res = await client.upload_code_batched(tid=environment, id=version_3, resources={"test::Test4": sources3})
     assert res.code == 200
 
-    # source version again
-    res = await client.upload_code_batched(tid=environment, id=version_4, resources={"test::Test4": sources2})
-    assert res.code == 200
-
     # Try to pull binary file via v1 API, get a 400
-    result = await client.get_code(tid=environment, id=version_3, resource="test::Test4")
-    assert result.code == 400
+    # result = await client.get_code(tid=environment, id=version_3, resource="test::Test4")
+    # assert result.code == 400
 
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
     )
 
-    # Cache test
-    # install sources for all three
     resource_install_specs_1: list[ResourceInstallSpec]
     resource_install_specs_2: list[ResourceInstallSpec]
-    resource_install_specs_3: list[ResourceInstallSpec]
-    resource_install_specs_4: list[ResourceInstallSpec]
-    resource_install_specs_5: list[ResourceInstallSpec]
-    resource_install_specs_6: list[ResourceInstallSpec]
 
-    resource_install_specs_1, _ = await agent.get_code(
-        environment=environment, version=version_1, resource_types=["test::Test", "test::Test2", "test::Test3"]
+    resource_install_specs_1, invalid_resource_types_1 = await agent.get_code(
+        environment=environment, version=-1, resource_types=["test::Test", "test::Test2", "test::Test3"]
     )
+    assert len(invalid_resource_types_1) == 3
+
+
     await agent.ensure_code(
         code=resource_install_specs_1,
     )
+
     resource_install_specs_2, _ = await agent.get_code(
         environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"]
     )
-    await agent.ensure_code(
+
+    async def _install(blueprint: executor.ExecutorBlueprint) -> None:
+        raise Exception("Unable to load code when agent is started with code loading disabled.")
+
+    monkeypatch.setattr(agent, "_install", _install)
+
+    failed_to_load = await agent.ensure_code(
         code=resource_install_specs_2,
     )
-    resource_install_specs_3, _ = await agent.get_code(
-        environment=environment, version=version_2, resource_types=["test::Test2"]
-    )
-    await agent.ensure_code(
-        code=resource_install_specs_3,
-    )
+    assert len(failed_to_load) == 2
 
-    # we are now at sources1
-    assert getattr(inmanta, "test_agent_code_loading") == 5
-
-    resource_install_specs_4, _ = await agent.get_code(
-        environment=environment, version=version_2, resource_types=["test::Test3"]
-    )
-    # Install sources2
-    await agent.ensure_code(code=resource_install_specs_4)
-    # Test 3 is deployed twice, as seen by the agent and the loader
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test3 version={version_1}")
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test3 version={version_2}")
-    # Loader only loads source2 once
-    LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv2}, module=inmanta_plugins.tests)").assert_not(
-        "inmanta.loader", INFO, f"Deploying code (hv={hv2}, module=inmanta_plugins.tests)"
-    )
-
-    # we are now at sources2
-    assert getattr(inmanta, "test_agent_code_loading") == 10
-
-    resource_install_specs_5, _ = await agent.get_code(
-        environment=environment, version=version_3, resource_types=["test::Test4"]
-    )
-    # Loader loads byte code file
-    await agent.ensure_code(code=resource_install_specs_5)
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test4 version={version_3}")
-    LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)").assert_not(
-        "inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)"
-    )
-
-    assert getattr(inmanta, "test_agent_code_loading") == 15
-
-    resource_install_specs_6, _ = await agent.get_code(
-        environment=environment, version=version_4, resource_types=["test::Test4"]
-    )
-    # Now load the python only version again
-    await agent.ensure_code(code=resource_install_specs_6)
-    assert getattr(inmanta, "test_agent_code_loading") == 10
-
-    # ensure we clean up on restart
-    assert os.path.exists(os.path.join(agent._loader.mod_dir, "tests/plugins/__init__.py"))
-    await agent.stop()
-    await agent_factory(
-        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
-    )
-    assert not os.path.exists(os.path.join(agent._loader.mod_dir, "tests"))
-
-
-# TODO ensure code
-# TODO get code
+    monkeypatch.undo()

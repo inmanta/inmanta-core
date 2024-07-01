@@ -46,7 +46,7 @@ from inmanta.util import NamedLock
 LOGGER = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class FailedResource:
     resource_type: ResourceType
     exception: Exception
