@@ -16,10 +16,12 @@
     Contact: code@inmanta.com
 """
 
+import abc
 import asyncio
 import collections
 import concurrent.futures
 import concurrent.futures.thread
+import datetime
 import functools
 import logging
 import logging.config
@@ -28,7 +30,9 @@ import os
 import socket
 import typing
 import uuid
-from asyncio import transports
+from abc import abstractmethod
+from asyncio import Future, transports
+from typing import Any, Coroutine, Optional, Sequence
 
 import inmanta.agent.cache
 import inmanta.agent.executor
@@ -44,7 +48,15 @@ import inmanta.signals
 import inmanta.util
 from inmanta.agent import executor
 from inmanta.data.model import ResourceType
-from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
+from inmanta.protocol.ipc_light import (
+    FinalizingIPCClient,
+    IPCMethod,
+    IPCReplyFrame,
+    IPCServer,
+    LogReceiver,
+    LogShipper,
+    ReturnType,
+)
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(__name__)
@@ -159,7 +171,40 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
 
 class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
-    pass
+    def __init__(self, name: str):
+        super().__init__(name)
+
+        # Keeps track of when this client was active last
+        self.last_used_at: datetime.datetime = datetime.datetime.now().astimezone()
+
+    def get_idle_time(self) -> datetime.timedelta:
+        return datetime.datetime.now().astimezone() - self.last_used_at
+
+    @typing.overload
+    def call(
+        self, method: IPCMethod[ExecutorContext, ReturnType], has_reply: typing.Literal[True] = True
+    ) -> Future[ReturnType]: ...
+
+    @typing.overload
+    def call(self, method: IPCMethod[ExecutorContext, ReturnType], has_reply: typing.Literal[False]) -> None: ...
+
+    @typing.overload
+    def call(self, method: IPCMethod[ExecutorContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None: ...
+
+    def call(self, method: IPCMethod[ExecutorContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None:
+        """Call a method with given arguments"""
+        self.last_used_at = datetime.datetime.now().astimezone()
+        response = super().call(method, has_reply)
+        assert response is None or isinstance(response, Future)
+        return response
+
+    def has_outstanding_calls(self) -> bool:
+        """Is this client still waiting for replies"""
+        return len(self.requests) > 0
+
+    def process_reply(self, frame: IPCReplyFrame) -> None:
+        super().process_reply(frame)
+        self.last_used_at = datetime.datetime.now().astimezone()
 
 
 class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
@@ -354,14 +399,28 @@ def mp_worker_entrypoint(
     exit(0)
 
 
-class MPExecutor(executor.Executor):
+class PoolMember(abc.ABC):
+    @abstractmethod
+    def can_be_cleaned_up(self, retention_time: int) -> bool:
+        pass
+
+    @abstractmethod
+    def last_used(self) -> datetime.datetime:
+        pass
+
+    @abstractmethod
+    async def stop(self) -> None:
+        pass
+
+
+class MPExecutor(executor.Executor, PoolMember):
     """A Single Child Executor"""
 
     def __init__(
         self,
         owner: "MPManager",
         process: multiprocessing.Process,
-        connection: FinalizingIPCClient[ExecutorContext],
+        connection: ExecutorClient,
         executor_id: executor.ExecutorId,
         venv: executor.ExecutorVirtualEnvironment,
     ):
@@ -387,6 +446,15 @@ class MPExecutor(executor.Executor):
         except inmanta.protocol.ipc_light.ConnectionLost:
             # Already gone
             pass
+
+    def can_be_cleaned_up(self, retention_time: int) -> bool:
+        if self.connection.has_outstanding_calls():
+            return False
+
+        return self.connection.get_idle_time() > datetime.timedelta(seconds=retention_time)
+
+    def last_used(self) -> datetime.datetime:
+        return self.connection.last_used_at
 
     async def force_stop(self, grace_time: float = inmanta.const.SHUTDOWN_GRACE_HARD) -> None:
         """Stop by process close"""
@@ -469,7 +537,24 @@ class MPExecutor(executor.Executor):
         return await self.connection.call(FactsCommand(resource))
 
 
-class MPManager(executor.ExecutorManager[MPExecutor]):
+class PoolManager:
+    def __init__(self, max_time: int, max_pool_size: int, min_pool_size: int):
+        pass
+
+    @abstractmethod
+    async def start(self) -> None:
+        pass
+
+    @abstractmethod
+    async def stop(self) -> None:
+        pass
+
+    @abstractmethod
+    def get_pool_members(self) -> Sequence[PoolMember]:
+        pass
+
+
+class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
     """
     This is the executor that provides the new behavior (ISO8+),
     where the agent forks executors in specific venvs to prevent code reloading.
@@ -517,6 +602,18 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
         self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
+        self.executor_retention_time = inmanta.agent.config.agent_executor_retention_time.get()
+        self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
+
+        self.stopping: bool = False
+        # Keep a reference to all active backgrounds tasks to make sure they don't disappear
+        # mid-execution and to be able to cancel them when shutting down.
+        self.background_tasks: set[asyncio.Task[None]] = set()
+
+        # Keep a reference to the last scheduled cleanup task for easy cancelation
+        # and rescheduling when the retention time is updated
+        self.next_executor_cleanup_task: Optional[asyncio.Task[None]] = None
+
     def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
         self.executor_map[theid] = the_executor
         self.agent_map[theid.agent_name].add(theid)
@@ -534,6 +631,9 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self.executor_map.pop(theid)
         self.agent_map[theid.agent_name].discard(theid)
 
+    def get_pool_members(self) -> Sequence[MPExecutor]:
+        return self.children
+
     @classmethod
     def init_once(cls) -> None:
         try:
@@ -549,11 +649,14 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
     ) -> MPExecutor:
         """
-        Retrieves an Executor based on the agent name and ResourceInstallSpec.
+        Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
         If an Executor does not exist for the given configuration, a new one is created.
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
-        :param code: The set of sources to be installed on the executor.
+        :param agent_uri: The name of the host on which the agent is running.
+        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
+            which resource types it can act on and all necessary information to install the relevant
+            handler code in its venv.
         :return: An Executor instance
         """
         blueprint = executor.ExecutorBlueprint.from_specs(code)
@@ -563,8 +666,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             if not it.closing:
                 LOGGER.debug("Found existing executor for agent %s with id %s", agent_name, executor_id.identity())
                 return it
-        # Acquire a lock based on the blueprint's hash
-        # We don't care about URI here
+        # Acquire a lock based on the executor's identity (agent name, agent uri and blueprint hash)
         async with self._locks.get(executor_id.identity()):
             if executor_id in self.executor_map:
                 it = self.executor_map[executor_id]
@@ -576,6 +678,18 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                         "Found stale executor for agent %s with id %s, waiting for close", agent_name, executor_id.identity()
                     )
                     await it.join(2.0)
+            n_executors_for_agent = len(self.agent_map[executor_id.agent_name])
+            if n_executors_for_agent >= self.max_executors_per_agent:
+                # Close oldest executor:
+                executor_ids = self.agent_map[executor_id.agent_name]
+                oldest_executor = min([self.executor_map[id] for id in executor_ids], key=lambda e: e.connection.last_used_at)
+                LOGGER.debug(
+                    f"Reached executor cap for agent {executor_id.agent_name}. Stopping oldest executor "
+                    f"{oldest_executor.executor_id.identity()} to make room for a new one."
+                )
+
+                await oldest_executor.stop()
+
             my_executor = await self.create_executor(executor_id)
             self.__add_executor(executor_id, my_executor)
             if my_executor.failed_resource_sources:
@@ -629,7 +743,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
     async def make_child_and_connect(
         self, executor_id: executor.ExecutorId, venv: executor.ExecutorVirtualEnvironment
     ) -> MPExecutor:
-        """Async code to make a child process as share a socker with it"""
+        """Async code to make a child process and share a socket with it"""
         loop = asyncio.get_running_loop()
         name = executor_id.agent_name
 
@@ -658,6 +772,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
     def _make_child(self, name: str, log_level: int, cli_log: bool) -> tuple[multiprocessing.Process, socket.socket]:
         """Sync code to make a child process and share a socket with it"""
         parent_conn, child_conn = socket.socketpair()
+        # Fork an ExecutorServer
         p = multiprocessing.Process(
             target=mp_worker_entrypoint,
             args=(child_conn, name, log_level, cli_log, inmanta.config.Config.config_as_dict()),
@@ -665,9 +780,17 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         )
         p.start()
         child_conn.close()
+
         return p, parent_conn
 
+    async def start(self) -> None:
+        self.start_executor_retention_time_watcher()
+        self.start_periodic_executor_cleanup()
+
     async def stop(self) -> None:
+        self.stopping = True
+        for task in self.background_tasks:
+            task.cancel()
         await asyncio.gather(*(child.stop() for child in self.children))
 
     async def force_stop(self, grace_time: float) -> None:
@@ -682,3 +805,97 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         children = [self.executor_map[child_id] for child_id in children_ids]
         await asyncio.gather(*(child.stop() for child in children))
         return children
+
+    def start_executor_retention_time_watcher(self) -> None:
+        """
+        Schedule a task that periodically checks for updates to the executor
+        retention time. If such an update is detected, the previous recurring cleanup
+        task is canceled and a new recurring cleanup task with the updated retention time
+        is scheduled.
+        """
+
+        async def watch_retention_time() -> None:
+            if self.stopping:
+                # Stop periodic re-scheduling when the manager is shutting down
+                return
+
+            retention_time_from_config = inmanta.agent.config.agent_executor_retention_time.get()
+
+            if self.executor_retention_time != retention_time_from_config:
+                self.executor_retention_time = retention_time_from_config
+                self.start_periodic_executor_cleanup(restart=True)
+
+            await asyncio.sleep(2)
+            self.add_background_task(watch_retention_time())
+
+        self.add_background_task(watch_retention_time())
+
+    def start_periodic_executor_cleanup(self, restart: Optional[bool] = False) -> None:
+        """
+        Schedule a task that removes inactive executors and re-schedules
+        itself based on the retention time.
+
+        :param restart: Cancel the previously scheduled cleanup task and start a new one.
+        """
+
+        async def cleanup_inactive_executors() -> None:
+            """
+            This task cleans up idle executors and reschedules itself
+            """
+            if self.stopping:
+                # Stop periodic re-scheduling when the manager is shutting down
+                return
+
+            if restart and self.next_executor_cleanup_task:
+                self.next_executor_cleanup_task.cancel()
+
+            cleanup_start = datetime.datetime.now().astimezone()
+
+            reschedule_interval: float = self.executor_retention_time
+            for _executor in self.executor_map.values():
+                if _executor.can_be_cleaned_up(self.executor_retention_time):
+                    async with self._locks.get(_executor.executor_id.identity()):
+                        # Check that the executor can still be cleaned up by the time we have acquired the lock
+                        if _executor.can_be_cleaned_up(self.executor_retention_time):
+                            try:
+                                LOGGER.debug(
+                                    "Stopping executor %s because it "
+                                    "was inactive for %d s, which is longer then the retention time of %d s.",
+                                    _executor.executor_id.identity(),
+                                    _executor.connection.get_idle_time().total_seconds(),
+                                    self.executor_retention_time,
+                                )
+                                await _executor.stop()
+                            except Exception:
+                                LOGGER.debug(
+                                    "Unexpected error during executor %s cleanup:",
+                                    _executor.executor_id.identity(),
+                                    exc_info=True,
+                                )
+                else:
+                    reschedule_interval = min(
+                        reschedule_interval,
+                        (
+                            datetime.timedelta(seconds=self.executor_retention_time)
+                            - (cleanup_start - _executor.connection.last_used_at)
+                        ).total_seconds(),
+                    )
+
+            cleanup_end = datetime.datetime.now().astimezone()
+
+            await asyncio.sleep(max(0.0, reschedule_interval - (cleanup_end - cleanup_start).total_seconds()))
+            self.next_executor_cleanup_task = self.add_background_task(cleanup_inactive_executors())
+
+        self.add_background_task(cleanup_inactive_executors())
+
+    def add_background_task(self, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
+        """
+        Wrap a coroutine in an asyncio Task and register it.
+        """
+        task = asyncio.create_task(coro)
+
+        self.background_tasks.add(task)
+        # Make sure the task removes itself from the set when it's done
+        task.add_done_callback(self.background_tasks.discard)
+
+        return task
