@@ -849,7 +849,8 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
             if restart and self.next_executor_cleanup_task:
                 self.next_executor_cleanup_task.cancel()
 
-            now = datetime.datetime.now().astimezone()
+            cleanup_start = datetime.datetime.now().astimezone()
+
             reschedule_interval: float = self.executor_retention_time
             for _executor in self.executor_map.values():
                 if _executor.can_be_cleaned_up(self.executor_retention_time):
@@ -875,11 +876,14 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
                     reschedule_interval = min(
                         reschedule_interval,
                         (
-                            datetime.timedelta(seconds=self.executor_retention_time) - (now - _executor.connection.last_used_at)
+                            datetime.timedelta(seconds=self.executor_retention_time)
+                            - (cleanup_start - _executor.connection.last_used_at)
                         ).total_seconds(),
                     )
 
-            await asyncio.sleep(reschedule_interval)
+            cleanup_end = datetime.datetime.now().astimezone()
+
+            await asyncio.sleep(max(0.0, reschedule_interval - (cleanup_end - cleanup_start).total_seconds()))
             self.next_executor_cleanup_task = self.add_background_task(cleanup_inactive_executors())
 
         self.add_background_task(cleanup_inactive_executors())
