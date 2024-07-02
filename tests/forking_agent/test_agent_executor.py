@@ -13,12 +13,15 @@
 """
 
 import asyncio
+import datetime
 import hashlib
 import json
 import logging
 import os
+import pathlib
 import subprocess
 
+from inmanta import const
 from inmanta.agent import executor, forking_executor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
@@ -281,7 +284,7 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     assert env_same_1 is not env_diff_1, "Expected different instances for different blueprints"
 
 
-async def test_executor_creation_and_reuse(pip_index, mpmanager_light) -> None:
+async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
@@ -324,3 +327,82 @@ def test():
     assert executor_1 is not executor_2, "Expected a different executor instance for different sources"
     assert executor_1 is not executor_3, "Expected a different executor instance for different requirements and sources"
     assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
+
+
+async def test_executor_creation_and_venv_usage(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager) -> None:
+    """
+    This test verifies the creation and reuse of executors based on their blueprints. It checks whether
+    the concurrency aspects and the locking mechanisms work as intended.
+    """
+
+    requirements1 = ()
+    requirements2 = ("pkg1",)
+    pip_config = PipConfig(index_url=pip_index.url)
+
+    # Prepare a source module and its hash
+    code = """
+def test():
+    return 10
+    """.encode()
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(code)
+    hv: str = sha1sum.hexdigest()
+    module_source1 = ModuleSource(
+        name="inmanta_plugins.test",
+        hash_value=hv,
+        is_byte_code=False,
+        source=code,
+    )
+    sources1 = ()
+    sources2 = (module_source1,)
+
+    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
+    blueprint2 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
+
+    executor_manager = mpmanager_light
+    executor_1, executor_2 = await asyncio.gather(
+        executor_manager.get_executor("agent1", "local:", code_for(blueprint1), venv_checkup_interval=0.1),
+        executor_manager.get_executor("agent2", "local:", code_for(blueprint2), venv_checkup_interval=0.1),
+    )
+    executor_1_venv_status_file = pathlib.Path(executor_1.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+    executor_2_venv_status_file = pathlib.Path(executor_2.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+
+    old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
+    # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
+    # modification override of the inmanta file and the retrieval of the last modification of the file
+    os.utime(
+        executor_2_venv_status_file,
+        (datetime.datetime.now().timestamp(), old_datetime.timestamp()),
+    )
+
+    old_check_executor1 = executor_1.executor_virtual_env.get_last_used_timestamp()
+    old_check_executor2 = executor_2.executor_virtual_env.get_last_used_timestamp()
+
+    await asyncio.sleep(0.2)
+
+    new_check_executor1 = executor_1.executor_virtual_env.get_last_used_timestamp()
+    new_check_executor2 = executor_2.executor_virtual_env.get_last_used_timestamp()
+
+    assert new_check_executor1 > old_check_executor1
+    assert new_check_executor2 > old_check_executor2
+    assert (datetime.datetime.now() - new_check_executor2).seconds <= 2
+
+    # Now we want to check if the cleanup is working correctly
+    await executor_manager.stop_for_agent("agent1")
+    # First we want to override the modification date of the `inmanta_venv_status` file
+    os.utime(executor_1_venv_status_file, (datetime.datetime.now().timestamp(), old_datetime.timestamp()))
+
+    venv_dir = pathlib.Path(mpmanager_light.environment_manager.envs_dir)
+    assert len([e for e in venv_dir.iterdir()]) == 2, "We should have two Virtual Environments for our 2 executors!"
+    # We remove the old VirtualEnvironment
+    await mpmanager_light.environment_manager.cleanup_virtual_environments()
+    venvs = [str(e) for e in venv_dir.iterdir()]
+    assert len(venvs) == 1, "Only one Virtual Environment should exist!"
+    assert [executor_2.executor_virtual_env.env_path] == venvs
+
+    # Let's stop the other agent and pretend that the venv is broken
+    await executor_manager.stop_for_agent("agent2")
+    executor_2_venv_status_file.unlink()
+    await mpmanager_light.environment_manager.cleanup_virtual_environments()
+    venvs = [str(e) for e in venv_dir.iterdir()]
+    assert len(venvs) == 0, "No Virtual Environment should exist!"

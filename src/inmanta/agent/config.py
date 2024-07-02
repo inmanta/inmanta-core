@@ -160,6 +160,16 @@ agent_get_resource_backoff: Option[float] = Option(
     is_float,
 )
 
+executor_venv_retention_time: Option[float] = Option(
+    "agent",
+    "executor-venv-retention-time",
+    7,
+    "This is the number of days to wait before unused Python virtual environments of an executor are removed from "
+    "the inmanta server. Setting this option too low may result in a high load on the Inmanta server. Setting it too high"
+    " may result in increased disk usage.",
+    is_float,
+)
+
 
 class AgentExcutorMode(str, enum.Enum):
     threaded = "threaded"

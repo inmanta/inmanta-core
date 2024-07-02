@@ -25,6 +25,7 @@ import logging
 import logging.config
 import multiprocessing
 import os
+import pathlib
 import socket
 import typing
 import uuid
@@ -42,6 +43,7 @@ import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
+from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer, LogReceiver, LogShipper
@@ -103,6 +105,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.ctx = ExecutorContext(self)
         self.log_transport: typing.Optional[LogShipper] = None
         self.take_over_logging = take_over_logging
+        self.timer_venv_checkup: typing.Optional[util.Scheduler] = None
         self.logger = logger
 
     def set_status(self, status: str) -> None:
@@ -114,7 +117,6 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
         # Second stage logging setup
         # Take over logger to ship to remote
-
         if self.take_over_logging:
             # Remove all loggers
             root_logger = logging.root
@@ -132,6 +134,19 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             logging.getLogger().removeHandler(self.log_transport)
             self.log_transport = None
 
+    def start_timer_venv_checkup(self, interval: int) -> None:
+        self.timer_venv_checkup = util.Scheduler("venv_checkup_scheduler")
+        self.timer_venv_checkup.add_action(
+            action=self.touch_inmanta_venv_status,
+            schedule=util.IntervalSchedule(
+                interval=interval,
+            ),
+        )
+
+    def stop_timer_venv_checkup(self) -> None:
+        if self.timer_venv_checkup is not None:
+            asyncio.ensure_future(self.timer_venv_checkup.stop())
+
     def get_context(self) -> ExecutorContext:
         return self.ctx
 
@@ -148,6 +163,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             self.stopping = True
             assert self.transport is not None  # Mypy
             self.transport.close()
+            self.stop_timer_venv_checkup()
 
     def connection_lost(self, exc: Exception | None) -> None:
         """We lost connection to the controler, bail out"""
@@ -155,7 +171,16 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.logger.info("Connection lost", exc_info=exc)
         self.set_status("disconnected")
         self._sync_stop()
+        self.stop_timer_venv_checkup()
         self.stopped.set()
+
+    async def touch_inmanta_venv_status(self) -> None:
+        """
+        Touch the `inmanta_venv_status` file.
+        """
+        # makes mypy happy
+        assert self.ctx.venv is not None
+        (pathlib.Path(self.ctx.venv.env_path) / const.INMANTA_VENV_STATUS_FILENAME).touch()
 
 
 class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
@@ -185,15 +210,24 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         sources: list[inmanta.loader.ModuleSource],
         environment: uuid.UUID,
         uri: str,
+        venv_checkup_interval: int = 60,
     ):
+        """
+        :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
+            testing. The default value is set to 60. It should not be used except for testing purposes. It can be
+            overridden to speed up the tests
+        """
         self.venv_path = venv_path
         self.storage_folder = storage_folder
         self.gid = session_gid
         self.sources = sources
         self.environment = environment
         self.uri = uri
+        self._venv_checkup_interval = venv_checkup_interval
 
     async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.ModuleSource]:
+        assert context.server.timer_venv_checkup is None, "InitCommand should be only called once!"
+
         loop = asyncio.get_running_loop()
         parent_logger = logging.getLogger("agent.executor")
         logger = parent_logger.getChild(context.name)
@@ -214,6 +248,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         # activate venv
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
+
+        context.server.start_timer_venv_checkup(self._venv_checkup_interval)
 
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
@@ -546,7 +582,11 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             pass
 
     async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
+        self,
+        agent_name: str,
+        agent_uri: str,
+        code: typing.Collection[executor.ResourceInstallSpec],
+        venv_checkup_interval: int = 60,
     ) -> MPExecutor:
         """
         Retrieves an Executor based on the agent name and ResourceInstallSpec.
@@ -554,6 +594,9 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param code: The set of sources to be installed on the executor.
+        :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
+            testing. The default value is set to 60. It should not be used except for testing purposes. It can be
+            It can be overridden to speed up the tests
         :return: An Executor instance
         """
         blueprint = executor.ExecutorBlueprint.from_specs(code)
@@ -576,7 +619,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                         "Found stale executor for agent %s with id %s, waiting for close", agent_name, executor_id.identity()
                     )
                     await it.join(2.0)
-            my_executor = await self.create_executor(executor_id)
+            my_executor = await self.create_executor(executor_id, venv_checkup_interval)
             self.__add_executor(executor_id, my_executor)
             if my_executor.failed_resource_sources:
                 # If some code loading failed, resolve here
@@ -594,7 +637,12 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             # https://github.com/inmanta/inmanta-core/issues/7281
             return my_executor
 
-    async def create_executor(self, executor_id: executor.ExecutorId) -> MPExecutor:
+    async def create_executor(self, executor_id: executor.ExecutorId, venv_checkup_interval: int = 60) -> MPExecutor:
+        """
+        :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
+            testing. The default value is set to 60. It should not be used except for testing purposes. It can be
+            overridden to speed up the tests
+        """
         LOGGER.info("Creating executor for agent %s with id %s", executor_id.agent_name, executor_id.identity())
         env_blueprint = executor_id.blueprint.to_env_blueprint()
         venv = await self.environment_manager.get_environment(env_blueprint, self.thread_pool)
@@ -615,6 +663,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                 [x.for_transport() for x in executor_id.blueprint.sources],
                 self.environment,
                 executor_id.agent_uri,
+                venv_checkup_interval,
             )
         )
         LOGGER.debug(
