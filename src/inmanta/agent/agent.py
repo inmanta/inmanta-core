@@ -1079,7 +1079,6 @@ class Agent(SessionEndpoint):
         await super().start()
         await self.executor_manager.start()
 
-
     async def add_end_point_name(self, name: str) -> None:
         async with self._instances_lock:
             await self._add_end_point_name(name)

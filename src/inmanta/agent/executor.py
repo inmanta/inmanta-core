@@ -500,6 +500,7 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         Start the manager.
         """
         pass
+
     @abc.abstractmethod
     async def stop(self) -> None:
         """

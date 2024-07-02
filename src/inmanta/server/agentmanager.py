@@ -1179,8 +1179,8 @@ class AutostartedAgentManager(ServerSlice):
                 config_path,
                 "--config-dir",
                 Config._config_dir if Config._config_dir is not None else "",
-                # "--log-file",
-                # agent_log,
+                "--log-file",
+                agent_log,
                 "agent",
             ],
             out,
@@ -1292,8 +1292,7 @@ ssl=True
                 errhandle = open(errfile, "wb+")
 
             return await asyncio.create_subprocess_exec(
-                sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=sys.stdout, stderr=sys.stdout
-                # sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle
+                sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle
             )
         finally:
             if outhandle is not None:

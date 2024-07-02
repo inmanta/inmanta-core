@@ -457,6 +457,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
     async def stop(self) -> None:
         for child in self.executors.values():
             child.stop()
+
     async def start(self) -> None:
         pass
 
