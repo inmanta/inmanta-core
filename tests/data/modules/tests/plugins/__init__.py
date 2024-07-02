@@ -2,7 +2,7 @@ from _collections import defaultdict
 from inmanta import resources
 from inmanta.execute.proxy import UnknownException
 from inmanta.execute.util import Unknown
-from inmanta.plugins import PluginException, plugin
+from inmanta.plugins import PluginException, plugin, Context
 
 
 @plugin
@@ -85,3 +85,14 @@ def raise_exception(message: "string") -> None:
 @plugin
 def sum(x: "int", y: "int") -> "int":
     return x + y
+
+
+@plugin
+def context_tester(
+    resource: "std::Entity",
+    context: Context,
+) -> "string":
+    # force reschedule
+    resource.requires
+    # return
+    return "test"
