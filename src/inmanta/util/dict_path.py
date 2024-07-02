@@ -835,6 +835,12 @@ class DictPath(WildDictPath):
         :raises KeyError: if the element is not found or if more than one occurrence was found.
         """
 
+    def get_elements(self, container: object) -> list[object]:
+        try:
+            return [self.get_element(container, False)]
+        except LookupError:
+            return []
+
     @abc.abstractmethod
     def set_element(self, container: object, value: object, construct: bool = True) -> None:
         """
