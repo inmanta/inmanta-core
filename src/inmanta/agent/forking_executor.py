@@ -401,15 +401,15 @@ def mp_worker_entrypoint(
 
 class PoolMember(abc.ABC):
     @abstractmethod
-    def can_be_cleaned_up(self) -> bool:
+    def can_be_cleaned_up(self, retention_time: int) -> bool:
         pass
 
     @abstractmethod
-    def last_used(self) -> datetime:
+    def last_used(self) -> datetime.datetime:
         pass
 
     @abstractmethod
-    async def stop(self):
+    async def stop(self) -> None:
         pass
 
 
@@ -452,6 +452,9 @@ class MPExecutor(executor.Executor, PoolMember):
             return False
 
         return self.connection.get_idle_time() > datetime.timedelta(seconds=retention_time)
+
+    def last_used(self) -> datetime.datetime:
+        return self.connection.last_used_at
 
     async def force_stop(self, grace_time: float = inmanta.const.SHUTDOWN_GRACE_HARD) -> None:
         """Stop by process close"""
@@ -535,15 +538,15 @@ class MPExecutor(executor.Executor, PoolMember):
 
 
 class PoolManager:
-    def __init__(max_time, max_pool_size, min_pool_size):
+    def __init__(self, max_time: int, max_pool_size: int, min_pool_size: int):
         pass
 
     @abstractmethod
-    async def start(self):
+    async def start(self) -> None:
         pass
 
     @abstractmethod
-    async def stop(self):
+    async def stop(self) -> None:
         pass
 
     @abstractmethod
