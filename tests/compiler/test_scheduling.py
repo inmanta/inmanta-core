@@ -106,3 +106,29 @@ def test_function_rescheduling_with_side_effect(snippetcompiler):
         """
     )
     compiler.do_compile()
+
+
+def test_function_rescheduling_plugin_with_context(snippetcompiler):
+    """Ensure that when a plugin is rescheduled, context injection doesn't break"""
+
+    snippetcompiler.setup_for_snippet(
+        """
+        import tests
+        std::print(tests::context_tester(container))
+
+
+        entity Container:
+        end
+
+
+
+        container = Container()
+        for i in std::sequence(6):
+            container.requires += Container()
+        end
+
+        implement Container using std::none
+
+        """
+    )
+    compiler.do_compile()
