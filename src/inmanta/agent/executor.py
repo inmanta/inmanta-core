@@ -91,7 +91,7 @@ class EnvBlueprint:
     requirements: Sequence[str]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # remove duplicates and make uniform
         self.requirements = sorted(list(set(self.requirements)))
 
@@ -136,7 +136,7 @@ class ExecutorBlueprint(EnvBlueprint):
     sources: Sequence[ModuleSource]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         super().__post_init__()
         # remove duplicates and make uniform
         self.sources = sorted(list(set(self.sources)))
