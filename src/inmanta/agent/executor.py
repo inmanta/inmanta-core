@@ -91,6 +91,10 @@ class EnvBlueprint:
     requirements: Sequence[str]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
 
+    def __post_init__(self):
+        # remove duplicates and make uniform
+        self.requirements = sorted(list(set(self.requirements)))
+
     def blueprint_hash(self) -> str:
         """
         Generate a stable hash for an EnvBlueprint instance by serializing its pip_config
@@ -101,7 +105,7 @@ class EnvBlueprint:
         if self._hash_cache is None:
             blueprint_dict: Dict[str, Any] = {
                 "pip_config": self.pip_config.dict(),
-                "requirements": sorted(self.requirements),
+                "requirements": self.requirements,
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -131,6 +135,11 @@ class ExecutorBlueprint(EnvBlueprint):
 
     sources: Sequence[ModuleSource]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
+
+    def __post_init__(self):
+        super().__post_init__()
+        # remove duplicates and make uniform
+        self.sources = sorted(list(set(self.sources)))
 
     @classmethod
     def from_specs(cls, code: typing.Collection["ResourceInstallSpec"]) -> "ExecutorBlueprint":
@@ -164,7 +173,7 @@ class ExecutorBlueprint(EnvBlueprint):
         if self._hash_cache is None:
             blueprint_dict = {
                 "pip_config": self.pip_config.dict(),
-                "requirements": sorted(list(set(self.requirements))),
+                "requirements": self.requirements,
                 # Use the hash values of the sources, sorted to ensure consistent ordering
                 "sources": sorted(list(set(source.hash_value for source in self.sources))),
             }
