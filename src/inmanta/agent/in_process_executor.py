@@ -24,6 +24,7 @@ from typing import Any, Optional
 import inmanta.agent.cache
 import inmanta.protocol
 import inmanta.util
+import logfire
 from inmanta import const, data
 from inmanta.agent import executor, handler
 from inmanta.agent.executor import FailedResourcesSet, ResourceDetails
@@ -220,6 +221,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             )
             raise
 
+    @logfire.instrument("InProcessExecutor.execute", extract_args=True)
     async def execute(
         self,
         gid: uuid.UUID,

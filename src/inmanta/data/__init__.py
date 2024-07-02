@@ -50,6 +50,7 @@ import inmanta.const as const
 import inmanta.db.versions
 import inmanta.resources as resources
 import inmanta.util as util
+import logfire
 from crontab import CronTab
 from inmanta.const import DATETIME_MIN_UTC, DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
@@ -2887,10 +2888,19 @@ RETURNING last_version;
 
         :return: An instance of this class with its fields filled from the database.
         """
-        result = await cls.get_list(id=doc_id, connection=connection, details=details)
-        if len(result) > 0:
-            return result[0]
-        return None
+        if not details:
+            columns = [column_name for column_name in cls.get_valid_field_names() if column_name not in {"description", "icon"}]
+            selected_columns = ",".join([cls.validate_field_name(column) for column in columns])
+        else:
+            selected_columns = "*"
+
+        query = f"SELECT {selected_columns} FROM environment WHERE id = $1"
+        async with cls.get_connection(connection) as con:
+            environment = await con.fetchrow(query, doc_id)
+
+            if environment:
+                return cls(from_postgres=True, **environment)
+            return None
 
     async def acquire_release_version_lock(self, *, shared: bool = False, connection: asyncpg.Connection) -> None:
         """
@@ -3344,6 +3354,7 @@ class Agent(BaseDocument):
         return super().get_valid_field_names() + ["process_name", "status"]
 
     @classmethod
+    @logfire.instrument("data.Agent.get_statuses")
     async def get_statuses(
         cls, env_id: uuid.UUID, agent_names: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> dict[str, Optional[AgentStatus]]:
@@ -3466,6 +3477,7 @@ class Agent(BaseDocument):
         await cls._execute_query(query, *values, connection=connection)
 
     @classmethod
+    @logfire.instrument("Agent.update_primary", extract_args=True)
     async def update_primary(
         cls,
         env: uuid.UUID,

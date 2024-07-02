@@ -40,6 +40,7 @@ import pydantic
 from asyncpg import Connection
 
 import inmanta.data.model as model
+import logfire
 from inmanta import config, const, data, protocol, server
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
@@ -146,11 +147,12 @@ class CompileRun:
             await self.stage.update_streams(err=part)
 
     async def drain(self, sub_process: asyncio.subprocess.Process) -> int:
-        # pipe, so stream is actual, not optional
-        out = cast(asyncio.StreamReader, sub_process.stdout)
-        err = cast(asyncio.StreamReader, sub_process.stderr)
-        ret, _, _ = await asyncio.gather(sub_process.wait(), self.drain_out(out), self.drain_err(err))
-        return ret
+        with logfire.span("drain"):
+            # pipe, so stream is actual, not optional
+            out = cast(asyncio.StreamReader, sub_process.stdout)
+            err = cast(asyncio.StreamReader, sub_process.stderr)
+            ret, _, _ = await asyncio.gather(sub_process.wait(), self.drain_out(out), self.drain_err(err))
+            return ret
 
     async def get_branch(self) -> Optional[str]:
         try:
@@ -315,6 +317,7 @@ class CompileRun:
                 python_path = PythonEnvironment.get_python_path_for_env_path(venv_dir)
                 assert os.path.exists(python_path)
                 full_cmd = [python_path, "-m", "inmanta.app"] + inmanta_args
+                env.update(logfire.propagate.get_context())
                 return await self._run_compile_stage(stage_name, full_cmd, cwd, env)
 
             async def setup() -> AsyncIterator[Awaitable[Optional[data.Report]]]:
