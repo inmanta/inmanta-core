@@ -465,52 +465,21 @@ def test_dict_path_get_elements(
 
 
 @pytest.mark.parametrize(
-    ("wild_path", "dict_paths"),
+    ("wild_path", "dict_paths", "exception"),
     [
         # NullPath should give a NullPath
-        (".", ["."]),
+        (".", ["."], None),
         # Any keys should give one path by key
-        (".*", list(str(InDict(str(k))) for k in WILD_PATH_TEST_CONTAINER.keys())),
+        (".*", list(str(InDict(str(k))) for k in WILD_PATH_TEST_CONTAINER.keys()), None),
         # Matching all items of a keyed list should give one path by item
-        ("mylist[k1=*][k2=*]", ["mylist[k1=0][k2=0]", "mylist[k1=0][k2=1]", "mylist[k1=1][k2=0]"]),
+        ("mylist[k1=*][k2=*]", ["mylist[k1=0][k2=0]", "mylist[k1=0][k2=1]", "mylist[k1=1][k2=0]"], None),
         (
             "mylist[k1=*][k2=*].nested.value",
             ["mylist[k1=0][k2=0].nested.value", "mylist[k1=0][k2=1].nested.value", "mylist[k1=1][k2=0].nested.value"],
-        ),
-        (
-            "mylist[*=*]",
-            [
-                "mylist[k1=0]",
-                "mylist[k2=0]",
-                "mylist[nested={'value': 10}]",
-                "mylist[k1=1]",
-                "mylist[k2=0]",
-                "mylist[nested={'value': 20}]",
-                "mylist[k1=0]",
-                "mylist[k2=1]",
-                "mylist[nested={'value': 30}]",
-            ],
-        ),
-        (
-            "mylist[*=*].k1",
-            [
-                "mylist[k1=0].k1",
-                "mylist[k1=0].k1",
-                "mylist[k2=0].k1",
-                "mylist[k2=0].k1",
-                "mylist[nested={'value': 10}].k1",
-                "mylist[k1=1].k1",
-                "mylist[k2=0].k1",
-                "mylist[k2=0].k1",
-                "mylist[nested={'value': 20}].k1",
-                "mylist[k1=0].k1",
-                "mylist[k1=0].k1",
-                "mylist[k2=1].k1",
-                "mylist[nested={'value': 30}].k1",
-            ],
+            None,
         ),
         # A normal dict path should give a copy of itself
-        ("mylist[k1=0][k2=0].nested.value", ["mylist[k1=0][k2=0].nested.value"]),
+        ("mylist[k1=0][k2=0].nested.value", ["mylist[k1=0][k2=0].nested.value"], None),
         # Combine wild keyed list and wild in dict
         (
             "mylist[k1=0][k2=*].*",
@@ -522,18 +491,19 @@ def test_dict_path_get_elements(
                 "mylist[k1=0][k2=1].k2",
                 "mylist[k1=0][k2=1].nested",
             ],
+            None,
         ),
         (
             "special_list[*=just-a-string][key=*]",
-            [
-                "special_list[value=just-a-string][key=None]",
-            ],
+            [],
+            NotImplementedError,
         ),
     ],
 )
 def test_dict_path_get_paths(
     wild_path: str,
     dict_paths: list[str],
+    exception: type[Exception] | None,
 ) -> None:
     """
     Test the get_paths method of the WildDictPath object.
@@ -542,6 +512,12 @@ def test_dict_path_get_paths(
 
     # Compile the wild path
     path = to_wild_path(wild_path)
+
+    if exception is not None:
+        with pytest.raises(exception):
+            path.resolve_wild_cards(container_copy)
+        return
+
     all_paths = path.resolve_wild_cards(container_copy)
 
     # Assert that all the paths which are resolved match what is expected

@@ -236,6 +236,9 @@ class WildDictPath(abc.ABC):
         for the given container, should be equal to the set of all elements matched by
         this wild dict path expression for the given container.
 
+        This method may return a NotImplementedError if the path upon which it is called
+        isn't supported by the method.
+
         :param container: the container to search in
         """
 
@@ -588,50 +591,17 @@ class WildKeyedList(WildDictPath):
                 WildKeyedList("relation", [("key_attribute","key_value"), ("other_attribute", "other_value")]),
             ]
 
-            assert WildKeyedList("relation",[("*","other_value")]).resolve_wild_cards(
-                {
-                    "relation":[
-                        {
-                            "key_attribute":"key_value",
-                            "other_attribute":"other_value",
-                        },
-                        {
-                            "key_attribute":"other_value",
-                        },
-                        {
-                            "other_key_attribute":"other_value",
-                        },
-                    [
-                }
-            ) == [
-                WildKeyedList("relation", [("other_attribute","other_value")]),
-                WildKeyedList("relation", [("key_attribute","other_value")]),
-                WildKeyedList("relation", [("other_key_attribute","other_value")]),
-            ]
-
-            assert WildKeyedList("relation",[("*","*")]).resolve_wild_cards(
-                {
-                    "relation":[
-                        {
-                            "key_attribute":"key_value",
-                            "other_attribute":"other_value",
-                        },
-                        {
-                            "key_attribute":"other_value",
-                        },
-                        {
-                            "other_key_attribute":"other_value",
-                        },
-                    [
-                }
-            ) == [
-                WildKeyedList("relation", [("key_attribute","key_value")]),
-                WildKeyedList("relation", [("other_attribute","other_value")]),
-                WildKeyedList("relation", [("key_attribute","other_value")]),
-                WildKeyedList("relation", [("other_key_attribute","other_value")]),
-            ]
-
         """
+        # Check if we have a wild card for any of the keys, if we do, raise a NotImplementedError
+        # as we didn't define an expected behavior for it yet
+        for key, _ in self.key_value_pairs:
+            if key == WildCardValue():
+                raise NotImplementedError(
+                    "Can not call resolve_wild_cards on this path because it uses "
+                    f"wild cards (`*`) for some of its keys: `{self}`.  The desired "
+                    "behavior of resolve_wild_cards for this type of path is currently undefined."
+                )
+
         outer = self._validate_outer_container(container)
         try:
             inner = outer[self.relation.value]
