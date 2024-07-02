@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import abc
 import asyncio
 import collections
 import concurrent.futures
@@ -29,9 +30,9 @@ import os
 import socket
 import typing
 import uuid
+from abc import abstractmethod
 from asyncio import Future, transports
-from types import coroutine
-from typing import Optional, Callable, Coroutine, Never, Any
+from typing import Any, Coroutine, Optional, Sequence
 
 import inmanta.agent.cache
 import inmanta.agent.executor
@@ -398,7 +399,21 @@ def mp_worker_entrypoint(
     exit(0)
 
 
-class MPExecutor(executor.Executor):
+class PoolMember(abc.ABC):
+    @abstractmethod
+    def can_be_cleaned_up(self) -> bool:
+        pass
+
+    @abstractmethod
+    def last_used(self) -> datetime:
+        pass
+
+    @abstractmethod
+    async def stop(self):
+        pass
+
+
+class MPExecutor(executor.Executor, PoolMember):
     """A Single Child Executor"""
 
     def __init__(
@@ -519,7 +534,24 @@ class MPExecutor(executor.Executor):
         return await self.connection.call(FactsCommand(resource))
 
 
-class MPManager(executor.ExecutorManager[MPExecutor]):
+class PoolManager:
+    def __init__(max_time, max_pool_size, min_pool_size):
+        pass
+
+    @abstractmethod
+    async def start(self):
+        pass
+
+    @abstractmethod
+    async def stop(self):
+        pass
+
+    @abstractmethod
+    def get_pool_members(self) -> Sequence[PoolMember]:
+        pass
+
+
+class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
     """
     This is the executor that provides the new behavior (ISO8+),
     where the agent forks executors in specific venvs to prevent code reloading.
@@ -595,6 +627,9 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             return
         self.executor_map.pop(theid)
         self.agent_map[theid.agent_name].discard(theid)
+
+    def get_pool_members(self) -> Sequence[MPExecutor]:
+        return self.children
 
     @classmethod
     def init_once(cls) -> None:
