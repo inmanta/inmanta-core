@@ -697,7 +697,7 @@ async def agent(server, environment):
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server):
+async def agent_factory(server) -> Agent:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     config.Config.set("config", "agent-deploy-interval", "0")

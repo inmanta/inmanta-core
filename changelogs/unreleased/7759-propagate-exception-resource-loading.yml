@@ -1,0 +1,5 @@
+description: "Provide the exception that caused a resource load to fail in the deployment logs."
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  minor-improvement: "{{description}}"
