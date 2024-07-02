@@ -17,6 +17,7 @@
 """
 
 import enum
+import functools
 import logging
 import typing
 import uuid
@@ -188,7 +189,7 @@ agent_executor_cap = Option[int](
     3,
     "Maximum number of concurrent executors to keep per environment, per agent. If this limit is already reached "
     "when creating a new executor, the oldest one will be stopped first.",
-    is_int,
+    functools.partial(is_lower_bounded_int, 1),
 )
 
 agent_executor_retention_time = Option[int](

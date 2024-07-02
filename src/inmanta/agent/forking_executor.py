@@ -838,6 +838,8 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
         :param restart: Cancel the previously scheduled cleanup task and start a new one.
         """
 
+
+        # while not stoppign -> to ahve only  task recycled  or while TRUe
         async def cleanup_inactive_executors() -> None:
             """
             This task cleans up idle executors and reschedules itself
@@ -846,7 +848,7 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
                 # Stop periodic re-scheduling when the manager is shutting down
                 return
 
-            if restart and self.next_executor_cleanup_task:
+            if restart and self.next_executor_cleanup_task: # move out of this
                 self.next_executor_cleanup_task.cancel()
 
             cleanup_start = datetime.datetime.now().astimezone()
@@ -865,6 +867,7 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
                                     _executor.connection.get_idle_time().total_seconds(),
                                     self.executor_retention_time,
                                 )
+                                # shield from cancelation in case of  )-> no need from cancelation
                                 await _executor.stop()
                             except Exception:
                                 LOGGER.debug(

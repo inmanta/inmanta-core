@@ -261,6 +261,13 @@ def is_list(value: str | list[str]) -> list[str]:
         return value
     return [] if value == "" else [x.strip() for x in value.split(",")]
 
+def is_lower_bounded_int(lower_bound: int, value: str | int) -> int:
+    """lower-bounded int"""
+    to_int = int(value)
+    if to_int < lower_bound:
+        raise ValueError(f"Value can not be lower than {lower_bound}")
+    return to_int
+
 
 def is_map(map_in: str | typing.Mapping[str, str]) -> typing.Mapping[str, str]:
     """List of comma-separated key=value pairs"""
