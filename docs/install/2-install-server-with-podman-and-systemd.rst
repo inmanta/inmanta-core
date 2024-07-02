@@ -353,17 +353,17 @@ Here is a systemd unit file that can be used to deploy the server on your machin
                         -d \
                         --replace \
                         --publish=127.0.0.1:8888:8888 \
-                        --uidmap=993:0:1 \
-                        --uidmap=0:1:993 \
-                        --uidmap=994:994:64543 \
-                        --gidmap=993:0:1 \
-                        --gidmap=0:1:993 \
-                        --gidmap=994:994:64543 \
+                        --uidmap=997:0:1 \
+                        --uidmap=0:1:997 \
+                        --uidmap=998:998:64543 \
+                        --gidmap=995:0:1 \
+                        --gidmap=0:1:995 \
+                        --gidmap=996:996:64543 \
                         --name=inmanta-orchestrator-server \
                         --volume=%E/inmanta/inmanta.cfg:/etc/inmanta/inmanta.cfg:z \
                         --volume=%h/.local/share/inmanta-orchestrator-server/logs:/var/log/inmanta:z \
                         --entrypoint=/usr/bin/inmanta \
-                        --user=993:993 \
+                        --user=997:995 \
                         ghcr.io/inmanta/orchestrator:latest \
                         --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs server
                 ExecStop=/usr/bin/podman stop \
@@ -402,19 +402,19 @@ Here is a systemd unit file that can be used to deploy the server on your machin
                         -d \
                         --replace \
                         --publish=127.0.0.1:8888:8888 \
-                        --uidmap=993:0:1 \
-                        --uidmap=0:1:993 \
-                        --uidmap=994:994:64543 \
-                        --gidmap=993:0:1 \
-                        --gidmap=0:1:993 \
-                        --gidmap=994:994:64543 \
+                        --uidmap=997:0:1 \
+                        --uidmap=0:1:997 \
+                        --uidmap=998:998:64543 \
+                        --gidmap=995:0:1 \
+                        --gidmap=0:1:995 \
+                        --gidmap=996:996:64543 \
                         --name=inmanta-orchestrator-server \
                         --volume=%E/inmanta/inmanta.cfg:/etc/inmanta/inmanta.cfg:z \
                         --volume=%E/inmanta/license/com.inmanta.license:/etc/inmanta/license/com.inmanta.license:z \
                         --volume=%E/inmanta/license/com.inmanta.jwe:/etc/inmanta/license/com.inmanta.jwe:z \
                         --volume=%h/.local/share/inmanta-orchestrator-server/logs:/var/log/inmanta:z \
                         --entrypoint=/usr/bin/inmanta \
-                        --user=993:993 \
+                        --user=997:995 \
                         containers.inmanta.com/containers/service-orchestrator:|version_major| \
                         --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs server
                 ExecStop=/usr/bin/podman stop \
@@ -461,17 +461,17 @@ Here is a systemd unit file that can be used to deploy the server on your machin
                         -d \
                         --replace \
                         --publish=127.0.0.1:8888:8888 \
-                        --uidmap=993:0:1 \
-                        --uidmap=0:1:993 \
-                        --uidmap=994:994:64543 \
-                        --gidmap=993:0:1 \
-                        --gidmap=0:1:993 \
-                        --gidmap=994:994:64543 \
+                        --uidmap=997:0:1 \
+                        --uidmap=0:1:997 \
+                        --uidmap=998:998:64543 \
+                        --gidmap=995:0:1 \
+                        --gidmap=0:1:995 \
+                        --gidmap=996:996:64543 \
                         --name=inmanta-orchestrator-server \
                         --volume=/etc/inmanta/inmanta.cfg:/etc/inmanta/inmanta.cfg:z \
                         --volume=/var/log/inmanta:/var/log/inmanta:z \
                         --entrypoint=/usr/bin/inmanta \
-                        --user=993:993 \
+                        --user=997:995 \
                         ghcr.io/inmanta/orchestrator:latest \
                         --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs server
                 ExecStop=/usr/bin/podman stop \
@@ -512,19 +512,19 @@ Here is a systemd unit file that can be used to deploy the server on your machin
                         -d \
                         --replace \
                         --publish=127.0.0.1:8888:8888 \
-                        --uidmap=993:0:1 \
-                        --uidmap=0:1:993 \
-                        --uidmap=994:994:64543 \
-                        --gidmap=993:0:1 \
-                        --gidmap=0:1:993 \
-                        --gidmap=994:994:64543 \
+                        --uidmap=997:0:1 \
+                        --uidmap=0:1:997 \
+                        --uidmap=998:998:64543 \
+                        --gidmap=995:0:1 \
+                        --gidmap=0:1:995 \
+                        --gidmap=996:996:64543 \
                         --name=inmanta-orchestrator-server \
                         --volume=/etc/inmanta/inmanta.cfg:/etc/inmanta/inmanta.cfg:z \
                         --volume=/etc/inmanta/license/com.inmanta.license:/etc/inmanta/license/com.inmanta.license:z \
                         --volume=/etc/inmanta/license/com.inmanta.jwe:/etc/inmanta/license/com.inmanta.jwe:z \
                         --volume=/var/log/inmanta:/var/log/inmanta:z \
                         --entrypoint=/usr/bin/inmanta \
-                        --user=993:993 \
+                        --user=997:995 \
                         containers.inmanta.com/containers/service-orchestrator:|version_major| \
                         --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs server
                 ExecStop=/usr/bin/podman stop \
@@ -544,14 +544,14 @@ Here is a systemd unit file that can be used to deploy the server on your machin
 
 .. note::
     In the configuration above, you can observe that the usage of the ``--uidmap`` and ``--gidmap`` options.  We use them three times to do the following:
-        1.  Map the user ``993`` inside of the container (the container's ``inmanta`` user) to the user ``0`` in the podman user namespace.
+        1.  Map the user ``997`` inside of the container (the container's ``inmanta`` user) to the user ``0`` in the podman user namespace.
             This user ``0`` in the user namespace is actually itself mapped to the user running the ``podman run`` command on the host.
-        2.  Map all users from ``0`` to ``65536`` (except for ``993``) inside of the container to subids of the host user running the container.
+        2.  Map all users from ``0`` to ``65536`` (except for ``997``) inside of the container to subids of the host user running the container.
 
     This allow us to easily share files between the host user and the ``inmanta`` user inside the container, avoiding any ownership conflict as they
     are then the same user (just seen from a different user namespace).
     Strictly speaking, if the image is already pulled on the host, you might get away with mapping only the ``inmanta`` 
-    (``--uidmap=993:0:1 --gidmap=993:0:1``) and the ``root`` (``--uidmap=0:1:1 --gidmap=0:1:1``) user and group inside of the container. 
+    (``--uidmap=997:0:1 --gidmap=995:0:1``) and the ``root`` (``--uidmap=0:1:1 --gidmap=0:1:1``) user and group inside of the container. 
     But you would face issue if the container image was deleted from your host and the ``run`` command in the unit file tried to automatically
     pull the image, as the container image does contain a lot more users and groups than ``inmanta`` and ``root`` in its filesystem.
 
