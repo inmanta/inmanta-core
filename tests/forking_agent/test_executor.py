@@ -215,6 +215,9 @@ def test():
         import lorem  # noqa: F401, F811
 
     async def check_automatic_clean_up() -> bool:
+        # Retention time is set to 20 prior to this
+        # Setting it to 2 tests that a new periodic cleanup is schedule when
+        # the setting is updated
         inmanta.agent.config.agent_executor_retention_time.set("2")
         return len(manager.agent_map["agent2"]) == 0
 
