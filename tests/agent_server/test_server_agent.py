@@ -3363,7 +3363,9 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     #   [2] Store action
     assert result["logs"][0]["action"] == "deploy"
     assert result["logs"][0]["status"] == "unavailable"
-    assert "Failed to load handler code " in result["logs"][0]["messages"][0]["msg"]
+    # We now have additional logs -> exception that occurred during the loading / installation of handler code
+    # But we know that this message will be the last one
+    assert "Failed to load handler code " in result["logs"][0]["messages"][-1]["msg"]
 
 
 async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, async_finalizer):
@@ -3980,7 +3982,7 @@ async def test_failing_deploy(
         "resource_action_logger",
         logging.ERROR,
         "multiple resources: test::Resource[agent1,key=key3],v=1 failed due to `Failed to install handler `test` version=1`.",
-        idx2,
+        idx1,
     )
     log_index(
         caplog,
@@ -3988,5 +3990,5 @@ async def test_failing_deploy(
         logging.ERROR,
         "multiple resources: Failed to load handler code or install handler code dependencies. Check the agent log for "
         "additional details.",
-        idx3,
+        max(idx2, idx3),
     )
