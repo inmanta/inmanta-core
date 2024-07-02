@@ -164,9 +164,9 @@ class ExecutorBlueprint(EnvBlueprint):
         if self._hash_cache is None:
             blueprint_dict = {
                 "pip_config": self.pip_config.dict(),
-                "requirements": sorted(self.requirements),
+                "requirements": sorted(list(set(self.requirements))),
                 # Use the hash values of the sources, sorted to ensure consistent ordering
-                "sources": sorted(source.hash_value for source in self.sources),
+                "sources": sorted(list(set(source.hash_value for source in self.sources))),
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -186,10 +186,10 @@ class ExecutorBlueprint(EnvBlueprint):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return (self.pip_config, set(self.requirements), sorted(self.sources)) == (
+        return (self.pip_config, set(self.requirements), sorted(list(set(self.sources)))) == (
             other.pip_config,
             set(other.requirements),
-            sorted(other.sources),
+            sorted(list(set(other.sources))),
         )
 
 
