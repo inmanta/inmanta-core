@@ -550,6 +550,11 @@ class WildKeyedList(WildDictPath):
         Get one WildKeyedList by set of matching key value pairs that can be found
         in the given container at the relation specified in this object.
 
+        As of now, this method can not be called on dict path expressions using a wild card
+        in the key of any key-value pair.  This is because the behavior for such type of path
+        is undefined.  It might get defined later on, once we get a use case for them.
+        If the method is called on such a path, a NotImplementedError is raised.
+
         ..code-block:: python
 
             assert WildKeyedList("relation","key_attribute","*").resolve_wild_cards(
