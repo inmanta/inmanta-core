@@ -19,7 +19,7 @@
 import logging
 from collections import abc
 from itertools import chain
-from typing import Optional
+from typing import Mapping, Optional, Sequence
 
 import inmanta.ast.type as InmantaType
 import inmanta.execute.dataflow as dataflow
@@ -238,8 +238,14 @@ class PluginFunction(Function):
                 raise ExternalException(self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e)
 
     def call_in_context(
-        self, args: list[object], kwargs: dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
+        self,
+        args: Sequence[object],
+        kwargs: Mapping[str, object],
+        resolver: Resolver,
+        queue: QueueScheduler,
+        result: ResultVariable,
     ) -> None:
+
         no_unknows = self.plugin.check_args(args, kwargs)
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
@@ -247,7 +253,10 @@ class PluginFunction(Function):
             return
 
         if self.plugin._context != -1:
-            args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result))
+            # Don't mutate the arguments!
+            new_args = list(args)
+            new_args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result))
+            args = new_args
 
         if self.plugin.opts["emits_statements"]:
             self.plugin(*args, **kwargs)
