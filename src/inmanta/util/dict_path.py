@@ -755,7 +755,7 @@ class WildComposedPath(WildDictPath):
             return [WildComposedPath(path=[path]) for path in self.expanded_path[0].resolve_wild_cards(container)]
 
         return [
-            path + next_part
+            WildComposedPath(path=[path, *next_part.get_path_sections()])
             for path in self.expanded_path[0].resolve_wild_cards(container)
             for elem in path.get_elements(container)
             for next_part in WildComposedPath(path=self.expanded_path[1:]).resolve_wild_cards(elem)

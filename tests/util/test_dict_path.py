@@ -498,6 +498,12 @@ def test_dict_path_get_elements(
             [],
             NotImplementedError,
         ),
+        # A path which doesn't match the dict should not emit any path
+        (
+            "my_list[k1=0][k2=0].test",
+            [],
+            None,
+        ),
     ],
 )
 def test_dict_path_get_paths(
