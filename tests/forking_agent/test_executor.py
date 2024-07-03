@@ -32,7 +32,9 @@ import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
 from inmanta.agent import executor
+from inmanta.agent.executor import ExecutorBlueprint
 from inmanta.agent.forking_executor import MPManager
+from inmanta.data import PipConfig
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import log_contains, retry_limited
 
@@ -251,3 +253,12 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
         await child1.connection.call("echo", ["aaaa"])
 
     utils.assert_no_warning(caplog)
+
+
+def test_hash_with_duplicates():
+    source = inmanta.loader.ModuleSource("test", "aaaaa", False, None, None)
+    requirement = "setuptools"
+    simple = ExecutorBlueprint(pip_config=PipConfig(), requirements=[requirement], sources=[source])
+    duplicated = ExecutorBlueprint(pip_config=PipConfig(), requirements=[requirement, requirement], sources=[source, source])
+    assert duplicated == simple
+    assert duplicated.blueprint_hash() == simple.blueprint_hash()
