@@ -1230,6 +1230,8 @@ agent-get-resource-backoff=%(agent_get_resource_backoff)f
 
 [agent]
 executor-mode={agent_cfg.agent_executor_mode.get().name}
+executor-cap={agent_cfg.agent_executor_cap.get()}
+executor-retention-time={agent_cfg.agent_executor_retention_time.get()}
 
 [agent_rest_transport]
 port=%(port)s

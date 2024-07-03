@@ -226,8 +226,9 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
     def __init__(self, name: str):
         super().__init__(name)
         # TODO timeouts
-        self.requests: dict[uuid.UUID, Future[object]] = {}
+
         # All outstanding calls
+        self.requests: dict[uuid.UUID, Future[object]] = {}
 
     @typing.overload
     def call(
@@ -236,6 +237,9 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
 
     @typing.overload
     def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: typing.Literal[False]) -> None: ...
+
+    @typing.overload
+    def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None: ...
 
     def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None:
         """Call a method with given arguments"""

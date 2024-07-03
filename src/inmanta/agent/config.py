@@ -17,6 +17,7 @@
 """
 
 import enum
+import functools
 import logging
 import typing
 import uuid
@@ -149,6 +150,7 @@ This option is ignored and a splay of 0 is used if 'agent_repair_interval' is a 
     is_time,
 )
 
+
 agent_get_resource_backoff: Option[float] = Option(
     "config",
     "agent-get-resource-backoff",
@@ -171,26 +173,42 @@ executor_venv_retention_time: Option[float] = Option(
 )
 
 
-class AgentExcutorMode(str, enum.Enum):
+class AgentExecutorMode(str, enum.Enum):
     threaded = "threaded"
     forking = "forking"
 
 
-def is_executor_mode(value: str | AgentExcutorMode) -> AgentExcutorMode:
+def is_executor_mode(value: str | AgentExecutorMode) -> AgentExecutorMode:
     """threaded | forking"""
-    if isinstance(value, AgentExcutorMode):
+    if isinstance(value, AgentExecutorMode):
         return value
-    return AgentExcutorMode(value)
+    return AgentExecutorMode(value)
 
 
 agent_executor_mode = Option(
     "agent",
     "executor-mode",
-    AgentExcutorMode.threaded,
+    AgentExecutorMode.threaded,
     "EXPERIMENTAL: set the agent to use threads or fork subprocesses to create workers.",
     is_executor_mode,
 )
 
+agent_executor_cap = Option[int](
+    "agent",
+    "executor-cap",
+    3,
+    "Maximum number of concurrent executors to keep per environment, per agent. If this limit is already reached "
+    "when creating a new executor, the oldest one will be stopped first.",
+    is_lower_bounded_int(1),
+)
+
+agent_executor_retention_time = Option[int](
+    "agent",
+    "executor-retention-time",
+    60,
+    "Amount of time (in seconds) to wait before cleaning up inactive executors.",
+    is_time,
+)
 
 ##############################
 # agent_rest_transport
