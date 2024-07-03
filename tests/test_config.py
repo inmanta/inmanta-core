@@ -354,7 +354,7 @@ def test_option_is_list_empty():
 def test_option_is_lower_bounded_int():
     lower_bound = 1
     option: Option = Option(
-        "test", "lb_int", lower_bound, "documentation", functools.partial(cfg.is_lower_bounded_int, lower_bound)
+        "test", "lb_int", lower_bound, "documentation", cfg.is_lower_bounded_int(lower_bound)
     )
     option.set("2")
     assert option.get() == 2
