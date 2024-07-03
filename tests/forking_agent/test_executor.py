@@ -86,8 +86,8 @@ def set_custom_executor_policy():
     inmanta.agent.config.agent_executor_cap.set("2")
 
     old_retention_value = inmanta.agent.config.agent_executor_retention_time.get()
-    # Clean up executors after 2s of inactivity
-    inmanta.agent.config.agent_executor_retention_time.set("2")
+    # Clean up executors after 3s of inactivity
+    inmanta.agent.config.agent_executor_retention_time.set("3")
 
     yield
 
