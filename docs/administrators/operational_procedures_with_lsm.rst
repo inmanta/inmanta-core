@@ -171,7 +171,7 @@ If no instance updates are expected use:
    * Keep a close eye on progress and problems that may arise.
    * In case of trouble, hit the emergency stop. Resuming after a stop is very easy and stopping gives you time to investigate.
 
-7. Verify that automation setting are on
+7. Verify that automation settings are on
 
    * :inmanta.environment-settings:setting:`agent_trigger_method_on_auto_deploy` = push_incremental_deploy
    * :inmanta.environment-settings:setting:`auto_deploy` = True

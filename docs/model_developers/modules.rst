@@ -263,9 +263,9 @@ dedicated branch. And it allows inmanta to resolve the requirements of all modul
 single set of requirements, because the name of module is unambiguously defined in the requirement.
 The format for requires in requirements.txt is the following:
 
-* Either, the name of the module and an optional constraint
-* Or a repository location such as  git+https://github.com/project/python-foo The correct syntax
-  to use is then: eggname@git+https://../repository#branch with branch being optional.
+   * Either, the name of the module and an optional constraint
+   * Or a repository location such as  git+https://github.com/project/python-foo The correct syntax
+     to use is then: eggname@git+https://../repository#branch with branch being optional.
 
 
 Installing modules

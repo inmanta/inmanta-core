@@ -647,7 +647,7 @@ Refinements
 Entities define what should be deployed. Entities can either be deployed directly (such as files and packages) or they can be
 refined. Refinement expands an abstract entity into one or more more concrete entities.
 
-For example, `InterfaceIPAssignment` is refined as follows
+For example, ``InterfaceIPAssignment`` is refined as follows
 
 ..
     based on https://github.com/inmanta/examples/blob/master/lsm-srlinux/main.cf
