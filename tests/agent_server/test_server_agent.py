@@ -3953,7 +3953,7 @@ async def test_failing_deploy(
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
 
-    async def ensure_code(code: Collection[ResourceInstallSpec]) -> executor.FailedResourcesSet:
+    async def ensure_code(code: Collection[ResourceInstallSpec]) -> executor.FailedResources:
         raise RuntimeError(f"Failed to install handler `test` version={version1}")
 
     monkeypatch.setattr(myagent_instance.executor_manager.process, "ensure_code", ensure_code)
@@ -3992,3 +3992,27 @@ async def test_failing_deploy(
         "additional details.",
         max(idx2, idx3),
     )
+
+    # Now let's check that everything is in the DB as well
+    # Given that everything is linked together, we can only fetch one resource and see what's present in the DB
+    result = await client.get_resource(
+        tid=environment,
+        id="test::Resource[agent1,key=key3],v=%d" % version1,
+        logs=True,
+    )
+
+    # Possible error messages that should be in the DB
+    expected_error_messages = {
+        "test::Resource[agent1,key=key1],v=1 failed due to `Failed to install handler `test` version=1`.",
+        "test::Wait[agent1,key=key2],v=1 failed due to `Failed to install handler `test` version=1`.",
+        "test::Resource[agent1,key=key3],v=1 failed due to `Failed to install handler `test` version=1`.",
+        "Failed to load handler code or install handler code dependencies. Check the agent log for additional details.",
+    }
+
+    global_logs = result.result["logs"]
+    assert len(global_logs) > 1
+    relevant_logs = [e for e in global_logs if e["action"] == "deploy"]
+    assert len(relevant_logs) == 1
+
+    resource_action_logs = {log["msg"] for log in relevant_logs[0]["messages"]}
+    assert resource_action_logs == expected_error_messages

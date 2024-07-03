@@ -817,7 +817,7 @@ class AgentInstance:
 
     async def setup_executor(
         self, model_version: int, resource_types: set[ResourceType]
-    ) -> tuple[Optional[executor.Executor], executor.FailedResourcesSet]:
+    ) -> tuple[Optional[executor.Executor], executor.FailedResources]:
         """
         Set up an executor for a given version of a model. This executor is the interface
         to interact with the resources.
@@ -834,28 +834,22 @@ class AgentInstance:
         # Resource types for which no handler code exist for the given model_version
         # or for which the pip config couldn't be retrieved
         code, invalid_resources = await self.process.get_code(self._env_id, model_version, resource_types)
-        failed_resource_types: executor.FailedResourcesSet = set()
+        failed_resources: executor.FailedResources = dict()
 
         try:
             current_executor = await self.executor_manager.get_executor(self.name, self.uri, code)
             # Resource types for which an error occurred during handler code installation
-            failed_resource_types = current_executor.failed_resource_types
+            failed_resources = current_executor.failed_resources
         except Exception as e:
-            invalid_resource_types: set[ResourceType] = {e.resource_type for e in invalid_resources}
             logging.warning("Could not set up executor for %s", self.name, exc_info=True)
             current_executor = None
             # If the failed resource type is not present in `failed_resources`, then we add it with the current exception
             # If it was already present, we only keep the old error
-            failed_resource_types = {
-                executor.FailedResource(
-                    resource_type=resource_type,
-                    exception=e,
-                )
-                for resource_type in resource_types
-                if resource_type not in invalid_resource_types
+            failed_resources = {
+                resource_type: e for resource_type in resource_types.difference(set(invalid_resources.keys()))
             }
 
-        invalid_resources.update(failed_resource_types)
+        invalid_resources.update(failed_resources)
 
         return current_executor, invalid_resources
 
@@ -887,7 +881,6 @@ class AgentInstance:
 
         executor, invalid_resources = await self.setup_executor(model_version, resource_types)
 
-        invalid_resources_types: dict[ResourceType, Exception] = {e.resource_type: e.exception for e in invalid_resources}
         loaded_resources: list[ResourceDetails] = []
         failed_resource_ids: list[ResourceVersionIdStr] = []
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
@@ -897,7 +890,7 @@ class AgentInstance:
             res_id = res["id"]
             res_type = res["resource_type"]
 
-            if res_type not in invalid_resources_types:
+            if res_type not in invalid_resources:
                 loaded_resources.append(ResourceDetails(res))
 
                 state = const.ResourceState[res["status"]]
@@ -909,7 +902,7 @@ class AgentInstance:
                         logging.ERROR,
                         "%(res_id)s failed due to `%(error)s`.",
                         res_id=res_id,
-                        error=str(invalid_resources_types[res_type]),
+                        error=str(invalid_resources[res_type]),
                     )
                 )
                 failed_resource_ids.append(res_id)
@@ -1229,7 +1222,7 @@ class Agent(SessionEndpoint):
 
     async def get_code(
         self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
-    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResourcesSet]:
+    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
         """
         Get the collection of installation specifications (i.e. pip config, python package dependencies,
         Inmanta modules sources) required to deploy a given version for the provided resource types.
@@ -1239,13 +1232,13 @@ class Agent(SessionEndpoint):
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
         if self._loader is None:
-            return [], set()
+            return [], dict()
 
         # store it outside the loop, but only load when required
         pip_config: Optional[PipConfig] = None
 
         resource_install_specs: list[ResourceInstallSpec] = []
-        invalid_resource_types: executor.FailedResourcesSet = set()
+        invalid_resource: executor.FailedResources = dict()
         for resource_type in set(resource_types):
             cached_spec: Optional[ResourceInstallSpec] = self._previously_loaded.get((resource_type, version))
             if cached_spec:
@@ -1276,12 +1269,7 @@ class Agent(SessionEndpoint):
                         pip_config = await self._get_pip_config(environment, version)
                     except Exception as e:
                         LOGGER.exception("Failed to load resources due to missing pip config for type %s", resource_type)
-                        invalid_resource_types.add(
-                            executor.FailedResource(
-                                resource_type=resource_type,
-                                exception=e,
-                            )
-                        )
+                        invalid_resource[resource_type] = e
                         continue
 
                 resource_install_spec = ResourceInstallSpec(
@@ -1299,21 +1287,16 @@ class Agent(SessionEndpoint):
                     version,
                     result.result,
                 )
-                invalid_resource_types.add(
-                    executor.FailedResource(
-                        resource_type=resource_type,
-                        exception=Exception(
-                            f"Failed to get source code for {resource_type} version={version}, result={result.get_result()}"
-                        ),
-                    )
+                invalid_resource[resource_type] = Exception(
+                    f"Failed to get source code for {resource_type} version={version}, result={result.get_result()}"
                 )
 
-        return resource_install_specs, invalid_resource_types
+        return resource_install_specs, invalid_resource
 
-    async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> executor.FailedResourcesSet:
+    async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> executor.FailedResources:
         """Ensure that the code for the given environment and version is loaded"""
 
-        failed_to_load: executor.FailedResourcesSet = set()
+        failed_to_load: executor.FailedResources = dict()
 
         if self._loader is None:
             return failed_to_load
@@ -1352,12 +1335,8 @@ class Agent(SessionEndpoint):
                         resource_install_spec.resource_type,
                         resource_install_spec.model_version,
                     )
-                    failed_to_load.add(
-                        executor.FailedResource(
-                            resource_type=resource_install_spec.resource_type,
-                            exception=e,
-                        )
-                    )
+                    if resource_install_spec.resource_type not in failed_to_load:
+                        failed_to_load[resource_install_spec.resource_type] = e
                     self._last_loaded_version[resource_install_spec.resource_type] = None
 
         return failed_to_load

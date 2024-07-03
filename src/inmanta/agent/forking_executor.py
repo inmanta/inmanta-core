@@ -387,7 +387,7 @@ class MPExecutor(executor.Executor):
 
         # Set by init and parent class that const
         self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = list()
-        self.failed_resource_types: executor.FailedResourcesSet = set()
+        self.failed_resources: executor.FailedResources = dict()
 
     async def stop(self) -> None:
         """Stop by shutdown"""
@@ -598,12 +598,8 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                 # resolve
                 for failed_resource_result in my_executor.failed_resource_results:
                     for rtype in type_for_spec.get(failed_resource_result.module_source, []):
-                        my_executor.failed_resource_types.add(
-                            executor.FailedResource(
-                                resource_type=rtype,
-                                exception=failed_resource_result.exception,
-                            )
-                        )
+                        if rtype not in my_executor.failed_resources:
+                            my_executor.failed_resources[rtype] = failed_resource_result.exception
 
             # TODO: recovery. If loading failed, we currently never rebuild
             # https://github.com/inmanta/inmanta-core/issues/7281

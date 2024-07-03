@@ -26,7 +26,7 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import FailedResourcesSet, ResourceDetails
+from inmanta.agent.executor import FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.const import ParameterSource
@@ -72,7 +72,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self._stopped = False
 
-        self.failed_resource_types: FailedResourcesSet = set()
+        self.failed_resources: FailedResources = dict()
 
     def stop(self) -> None:
         self._stopped = True
@@ -490,7 +490,6 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     out = InProcessExecutor(agent_name, agent_uri, self.environment, self.client, self.eventloop, self.logger)
                     self.executors[agent_name] = out
         assert out.uri == agent_uri
-        failed_resource_types: FailedResourcesSet = await self.process.ensure_code(code)
-        out.failed_resource_types = failed_resource_types
+        out.failed_resources = await self.process.ensure_code(code)
 
         return out

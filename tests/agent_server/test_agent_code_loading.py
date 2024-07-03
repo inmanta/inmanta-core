@@ -375,17 +375,15 @@ async def test_agent_code_loading_with_failure(
     resource_install_specs_2: list[ResourceInstallSpec]
 
     # We want to test
-    resource_install_specs_1, invalid_resource_types_1 = await agent.get_code(
+    resource_install_specs_1, invalid_resources_1 = await agent.get_code(
         environment=environment, version=-1, resource_types=["test::Test", "test::Test2", "test::Test3"]
     )
-    assert len(invalid_resource_types_1) == 3
-    for invalid_resource in invalid_resource_types_1:
+    assert len(invalid_resources_1.keys()) == 3
+    for resource_type, exception in invalid_resources_1.items():
         assert (
-            "Failed to get source code for " + invalid_resource.resource_type + " version=-1, result={'message': 'Request or "
-            "referenced resource does not exist: The version of the code does not exist. "
-            + invalid_resource.resource_type
-            + ", -1'}"
-        ) == str(invalid_resource.exception)
+            "Failed to get source code for " + resource_type + " version=-1, result={'message': 'Request or "
+            "referenced resource does not exist: The version of the code does not exist. " + resource_type + ", -1'}"
+        ) == str(exception)
 
     await agent.ensure_code(
         code=resource_install_specs_1,
@@ -404,8 +402,8 @@ async def test_agent_code_loading_with_failure(
         code=resource_install_specs_2,
     )
     assert len(failed_to_load) == 2
-    for failed_resource in failed_to_load:
-        assert "MKPTCH: Unable to load code when agent is started with code loading disabled" in str(failed_resource.exception)
+    for _, exception in failed_to_load.items():
+        assert "MKPTCH: Unable to load code when agent is started with code loading disabled" in str(exception)
 
     monkeypatch.undo()
 
