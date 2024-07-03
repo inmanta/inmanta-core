@@ -20,3 +20,4 @@ Model developer documentation
     model_developers/resource_sets.rst
     model_developers/unmanaged_resources.rst
     model_developers/dictpath.rst
+    model_developers/transfer_optimization.rst
