@@ -265,7 +265,7 @@ def is_list(value: str | list[str]) -> list[str]:
 def is_lower_bounded_int(lower_bound: int) -> Callable[[str | int], int]:
     """lower-bounded int factory"""
 
-    def inner(value: str | int):
+    def inner(value: str | int) -> int:
         to_int = int(value)
         if to_int < lower_bound:
             raise ValueError(f"Value can not be lower than {lower_bound}")
