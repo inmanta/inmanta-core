@@ -3968,29 +3968,35 @@ async def test_failing_deploy(
         caplog,
         "resource_action_logger",
         logging.ERROR,
-        "multiple resources: test::Resource[agent1,key=key1],v=1 failed due to `Failed to install handler `test` version=1`.",
+        "multiple resources: This type of resource `test::Resource` failed due to `Failed to install handler `test` "
+        "version=1`.",
     )
     idx2 = log_index(
         caplog,
         "resource_action_logger",
         logging.ERROR,
-        "multiple resources: test::Wait[agent1,key=key2],v=1 failed due to `Failed to install handler `test` version=1`.",
+        "multiple resources: This type of resource `test::Wait` failed due to `Failed to install handler `test` version=1`.",
         idx1,
     )
-    idx3 = log_index(
-        caplog,
-        "resource_action_logger",
-        logging.ERROR,
-        "multiple resources: test::Resource[agent1,key=key3],v=1 failed due to `Failed to install handler `test` version=1`.",
-        idx1,
-    )
+
+    # Logs should not appear twice
+    with pytest.raises(AssertionError):
+        log_index(
+            caplog,
+            "resource_action_logger",
+            logging.ERROR,
+            "multiple resources: This type of resource `test::Resource` failed due to `Failed to install handler `test` "
+            "version=1`.",
+            idx2,
+        )
+
     log_index(
         caplog,
         "resource_action_logger",
         logging.ERROR,
         "multiple resources: Failed to load handler code or install handler code dependencies. Check the agent log for "
         "additional details.",
-        max(idx2, idx3),
+        idx2,
     )
 
     # Now let's check that everything is in the DB as well
@@ -4003,9 +4009,8 @@ async def test_failing_deploy(
 
     # Possible error messages that should be in the DB
     expected_error_messages = {
-        "test::Resource[agent1,key=key1],v=1 failed due to `Failed to install handler `test` version=1`.",
-        "test::Wait[agent1,key=key2],v=1 failed due to `Failed to install handler `test` version=1`.",
-        "test::Resource[agent1,key=key3],v=1 failed due to `Failed to install handler `test` version=1`.",
+        "This type of resource `test::Resource` failed due to `Failed to install handler `test` version=1`.",
+        "This type of resource `test::Wait` failed due to `Failed to install handler `test` version=1`.",
         "Failed to load handler code or install handler code dependencies. Check the agent log for additional details.",
     }
 
@@ -4014,5 +4019,5 @@ async def test_failing_deploy(
     relevant_logs = [e for e in global_logs if e["action"] == "deploy"]
     assert len(relevant_logs) == 1
 
-    resource_action_logs = {log["msg"] for log in relevant_logs[0]["messages"]}
-    assert resource_action_logs == expected_error_messages
+    actual_resource_action_logs = {log["msg"] for log in relevant_logs[0]["messages"]}
+    assert actual_resource_action_logs == expected_error_messages

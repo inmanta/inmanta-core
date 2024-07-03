@@ -845,9 +845,7 @@ class AgentInstance:
             current_executor = None
             # If the failed resource type is not present in `failed_resources`, then we add it with the current exception
             # If it was already present, we only keep the old error
-            failed_resources = {
-                resource_type: e for resource_type in resource_types.difference(set(invalid_resources.keys()))
-            }
+            failed_resources = {resource_type: e for resource_type in resource_types.difference(set(invalid_resources.keys()))}
 
         invalid_resources.update(failed_resources)
 
@@ -886,6 +884,7 @@ class AgentInstance:
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
         logs = []
+        treated_resource_types = set()
         for res in resource_batch:
             res_id = res["id"]
             res_type = res["resource_type"]
@@ -897,14 +896,16 @@ class AgentInstance:
                 if state in const.UNDEPLOYABLE_STATES:
                     undeployable[res_id] = state
             else:
-                logs.append(
-                    data.LogLine.log(
-                        logging.ERROR,
-                        "%(res_id)s failed due to `%(error)s`.",
-                        res_id=res_id,
-                        error=str(invalid_resources[res_type]),
+                if res_type not in treated_resource_types:
+                    treated_resource_types.add(res_type)
+                    logs.append(
+                        data.LogLine.log(
+                            logging.ERROR,
+                            "This type of resource `%(res_type)s` failed due to `%(error)s`.",
+                            res_type=res_type,
+                            error=str(invalid_resources[res_type]),
+                        )
                     )
-                )
                 failed_resource_ids.append(res_id)
                 undeployable[res_id] = const.ResourceState.unavailable
                 loaded_resources.append(ResourceDetails(res))
