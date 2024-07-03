@@ -1,0 +1,6 @@
+---
+description: Fix the documentation regarding the uid and gid mapping in the docs.
+issue-nr: 7674
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso7, iso6]
