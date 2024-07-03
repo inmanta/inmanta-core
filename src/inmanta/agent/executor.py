@@ -93,7 +93,7 @@ class EnvBlueprint:
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
-        self.requirements = sorted(list(set(self.requirements)))
+        self.requirements = sorted(set(self.requirements))
 
     def blueprint_hash(self) -> str:
         """
