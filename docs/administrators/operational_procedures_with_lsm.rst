@@ -40,11 +40,11 @@ Pre-Upgrade steps
    We will assume this file is called `loader.cf`
 5. Verify that environment safety settings are on (this should always be the case)
 
-   * `protected_environment = True`
+   * :inmanta.environment-settings:setting:`protected_environment` = True
 
 6. Temporarily disable auto_deploy
 
-   * `auto_deploy = False`
+   * :inmanta.environment-settings:setting:`auto_deploy` = False
 
 4. Click ‘recompile’ to verify that no new deploy would start.
 
@@ -105,7 +105,7 @@ Post Upgrade procedure
 
 1. Re-enable auto_deploy
 
-    * `auto_deploy = True`
+   * :inmanta.environment-settings:setting:`auto_deploy` = True
 
 2. Allow requests to be sent to the north bound api again
 
@@ -139,11 +139,11 @@ Procedure
 
 3. Verify that environment safety settings are on (should always be the case)
 
-   * `protected_environment = True`
+   * :inmanta.environment-settings:setting:`protected_environment` = True
 
 4. Temporarily disable auto_deploy
 
-   * `auto_deploy = False`
+   * :inmanta.environment-settings:setting:`auto_deploy` = False
 
 5. Click ‘recompile’ to install the project.
 
@@ -171,12 +171,12 @@ If no instance updates are expected use:
    * Keep a close eye on progress and problems that may arise.
    * In case of trouble, hit the emergency stop. Resuming after a stop is very easy and stopping gives you time to investigate.
 
-7. Verify that automation setting are on
+7. Verify that automation settings are on
 
-    * `agent_trigger_method_on_auto_deploy = push_incremental_deploy`
-    * `auto_deploy = true`
-    * `push_on_auto_deploy = true`
-    * `server_compile = true`
+   * :inmanta.environment-settings:setting:`agent_trigger_method_on_auto_deploy` = push_incremental_deploy
+   * :inmanta.environment-settings:setting:`auto_deploy` = True
+   * :inmanta.environment-settings:setting:`push_on_auto_deploy` = True
+   * :inmanta.environment-settings:setting:`server_compile` = True
 
 8. Perform initial tests of all services via the API.
 
