@@ -269,8 +269,8 @@ def is_lower_bounded_int(lower_bound: int) -> Callable[[str | int],int]:
          if to_int < lower_bound:
               raise ValueError(f"Value can not be lower than {lower_bound}")
          return to_int
-    inner.__doc__ = f"int < {lower_bound}"
-    return inner 
+    inner.__doc__ = f"int >= {lower_bound}"
+    return inner
 
 
 def is_map(map_in: str | typing.Mapping[str, str]) -> typing.Mapping[str, str]:

@@ -605,7 +605,6 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
         self.executor_retention_time = inmanta.agent.config.agent_executor_retention_time.get()
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
 
-        self.stopping: bool = False
         # We keep a reference to the periodic cleanup task to prevent it
         # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
         self.cleanup_job: Optional[asyncio.Task[None]] = None
@@ -780,10 +779,11 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
         return p, parent_conn
 
     async def start(self) -> None:
+        self.running = True
         self.cleanup_job = asyncio.create_task(self.cleanup_inactive_executors())
 
     async def stop(self) -> None:
-        self.stopping = True
+        self.running = False
         await asyncio.gather(*(child.stop() for child in self.children))
 
     async def force_stop(self, grace_time: float) -> None:
@@ -792,7 +792,8 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
         thread_pool_finalizer.append(self.thread_pool)
         await asyncio.gather(*(child.join(timeout) for child in self.children))
-        await self.cleanup_job
+        if self.cleanup_job:
+            await self.cleanup_job
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children_ids = self.agent_map[agent_name]
@@ -804,7 +805,7 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
         """
         This task periodically cleans up idle executors
         """
-        while not self.stopping:
+        while self.running:
             cleanup_start = datetime.datetime.now().astimezone()
 
             reschedule_interval: float = self.executor_retention_time
