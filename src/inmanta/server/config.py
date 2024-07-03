@@ -93,7 +93,7 @@ server_bind_port = Option(
     "server",
     "bind-port",
     8888,
-    "The PORT on which the server will listen for connections. If this option is set, the "
+    "The port on which the server will listen for connections. If this option is set, the "
     ":inmanta.config:option:`server_rest_transport.port` option is ignored.",
     functools.partial(is_lower_bounded_int, 1),
 )
