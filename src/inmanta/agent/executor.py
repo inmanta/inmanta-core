@@ -139,7 +139,7 @@ class ExecutorBlueprint(EnvBlueprint):
     def __post_init__(self) -> None:
         super().__post_init__()
         # remove duplicates and make uniform
-        self.sources = sorted(list(set(self.sources)))
+        self.sources = sorted(set(self.sources))
 
     @classmethod
     def from_specs(cls, code: typing.Collection["ResourceInstallSpec"]) -> "ExecutorBlueprint":
