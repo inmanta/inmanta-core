@@ -108,7 +108,6 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     Also test that an executor policy can be set:
         - the agent_executor_cap option correctly stops the oldest executor.
         - the agent_executor_retention_time option is used to clean up old executors.
-        - updating the agent_executor_retention_time option correctly re-schedules the cleanup
     """
 
     with pytest.raises(ImportError):

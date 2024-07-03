@@ -801,7 +801,7 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
 
     async def cleanup_inactive_executors(self) -> None:
         """
-        This task cleans up idle executors and reschedules itself
+        This task periodically cleans up idle executors
         """
         while not self.stopping:
             cleanup_start = datetime.datetime.now().astimezone()
