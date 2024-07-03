@@ -15,13 +15,25 @@
 
     Contact: code@inmanta.com
 """
+
 import functools
 import logging
 import warnings
 from typing import Optional
 
-from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time, \
-    is_lower_bounded_int
+from inmanta.config import (
+    Config,
+    Option,
+    is_bool,
+    is_float,
+    is_int,
+    is_list,
+    is_lower_bounded_int,
+    is_map,
+    is_str,
+    is_str_opt,
+    is_time,
+)
 
 LOGGER = logging.getLogger(__name__)
 
