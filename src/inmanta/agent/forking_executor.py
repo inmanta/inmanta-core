@@ -606,13 +606,9 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
 
         self.stopping: bool = False
-        # Keep a reference to all active backgrounds tasks to make sure they don't disappear
-        # mid-execution and to be able to cancel them when shutting down.
-        self.background_tasks: set[asyncio.Task[None]] = set()
-
-        # Keep a reference to the last scheduled cleanup task for easy cancelation
-        # and rescheduling when the retention time is updated
-        self.next_executor_cleanup_task: Optional[asyncio.Task[None]] = None
+        # We keep a reference to the periodic cleanup task to prevent it
+        # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
+        self.cleanup_job: Optional[asyncio.Task[None]] = None
 
     def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
         self.executor_map[theid] = the_executor
@@ -784,13 +780,10 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
         return p, parent_conn
 
     async def start(self) -> None:
-        self.start_executor_retention_time_watcher()
-        self.start_periodic_executor_cleanup()
+        self.cleanup_job = asyncio.create_task(self.cleanup_inactive_executors())
 
     async def stop(self) -> None:
         self.stopping = True
-        for task in self.background_tasks:
-            task.cancel()
         await asyncio.gather(*(child.stop() for child in self.children))
 
     async def force_stop(self, grace_time: float) -> None:
@@ -806,51 +799,11 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
         await asyncio.gather(*(child.stop() for child in children))
         return children
 
-    def start_executor_retention_time_watcher(self) -> None:
+    async def cleanup_inactive_executors(self) -> None:
         """
-        Schedule a task that periodically checks for updates to the executor
-        retention time. If such an update is detected, the previous recurring cleanup
-        task is canceled and a new recurring cleanup task with the updated retention time
-        is scheduled.
+        This task cleans up idle executors and reschedules itself
         """
-
-        async def watch_retention_time() -> None:
-            if self.stopping:
-                # Stop periodic re-scheduling when the manager is shutting down
-                return
-
-            retention_time_from_config = inmanta.agent.config.agent_executor_retention_time.get()
-
-            if self.executor_retention_time != retention_time_from_config:
-                self.executor_retention_time = retention_time_from_config
-                self.start_periodic_executor_cleanup(restart=True)
-
-            await asyncio.sleep(2)
-            self.add_background_task(watch_retention_time())
-
-        self.add_background_task(watch_retention_time())
-
-    def start_periodic_executor_cleanup(self, restart: Optional[bool] = False) -> None:
-        """
-        Schedule a task that removes inactive executors and re-schedules
-        itself based on the retention time.
-
-        :param restart: Cancel the previously scheduled cleanup task and start a new one.
-        """
-
-
-        # while not stoppign -> to ahve only  task recycled  or while TRUe
-        async def cleanup_inactive_executors() -> None:
-            """
-            This task cleans up idle executors and reschedules itself
-            """
-            if self.stopping:
-                # Stop periodic re-scheduling when the manager is shutting down
-                return
-
-            if restart and self.next_executor_cleanup_task: # move out of this
-                self.next_executor_cleanup_task.cancel()
-
+        while not self.stopping:
             cleanup_start = datetime.datetime.now().astimezone()
 
             reschedule_interval: float = self.executor_retention_time
@@ -867,7 +820,6 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
                                     _executor.connection.get_idle_time().total_seconds(),
                                     self.executor_retention_time,
                                 )
-                                # shield from cancelation in case of  )-> no need from cancelation
                                 await _executor.stop()
                             except Exception:
                                 LOGGER.debug(
@@ -887,18 +839,4 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
             cleanup_end = datetime.datetime.now().astimezone()
 
             await asyncio.sleep(max(0.0, reschedule_interval - (cleanup_end - cleanup_start).total_seconds()))
-            self.next_executor_cleanup_task = self.add_background_task(cleanup_inactive_executors())
 
-        self.add_background_task(cleanup_inactive_executors())
-
-    def add_background_task(self, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
-        """
-        Wrap a coroutine in an asyncio Task and register it.
-        """
-        task = asyncio.create_task(coro)
-
-        self.background_tasks.add(task)
-        # Make sure the task removes itself from the set when it's done
-        task.add_done_callback(self.background_tasks.discard)
-
-        return task
