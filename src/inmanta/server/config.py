@@ -15,12 +15,13 @@
 
     Contact: code@inmanta.com
 """
-
+import functools
 import logging
 import warnings
 from typing import Optional
 
-from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time
+from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time, \
+    is_lower_bounded_int
 
 LOGGER = logging.getLogger(__name__)
 
@@ -92,9 +93,9 @@ server_bind_port = Option(
     "server",
     "bind-port",
     8888,
-    "The port on which the server will listen for connections. If this option is set, the "
+    "The PORT on which the server will listen for connections. If this option is set, the "
     ":inmanta.config:option:`server_rest_transport.port` option is ignored.",
-    is_int,
+    functools.partial(is_lower_bounded_int, 1),
 )
 
 
