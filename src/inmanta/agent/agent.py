@@ -884,7 +884,7 @@ class AgentInstance:
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
         logs = []
-        treated_resource_types = set()
+        logged_resource_types = set()
         for res in resource_batch:
             res_id = res["id"]
             res_type = res["resource_type"]
@@ -896,8 +896,8 @@ class AgentInstance:
                 if state in const.UNDEPLOYABLE_STATES:
                     undeployable[res_id] = state
             else:
-                if res_type not in treated_resource_types:
-                    treated_resource_types.add(res_type)
+                if res_type not in logged_resource_types:
+                    logged_resource_types.add(res_type)
                     logs.append(
                         data.LogLine.log(
                             logging.ERROR,
