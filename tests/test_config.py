@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import functools
 import logging
 import os
@@ -348,9 +349,13 @@ def test_option_is_list_empty():
     option: Option = Option("test", "list", "default,values", "documentation", cfg.is_list)
     option.set("")
     assert option.get() == []
+
+
 def test_option_is_lower_bounded_int():
     lower_bound = 1
-    option: Option = Option("test", "lb_int", lower_bound, "documentation", functools.partial(cfg.is_lower_bounded_int, lower_bound))
+    option: Option = Option(
+        "test", "lb_int", lower_bound, "documentation", functools.partial(cfg.is_lower_bounded_int, lower_bound)
+    )
     option.set("2")
     assert option.get() == 2
 
@@ -359,4 +364,3 @@ def test_option_is_lower_bounded_int():
         option.get()
 
     assert f"Value can not be lower than {lower_bound}" in str(exc_info.value)
-

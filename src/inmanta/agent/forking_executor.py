@@ -32,7 +32,7 @@ import typing
 import uuid
 from abc import abstractmethod
 from asyncio import Future, transports
-from typing import Any, Coroutine, Optional, Sequence
+from typing import Optional, Sequence
 
 import inmanta.agent.cache
 import inmanta.agent.executor
@@ -839,4 +839,3 @@ class MPManager(executor.ExecutorManager[MPExecutor], PoolManager):
             cleanup_end = datetime.datetime.now().astimezone()
 
             await asyncio.sleep(max(0.0, reschedule_interval - (cleanup_end - cleanup_start).total_seconds()))
-

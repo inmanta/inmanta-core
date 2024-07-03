@@ -261,6 +261,7 @@ def is_list(value: str | list[str]) -> list[str]:
         return value
     return [] if value == "" else [x.strip() for x in value.split(",")]
 
+
 def is_lower_bounded_int(lower_bound: int, value: str | int) -> int:
     """lower-bounded int"""
     to_int = int(value)
