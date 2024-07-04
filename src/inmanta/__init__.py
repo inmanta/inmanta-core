@@ -19,7 +19,7 @@
 COMPILER_VERSION = "2024.2"
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-__version__ = "11.3.0"
+__version__ = "11.3.1"
 
 RUNNING_TESTS = False
 """
