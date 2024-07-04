@@ -91,6 +91,10 @@ class EnvBlueprint:
     requirements: Sequence[str]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
 
+    def __post_init__(self) -> None:
+        # remove duplicates and make uniform
+        self.requirements = sorted(set(self.requirements))
+
     def blueprint_hash(self) -> str:
         """
         Generate a stable hash for an EnvBlueprint instance by serializing its pip_config
@@ -101,7 +105,7 @@ class EnvBlueprint:
         if self._hash_cache is None:
             blueprint_dict: Dict[str, Any] = {
                 "pip_config": self.pip_config.dict(),
-                "requirements": sorted(self.requirements),
+                "requirements": self.requirements,
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -131,6 +135,11 @@ class ExecutorBlueprint(EnvBlueprint):
 
     sources: Sequence[ModuleSource]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        # remove duplicates and make uniform
+        self.sources = sorted(set(self.sources))
 
     @classmethod
     def from_specs(cls, code: typing.Collection["ResourceInstallSpec"]) -> "ExecutorBlueprint":
@@ -164,9 +173,9 @@ class ExecutorBlueprint(EnvBlueprint):
         if self._hash_cache is None:
             blueprint_dict = {
                 "pip_config": self.pip_config.dict(),
-                "requirements": sorted(self.requirements),
-                # Use the hash values of the sources, sorted to ensure consistent ordering
-                "sources": sorted(source.hash_value for source in self.sources),
+                "requirements": self.requirements,
+                # Use the hash values and name to create a stable identity
+                "sources": [[source.hash_value, source.name, source.is_byte_code] for source in self.sources],
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -186,10 +195,10 @@ class ExecutorBlueprint(EnvBlueprint):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return (self.pip_config, set(self.requirements), sorted(self.sources)) == (
+        return (self.pip_config, self.requirements, self.sources) == (
             other.pip_config,
-            set(other.requirements),
-            sorted(other.sources),
+            other.requirements,
+            other.sources,
         )
 
 
@@ -471,11 +480,14 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
     @abc.abstractmethod
     async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]) -> E:
         """
-        Retrieves an Executor based on the agent name and blueprint.
+        Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
         If an Executor does not exist for the given configuration, a new one is created.
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
-        :param blueprint: The ExecutorBlueprint defining the configuration for the Executor.
+        :param agent_uri: The name of the host on which the agent is running.
+        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
+            which resource types it can act on and all necessary information to install the relevant
+            handler code in its venv.
         :return: An Executor instance
         """
         pass
@@ -488,6 +500,13 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         This is considered to be a hint , the manager can choose to follow or not
 
         If executors are stopped, they are returned
+        """
+        pass
+
+    @abc.abstractmethod
+    async def start(self) -> None:
+        """
+        Start the manager.
         """
         pass
 

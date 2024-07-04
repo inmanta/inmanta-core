@@ -224,7 +224,6 @@ class WildDictPath(abc.ABC):
         :param container: the container to search in
         """
 
-    @abc.abstractmethod
     def resolve_wild_cards(self: TWDP, container: object) -> Sequence[TWDP]:
         """
         Resolve all the wild cards contained in this wild dict path, based on the
@@ -241,6 +240,10 @@ class WildDictPath(abc.ABC):
 
         :param container: the container to search in
         """
+        raise NotImplementedError(
+            "There is no default behavior for resolve_wild_cards on the base class WildDictCard, "
+            "it should be implemented in the sub classes."
+        )
 
     @abc.abstractmethod
     def to_str(self) -> str:
