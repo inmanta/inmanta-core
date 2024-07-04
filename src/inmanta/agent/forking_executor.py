@@ -387,7 +387,7 @@ class MPExecutor(executor.Executor):
 
         # Set by init and parent class that const
         self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = list()
-        self.failed_resources: executor.FailedResources = dict()
+        self.failed_resources: executor.FailedResources = {}
 
     async def stop(self) -> None:
         """Stop by shutdown"""

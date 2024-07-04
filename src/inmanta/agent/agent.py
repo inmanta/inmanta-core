@@ -901,7 +901,7 @@ class AgentInstance:
                     logs.append(
                         data.LogLine.log(
                             logging.ERROR,
-                            "This type of resource `%(res_type)s` failed due to `%(error)s`.",
+                            "All resources of `%(res_type)s` failed due to `%(error)s`.",
                             res_type=res_type,
                             error=str(invalid_resources[res_type]),
                         )
@@ -1233,13 +1233,13 @@ class Agent(SessionEndpoint):
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
         if self._loader is None:
-            return [], dict()
+            return [], {}
 
         # store it outside the loop, but only load when required
         pip_config: Optional[PipConfig] = None
 
         resource_install_specs: list[ResourceInstallSpec] = []
-        invalid_resource: executor.FailedResources = dict()
+        invalid_resource: executor.FailedResources = {}
         for resource_type in set(resource_types):
             cached_spec: Optional[ResourceInstallSpec] = self._previously_loaded.get((resource_type, version))
             if cached_spec:
@@ -1297,7 +1297,7 @@ class Agent(SessionEndpoint):
     async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> executor.FailedResources:
         """Ensure that the code for the given environment and version is loaded"""
 
-        failed_to_load: executor.FailedResources = dict()
+        failed_to_load: executor.FailedResources = {}
 
         if self._loader is None:
             return failed_to_load
