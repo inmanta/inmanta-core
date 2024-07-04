@@ -352,11 +352,11 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
 
     def make_main(marker_print):
         return f"""
+    import std::testing
     marker = std::get_env("{testmarker_env}","{no_marker}")
     std::print("{marker_print} {{{{marker}}}}")
 
-    host = std::Host(name="test", os=std::linux)
-    std::ConfigFile(host=host, path="/etc/motd", content="1234")
+    std::testing::NullResource(name="test")
         """
 
     env = await environment_factory.create_environment(make_main(marker_print))
@@ -469,8 +469,8 @@ async def test_server_side_compile_with_ssl_enabled(
     ensure_directory_exist(project_work_dir)
 
     main_cf = """
-host = std::Host(name="test", os=std::linux)
-std::ConfigFile(host=host, path="/tmp/test", content="1234")
+import std::testing
+std::testing::NullResource(name="test")
     """.strip()
 
     # Add .inmanta file with inverse SSL config as the server itself.
@@ -688,8 +688,10 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
         fd.write(
             f"""
+        import std::testing
+
         host = std::Host(name="test", os=std::linux)
-        std::ConfigFile(host=host, path="/etc/motd", content="1234")
+        std::testing::NullResource(name=host.name)
         std::print(std::get_env("{key_env_var}"))
 """
         )

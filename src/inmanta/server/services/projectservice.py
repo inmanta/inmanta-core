@@ -110,7 +110,7 @@ class ProjectService(protocol.ServerSlice):
 
         environments = await data.Environment.get_list(project=project.id)
         for env in environments:
-            await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade())
+            await asyncio.gather(self.autostarted_agent_manager.stop_agents(env, delete_venv=True), env.delete_cascade())
             self.resource_service.close_resource_action_logger(env.id)
 
         await project.delete()

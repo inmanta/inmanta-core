@@ -1,0 +1,6 @@
+---
+description: Disable background tasks during migration tests.
+issue-nr: 1667
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [iso6]
