@@ -363,7 +363,7 @@ class Scheduler:
 
         def action_function() -> None:
             if not quiet_mode:
-                LOGGER.info("Calling %s", action)
+                LOGGER.info("Calling %s", action.__name__)
             if task_spec in self._scheduled:
                 try:
                     task = ensure_future_and_handle_exception(

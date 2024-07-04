@@ -26,12 +26,23 @@ from inmanta.execute.proxy import UnsetException
 def test_issue_127_default_overrides(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-f1=std::ConfigFile(host=std::Host(name="jos",os=std::linux), path="/tmp/test", owner="wouter", content="blabla")
+import std::testing
+
+entity NullResourceBis extends std::testing::NullResource:
+    string agentname ="agentbis"
+end
+
+implementation a for NullResourceBis:
+end
+
+implement NullResourceBis using a
+
+f1=NullResourceBis(name="test", agentname="agent")
         """
     )
     (types, _) = compiler.do_compile()
-    instances = types["std::File"].get_all_instances()
-    assert instances[0].get_attribute("owner").get_value() == "wouter"
+    instances = types["__config__::NullResourceBis"].get_all_instances()
+    assert instances[0].get_attribute("agentname").get_value() == "agent"
 
 
 def test_issue_135_duplo_relations(snippetcompiler):

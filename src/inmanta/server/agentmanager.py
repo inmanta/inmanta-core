@@ -19,6 +19,7 @@
 import asyncio
 import logging
 import os
+import shutil
 import sys
 import time
 import uuid
@@ -31,6 +32,7 @@ from uuid import UUID
 
 import asyncpg.connection
 
+import inmanta.config
 from inmanta import const, data
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
@@ -981,7 +983,12 @@ class AutostartedAgentManager(ServerSlice):
         agent_list = [a.name for a in agents]
         await self._ensure_agents(env, agent_list, restart=True)
 
-    async def stop_agents(self, env: data.Environment) -> None:
+    async def stop_agents(
+        self,
+        env: data.Environment,
+        *,
+        delete_venv: bool = False,
+    ) -> None:
         """
         Stop all agents for this environment and close sessions
         """
@@ -992,6 +999,8 @@ class AutostartedAgentManager(ServerSlice):
                 self._stop_process(subproc)
                 await self._wait_for_proc_bounded([subproc])
                 del self._agent_procs[env.id]
+            if delete_venv:
+                self._remove_venv_for_agent_in_env(env.id)
 
             LOGGER.debug("Expiring all sessions for %s", env.id)
             await self._agent_manager.expire_all_sessions_for_environment(env.id)
@@ -1022,6 +1031,24 @@ class AutostartedAgentManager(ServerSlice):
 
         LOGGER.debug("Expiring sessions for autostarted agents %s", sorted(agent_map.keys()))
         await self._agent_manager.expire_sessions_for_agents(env.id, agent_map.keys())
+
+    def _get_state_dir_for_agent_in_env(self, env_id: uuid.UUID) -> str:
+        """
+        Return the state dir to be used by the auto-started agent in the given environment.
+        """
+        state_dir: str = inmanta.config.state_dir.get()
+        return os.path.join(state_dir, str(env_id))
+
+    def _remove_venv_for_agent_in_env(self, env_id: uuid.UUID) -> None:
+        """
+        Remove the venv for the auto-started agent in the given environment.
+        """
+        agent_state_dir: str = self._get_state_dir_for_agent_in_env(env_id)
+        venv_dir: str = os.path.join(agent_state_dir, "agent", "env")
+        try:
+            shutil.rmtree(venv_dir)
+        except FileNotFoundError:
+            pass
 
     def _stop_process(self, process: subprocess.Process) -> None:
         try:
@@ -1177,7 +1204,7 @@ class AutostartedAgentManager(ServerSlice):
         environment_id = str(env.id)
         port: int = opt.get_bind_port()
 
-        privatestatedir: str = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
+        privatestatedir: str = self._get_state_dir_for_agent_in_env(env.id)
 
         agent_deploy_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, connection=connection))
         agent_deploy_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection))

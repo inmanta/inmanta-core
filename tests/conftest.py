@@ -16,13 +16,17 @@
     Contact: code@inmanta.com
 """
 
+import logging.config
 import warnings
 
 from tornado.httpclient import AsyncHTTPClient
 
+import _pytest.logging
 import toml
+from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
+from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -580,7 +584,7 @@ def reset_all_objects():
     V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
     auth.AuthJWTConfig.reset()
-    InmantaLoggerConfig.clean_instance()
+    InmantaLoggerConfig.clean_instance(root_handlers_to_remove=[h for h in logging.root.handlers if not is_caplog_handler(h)])
     AsyncHTTPClient.configure(None)
 
 
@@ -592,7 +596,7 @@ def disable_isolated_env_builder_cache() -> None:
 @pytest.fixture(scope="function", autouse=True)
 def restore_cwd():
     """
-    Restore the current working directory after search test.
+    Restore the current working directory after each test.
     """
     yield
     os.chdir(initial_cwd)
@@ -637,6 +641,27 @@ def inmanta_config() -> Iterator[ConfigParser]:
 @pytest.fixture
 def server_pre_start(server_config):
     """This fixture is called by the server. Override this fixture to influence server config"""
+
+
+@pytest.fixture
+def disable_background_jobs(monkeypatch):
+    """
+    This fixture disables the scheduling of all background jobs.
+    """
+
+    class NoopScheduler(Scheduler):
+        def add_action(
+            self,
+            action: TaskMethod,
+            schedule: Union[TaskSchedule, int],
+            cancel_on_stop: bool = True,
+            quiet_mode: bool = False,
+        ) -> Optional[ScheduledTask]:
+            pass
+
+    monkeypatch.setattr(inmanta.server.protocol, "Scheduler", NoopScheduler)
+
+    yield None
 
 
 @pytest.fixture(scope="function")
@@ -800,7 +825,7 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
 
     try:
         await ibl.start()
@@ -837,33 +862,7 @@ async def server_multi(
     with tempfile.TemporaryDirectory() as state_dir:
         ssl, auth, ca = request.param
 
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-
-        if auth:
-            config.Config.set("server", "auth", "true")
-
-        for x, ct in [
-            ("server", None),
-            ("agent_rest_transport", ["agent"]),
-            ("compiler_rest_transport", ["compiler"]),
-            ("client_rest_transport", ["api", "compiler"]),
-            ("cmdline_rest_transport", ["api"]),
-        ]:
-            if ssl and not ca:
-                config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
-                config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
-                config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
-                config.Config.set(x, "ssl", "True")
-            if ssl and ca:
-                capath = os.path.join(path, "ca", "enduser-certs")
-
-                config.Config.set(x, "ssl_cert_file", os.path.join(capath, "server.crt"))
-                config.Config.set(x, "ssl_key_file", os.path.join(capath, "server.key.open"))
-                config.Config.set(x, "ssl_ca_cert_file", os.path.join(capath, "server.chain"))
-                config.Config.set(x, "ssl", "True")
-            if auth and ct is not None:
-                token = protocol.encode_token(ct)
-                config.Config.set(x, "token", token)
+        utils.configure_auth(auth, ca, ssl)
 
         # Config.set() always expects a string value
         pg_password = "" if postgres_db.password is None else postgres_db.password
@@ -887,7 +886,7 @@ async def server_multi(
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
 
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
 
         try:
             await ibl.start()
@@ -1769,7 +1768,12 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
 
 @pytest.fixture
 async def migrate_db_from(
-    request: pytest.FixtureRequest, hard_clean_db, hard_clean_db_post, postgresql_client: asyncpg.Connection, server_pre_start
+    request: pytest.FixtureRequest,
+    hard_clean_db,
+    hard_clean_db_post,
+    postgresql_client: asyncpg.Connection,
+    disable_background_jobs,
+    server_pre_start,
 ) -> AsyncIterator[Callable[[], Awaitable[None]]]:
     """
     Restores a db dump and yields a function that starts the server and migrates the database schema to the latest version.
@@ -1784,7 +1788,7 @@ async def migrate_db_from(
         await PGRestore(fh.readlines(), postgresql_client).run()
         logger.debug("Restored %s", marker.args[0])
 
-    bootloader: InmantaBootloader = InmantaBootloader()
+    bootloader: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
     async def migrate() -> None:
         # start boatloader, triggering db migration
@@ -1858,6 +1862,37 @@ async def set_running_tests():
     Ensure the RUNNING_TESTS variable is True when running tests
     """
     inmanta.RUNNING_TESTS = True
+
+
+def is_caplog_handler(handler: logging.Handler) -> bool:
+    return isinstance(
+        handler,
+        (
+            _pytest.logging._FileHandler,
+            _pytest.logging._LiveLoggingStreamHandler,
+            _pytest.logging._LiveLoggingNullHandler,
+            _pytest.logging.LogCaptureHandler,
+        ),
+    )
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def dont_remove_caplog_handlers(request, monkeypatch):
+    """
+    Caplog captures log messages by attaching handlers to the root logger. This fixture makes sure the
+    inmanta.logging.FullLoggingConfig.apply_config() method doesn't remove any handlers that were added by the caplog fixture.
+    """
+    original_apply_config = inmanta_logging.FullLoggingConfig.apply_config
+
+    def patched_apply_config(self) -> None:
+        caplog_handlers = [h for h in logging.root.handlers if is_caplog_handler(h)]
+        original_apply_config(self)
+        # Re-add caplog handlers that were removed by the call to apply_config()
+        for current_handler in caplog_handlers:
+            if current_handler not in logging.root.handlers:
+                logging.root.addHandler(current_handler)
+
+    monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "apply_config", patched_apply_config)
 
 
 @pytest.fixture(scope="session")

@@ -44,27 +44,27 @@ async def env_with_facts(environment, client) -> tuple[str, list[str], list[str]
         is_suitable_for_partial_compiles=False,
     ).insert()
 
-    path = "/etc/file1"
-    resource_id = f"std::File[agent1,path={path}]"
+    name = "file1"
+    resource_id = f"std::testing::NullResource[agent1,name={name}]"
     res1_v1 = data.Resource.new(
-        environment=env_id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"path": path}
+        environment=env_id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"name": name}
     )
     await res1_v1.insert()
-    path = "/etc/file2"
-    resource_id_2 = f"std::File[agent1,path={path}]"
+    name = "file2"
+    resource_id_2 = f"std::testing::NullResource[agent1,name={name}]"
     await data.Resource.new(
         environment=env_id,
         resource_version_id=ResourceVersionIdStr(f"{resource_id_2},v={version}"),
-        attributes={"path": path},
+        attributes={"name": name},
     ).insert()
-    resource_id_3 = "std::File[agent1,path=/etc/file3]"
+    resource_id_3 = "std::testing::NullResource[agent1,name=file3]"
 
-    path = "/tmp/filex"
-    resource_id_4 = f"std::File[agent1,path={path}]"
+    name = "filex"
+    resource_id_4 = f"std::testing::NullResource[agent1,name={name}]"
     await data.Resource.new(
         environment=env_id,
         resource_version_id=ResourceVersionIdStr(f"{resource_id_4},v={version}"),
-        attributes={"path": path},
+        attributes={"name": name},
     ).insert()
 
     async def insert_param(

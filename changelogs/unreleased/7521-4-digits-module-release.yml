@@ -1,0 +1,7 @@
+---
+description: Improve support for four-digit version on 'inmanta module release' command. If the 'use_four_digit' is set to 'True' in the module's metadata, the version will be bumped to a 4 digit format after a release.
+issue-nr: 7521
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  minor-improvement: "{{description}}"
