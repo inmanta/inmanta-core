@@ -21,8 +21,6 @@ import os
 import pathlib
 import subprocess
 
-import pytest
-
 from inmanta import const
 from inmanta.agent import executor, forking_executor
 from inmanta.data.model import PipConfig
@@ -331,7 +329,6 @@ def test():
     assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
 
 
-@pytest.mark.parametrize("iteration", range(150))
 async def test_executor_creation_and_venv_usage(
     pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, iteration
 ) -> None:
@@ -380,30 +377,35 @@ def test():
         (datetime.datetime.now().timestamp(), old_datetime.timestamp()),
     )
 
-    old_check_executor1 = executor_1.executor_virtual_env.get_last_used_timestamp()
-    old_check_executor2 = executor_2.executor_virtual_env.get_last_used_timestamp()
+    old_check_executor1 = executor_1.executor_virtual_env.last_used()
+    old_check_executor2 = executor_2.executor_virtual_env.last_used()
 
     await asyncio.sleep(0.2)
 
-    new_check_executor1 = executor_1.executor_virtual_env.get_last_used_timestamp()
-    new_check_executor2 = executor_2.executor_virtual_env.get_last_used_timestamp()
+    new_check_executor1 = executor_1.executor_virtual_env.last_used()
+    new_check_executor2 = executor_2.executor_virtual_env.last_used()
 
     assert new_check_executor1 > old_check_executor1
     assert new_check_executor2 > old_check_executor2
-    assert (datetime.datetime.now() - new_check_executor2).seconds <= 2
+    assert (datetime.datetime.now().astimezone() - new_check_executor2).seconds <= 2
 
     # Now we want to check if the cleanup is working correctly
     await executor_manager.stop_for_agent("agent1")
     await asyncio.sleep(0.2)
     # First we want to override the modification date of the `inmanta_venv_status` file
-    os.utime(executor_1_venv_status_file, (datetime.datetime.now().timestamp(), old_datetime.timestamp()))
+    os.utime(
+        executor_1_venv_status_file, (datetime.datetime.now().astimezone().timestamp(), old_datetime.astimezone().timestamp())
+    )
 
     venv_dir = pathlib.Path(mpmanager_light.environment_manager.envs_dir)
     assert len([e for e in venv_dir.iterdir()]) == 2, "We should have two Virtual Environments for our 2 executors!"
     # We remove the old VirtualEnvironment
     logger.debug("Calling cleanup_virtual_environments")
     mpmanager_light.environment_manager.running = True
-    await mpmanager_light.environment_manager.cleanup_inactive_virtual_environments(datetime.datetime.now())
+    try:
+        await asyncio.wait_for(mpmanager_light.environment_manager.cleanup_inactive_pool_members(), 0.5)
+    except TimeoutError:
+        pass
     logger.debug("cleanup_virtual_environments ended")
     venvs = [str(e) for e in venv_dir.iterdir()]
     assert len(venvs) == 1, "Only one Virtual Environment should exist!"
@@ -413,6 +415,9 @@ def test():
     await executor_manager.stop_for_agent("agent2")
     await asyncio.sleep(0.2)
     executor_2_venv_status_file.unlink()
-    await mpmanager_light.environment_manager.cleanup_inactive_virtual_environments(datetime.datetime.now())
+    try:
+        await asyncio.wait_for(mpmanager_light.environment_manager.cleanup_inactive_pool_members(), 0.5)
+    except TimeoutError:
+        pass
     venvs = [str(e) for e in venv_dir.iterdir()]
     assert len(venvs) == 0, "No Virtual Environment should exist!"

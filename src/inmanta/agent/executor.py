@@ -247,7 +247,27 @@ class ResourceInstallSpec:
     blueprint: ExecutorBlueprint
 
 
-class ExecutorVirtualEnvironment(PythonEnvironment):
+class PoolMember(abc.ABC):
+    def can_be_cleaned_up(self, retention_time: int) -> bool:
+        return self.get_idle_time() > datetime.timedelta(seconds=retention_time)
+
+    def get_idle_time(self) -> datetime.timedelta:
+        return datetime.datetime.now().astimezone() - self.last_used()
+
+    @abc.abstractmethod
+    def last_used(self) -> datetime.datetime:
+        pass
+
+    @abc.abstractmethod
+    def get_lock_id(self) -> str:
+        pass
+
+    @abc.abstractmethod
+    async def clean(self) -> None:
+        pass
+
+
+class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
     """
     Manages a single virtual environment for an executor,
     including the creation and installation of packages based on a blueprint.
@@ -262,6 +282,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
         super().__init__(env_path=env_path)
         self.thread_pool = threadpool
         self.inmanta_venv_status_file = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        self.folder_name = pathlib.Path(self.env_path).name
 
     def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
@@ -290,15 +311,33 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
         """
         self.inmanta_venv_status_file.touch()
 
-    def get_idle_time(self) -> datetime.timedelta:
-        return datetime.datetime.now() - self.get_last_used_timestamp()
-
-    def get_last_used_timestamp(self) -> datetime.datetime:
+    def last_used(self) -> datetime.datetime:
         """
         Retrieve the last modified timestamp of the inmanta status file
         """
         assert self.is_correctly_initialized()
-        return datetime.datetime.fromtimestamp(self.inmanta_venv_status_file.stat().st_mtime)
+        return datetime.datetime.fromtimestamp(self.inmanta_venv_status_file.stat().st_mtime).astimezone()
+
+    async def clean(self) -> None:
+        """
+        Remove the venv of the executor through the thread pool.
+        This method is supposed to be used by the VirtualEnvironmentManager with the lock associated to this executor!
+        """
+        loop = asyncio.get_running_loop()
+
+        if self.is_correctly_initialized():
+            LOGGER.debug(
+                "Removing venv %s because it was inactive for %d s, which is longer then the retention " "time of %d s.",
+                self.env_path,
+                self.get_idle_time().total_seconds(),
+                cfg.executor_venv_retention_time.get(),
+            )
+        else:
+            LOGGER.debug(
+                "Removing venv %s because it is incomplete (broken venv),.",
+                self.env_path,
+            )
+        await loop.run_in_executor(self.thread_pool, self.remove_venv)
 
     def remove_venv(self) -> None:
         """
@@ -328,7 +367,10 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
         if not self.is_correctly_initialized():
             return True
 
-        return (datetime.datetime.now() - self.get_last_used_timestamp()) > datetime.timedelta(seconds=retention_time)
+        return super().can_be_cleaned_up(retention_time)
+
+    def get_lock_id(self) -> str:
+        return self.folder_name
 
 
 def initialize_envs_directory() -> str:
@@ -344,7 +386,63 @@ def initialize_envs_directory() -> str:
     return env_dir
 
 
-class VirtualEnvironmentManager:
+class PoolManager:
+    retention_time: int
+    _locks: inmanta.util.NamedLock
+
+    def __init__(self) -> None:
+        self.running = False
+
+        # We keep a reference to the periodic cleanup task to prevent it
+        # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
+        self.cleanup_job: typing.Optional[asyncio.Task[None]] = None
+
+    async def start(self) -> None:
+        self.running = True
+        self.cleanup_job = asyncio.create_task(self.cleanup_inactive_pool_members())
+
+    async def stop(self) -> None:
+        self.running = False
+
+    @abc.abstractmethod
+    async def get_pool_members(self) -> Sequence[PoolMember]:
+        pass
+
+    def clean_pool_member_from_manager(self, pool_member: PoolMember) -> None:
+        """
+        Additional operation(s) that need to be performed by the Manager regarding the pool member
+        """
+        pass
+
+    async def cleanup_inactive_pool_members(self) -> None:
+        """
+        This task periodically cleans up idle pool member
+        """
+        while self.running:
+            cleanup_start = datetime.datetime.now().astimezone()
+
+            reschedule_interval: float = self.retention_time
+            pool_members = await self.get_pool_members()
+            for pool_member in pool_members:
+                if pool_member.can_be_cleaned_up(self.retention_time):
+                    async with self._locks.get(pool_member.get_lock_id()):
+                        # Check that the executor can still be cleaned up by the time we have acquired the lock
+                        if pool_member.can_be_cleaned_up(self.retention_time):
+                            await pool_member.clean()
+                            self.clean_pool_member_from_manager(pool_member)
+                else:
+                    reschedule_interval = min(
+                        reschedule_interval,
+                        (
+                            datetime.timedelta(seconds=self.retention_time) - (cleanup_start - pool_member.last_used())
+                        ).total_seconds(),
+                    )
+
+            cleanup_end = datetime.datetime.now().astimezone()
+            await asyncio.sleep(max(0.0, reschedule_interval - (cleanup_end - cleanup_start).total_seconds()))
+
+
+class VirtualEnvironmentManager(PoolManager):
     """
     Manages virtual environments to ensure efficient reuse.
     This manager handles the creation of new environments based on specific blueprints and maintains a directory
@@ -352,27 +450,23 @@ class VirtualEnvironmentManager:
     """
 
     def __init__(self, envs_dir: str) -> None:
+        PoolManager.__init__(self)
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
         self.envs_dir: str = envs_dir
         # We rely on a Named lock (`self._locks`) to be able to lock specific entries of the `_environment_map` dict. This
         # allows us to prevent creating and deleting the same venv at a given time. The keys of this named lock are the hash of
         # venv
         self._locks: NamedLock = NamedLock()
-        self.running = False
+        self.retention_time = cfg.executor_venv_retention_time.get()
 
     async def start(self) -> None:
-        self.running = True
-        # We know that the .inmanta venv status file is touched every minute, so `61` seconds is the lowest default we can use
+        # We know that the .inmanta venv status file is touched every minute, so `60` seconds is the lowest default we can use
         interval_cleanup_check = 60
-        executor_venv_retention_time = cfg.executor_venv_retention_time.get()
         assert (
-            executor_venv_retention_time > interval_cleanup_check
+            self.retention_time > interval_cleanup_check
         ), "The `executor-venv-retention-time` must be longer than the cleanup check interval!"
 
-        self.cleanup_job = asyncio.create_task(self.scheduled_cleanup_inactive_virtual_environments())
-
-    async def stop(self) -> None:
-        self.running = False
+        await super().start()
 
     async def join(self) -> None:
         if self.cleanup_job:
@@ -470,28 +564,13 @@ class VirtualEnvironmentManager:
             # cleanup as the `INMANTA_ENV_STATUS_FILENAME` will be touched at the end of the creation.
             return await self.create_environment(blueprint, threadpool)
 
-    async def scheduled_cleanup_inactive_virtual_environments(self) -> None:
-        """
-        This task periodically cleans up idle executors
-        """
-        while self.running:
-            cleanup_start = datetime.datetime.now()
-            reschedule_interval = await self.cleanup_inactive_virtual_environments(cleanup_start)
-            cleanup_end = datetime.datetime.now()
-            new_duration = reschedule_interval - (cleanup_end - cleanup_start).total_seconds()
-            await asyncio.sleep(max(0.0, new_duration))
-
-    async def cleanup_inactive_virtual_environments(self, cleanup_start: datetime.datetime) -> float:
-        loop = asyncio.get_running_loop()
-
-        executor_venv_retention_time = cfg.executor_venv_retention_time.get()
-        reschedule_interval: float = executor_venv_retention_time
+    async def get_pool_members(self) -> Sequence[ExecutorVirtualEnvironment]:
+        # We should walk once for the first-level of folders!
         envs_dir = pathlib.Path(self.envs_dir)
+        _, root_folders, _ = next(os.walk(self.envs_dir))
         venv_path_to_blueprint = {pathlib.Path(v.env_path): k for k, v in self._environment_map.items()}
 
-        # We should walk once for the first-level of folders!
-        _, root_folders, _ = next(os.walk(self.envs_dir))
-
+        pool_members = []
         for folder in root_folders:
             # the name of the folder is the hash!
             async with self._locks.get(folder):
@@ -504,36 +583,17 @@ class VirtualEnvironmentManager:
                         env_path=str(current_folder.absolute()), threadpool=None
                     )
 
-                if current_executor_environment.can_be_cleaned_up(executor_venv_retention_time):
-                    if current_executor_environment.is_correctly_initialized():
-                        LOGGER.debug(
-                            "Removing venv %s because it was inactive for %d s, which is longer then the retention "
-                            "time of %d s.",
-                            folder,
-                            current_executor_environment.get_idle_time().total_seconds(),
-                            executor_venv_retention_time,
-                        )
-                    else:
-                        LOGGER.debug(
-                            "Removing venv %s because it is incomplete (broken venv),.",
-                            folder,
-                        )
-                    await loop.run_in_executor(
-                        current_executor_environment.thread_pool, current_executor_environment.remove_venv
-                    )
-                    if blueprint is not None:
-                        self._environment_map.pop(blueprint)
-                else:
-                    reschedule_interval = min(
-                        reschedule_interval,
-                        (
-                            datetime.timedelta(seconds=executor_venv_retention_time)
-                            # This could be negative
-                            - (cleanup_start - current_executor_environment.get_last_used_timestamp())
-                        ).total_seconds(),
-                    )
+                pool_members.append(current_executor_environment)
+        return pool_members
 
-        return reschedule_interval
+    def clean_pool_member_from_manager(self, pool_member: PoolMember) -> None:
+        """
+        Additional operation(s) that need to be performed by the Manager regarding the pool member
+        """
+        venv_path_to_blueprint = {pathlib.Path(v.env_path).name: k for k, v in self._environment_map.items()}
+        entry_to_remove = venv_path_to_blueprint[pool_member.get_lock_id()]
+
+        del self._environment_map[entry_to_remove]
 
 
 class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):
