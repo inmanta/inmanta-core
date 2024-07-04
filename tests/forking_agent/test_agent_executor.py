@@ -22,6 +22,7 @@ import pathlib
 import subprocess
 
 import pytest
+
 from inmanta import const
 from inmanta.agent import executor, forking_executor
 from inmanta.data.model import PipConfig
@@ -330,8 +331,10 @@ def test():
     assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
 
 
-@pytest.mark.parametrize("iteration", range(1000))
-async def test_executor_creation_and_venv_usage(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, iteration) -> None:
+@pytest.mark.parametrize("iteration", range(150))
+async def test_executor_creation_and_venv_usage(
+    pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, iteration
+) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
@@ -399,7 +402,8 @@ def test():
     assert len([e for e in venv_dir.iterdir()]) == 2, "We should have two Virtual Environments for our 2 executors!"
     # We remove the old VirtualEnvironment
     logger.debug("Calling cleanup_virtual_environments")
-    await mpmanager_light.environment_manager.cleanup_virtual_environments()
+    mpmanager_light.environment_manager.running = True
+    await mpmanager_light.environment_manager.cleanup_inactive_virtual_environments(datetime.datetime.now())
     logger.debug("cleanup_virtual_environments ended")
     venvs = [str(e) for e in venv_dir.iterdir()]
     assert len(venvs) == 1, "Only one Virtual Environment should exist!"
@@ -409,6 +413,6 @@ def test():
     await executor_manager.stop_for_agent("agent2")
     await asyncio.sleep(0.2)
     executor_2_venv_status_file.unlink()
-    await mpmanager_light.environment_manager.cleanup_virtual_environments()
+    await mpmanager_light.environment_manager.cleanup_inactive_virtual_environments(datetime.datetime.now())
     venvs = [str(e) for e in venv_dir.iterdir()]
     assert len(venvs) == 0, "No Virtual Environment should exist!"

@@ -449,6 +449,7 @@ class MPExecutor(executor.Executor):
         self.connection.finalizers.append(self.force_stop)
         self.closing = False
         self.closed = False
+        self.running = False
         self.owner = owner
         # Pure for debugging purpose
         self.executor_id = executor_id
@@ -800,6 +801,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         await asyncio.gather(*(child.stop() for child in self.children))
 
     async def force_stop(self, grace_time: float) -> None:
+        self.running = False
         await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
