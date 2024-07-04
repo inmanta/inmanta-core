@@ -375,14 +375,19 @@ async def test_agent_code_loading_with_failure(
     resource_install_specs_2: list[ResourceInstallSpec]
 
     # We want to test
+    nonexistent_version = -1
     resource_install_specs_1, invalid_resources_1 = await agent.get_code(
-        environment=environment, version=-1, resource_types=["test::Test", "test::Test2", "test::Test3"]
+        environment=environment, version=nonexistent_version, resource_types=["test::Test", "test::Test2", "test::Test3"]
     )
     assert len(invalid_resources_1.keys()) == 3
     for resource_type, exception in invalid_resources_1.items():
         assert (
             "Failed to get source code for " + resource_type + " version=-1, result={'message': 'Request or "
-            "referenced resource does not exist: The version of the code does not exist. " + resource_type + ", -1'}"
+            "referenced resource does not exist: The version of the code does not exist. "
+            + resource_type
+            + ", "
+            + str(nonexistent_version)
+            + "'}"
         ) == str(exception)
 
     await agent.ensure_code(
