@@ -3968,14 +3968,13 @@ async def test_failing_deploy(
         caplog,
         "resource_action_logger",
         logging.ERROR,
-        "multiple resources: This type of resource `test::Resource` failed due to `Failed to install handler `test` "
-        "version=1`.",
+        "multiple resources: All resources of `test::Resource` failed due to `Failed to install handler `test` " "version=1`.",
     )
     idx2 = log_index(
         caplog,
         "resource_action_logger",
         logging.ERROR,
-        "multiple resources: This type of resource `test::Wait` failed due to `Failed to install handler `test` version=1`.",
+        "multiple resources: All resources of `test::Wait` failed due to `Failed to install handler `test` version=1`.",
         idx1,
     )
 
@@ -3985,7 +3984,7 @@ async def test_failing_deploy(
             caplog,
             "resource_action_logger",
             logging.ERROR,
-            "multiple resources: This type of resource `test::Resource` failed due to `Failed to install handler `test` "
+            "multiple resources: All resources of `test::Resource` failed due to `Failed to install handler `test` "
             "version=1`.",
             idx2,
         )
@@ -4009,8 +4008,8 @@ async def test_failing_deploy(
 
     # Possible error messages that should be in the DB
     expected_error_messages = {
-        "This type of resource `test::Resource` failed due to `Failed to install handler `test` version=1`.",
-        "This type of resource `test::Wait` failed due to `Failed to install handler `test` version=1`.",
+        "All resources of `test::Resource` failed due to `Failed to install handler `test` version=1`.",
+        "All resources of `test::Wait` failed due to `Failed to install handler `test` version=1`.",
         "Failed to load handler code or install handler code dependencies. Check the agent log for additional details.",
     }
 
