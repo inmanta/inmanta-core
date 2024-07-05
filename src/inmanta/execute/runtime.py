@@ -853,38 +853,8 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
     def get_progress_potential(self) -> int:
         return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
 
-import contextlib
-from collections.abc import Iterator, MutableSet, Set
-from typing import NewType, TypeVar
 
-
-T = TypeVar("T")
-
-
-class OrderedSet(MutableSet[T]):
-    __slots__ = ("_dict",)
-
-    def __init__(self) -> None:
-        self._dict: dict[T, None] = {}
-
-    def __contains__(self, item: object) -> bool:
-        return item in self._dict
-
-    def __iter__(self) -> Iterator[T]:
-        return iter(self._dict)
-
-    def __len__(self) -> int:
-        return len(self._dict)
-
-    def add(self, elem: T) -> None:
-        self._dict[elem] = None
-
-    def discard(self, elem: T) -> None:
-        with contextlib.suppress(KeyError):
-            del self._dict[elem]
-
-
-OrderedWaiterSet = OrderedSet["Waiter"]
+OrderedWaiterSet = NewType("OrderedWaiterSet", Set["Waiter"])
 """
 Set-like object with deterministic iteration order (maintains insert order).
 
@@ -912,11 +882,11 @@ class QueueScheduler:
         self.runqueue = runqueue
         self.waitqueue = waitqueue
         self.types = types
-        self._allwaiters: OrderedWaiterSet = OrderedWaiterSet()
+        self._allwaiters: dict[Waiter, None] = {}
 
     @property
     def allwaiters(self) -> OrderedWaiterSet:
-        return self._allwaiters
+        return OrderedWaiterSet(self._allwaiters.keys())
 
     def add_running(self, item: "Waiter") -> None:
         self.runqueue.append(item)
@@ -931,10 +901,10 @@ class QueueScheduler:
         return self.types
 
     def add_to_all(self, item: "Waiter") -> None:
-        self._allwaiters.add(item)
+        self._allwaiters[item] = None
 
     def remove_from_all(self, item: "Waiter") -> None:
-        self._allwaiters.remove(item)
+        del self._allwaiters[item]
 
     def get_tracker(self) -> Optional[Tracker]:
         return None
