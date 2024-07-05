@@ -44,6 +44,7 @@ from tornado import web
 
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
+from inmanta.protocol import auth
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
@@ -64,6 +65,21 @@ OCTET_STREAM_CONTENT = "application/octet-stream"
 ZIP_CONTENT = "application/zip"
 UTF8_CHARSET = "charset=UTF-8"
 HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
+
+
+class CallContext:
+    """A context variable that provides more information about the current call context"""
+
+    request_headers: dict[str, str]
+    auth_token: Optional[auth.claim_type]
+    auth_username: Optional[str]
+
+    def __init__(
+        self, request_headers: dict[str, str], auth_token: Optional[auth.claim_type], auth_username: Optional[str]
+    ) -> None:
+        self.request_headers = request_headers
+        self.auth_token = auth_token
+        self.auth_username = auth_username
 
 
 class ArgOption:
@@ -402,6 +418,8 @@ class MethodProperties:
         if validate_sid is None:
             validate_sid = agent_server and not api
 
+        assert not (enforce_auth and server_agent), "Can not authenticate the return channel"
+
         self._path = UrlPath(path)
         self.path = path
         self._operation = operation
@@ -422,6 +440,7 @@ class MethodProperties:
         self.function = function
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
+        self._return_type: Optional[type] = None
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -442,6 +461,12 @@ class MethodProperties:
     @property
     def enforce_auth(self) -> bool:
         return self._enforce_auth
+
+    @property
+    def return_type(self) -> type:
+        if self._return_type is None:
+            raise InvalidMethodDefinition("Only typed methods have a return type")
+        return self._return_type
 
     def validate_arguments(self, values: dict[str, Any]) -> dict[str, Any]:
         """
@@ -533,9 +558,9 @@ class MethodProperties:
                 f"A key/value argument is only allowed when `varkw` is set to true in method {self.function}."
             )
 
-        self._validate_return_type(type_hints["return"], strict=self.strict_typing)
+        self._return_type = self._validate_return_type(type_hints["return"], strict=self.strict_typing)
 
-    def _validate_return_type(self, arg_type: type, *, strict: bool = True) -> None:
+    def _validate_return_type(self, arg_type: type, *, strict: bool = True) -> type:
         """Validate the return type"""
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
@@ -549,9 +574,9 @@ class MethodProperties:
                 return False
 
         if is_return_value_type(arg_type):
-            self._validate_type_arg(
-                arg, typing_inspect.get_args(arg_type, evaluate=True)[0], strict=strict, allow_none_type=True
-            )
+            return_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+            self._validate_type_arg(arg, return_type, strict=strict, allow_none_type=True)
+            return return_type
 
         elif (
             not typing_inspect.is_generic_type(arg_type)
@@ -562,6 +587,7 @@ class MethodProperties:
 
         else:
             self._validate_type_arg(arg, arg_type, allow_none_type=True, strict=strict)
+            return arg_type
 
     def _validate_type_arg(
         self, arg: str, arg_type: type, *, strict: bool = True, allow_none_type: bool = False, in_url: bool = False
@@ -574,7 +600,6 @@ class MethodProperties:
         :param allow_none_type: If true, allow `None` as the type for this argument
         :param in_url: This argument is passed in the URL
         """
-
         if typing_inspect.is_new_type(arg_type):
             return self._validate_type_arg(
                 arg,
@@ -656,6 +681,8 @@ class MethodProperties:
         elif allow_none_type and types.issubclass(arg_type, type(None)):
             # A check for optional arguments
             pass
+        elif issubclass(arg_type, CallContext):
+            raise InvalidMethodDefinition("CallContext should only be defined in the handler, not the method.")
         else:
             valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])
             raise InvalidMethodDefinition(

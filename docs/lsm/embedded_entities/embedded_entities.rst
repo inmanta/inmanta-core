@@ -55,7 +55,7 @@ The following constraints should be satisfied for each embedded entity defined i
 * The embedded entity must inherit from :inmanta:entity:`lsm::EmbeddedEntity`.
 * When a bidirectional relationship is used between the embedding entity and the embedded entity, the variable name
   referencing the embedding entity should start with an underscore (See code snippet below).
-* When a bidirectional relationship is used, the arity of the relationship towards the embedding entity should be 1.
+* When a bidirectional relationship is used, the arity of the relationship towards the embedding entity should be 0 or 1.
 * Relation attributes, where the other side is an embedded entity, should be prefixed with an underscore when the
   relation should not be included in the service definition.
 * An index must be defined on an embedded entity if the relationship towards that embedded entity has an upper arity

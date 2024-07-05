@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump furo from 2024.4.27 to 2024.5.6
+destination-branches:
+- iso7
+sections: {}

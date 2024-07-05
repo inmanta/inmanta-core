@@ -15,7 +15,7 @@ requires = [
     "docstring-parser>=0.10,<0.17",
     "email-validator>=1,<3",
     "execnet>=1,<2",
-    "importlib_metadata>=4,<8",
+    "importlib_metadata>=4,<9",
     "jinja2~=3.0",
     "more-itertools>=8,<11",
     # leave upper bound floating for fast-moving and extremely stable packaging
@@ -46,7 +46,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "11.2.0"
+version = "11.3.0"
 
 setup(
     version=version,

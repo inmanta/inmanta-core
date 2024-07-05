@@ -1,0 +1,5 @@
+description: Clean up and patch compiler service queue processing
+change-type: patch
+destination-branches:
+  - master
+  - iso7

@@ -267,7 +267,7 @@ class Environment(BaseModel):
 
 class Project(BaseModel):
     """
-    An inmanta environment.
+    An inmanta project.
     """
 
     id: uuid.UUID
@@ -454,8 +454,15 @@ class LatestReleasedResource(VersionedResource):
 
 
 class PagingBoundaries:
-    """Represents the lower and upper bounds that should be used for the next and previous pages
-    when listing domain entities"""
+    """
+    Represents the lower and upper bounds that should be used for the next and previous pages
+    when listing domain entities.
+
+    :param start: largest value of the page for the primary sort column.
+    :param end: smallest value of the page for the primary sort column.
+    :param first_id: largest value of the page for the secondary sort column, if there is one.
+    :param last_id: smallest value of the page for the secondary sort column, if there is one.
+    """
 
     def __init__(
         self,
@@ -722,6 +729,12 @@ class User(BaseModel):
     auth_method: AuthMethod
 
 
+class CurrentUser(BaseModel):
+    """Information about the current logged in user"""
+
+    username: str
+
+
 class LoginReturn(BaseModel):
     """
     Login information
@@ -738,10 +751,13 @@ class DiscoveredResource(BaseModel):
     """
     :param discovered_resource_id: The name of the resource
     :param values: The actual resource
+    :param managed_resource_uri: URI of the resource with the same ID that is already
+        managed by the orchestrator e.g. "/api/v2/resource/<rid>". Or None if the resource is not managed.
     """
 
     discovered_resource_id: ResourceIdStr
     values: dict[str, object]
+    managed_resource_uri: Optional[str] = None
 
     @field_validator("discovered_resource_id")
     @classmethod

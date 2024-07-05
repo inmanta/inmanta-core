@@ -1,0 +1,3 @@
+description: Add JWT based authentication support documentation
+change-type: minor
+destination-branches: [master, iso7]

@@ -1,0 +1,6 @@
+description: Improved performance of resource view endpoint
+issue-nr: 7443
+change-type: patch
+destination-branches:
+  - master
+  - iso7

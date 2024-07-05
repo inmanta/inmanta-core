@@ -162,7 +162,7 @@ def encode_token(
     return jwt.encode(payload=payload, key=cfg.key, algorithm=cfg.algo)
 
 
-def decode_token(token: str) -> claim_type:
+def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
     try:
         # First decode the token without verification
         header = jwt.get_unverified_header(token)
@@ -200,6 +200,7 @@ def decode_token(token: str) -> claim_type:
     try:
         # copy the payload and make sure the type is claim_type
         decoded_payload: MutableMapping[str, str | Sequence[str]] = {}
+        unsupported = []
         for k, v in jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]).items():
             match v:
                 case str():
@@ -213,19 +214,23 @@ def decode_token(token: str) -> claim_type:
                             )
                     decoded_payload[k] = v
                 case _:
-                    logging.getLogger(__name__).info(
-                        "Only claims of type string or list of strings are supported. %s is filtered out.", k
-                    )
+                    unsupported.append(k)
+
+        if unsupported:
+            logging.getLogger(__name__).debug(
+                "Only claims of type string or list of strings are supported. %s are filtered out.", ", ".join(unsupported)
+            )
 
         ct_key = const.INMANTA_URN + "ct"
-        decoded_payload[ct_key] = [x.strip() for x in str(payload[ct_key]).split(",")]
+        ct_value = str(payload.get(ct_key, "api"))
+        decoded_payload[ct_key] = [x.strip() for x in ct_value.split(",")]
     except Exception as e:
         raise exceptions.Forbidden(*e.args)
 
     if not check_custom_claims(claims=decoded_payload, claim_constraints=cfg.claims):
         raise exceptions.Forbidden("The configured claims constraints did not match. See logs for details.")
 
-    return decoded_payload
+    return decoded_payload, cfg
 
 
 #############################
@@ -325,6 +330,13 @@ class AuthJWTConfig:
         self.keys: dict[str, bytes] = {}
         self._config: configparser.SectionProxy = config
         self.claims: list[ClaimMatch] = []
+
+        self.jwt_username_claim: str = "sub"
+        self.expire: int = 0
+        self.sign: bool = False
+        self.issuer: str = "https://localhost:8888/"
+        self.audience: str
+
         if "algorithm" not in config:
             raise ValueError("algorithm is required in %s section" % self.section)
 
@@ -344,8 +356,6 @@ class AuthJWTConfig:
         """
         if "sign" in self._config:
             self.sign = config.is_bool(self._config["sign"])
-        else:
-            self.sign = False
 
         if "client_types" not in self._config:
             raise ValueError("client_types is a required options for %s" % self.section)
@@ -357,13 +367,9 @@ class AuthJWTConfig:
 
         if "expire" in self._config:
             self.expire = config.is_int(self._config["expire"])
-        else:
-            self.expire = 0
 
         if "issuer" in self._config:
             self.issuer = config.is_str(self._config["issuer"])
-        else:
-            self.issuer = "https://localhost:8888/"
 
         if "audience" in self._config:
             self.audience = config.is_str(self._config["audience"])
@@ -372,6 +378,11 @@ class AuthJWTConfig:
 
         if "claims" in self._config:
             self.parse_claim_matching(self._config["claims"])
+
+        if "jwt-username-claim" in self._config:
+            if self.sign:
+                raise ValueError(f"auth config {self.section} used for signing cannot use a custom claim.")
+            self.jwt_username_claim = self._config.get("jwt-username-claim")
 
     def parse_claim_matching(self, claim_conf: str) -> None:
         """Parse claim matching expressions"""

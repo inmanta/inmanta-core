@@ -73,6 +73,7 @@ def method(
     api_prefix: str = "api",
     envelope: bool = False,
     envelope_key: str = const.ENVELOPE_KEY,
+    enforce_auth: bool = True,
 ) -> Callable[..., Callable]:
     """
     Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -100,7 +101,8 @@ def method(
     :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>.
     :param envelope: Put the response of the call under an envelope with key envelope_key.
     :param envelope_key: The envelope key to use.
-
+    :param enforce_auth: When set to true authentication is enforced on this endpoint. When set to false, authentication is not
+                         enforced, even if auth is enabled.
     """
 
     def wrapper(func: MethodT) -> MethodT:
@@ -121,6 +123,7 @@ def method(
             envelope,
             False,
             envelope_key,
+            enforce_auth=enforce_auth,
         )
         common.MethodProperties.register_method(properties)
         return func
