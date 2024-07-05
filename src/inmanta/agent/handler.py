@@ -1088,22 +1088,13 @@ class Commander:
     @classmethod
     def get_providers(cls) -> typing.Iterator[tuple[str, type[ResourceHandler[Any]]]]:
         """Return an iterator over resource type, handler definition"""
-        for resource_type, handler_map in cls.__command_functions.items():
-            for handle_name, handler_class in handler_map.items():
-                yield (resource_type, handler_class)
+        for resource_type, handler_class in cls.__command_functions.items():
+            yield (resource_type, handler_class)
 
     @classmethod
     def get_provider_class(cls, resource_type: str, name: str) -> Optional[type[ResourceHandler[Any]]]:
-        """
-        Return the class of the handler for the given type and with the given name
-        """
-        if resource_type not in cls.__command_functions:
-            return None
-
-        if name not in cls.__command_functions[resource_type]:
-            return None
-
-        return cls.__command_functions[resource_type][name]
+        """Return the class of the handler for the given type and with the given name"""
+        return cls.__command_functions.get(resource_type, None)
 
 
 class HandlerNotAvailableException(Exception):
