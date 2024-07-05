@@ -62,7 +62,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env
-from inmanta.logging import InmantaLoggerConfig, LoggerMode, _is_on_tty
+from inmanta.logging import InmantaLoggerConfig, LoggerMode, LoggerModeManager, _is_on_tty
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version
@@ -241,8 +241,8 @@ def compiler_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequenc
     "compile", help_msg="Compile the project to a configuration model", parser_config=compiler_config, require_project=True
 )
 def compile_project(options: argparse.Namespace) -> None:
-    inmanta_logger_config = InmantaLoggerConfig.get_current_instance()
-    with inmanta_logger_config.run_in_logger_mode(LoggerMode.COMPILER):
+    logger_mode_manager = LoggerModeManager.get_instance()
+    with logger_mode_manager.run_in_logger_mode(LoggerMode.COMPILER):
         if options.environment is not None:
             Config.set("config", "environment", options.environment)
 
@@ -442,8 +442,8 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         help=(
             "Execute a partial export. Does not upload new Python code to the server: it is assumed to be unchanged since the"
             " last full export. Multiple partial exports for disjunct resource sets may be performed concurrently but not"
-            " concurrent with a full export. When used in combination with the `--json` option, 0 is used as a placeholder for"
-            " the model version."
+            " concurrent with a full export. When used in combination with the ``--json`` option, 0 is used as a placeholder "
+            "for the model version."
         ),
         action="store_true",
         default=False,
@@ -452,13 +452,15 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "--delete-resource-set",
         dest="delete_resource_set",
         help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
-        "be used together with the --partial option.",
+        "be used together with the --partial option. Sets can also be marked for deletion via the INMANTA_REMOVED_SET_ID "
+        "env variable as a space separated list of set ids to remove.",
         action="append",
     )
     parser.add_argument(
         "--soft-delete",
         dest="soft_delete",
-        help="Use in combination with --delete-resource-set to delete these resource sets only if they are not being exported",
+        help="This flag prevents the deletion of resource sets (marked for deletion via the ``--delete-resource-set`` cli"
+        "option or the INMANTA_REMOVED_SET_ID env variable) that contain resources that are currently being exported.",
         action="store_true",
         default=False,
     )
@@ -467,12 +469,23 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
 def export(options: argparse.Namespace) -> None:
-    inmanta_logger_config = InmantaLoggerConfig.get_current_instance()
-    with inmanta_logger_config.run_in_logger_mode(LoggerMode.COMPILER):
-        if not options.partial_compile and options.delete_resource_set:
+    logger_mode_manager = LoggerModeManager.get_instance()
+    with logger_mode_manager.run_in_logger_mode(LoggerMode.COMPILER):
+        resource_sets_to_remove: set[str] = set(options.delete_resource_set) if options.delete_resource_set else set()
+
+        if const.INMANTA_REMOVED_SET_ID in os.environ:
+            removed_sets = set(os.environ[const.INMANTA_REMOVED_SET_ID].split())
+
+            resource_sets_to_remove.update(removed_sets)
+
+        if not options.partial_compile and resource_sets_to_remove:
             raise CLIException(
-                "The --delete-resource-set option should always be used together with the --partial option", exitcode=1
+                "A full export was requested but resource sets were marked for deletion (via the --delete-resource-set cli "
+                "option or the INMANTA_REMOVED_SET_ID env variable). Deleting a resource set can only be performed during a "
+                "partial export. To trigger a partial export, use the --partial option.",
+                exitcode=1,
             )
+
         if options.environment is not None:
             Config.set("config", "environment", options.environment)
 
@@ -538,7 +551,7 @@ def export(options: argparse.Namespace) -> None:
                 types, scopes = (None, None)
                 raise
 
-    with inmanta_logger_config.run_in_logger_mode(LoggerMode.EXPORTER):
+    with logger_mode_manager.run_in_logger_mode(LoggerMode.EXPORTER):
         # Even if the compile failed we might have collected additional data such as unknowns. So
         # continue the export
 
@@ -551,7 +564,7 @@ def export(options: argparse.Namespace) -> None:
                 model_export=options.model_export,
                 export_plugin=options.export_plugin,
                 partial_compile=options.partial_compile,
-                resource_sets_to_remove=options.delete_resource_set,
+                resource_sets_to_remove=list(resource_sets_to_remove),
             )
 
         if not summary_reporter.is_failure() and options.deploy:
@@ -716,6 +729,13 @@ def cmd_parser() -> argparse.ArgumentParser:
         default="/etc/inmanta/inmanta.d",
     )
     parser.add_argument("--log-file", dest="log_file", help="Path to the logfile")
+    parser.add_argument(
+        "--logging-config",
+        dest="logging_config",
+        help="The path to the configuration file for the logging framework. This is a YAML file that follows "
+        "the dictionary-schema accepted by logging.config.dictConfig(). All other log-related configuration "
+        "arguments will be ignored when this argument is provided.",
+    )
     parser.add_argument(
         "--log-file-level",
         dest="log_file_level",

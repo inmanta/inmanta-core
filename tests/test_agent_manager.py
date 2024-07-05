@@ -1418,6 +1418,11 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     caplog.set_level(logging.WARNING)
     hanglock = asyncio.Event()
 
+    async def unlock():
+        hanglock.set()
+
+    async_finalizer(unlock)
+
     @typedmethod(
         path="/test",
         operation="GET",
@@ -1445,7 +1450,7 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
 
     server = TestSlice(name="test_slice")
 
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
     ctx = ibl.load_slices()
 
     for mypart in ctx.get_slices():
@@ -1494,15 +1499,15 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
         return False
 
     await retry_limited(did_exceed_capacity, 10)
-
     caplog.set_level(logging.NOTSET)
     caplog.clear()
+    LOGGER.info("Locked, Waiting for heartbeat")
 
     def still_sending_heartbeats():
         count = caplog.text.count("Level 3 sending heartbeat for")
         return count > 2
 
     await retry_limited(still_sending_heartbeats, 10)
-
+    LOGGER.info("Heartbeat good, unlocking")
     hanglock.set()
     await hangers

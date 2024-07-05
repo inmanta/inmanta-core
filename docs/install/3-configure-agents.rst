@@ -56,6 +56,9 @@ managed in the configuration model.
 Special Requirements for remote std::File, std::Package, std::Service and exec::Run
 ===================================================================================
 
+..
+    This refers to std::File and others, which are to be removed, but it is explicitly only about them, so this will be removed with it
+
 When using the agents built-in ssh capability, to perform actions over ssh on remote hosts, the following requirements must be met:
 
 * The Inmanta server should have passphraseless SSH access on the machine it maps to. More information on how to set up SSH

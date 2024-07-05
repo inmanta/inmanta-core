@@ -17,6 +17,7 @@
 """
 
 import base64
+import functools
 import hashlib
 import importlib
 import importlib.util
@@ -117,7 +118,8 @@ class CodeManager:
     """This class is responsible for loading and packaging source code for types (resources, handlers, ...) that need to be
     available in a remote process (e.g. agent).
 
-    __type_file: Maps Inmanta type names (e.g., ``std::File``, ``mymodule::Mytype``) to sets of filenames containing
+    __type_file: Maps Inmanta type names (e.g., ``std::testing::NullResource``, ``mymodule::Mytype``)
+                 to sets of filenames containing
                  the necessary source code (all plugin files in the module).
     __file_info: Stores metadata about each individual source code file. The keys are file paths and the values
                  in this dictionary are ``SourceInfo`` objects.
@@ -135,7 +137,8 @@ class CodeManager:
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
 
-        :param type_name: The inmanta type name for which the source of type_object will be registered. For example std::File
+        :param type_name: The inmanta type name for which the source of type_object will be registered.
+            For example std::testing::NullResource
         :param instance: An instance for which the code needs to be registered.
         """
         file_name = self.get_object_source(instance)
@@ -197,6 +200,7 @@ class CodeManager:
 
 
 @dataclass(frozen=True)
+@functools.total_ordering
 class ModuleSource:
     """
     :param name: the name of the python module. e.g. inmanta_plugins.model.x
@@ -211,6 +215,16 @@ class ModuleSource:
     is_byte_code: bool
     source: Optional[bytes] = None
     _client: Optional["protocol.SyncClient"] = None
+
+    def __lt__(self, other):
+        if not isinstance(other, ModuleSource):
+            return NotImplemented
+        return (self.name, self.hash_value, self.is_byte_code) < (other.name, other.hash_value, other.is_byte_code)
+
+    def __eq__(self, other):
+        if not isinstance(other, ModuleSource):
+            return False
+        return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
 
     def get_source_code(self) -> bytes:
         """Load the source code"""
@@ -266,22 +280,28 @@ class CodeLoader:
         if not os.path.exists(os.path.join(self.__code_dir, MODULE_DIR)):
             os.makedirs(os.path.join(self.__code_dir, MODULE_DIR), exist_ok=True)
 
-    def _load_module(self, mod_name: str, hv: str) -> None:
+    def _load_module(self, mod_name: str, hv: str, require_reload: bool = True) -> None:
         """
         Load or reload a module
+
+        :arg require_reload: if set to true, we will explcitly reload modules, otherwise we keep them as is
         """
 
         # Importing a module -> only the first import loads the code
         # cache of loaded modules mechanism -> starts afresh when agent is restarted
         try:
             if mod_name in self.__modules:
-                mod = importlib.reload(self.__modules[mod_name][1])
+                if require_reload:
+                    mod = importlib.reload(self.__modules[mod_name][1])
+                else:
+                    LOGGER.debug("Not reloading module %s", mod_name)
+                    return
             else:
                 mod = importlib.import_module(mod_name)
             self.__modules[mod_name] = (hv, mod)
-            LOGGER.info("Loaded module %s" % mod_name)
+            LOGGER.info("Loaded module %s", mod_name)
         except ImportError:
-            LOGGER.exception("Unable to load module %s" % mod_name)
+            LOGGER.exception("Unable to load module %s", mod_name)
 
     def install_source(self, module_source: ModuleSource) -> bool:
         """

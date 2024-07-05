@@ -21,7 +21,7 @@ import json
 from abc import ABC
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Generic, Optional, TypeVar, Union, cast
+from typing import Generic, Mapping, Optional, TypeVar, Union, cast
 from urllib import parse
 from urllib.parse import quote
 from uuid import UUID
@@ -53,7 +53,7 @@ from inmanta.data import (
     ResourceAction,
     ResourceHistoryOrder,
     ResourceLogOrder,
-    ResourceOrder,
+    ResourceStatusOrder,
     SimpleQueryBuilder,
     VersionedResourceOrder,
     model,
@@ -166,8 +166,19 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         last_id: Optional[PRIMITIVE_SQL_TYPES] = None,
         start: Optional[PRIMITIVE_SQL_TYPES] = None,
         end: Optional[PRIMITIVE_SQL_TYPES] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        filter: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
+        """
+        All boundary values for paging are exclusive, i.e. the returned page will contain only values strictly larger/smaller
+        than the boundary value. "start", "first", "end" and "last" are poorly named: they imply to be ordering-aware, while
+        they're actually only about the requested page containing "larger" or "smaller" values respectively, regardless of
+        the requested order.
+
+        :param first_id: secondary boundary value for min bound. If not None, boundary is `> (start, first_id)`.
+        :param last_id: secondary boundary value for max bound. If not None, boundary is `< (end, last_id)`.
+        :param start: primary boundary value for min bound. If first_id is None, boundary is `> start`.
+        :param end: primary boundary value for max bound. If last_id is None, boundary is `< end`.
+        """
         self.limit = self.validate_limit(limit)
         self.raw_filter = filter or {}
         self.filter: dict[str, QueryFilter] = self.process_filters(filter)
@@ -379,7 +390,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         links = {}
 
-        url_query_params: dict[str, Optional[Union[SimpleTypes, list[str]]]] = {
+        url_query_params: dict[str, Optional[Union[SimpleTypes, Sequence[str]]]] = {
             "limit": self.limit,
             "sort": str(self.order),
         }
@@ -446,7 +457,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         return limit
 
 
-class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
+class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
     def __init__(
         self,
         env: data.Environment,
@@ -460,7 +471,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         deploy_summary: bool = False,
     ) -> None:
         super().__init__(
-            order=ResourceOrder.parse_from_string(sort),
+            order=ResourceStatusOrder.parse_from_string(sort),
             limit=limit,
             first_id=first_id,
             last_id=last_id,
@@ -544,9 +555,9 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                     SELECT
                         rps.resource_id,
                         r.attributes,
-                        r.resource_type,
-                        r.agent,
-                        r.resource_id_value,
+                        rps.resource_type,
+                        rps.agent,
+                        rps.resource_id_value,
                         r.model,
                         rps.environment,
                         (
@@ -916,7 +927,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
             "action": ContainsFilterResourceAction,
         }
 
-    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[Mapping[str, Sequence[str]]]) -> dict[str, QueryFilter]:
         # Change the api names of the filters to the names used internally in the database
         query = super().process_filters(filter)
         if query.get("minimal_log_level"):
@@ -1190,7 +1201,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
             "status": ContainsFilter,
         }
 
-    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[Mapping[str, Sequence[str]]]) -> dict[str, QueryFilter]:
         out_filter = super().process_filters(filter)
         # name is ambiguous, qualify
         if "name" in out_filter:
@@ -1249,6 +1260,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         sort: str = "discovered_resource_id.asc",
         start: Optional[str] = None,
         end: Optional[str] = None,
+        filter: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         super().__init__(
             order=DiscoveredResourceOrder.parse_from_string(sort),
@@ -1257,7 +1269,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
             last_id=None,
             start=start,
             end=end,
-            filter=None,
+            filter=filter,
         )
         self.environment = environment
 
@@ -1266,16 +1278,31 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         """
         Return the specification of the allowed filters, see FilterValidator
         """
-        return {}
+        return {
+            "managed": BooleanEqualityFilter,
+        }
 
     def get_base_url(self) -> str:
         return "/api/v2/discovered"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
-            select_clause="SELECT environment, discovered_resource_id, values",
-            from_clause=f" FROM {data.DiscoveredResource.table_name()}",
-            filter_statements=["environment = $1"],
+            select_clause="SELECT *",
+            prelude=f"""
+            WITH result AS (
+                SELECT
+                    dr.environment,
+                    dr.discovered_resource_id,
+                    dr.values,
+                    (rps.resource_id IS NOT NULL)  AS managed
+
+                FROM {data.DiscoveredResource.table_name()} as dr
+                LEFT JOIN {data.ResourcePersistentState.table_name()} rps
+                ON dr.environment=rps.environment AND dr.discovered_resource_id = rps.resource_id
+                WHERE dr.environment = $1
+            )
+            """,
+            from_clause="FROM result AS r",
             values=[self.environment.id],
         )
         return query_builder
@@ -1285,6 +1312,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
             model.DiscoveredResource(
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
+                managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
             ).model_dump()
             for res in records
         ]

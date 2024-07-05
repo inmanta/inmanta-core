@@ -1,0 +1,5 @@
+description: Add documentation for batched partial compile and custom partitioning
+issue-nr: 1603
+issue-repo: lsm
+change-type: minor
+destination-branches: [master, iso7]

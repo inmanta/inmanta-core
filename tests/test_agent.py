@@ -50,7 +50,7 @@ async def test_agent_get_status(server, environment, agent):
 
 def test_context_changes():
     """Test registering changes in the handler context"""
-    resource = PurgeableResource(Id.parse_id("std::File[agent,path=/test],v=1"))
+    resource = PurgeableResource(Id.parse_id("std::testing::NullResource[agent,name=test],v=1"))
     ctx = HandlerContext(resource)
 
     # use attribute change attributes
@@ -108,7 +108,7 @@ async def startable_server(server_config):
     """
     This fixture returns the bootloader of a server which is not yet started.
     """
-    bootloader = InmantaBootloader()
+    bootloader = InmantaBootloader(configure_logging=True)
     yield bootloader
     try:
         await bootloader.stop(timeout=15)

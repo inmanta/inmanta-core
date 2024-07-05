@@ -36,9 +36,9 @@ from utils import LogSequence
 
 async def assert_resource_set_assignment(environment, assignment: dict[str, Optional[str]]) -> None:
     """
-    Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
+    Verify whether the resources on the server are assigned to the resource sets given via the assignment argument.
 
-    :param environment
+    :param environment: environment uuid
     :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
                        belong to.
     """
@@ -223,8 +223,8 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
 async def test_server_export(snippetcompiler, server: Server, client, environment):
     snippetcompiler.setup_for_snippet(
         """
-            h = std::Host(name="test", os=std::linux)
-            f = std::ConfigFile(host=h, path="/etc/motd", content="test")
+            import std::testing
+            f = std::testing::NullResource(name="test")
         """
     )
     await snippetcompiler.do_export_and_deploy()

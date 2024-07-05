@@ -49,8 +49,8 @@ sphinxcontrib.inmanta.dsl
 This exention adds objects and directives to add documentation for Inmanta dsl objects such as
 entities, relations, ...
 
-RST files can reference to inmanta configuration code with ```:inmanta:entity:`std::File````. This renders to
-:inmanta:entity:`std::File`
+RST files can reference to inmanta configuration code with ```:inmanta:entity:`std::testing::NullResource````. This renders to
+:inmanta:entity:`std::testing::NullResource`
 
 sphinx-inmanta-api
 ******************
