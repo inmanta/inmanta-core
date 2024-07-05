@@ -1389,11 +1389,17 @@ class ModuleV2Metadata(ModuleMetadata):
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
       Valid values are [==, ~=, >=]. *Default is '~='*
     :param install_requires: The Python packages this module depends on.
+    :param four_digit_version: Whether to use a four-digit version format (e.g. 23.4.1.0) instead of the standard
+        three-digit format (e.g. 23.4.1).
+        Even without setting this option to True, a fourth digit is allowed as a revision digit. However, the tooling
+        will not use it by default. For example, you can use the '--revision' flag with the command
+        'inmanta module release --dev --revision' even if 'four_digit_version' is set to False. But if you don't specify
+        '--revision' explicitly, the tooling will consider 'patch' to be the lowest increment.
     """
 
     install_requires: list[str]
     version_tag: str = ""
-
+    four_digit_version: bool = False
     _raw_parser: typing.ClassVar[type[CfgParser]] = CfgParser
 
     @field_validator("version")
@@ -1452,9 +1458,7 @@ class ModuleV2Metadata(ModuleMetadata):
     @classmethod
     def _substitute_version(cls: type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
         result = re.sub(
-            r"(\[metadata\][^\[]*[ \t\f\v]*version[ \t\f\v]*=[ \t\f\v]*)[\S]+(\n|$)",
-            rf"\g<1>{new_version}\n",
-            source,
+            r"(\[metadata\][^\[]*?\bversion[ \t\f\v]*=[ \t\f\v]*)[\S]+(\n|$)", rf"\g<1>{new_version}\n", source, flags=re.DOTALL
         )
         if "[egg_info]" not in result:
             result = f"{result}\n[egg_info]\ntag_build = {version_tag}"
@@ -1476,7 +1480,7 @@ class ModuleV2Metadata(ModuleMetadata):
 
         if not out.has_section("metadata"):
             out.add_section("metadata")
-        for k, v in self.dict(exclude_none=True, exclude={"install_requires"}).items():
+        for k, v in self.dict(exclude_none=True, exclude={"install_requires", "version_tag"}).items():
             out.set("metadata", k, str(v))
 
         if self.version_tag:

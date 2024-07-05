@@ -29,7 +29,6 @@ import pytest
 
 from inmanta import const, data
 from inmanta.server import SLICE_ENVIRONMENT_METRICS, protocol
-from inmanta.server.services import environment_metrics_service
 from inmanta.server.services.environment_metrics_service import (
     DEFAULT_CATEGORY,
     AgentCountMetricsCollector,
@@ -55,15 +54,12 @@ async def env_metrics_service(server_config, init_dataclasses_and_load_schema) -
 
 
 @pytest.fixture
-def server_pre_start(server_config):
+def server_pre_start(disable_background_jobs, server_config):
     """
-    This fixture is called before the server starts to disable all actions done
-    by the EnvironmentMetricsService on the metrics-related database tables.
+    This fixture is called before the server starts and will disable background jobs
+    that might interfere with the testing by calling into the disable_background_jobs
+    fixture.
     """
-    old_disable_env_metrics_service = environment_metrics_service.DISABLE_ENV_METRICS_SERVICE
-    environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = True
-    yield
-    environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = old_disable_env_metrics_service
 
 
 @pytest.fixture

@@ -1,0 +1,4 @@
+---
+description: Improve the logging when loading handler code fails.
+change-type: patch
+destination-branches: [master]

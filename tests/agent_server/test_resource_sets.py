@@ -726,6 +726,15 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         "test::Resource[agent1,key=key8]": "set-c",
     }
 
+    # Dependencies: arrow represents "requires" relation
+    # R4 -> R3
+    # R2 -> R1
+
+    # Sets:
+    # set-a  ( R1, R2)
+    # set-b  ( R3, R4)
+    # set-c  ( R7, R8)
+
     result = await client.put_version(
         tid=environment,
         version=version,
@@ -1947,12 +1956,12 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
         :return: The version of the new configurationmodel.
         """
         version = await clienthelper.get_version()
-        rid_shared = "test::Resource[agent1,key=shared]"
-        rid_set1 = "test::Resource[agent1,key=one]"
-        rid_set2 = "test::Resource[agent1,key=two]"
+        rid_shared = "test::Resource[agent1,key=shared_resource]"
+        rid_set1 = "test::Resource[agent1,key=resource_in_set1]"
+        rid_set2 = "test::Resource[agent1,key=resource_in_set2]"
         resources = [
             {
-                "key": "shared",
+                "key": "shared_resource",
                 "version": version,
                 "id": f"{rid_shared},v={version}",
                 "send_event": False,
@@ -1961,7 +1970,7 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
                 "requires": [],
             },
             {
-                "key": "set1",
+                "key": "resource_in_set1",
                 "version": version,
                 "id": f"{rid_set1},v={version}",
                 "send_event": False,
@@ -1970,7 +1979,7 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
                 "requires": [f"{rid_shared},v={version}"],
             },
             {
-                "key": "set2",
+                "key": "resource_in_set2",
                 "version": version,
                 "id": f"{rid_set2},v={version}",
                 "send_event": False,
@@ -2006,10 +2015,10 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
                             suitable for partial compiles because it has cross resource set dependencies.
         :return: The new version of the model when should_fail is false, otherwise None is returned.
         """
-        rid_set1 = "test::Resource[agent1,key=one]"
+        rid_set1 = "test::Resource[agent1,key=updated_resource_in_set2]"
         resources_partial = [
             {
-                "key": "updated_set2",
+                "key": "updated_resource_in_set2",
                 "version": 0,
                 "id": f"{rid_set1},v=0",
                 "send_event": False,
@@ -2027,7 +2036,7 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
             unknowns=[],
             version_info=None,
             resource_sets=resource_sets,
-            removed_resource_sets=["deleted"],
+            removed_resource_sets=["set2"],
         )
         if not should_fail:
             assert result.code == 200
@@ -2036,7 +2045,7 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
             assert result.code == 400
             assert (
                 f"Base version {base_version} is not suitable for a partial compile. A dependency exists between resources"
-                " test::Resource[agent1,key=two] and test::Resource[agent1,key=one],"
+                " test::Resource[agent1,key=resource_in_set2] and test::Resource[agent1,key=resource_in_set1],"
                 " but they belong to different resource sets." in result.result["message"]
             )
             return None

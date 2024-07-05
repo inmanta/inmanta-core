@@ -237,11 +237,22 @@ class PagingOrder(str, enum.Enum):
             return PagingOrder.DESC
         return PagingOrder.ASC
 
-    @property
-    def db_form(self) -> OrderStr:
-        if self == PagingOrder.ASC:
-            return OrderStr("ASC NULLS FIRST")
-        return OrderStr("DESC NULLS LAST")
+    def db_form(self, *, nullable: bool = True) -> OrderStr:
+        # The current filtering and sorting framework has the built-in assumption that nulls are considered the lowest values,
+        # hence we must deviate from postgres' default order. As a result, we may lose the opportunity to use indexes, which
+        # use the same order.
+        # The framework can not easily be refactored because
+        #   1. Not all column types have a sane MAX value to coalesce to
+        #   2. The alternative approach to use a window function `row_number() OVER (ORDER BY ...)`, selecting on the ids of
+        #       the first and last elements in the page, is more accurate, and does hit the indexes, but it also builds the
+        #       row number for each row, which ends up costing even more.
+        if nullable:
+            if self == PagingOrder.ASC:
+                return OrderStr("ASC NULLS FIRST")
+            return OrderStr("DESC NULLS LAST")
+        # Luckily, for NOT NULL columns we will never encounter the COALESCE issue, so we can safely use the default order.
+        else:
+            return OrderStr(self.value)
 
 
 class InvalidSort(Exception):
@@ -362,65 +373,6 @@ class ForcedStringColumn(ColumnType):
         return super().get_accessor(column_name, table_prefix) + "::" + self.forced_type
 
 
-class ResourceVersionIdColumnType(ColumnType):
-    def __init__(self, table_prefix: Optional[str] = None) -> None:
-        super().__init__(base_type=None, nullable=False, table_prefix=table_prefix)
-
-    def as_basic_filter_elements(self, name: str, value: object) -> Sequence[tuple[str, "ColumnType", object]]:
-        """
-        Break down this filter into more elementary filters
-
-        :param name: column name, intended to be passed through get_accessor
-        :param value: the value of this column
-        :return: a list of (name, type, value) items
-        """
-        assert isinstance(value, str)
-        id = resources.Id.parse_resource_version_id(value)
-        return [
-            (
-                "resource_id",
-                StringColumn.with_prefix(self.table_prefix),
-                StringColumn.get_value(id.resource_str()),
-            ),
-            (
-                "model",
-                PositiveIntColumn.with_prefix(self.table_prefix),
-                PositiveIntColumn.get_value(id.version),
-            ),
-        ]
-
-    def as_basic_order_elements(self, name: str, order: PagingOrder) -> Sequence[tuple[str, "ColumnType", PagingOrder]]:
-        """
-        Break down this filter into more elementary filters
-
-        :param name: column name, intended to be passed through get_accessor
-        :return: a list of (name, type, order) items
-        """
-        return [
-            ("resource_id", StringColumn.with_prefix(self.table_prefix), order),
-            ("model", PositiveIntColumn.with_prefix(self.table_prefix), order),
-        ]
-
-    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
-        """
-        Prepare the actual value for use as an argument in a prepared statement for this type
-        """
-        raise NotImplementedError()
-
-    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
-        """
-        return the sql statement to get this column, as used in filter and other statements
-        """
-        raise NotImplementedError()
-
-    def coalesce_to_min(self, value_reference: str) -> str:
-        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
-        This is required for the comparisons used for paging, because comparing a value to
-        NULL always yields NULL.
-        """
-        raise NotImplementedError()
-
-
 StringColumn = ColumnType(base_type=str, nullable=False)
 OptionalStringColumn = ColumnType(base_type=str, nullable=True)
 
@@ -434,7 +386,6 @@ TextColumn = ForcedStringColumn("text")
 
 UUIDColumn = ColumnType(base_type=uuid.UUID, nullable=False)
 BoolColumn = ColumnType(base_type=bool, nullable=False)
-ResourceVersionIdColumn = ResourceVersionIdColumnType()
 
 
 class DatabaseOrderV2(ABC):
@@ -594,7 +545,10 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
     def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
         """Return the actual order by statement, as derived from get_order_elements"""
         order_by_part = ", ".join(
-            (f"{type.get_accessor(col, table)} {order.db_form}" for col, type, order in self.get_order_elements(invert))
+            (
+                f"{type.get_accessor(col, table)} {order.db_form(nullable=type.nullable)}"
+                for col, type, order in self.get_order_elements(invert)
+            )
         )
         return f" ORDER BY {order_by_part}"
 
@@ -744,43 +698,18 @@ class VersionedResourceOrder(AbstractDatabaseOrderV2):
         return ColumnNameStr("resource_id"), StringColumn
 
 
-class ResourceOrder(VersionedResourceOrder):
-    """Represents the ordering by which resources should be sorted"""
+class ResourceStatusOrder(VersionedResourceOrder):
+    """
+    Resources with a status field
+    """
 
     @classmethod
     def get_valid_sort_columns(cls) -> dict[ColumnNameStr, ColumnType]:
         return {
-            ColumnNameStr("resource_type"): StringColumn,
-            ColumnNameStr("agent"): StringColumn,
-            ColumnNameStr("resource_id"): TablePrefixWrapper("rps", StringColumn),
-            ColumnNameStr("resource_id_value"): StringColumn,
+            **super().get_valid_sort_columns(),
+            ColumnNameStr("resource_id"): StringColumn,
             ColumnNameStr("status"): TextColumn,
         }
-
-    @property
-    def id_column(self) -> tuple[ColumnNameStr, ColumnType]:
-        """Name of the id column of this database order"""
-        return ColumnNameStr("resource_version_id"), ResourceVersionIdColumnType(table_prefix="r")
-
-    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
-        if self.get_order() == PagingOrder.ASC:
-            first, last = last, first
-
-        order_column_name = self.order_by_column
-        order_type: ColumnType = self.get_order_by_column_type()
-
-        def make_id(record: abc.Mapping[str, object]) -> str:
-            resource_id = record["resource_id"]
-            assert isinstance(resource_id, str)
-            model = record["model"]
-            return resource_id + ",v=" + str(model)
-
-        return PagingBoundaries(
-            start=order_type.get_value(first[order_column_name]),
-            first_id=make_id(first),
-            end=order_type.get_value(last[order_column_name]),
-            last_id=make_id(last),
-        )
 
 
 class ResourceHistoryOrder(AbstractDatabaseOrderV2):
@@ -2602,7 +2531,7 @@ class Environment(BaseDocument):
             typ="str",
             default="600",
             doc="The deployment interval of the autostarted agents. Can be specified as a number of seconds"
-            " or as a cron-like expression."
+            " or as a cron-like expression. Set this to 0 to disable the automatic scheduling of deploy runs."
             " See also: :inmanta.config:option:`config.agent-deploy-interval`",
             validator=validate_cron_or_int,
             agent_restart=True,
@@ -2622,7 +2551,7 @@ class Environment(BaseDocument):
             default="86400",
             doc=(
                 "The repair interval of the autostarted agents. Can be specified as a number of seconds"
-                " or as a cron-like expression."
+                " or as a cron-like expression. Set this to 0 to disable the automatic scheduling of repair runs."
                 " See also: :inmanta.config:option:`config.agent-repair-interval`"
             ),
             validator=validate_cron_or_int,
@@ -2712,9 +2641,9 @@ class Environment(BaseDocument):
         ENVIRONMENT_METRICS_RETENTION: Setting(
             name=ENVIRONMENT_METRICS_RETENTION,
             typ="int",
-            default=8760,
+            default=336,
             doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
-            "Default=8760 hours (1 year). Set to 0 to disable automatic cleanups.",
+            "Default=336 hours (2 weeks). Set to 0 to disable automatic cleanups.",
             validator=convert_int,
         ),
     }
@@ -3654,7 +3583,7 @@ class Compile(BaseDocument):
     :param requested: Time the compile was requested
     :param started: Time the compile started
     :param completed: Time to compile was completed
-    :param do_export: should this compiler perform an export
+    :param do_export: should this compile perform an export
     :param force_update: should this compile definitely update
     :param metadata: exporter metadata to be passed to the compiler
     :param requested_environment_variables: environment variables requested to be passed to the compiler
@@ -3759,25 +3688,31 @@ class Compile(BaseDocument):
         return results[0]
 
     @classmethod
-    async def get_next_run(cls, environment_id: uuid.UUID) -> Optional["Compile"]:
+    async def get_next_run(
+        cls, environment_id: uuid.UUID, *, connection: Optional[asyncpg.Connection] = None
+    ) -> Optional["Compile"]:
         """Get the next compile in the queue for the given environment"""
-        results = await cls.select_query(
-            f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND completed IS NULL ORDER BY requested ASC LIMIT 1",
-            [cls._get_value(environment_id)],
-        )
-        if not results:
-            return None
-        return results[0]
+        async with cls.get_connection(connection) as con:
+            results = await cls.select_query(
+                f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND completed IS NULL ORDER BY requested ASC LIMIT 1",
+                [cls._get_value(environment_id)],
+                connection=con,
+            )
+            if not results:
+                return None
+            return results[0]
 
     @classmethod
-    async def get_next_run_all(cls) -> "Sequence[Compile]":
+    async def get_next_run_all(cls, *, connection: Optional[asyncpg.Connection] = None) -> "Sequence[Compile]":
         """Get the next compile in the queue for each environment"""
-        results = await cls.select_query(
-            f"SELECT DISTINCT ON (environment) * FROM {cls.table_name()} WHERE completed IS NULL ORDER BY environment, "
-            f"requested ASC",
-            [],
-        )
-        return results
+        async with cls.get_connection(connection) as con:
+            results = await cls.select_query(
+                f"SELECT DISTINCT ON (environment) * FROM {cls.table_name()} WHERE completed IS NULL ORDER BY environment, "
+                f"requested ASC",
+                [],
+                connection=con,
+            )
+            return results
 
     @classmethod
     async def get_unhandled_compiles(cls) -> "Sequence[Compile]":
@@ -3810,10 +3745,13 @@ class Compile(BaseDocument):
         return await cls._fetch_int(query)
 
     @classmethod
-    async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "Sequence[Compile]":
+    async def get_by_remote_id(
+        cls, environment_id: uuid.UUID, remote_id: uuid.UUID, *, connection: Optional[asyncpg.Connection] = None
+    ) -> "Sequence[Compile]":
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND remote_id=$2",
             [cls._get_value(environment_id), cls._get_value(remote_id)],
+            connection=connection,
         )
         return results
 
@@ -4496,6 +4434,9 @@ class ResourcePersistentState(BaseDocument):
 
     # ID related
     resource_id: m.ResourceIdStr
+    resource_type: str
+    agent: str
+    resource_id_value: str
 
     # Field based on content from the resource actions
     last_deploy: Optional[datetime.datetime] = None
@@ -4537,13 +4478,16 @@ class Resource(BaseDocument):
     A specific version of a resource. This entity contains the desired state of a resource.
 
     :param environment: The environment this resource version is defined in
-    :param rid: The id of the resource and its version
-    :param resource: The resource for which this defines the state
-    :param model: The configuration model (versioned) this resource state is associated with
-    :param attributes: The state of this version of the resource
+    :param model: The version of the configuration model this resource state is associated with
+    :param resource_id: The id of the resource (without the version)
+    :param resource_type: The type of the resource
+    :param resource_id_value: The attribute value from the resource id
+    :param agent: The name of the agent responsible for deploying this resource
+    :param attributes: The desired state for this version of the resource as a dict of attributes
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
-    :param resource_id_value: The attribute value from the resource id
+    :param status: The state of this resource, used e.g. in scheduling
+    :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
     """
 
     __primary_key__ = ("environment", "model", "resource_id")
@@ -5297,9 +5241,16 @@ class Resource(BaseDocument):
         await super().insert(connection=connection)
         # TODO: On conflict or is not exists or just make every update an upsert?
         await self._execute_query(
-            """INSERT INTO resource_persistent_state(environment, resource_id) VALUES ($1, $2) ON CONFLICT DO NOTHING""",
+            """
+            INSERT INTO resource_persistent_state (environment, resource_id, resource_type, agent, resource_id_value)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT DO NOTHING
+            """,
             self.environment,
             self.resource_id,
+            self.resource_type,
+            self.agent,
+            self.resource_id_value,
             connection=connection,
         )
 
@@ -5312,9 +5263,16 @@ class Resource(BaseDocument):
         # TODO performance?
         for doc in documents:
             await cls._execute_query(
-                """INSERT INTO resource_persistent_state(environment, resource_id) VALUES ($1, $2) ON CONFLICT DO NOTHING""",
+                """
+                INSERT INTO resource_persistent_state (environment, resource_id, resource_type, agent, resource_id_value)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT DO NOTHING
+                """,
                 doc.environment,
                 doc.resource_id,
+                doc.resource_type,
+                doc.agent,
+                doc.resource_id_value,
                 connection=connection,
             )
         await super().insert_many(documents, connection=connection)

@@ -19,6 +19,7 @@
 import asyncio
 import dataclasses
 import logging
+import os
 import time
 import uuid
 from collections.abc import Mapping
@@ -60,6 +61,7 @@ from inmanta.util import get_compiler_version
 from utils import (
     UNKWN,
     ClientHelper,
+    LogSequence,
     _wait_until_deployment_finishes,
     assert_equal_ish,
     log_contains,
@@ -249,7 +251,7 @@ async def test_server_restart(
     resource_container.Provider.set("agent1", "key3", "value")
 
     await asyncio.wait_for(server.stop(), timeout=15)
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=False)
     server = ibl.restserver
     async_finalizer.add(agent.stop)
     async_finalizer.add(partial(ibl.stop, timeout=15))
@@ -967,143 +969,6 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
     assert states["test::Resource[agent1,key=key5],v=%d" % version] == "skipped"
 
 
-async def test_wait(resource_container, client, clienthelper, environment, server, no_agent_backoff, async_finalizer):
-    """
-    If this test fail due to timeout,
-    this is probably due to the mechanism in the agent that prevents pulling resources in very rapid succession.
-
-    If the test server is slow, a get_resources call takes a long time,
-    this makes the back-off longer
-
-    this test deploys two models in rapid successions, if the server is slow, this may fail due to the back-off
-    """
-    resource_container.Provider.reset()
-
-    env_id = environment
-
-    # setup agent
-    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False, poolsize=10)
-    await agent.add_end_point_name("agent1")
-    await agent.start()
-    async_finalizer(agent.stop)
-
-    # wait for agent
-    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
-
-    # set the deploy environment
-    resource_container.Provider.set("agent1", "key", "value")
-
-    async def make_version():
-        version = await clienthelper.get_version()
-
-        resources = [
-            {
-                "key": "key",
-                "value": "value",
-                "id": "test::Wait[agent1,key=key],v=%d" % version,
-                "requires": [],
-                "purged": False,
-                "send_event": False,
-            },
-            {
-                "key": "key2",
-                "value": "value",
-                "id": "test::Resource[agent1,key=key2],v=%d" % version,
-                "requires": ["test::Wait[agent1,key=key],v=%d" % version],
-                "purged": False,
-                "send_event": False,
-            },
-            {
-                "key": "key3",
-                "value": "value",
-                "id": "test::Resource[agent1,key=key3],v=%d" % version,
-                "requires": [],
-                "purged": False,
-                "send_event": False,
-            },
-            {
-                "key": "key4",
-                "value": "value",
-                "id": "test::Resource[agent1,key=key4],v=%d" % version,
-                "requires": ["test::Resource[agent1,key=key3],v=%d" % version],
-                "purged": False,
-                "send_event": False,
-            },
-            {
-                "key": "key5",
-                "value": "value",
-                "id": "test::Resource[agent1,key=key5],v=%d" % version,
-                "requires": ["test::Resource[agent1,key=key4],v=%d" % version, "test::Wait[agent1,key=key],v=%d" % version],
-                "purged": False,
-                "send_event": False,
-            },
-        ]
-        return version, resources
-
-    logger.info("setup done")
-
-    version1, resources = await make_version()
-    result = await client.put_version(
-        tid=env_id, version=version1, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version()
-    )
-    assert result.code == 200
-
-    logger.info("first version pushed")
-
-    # deploy and wait until one is ready
-    result = await client.release_version(env_id, version1, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
-
-    logger.info("first version released")
-
-    await wait_for_n_deployed_resources(client, env_id, version1, n=2)
-
-    generation_version1 = agent._instances["agent1"]._nq.generation
-
-    result = await client.get_version(environment, version1)
-    assert result.code == 200
-    assert result.result["model"]["done"] == 2
-
-    logger.info("first version, 2 resources deployed")
-
-    version2, resources = await make_version()
-    result = await client.put_version(
-        tid=env_id, version=version2, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version()
-    )
-    assert result.code == 200
-
-    logger.info("second version pushed %f", time.time())
-
-    # deploy and wait until done
-    result = await client.release_version(env_id, version2, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
-
-    logger.info("second version released")
-
-    # Wait until the agent is deploying version2. Otherwise the call to `wait_for_done_with_waiters()`
-    # might notify a test::Wait resource of version1, instead of the resources of version2. This could
-    # cause problem when the resource states of version1 are checked later on in this test case.
-    await retry_limited(lambda: agent._instances["agent1"]._nq.generation != generation_version1, timeout=10)
-    await resource_container.wait_for_done_with_waiters(client, env_id, version2)
-
-    logger.info("second version complete")
-
-    result = await client.get_version(env_id, version2)
-    assert result.code == 200
-    for x in result.result["resources"]:
-        assert x["status"] == const.ResourceState.deployed.name
-
-    result = await client.get_version(env_id, version1)
-    assert result.code == 200
-    states = {x["id"]: x["status"] for x in result.result["resources"]}
-
-    assert states["test::Wait[agent1,key=key],v=%d" % version1] == const.ResourceState.deployed.name
-    assert states["test::Resource[agent1,key=key2],v=%d" % version1] == const.ResourceState.available.name
-    assert states["test::Resource[agent1,key=key3],v=%d" % version1] == const.ResourceState.deployed.name
-    assert states["test::Resource[agent1,key=key4],v=%d" % version1] == const.ResourceState.deployed.name
-    assert states["test::Resource[agent1,key=key5],v=%d" % version1] == const.ResourceState.available.name
-
-
 async def test_multi_instance(resource_container, client, clienthelper, server, environment, no_agent_backoff, async_finalizer):
     """
     Test for multi threaded deploy
@@ -1118,7 +983,6 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
         environment=env_id,
         agent_map={"agent1": "localhost", "agent2": "localhost", "agent3": "localhost"},
         code_loader=False,
-        poolsize=1,
     )
     await agent.add_end_point_name("agent1")
     await agent.add_end_point_name("agent2")
@@ -1694,7 +1558,9 @@ async def test_autostart_mapping_overrides_config(server, client, environment, a
     )
 
 
-async def test_autostart_mapping_update_uri(server, client, environment, async_finalizer, caplog):
+async def test_autostart_mapping_update_uri(
+    server, client, clienthelper, environment, async_finalizer, resource_container, caplog, no_agent_backoff
+):
     caplog.set_level(logging.INFO)
     agent_config.use_autostart_agent_map.set("true")
     env_uuid = uuid.UUID(environment)
@@ -1713,12 +1579,37 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     await retry_limited(lambda: (env_uuid, agent_name) in agent_manager.tid_endpoint_to_session, 10)
     await retry_limited(agent_in_db, 10)
 
+    async def deploy_one():
+        version = await clienthelper.get_version()
+
+        resources = [
+            {
+                "key": "key1",
+                "value": f"value{version}",
+                "id": f"test::Resource[{agent_name},key=key1],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+
+        await clienthelper.put_version_simple(resources, version)
+        await client.release_version(environment, version, push=True)
+        await clienthelper.wait_for_deployed(version)
+
+    await deploy_one()
+
     # Update agentmap
     caplog.clear()
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {agent_name: "localhost"})
     assert result.code == 200
 
     await retry_limited(lambda: f"Updating the URI of the endpoint {agent_name} from local: to localhost" in caplog.text, 10)
+
+    await deploy_one()
+
+    # this can fail in the background, #7641
+    LogSequence(caplog).no_more_errors()
 
     # Pause agent
     result = await client.agent_action(tid=env_uuid, name="internal", action=const.AgentAction.pause.value)
@@ -1785,8 +1676,16 @@ async def test_autostart_clear_environment(server, client, resource_container, e
     # One autostarted agent should running as a subprocess
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    venv_dir_agent1 = os.path.join(
+        autostarted_agent_manager._get_state_dir_for_agent_in_env(uuid.UUID(environment)), "agent", "env"
+    )
+
     # clear environment
-    await client.clear_environment(environment)
+    assert os.path.exists(venv_dir_agent1)
+    result = await client.clear_environment(environment)
+    assert result.code == 200
+    assert not os.path.exists(venv_dir_agent1)
 
     # Autostarted agent should be terminated after clearing the environment
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=0)
@@ -1841,6 +1740,57 @@ async def test_autostart_clear_environment(server, client, resource_container, e
 
     # One autostarted agent should running as a subprocess
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
+
+
+@pytest.mark.parametrize("delete_project", [True, False])
+async def test_autostart_clear_agent_venv_on_delete(
+    server, client, resource_container, project_default: str, environment: str, no_agent_backoff, delete_project: bool
+) -> None:
+    """
+    Ensure that the venv of an auto-started agent gets cleaned up when its environment or project is deleted.
+    """
+    resource_container.Provider.reset()
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
+    await env.set(data.AUTO_DEPLOY, True)
+    await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
+    await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
+    await env.set(data.AUTOSTART_ON_START, True)
+
+    clienthelper = ClientHelper(client, environment)
+    version = await clienthelper.get_version()
+    await clienthelper.put_version_simple(
+        [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": f"test::Resource[agent1,key=key1],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            }
+        ],
+        version,
+    )
+
+    # check deploy
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    venv_dir_agent1 = os.path.join(
+        autostarted_agent_manager._get_state_dir_for_agent_in_env(uuid.UUID(environment)), "agent", "env"
+    )
+
+    assert os.path.exists(venv_dir_agent1)
+
+    if delete_project:
+        result = await client.delete_project(project_default)
+        assert result.code == 200
+    else:
+        result = await client.delete_environment(environment)
+        assert result.code == 200
+
+    assert not os.path.exists(venv_dir_agent1)
 
 
 async def setup_environment_with_agent(client, project_name):
@@ -2623,7 +2573,8 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
         await asyncio.sleep(0.1)
 
     # cache has 1 version in flight
-    assert len(myagent_instance._cache.counterforVersion) == 1
+    executor_instance = agent.executor_manager.executors["agent1"]
+    assert len(executor_instance._cache.counterforVersion) == 1
 
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
@@ -2636,7 +2587,7 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
 
     # cache has no versions in flight
     # for issue #1883
-    assert not myagent_instance._cache.counterforVersion
+    assert not executor_instance._cache.counterforVersion
 
     # Incremental deploy
     #   * All resources are deployed successfully:
@@ -2871,7 +2822,8 @@ async def test_s_periodic_Vs_full(
         await asyncio.sleep(0.1)
 
     # cache has 1 version in flight
-    assert len(myagent_instance._cache.counterforVersion) == 1
+    executor_instance = agent.executor_manager.executors["agent1"]
+    assert len(executor_instance._cache.counterforVersion) == 1
 
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
@@ -2884,7 +2836,8 @@ async def test_s_periodic_Vs_full(
     await resource_container.wait_for_done_with_waiters(client, environment, versions[action.wait_for])
     # cache has no versions in flight
     # for issue #1883
-    assert not myagent_instance._cache.counterforVersion
+
+    assert not executor_instance._cache.counterforVersion
 
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, action.msg)
 
@@ -3392,7 +3345,7 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
 
     await clienthelper.put_version_simple(resources, version)
 
-    await _wait_until_deployment_finishes(client, environment, version)
+    await _wait_until_deployment_finishes(client, environment, version, timeout=10)
     # The resource state and its logs are not set atomically. This call prevents a race condition.
     await wait_until_logs_are_available(client, environment, resource_id, expect_nr_of_logs=3)
 
