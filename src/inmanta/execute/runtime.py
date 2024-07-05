@@ -854,11 +854,12 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
 
 
-OrderedWaiterSet = NewType("OrderedWaiterSet", Set["Waiter"])
+WaiterSet = NewType("WaiterSet", Set["Waiter"])
 """
 Set-like object with deterministic iteration order (maintains insert order).
 
 Declared as NewType rather than an implementation of MutableSet for performance reasons (one order of magnitude).
+Constructor is responsible for upholding the type's semantics.
 """
 
 
@@ -882,11 +883,12 @@ class QueueScheduler:
         self.runqueue = runqueue
         self.waitqueue = waitqueue
         self.types = types
+        # store internally as dict rather than set to achieve deterministic iteration order
         self._allwaiters: dict[Waiter, None] = {}
 
     @property
-    def allwaiters(self) -> OrderedWaiterSet:
-        return OrderedWaiterSet(self._allwaiters.keys())
+    def allwaiters(self) -> WaiterSet:
+        return WaiterSet(self._allwaiters.keys())
 
     def add_running(self, item: "Waiter") -> None:
         self.runqueue.append(item)

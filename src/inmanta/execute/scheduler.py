@@ -21,7 +21,7 @@ import logging
 import os
 import time
 from collections import deque
-from collections.abc import Iterable, Iterator, Sequence, Set
+from collections.abc import Iterable, Iterator, Sequence
 from typing import TYPE_CHECKING, Any, Deque, Optional
 
 from inmanta import plugins
@@ -44,7 +44,7 @@ from inmanta.execute.runtime import (
     ResultVariableProxy,
     VariableABC,
     Waiter,
-    OrderedWaiterSet,
+    WaiterSet,
 )
 from inmanta.execute.tracking import ModuleTracker
 
@@ -305,7 +305,7 @@ class Scheduler:
 
         return range_to_range
 
-    def find_wait_cycle(self, attributes_with_precedence_rule: list[RelationAttribute], allwaiters: OrderedWaiterSet) -> bool:
+    def find_wait_cycle(self, attributes_with_precedence_rule: list[RelationAttribute], allwaiters: WaiterSet) -> bool:
         """
         Preconditions: no progress is made anymore
 
@@ -420,7 +420,6 @@ class Scheduler:
                 next = basequeue.popleft()
                 try:
                     next.execute()
-                    # TODO: check performance overhead
                     queue.remove_from_all(next)
                     count = count + 1
                 except UnsetException as e:
@@ -509,7 +508,7 @@ class Scheduler:
         else:
             raise MultiException(excns)
 
-        remaining_waiters: Set[Waiter] = queue.allwaiters
+        remaining_waiters: WaiterSet = queue.allwaiters
         if remaining_waiters:
             stmt = None
             for st in remaining_waiters:
