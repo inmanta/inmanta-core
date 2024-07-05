@@ -30,6 +30,13 @@
     @command annotation to register new command
 """
 
+# TODO:
+#   - ChannelException
+#   - pytest-inmanta
+#   - std
+#   - Do we still support multiple handlers per type? -> no?
+#   - deprecate handler name
+
 import argparse
 import asyncio
 import contextlib

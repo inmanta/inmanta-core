@@ -32,7 +32,6 @@ from tornado import concurrent
 
 import inmanta
 from inmanta import const, data, protocol, resources
-from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, ResourceIdStr
@@ -44,7 +43,6 @@ from inmanta.util import hash_file
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent
     import inmanta.agent.executor
-    from inmanta.agent.io.local import IOBase
 
 
 LOGGER = logging.getLogger(__name__)
@@ -435,22 +433,19 @@ class HandlerAPI(ABC, Generic[TResource]):
     At the end, it also defines a number of utility methods.
 
     New handlers are registered with the :func:`~inmanta.agent.handler.provider` decorator.
-    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
-    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
-    operations.
     """
 
-    def __init__(self, agent: "inmanta.agent.executor.AgentInstance", io: Optional["IOBase"] = None) -> None:
+    def __init__(self, agent: "inmanta.agent.executor.AgentInstance", io: object = None) -> None:
         """
         :param agent: The agent that is executing this handler.
-        :param io: The io object to use.
+        :param io: Parameter for backwards compatibility
         """
+        if io:
+            raise DeprecationWarning("The io parameter is no longer used and is deprecated.")
+
         self._agent = agent
-        if io is None:
-            raise Exception("Unsupported: no resource mgmt in RH")
-        else:
-            self._io = io
         self._client: Optional[protocol.SessionClient] = None
+
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.eventloop
 
@@ -547,14 +542,6 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param resource: The resource to deploy.
         :param dry_run: If set to true, the intent is not enforced, only the set of changes it would bring is computed.
         """
-
-    def available(self, resource: TResource) -> bool:
-        """
-        Kept for backwards compatibility, new handler implementations should never override this.
-
-        :param resource: Resource for which to check whether this handler is available.
-        """
-        return True
 
     @abstractmethod
     def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
@@ -1058,66 +1045,31 @@ class Commander:
     This class handles commands
     """
 
-    __command_functions: dict[str, dict[str, type[ResourceHandler[Any]]]] = defaultdict(dict)
+    __command_functions: dict[str, type[ResourceHandler[Any]]] = {}
 
     @classmethod
-    def get_handlers(cls) -> dict[str, dict[str, type[ResourceHandler[Any]]]]:
+    def get_handlers(cls) -> dict[str, type[ResourceHandler[Any]]]:
         return cls.__command_functions
 
     @classmethod
     def reset(cls) -> None:
-        cls.__command_functions = defaultdict(dict)
+        cls.__command_functions = {}
 
     @classmethod
     def close(cls) -> None:
         pass
 
     @classmethod
-    def _get_instance(
-        cls, handler_class: type[ResourceHandler[Any]], agent: "inmanta.agent.executor.AgentInstance", io: "IOBase"
-    ) -> ResourceHandler[Any]:
-        new_instance = handler_class(agent, io)
-        return new_instance
-
-    @classmethod
-    def get_provider(
-        cls, cache: AgentCache, agent: "inmanta.agent.executor.AgentInstance", resource: resources.Resource
-    ) -> HandlerAPI[Any]:
+    def get_provider(cls, agent: "inmanta.agent.executor.AgentInstance", resource: resources.Resource) -> HandlerAPI[Any]:
         """
         Return a provider to handle the given resource
         """
-        resource_id = resource.id
-        resource_type = resource_id.get_entity_type()
-        try:
-            agent_io = io.get_io(cache, agent.uri, resource_id.get_version())
-        except Exception:
-            LOGGER.exception("Exception raised during creation of IO for uri %s", agent.uri)
-            raise Exception("No handler available for %s (no io available)" % resource_id)
+        resource_type = resource.id.get_entity_type()
 
-        if agent_io is None:
-            # Skip this resource
-            raise Exception("No handler available for %s (no io available)" % resource_id)
+        if resource_type not in cls.__command_functions:
+            raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
-        available = []
-        if resource_type in cls.__command_functions:
-            for handlr in cls.__command_functions[resource_type].values():
-                h = cls._get_instance(handlr, agent, agent_io)
-                if h.available(resource):
-                    available.append(h)
-                else:
-                    h.close()
-
-        if len(available) > 1:
-            for h in available:
-                h.close()
-
-            agent_io.close()
-            raise Exception("More than one handler selected for resource %s" % resource.id)
-
-        elif len(available) == 1:
-            return available[0]
-
-        raise Exception("No resource handler registered for resource of type %s" % resource_type)
+        return cls.__command_functions[resource_type](agent)
 
     @classmethod
     def add_provider(cls, resource: str, name: str, provider: type[ResourceHandler[Any]]) -> None:
@@ -1125,13 +1077,13 @@ class Commander:
         Register a new provider
 
         :param resource: the name of the resource this handler applies to
-        :param name: the name of the handler itself
+        :param name: the name of the handler itself (not required anymore)
         :param provider: the handler function
         """
-        if resource in cls.__command_functions and name in cls.__command_functions[resource]:
-            del cls.__command_functions[resource][name]
+        if resource in cls.__command_functions:
+            raise RuntimeError(f"A handler has already been registered for resource {name}")
 
-        cls.__command_functions[resource][name] = provider
+        cls.__command_functions[resource] = provider
 
     @classmethod
     def get_providers(cls) -> typing.Iterator[tuple[str, type[ResourceHandler[Any]]]]:

@@ -14,7 +14,6 @@ requires = [
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.17",
     "email-validator>=1,<3",
-    "execnet>=1,<2",
     "importlib_metadata>=4,<9",
     "jinja2~=3.0",
     "more-itertools>=8,<11",

@@ -28,7 +28,6 @@ from inmanta import const, data
 from inmanta.agent import executor, handler
 from inmanta.agent.executor import FailedResourcesSet, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
-from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.const import ParameterSource
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.resources import Id, Resource
@@ -36,6 +35,10 @@ from inmanta.types import Apireturn
 
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent as agent
+
+
+class ChannelClosedException(Exception):
+    """Raised if execnet's remote_exec throws an OSError"""
 
 
 class InProcessExecutor(executor.Executor, executor.AgentInstance):
@@ -94,9 +97,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         return self._stopped
 
     async def get_provider(self, resource: Resource) -> HandlerAPI[Any]:
-        provider = await asyncio.get_running_loop().run_in_executor(
-            self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
-        )
+        provider = handler.Commander.get_provider(agent=self, resource=resource)
         provider.set_cache(self._cache)
         return provider
 
