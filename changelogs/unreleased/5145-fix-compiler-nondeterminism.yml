@@ -1,0 +1,9 @@
+description: "Compiler: fixed a rare occurrence of nondeterministic execution order"
+issue-nr: 5145
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches:
+  - master
+  - iso7
+  - iso6
