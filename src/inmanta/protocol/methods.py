@@ -307,6 +307,7 @@ def clear_environment(id: uuid.UUID):
     This method deletes various components associated with the specified environment from the database,
     including agents, compile data, parameters, notifications, code, resources, and configuration models.
     However, it retains the entry in the Environment table itself and settings are kept.
+    The environment will be temporarily halted during the decommissioning process.
 
     :param id: The id of the environment to be cleared.
 
@@ -864,7 +865,7 @@ def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
     :param tid: The id of the environment to which the code belongs.
     :param id: The version number of the configuration model.
     :param resources: A dictionary where each key is a string representing a resource type.
-                  For each resource type, the value is a dictionary. This nested dictionary's keys are file names,
+                  For each resource type, the value is a dictionary. This nested dictionary's keys are file hashes,
                   and each key maps to a tuple. This tuple contains three elements: the file name, the module name,
                   and a list of requirements.
 

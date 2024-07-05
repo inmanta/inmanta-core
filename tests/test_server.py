@@ -393,7 +393,7 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
         {
             "group": "root",
             "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version,
+            "id": "std::testing::NullResource[vm1.dev.inmanta.com,name=network],v=%d" % version,
             "owner": "root",
             "path": "/etc/sysconfig/network",
             "permissions": 644,
@@ -405,7 +405,7 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
         {
             "group": "root",
             "hash": "b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba",
-            "id": "std::File[vm2.dev.inmanta.com,path=/etc/motd],v=%d" % version,
+            "id": "std::testing::NullResource[vm2.dev.inmanta.com,name=motd],v=%d" % version,
             "owner": "root",
             "path": "/etc/motd",
             "permissions": 644,
@@ -417,7 +417,7 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
         {
             "group": "root",
             "hash": "3bfcdad9ab7f9d916a954f1a96b28d31d95593e4",
-            "id": "std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version,
+            "id": "std::testing::NullResource[vm1.dev.inmanta.com,name=hostname],v=%d" % version,
             "owner": "root",
             "path": "/etc/hostname",
             "permissions": 644,
@@ -430,7 +430,7 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
             "id": "std::Service[vm1.dev.inmanta.com,name=network],v=%d" % version,
             "name": "network",
             "onboot": True,
-            "requires": ["std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version],
+            "requires": ["std::testing::NullResource[vm1.dev.inmanta.com,name=network],v=%d" % version],
             "state": "running",
             "version": version,
         },
@@ -474,7 +474,7 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     now = datetime.now()
     result = await aclient.resource_action_update(
         environment_multi,
-        ["std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version],
+        ["std::testing::NullResource[vm1.dev.inmanta.com,name=network],v=%d" % version],
         action_id,
         "deploy",
         now,
@@ -494,7 +494,7 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     now = datetime.now()
     result = await aclient.resource_action_update(
         environment_multi,
-        ["std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version],
+        ["std::testing::NullResource[vm1.dev.inmanta.com,name=hostname],v=%d" % version],
         action_id,
         "deploy",
         now,
@@ -520,7 +520,7 @@ async def test_get_environment(client, clienthelper, server, environment):
                 {
                     "group": "root",
                     "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-                    "id": "std::File[vm1.dev.inmanta.com,path=/tmp/file%d],v=%d" % (j, version),
+                    "id": "std::testing::NullResource[vm1.dev.inmanta.com,name=file%d],v=%d" % (j, version),
                     "owner": "root",
                     "path": "/tmp/file%d" % j,
                     "permissions": 644,
@@ -567,7 +567,7 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
             {
                 "group": "root",
                 "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-                "id": "std::File[vm1,path=/tmp/file%d],v=%d" % (j, version),
+                "id": "std::testing::NullResource[vm1,name=file%d],v=%d" % (j, version),
                 "owner": "root",
                 "path": "/tmp/file%d" % j,
                 "permissions": 644,
@@ -748,8 +748,8 @@ async def test_batched_code_upload(
     """Test uploading all code definitions at once"""
     snippetcompiler.setup_for_snippet(
         """
-    h = std::Host(name="test", os=std::linux)
-    f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
+    import std::testing
+    f = std::testing::NullResource(name="test")
     """
     )
     version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
@@ -789,7 +789,7 @@ async def test_resource_action_log(server, client, environment):
         {
             "group": "root",
             "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version,
+            "id": "std::testing::NullResource[vm1.dev.inmanta.com,name=network],v=%d" % version,
             "owner": "root",
             "path": "/etc/sysconfig/network",
             "permissions": 644,
@@ -824,7 +824,7 @@ async def test_invalid_sid(server, client, environment):
     Test the server to manage the updates on a model during agent deploy
     """
     # request get_code with a compiler client that does not have a sid
-    res = await client.get_code(tid=environment, id=1, resource="std::File")
+    res = await client.get_code(tid=environment, id=1, resource="std::testing::NullResource")
     assert res.code == 400
     assert res.result["message"] == "Invalid request: this is an agent to server call, it should contain an agent session id"
 
@@ -901,7 +901,7 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
             {
                 "group": "root",
                 "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-                "id": "std::File[vm1,path=/tmp/file%d],v=%d" % (j, version),
+                "id": "std::testing::NullResource[vm1,name=file%d],v=%d" % (j, version),
                 "owner": "root",
                 "path": "/tmp/file%d" % j,
                 "permissions": 644,
@@ -915,7 +915,7 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     #  adding a resource action with its change field set to "created" to test the get_resource_actions
     #  filtering on resources with changes
 
-    rvid_r1_v1 = f"std::File[agent1,path=/etc/file200],v={version}"
+    rvid_r1_v1 = f"std::testing::NullResource[agent1,name=file200],v={version}"
     resources.append(
         {
             "group": "root",
@@ -1038,7 +1038,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
         await cm.insert()
         res1 = data.Resource.new(
             environment=env.id,
-            resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
+            resource_version_id="std::testing::NullResource[agent1,name=motd],v=%s" % str(i),
             status=const.ResourceState.deployed,
             last_deploy=datetime.now() + timedelta(minutes=i),
             attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
@@ -1051,7 +1051,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     resource_action = data.ResourceAction(
         environment=env.id,
         version=1,
-        resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={1}"],
+        resource_version_ids=[f"std::testing::NullResource[agent1,name=motd],v={1}"],
         action_id=earliest_action_id,
         action=const.ResourceAction.deploy,
         started=motd_first_start_time - timedelta(minutes=1),
@@ -1067,7 +1067,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
         resource_action = data.ResourceAction(
             environment=env.id,
             version=i,
-            resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={i}"],
+            resource_version_ids=[f"std::testing::NullResource[agent1,name=motd],v={i}"],
             action_id=action_id,
             action=const.ResourceAction.deploy,
             started=motd_first_start_time,
@@ -1080,7 +1080,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     resource_action = data.ResourceAction(
         environment=env.id,
         version=6,
-        resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={6}"],
+        resource_version_ids=[f"std::testing::NullResource[agent1,name=motd],v={6}"],
         action_id=later_action_id,
         action=const.ResourceAction.deploy,
         started=motd_first_start_time + timedelta(minutes=6),
@@ -1091,7 +1091,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
 
     result = await client.get_resource_actions(
         tid=env.id,
-        resource_type="std::File",
+        resource_type="std::testing::NullResource",
         attribute="path",
         attribute_value="/etc/motd",
         last_timestamp=motd_first_start_time + timedelta(minutes=7),
@@ -1165,9 +1165,9 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     await cm.insert()
 
     model_version = 1
-    rvid_r1 = "std::File[agent1,path=/etc/file1]"
-    rvid_r2 = "std::File[agent1,path=/etc/file2]"
-    rvid_r3 = "std::File[agent1,path=/etc/file3]"
+    rvid_r1 = "std::testing::NullResource[agent1,name=file1]"
+    rvid_r2 = "std::testing::NullResource[agent1,name=file2]"
+    rvid_r3 = "std::testing::NullResource[agent1,name=file3]"
     rvid_r1_v1 = f"{rvid_r1},v={model_version}"
     rvid_r2_v1 = f"{rvid_r2},v={model_version}"
     rvid_r3_v1 = f"{rvid_r3},v={model_version}"
@@ -1238,13 +1238,13 @@ async def test_resource_deploy_start_error_handling(server, client, environment,
 
     # Version part missing from resource_version_id
     result = await agent._client.resource_deploy_start(
-        tid=env_id, rvid="std::File[agent1,path=/etc/file1]", action_id=uuid.uuid4()
+        tid=env_id, rvid="std::testing::NullResource[agent1,name=file1]", action_id=uuid.uuid4()
     )
     assert result.code == 400
     assert "Invalid resource version id" in result.result["message"]
 
     # Execute resource_deploy_start call for resource that doesn't exist
-    resource_id = "std::File[agent1,path=/etc/file1],v=1"
+    resource_id = "std::testing::NullResource[agent1,name=file1],v=1"
     result = await agent._client.resource_deploy_start(tid=env_id, rvid=resource_id, action_id=uuid.uuid4())
     assert result.code == 404
     assert f"Environment {environment} doesn't contain a resource with id {resource_id}" in result.result["message"]
@@ -1268,7 +1268,7 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
     await cm.insert()
 
     model_version = 1
-    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+    rvid_r1_v1 = f"std::testing::NullResource[agent1,name=file1],v={model_version}"
 
     await data.Resource.new(
         environment=env_id,
@@ -1313,7 +1313,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     )
     await cm.insert()
 
-    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+    rvid_r1_v1 = f"std::testing::NullResource[agent1,name=file1],v={model_version}"
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.available,
@@ -1328,7 +1328,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
         id=parameter_id,
         source=const.ParameterSource.user,
         value="val",
-        resource_id="std::File[agent1,path=/etc/file1]",
+        resource_id="std::testing::NullResource[agent1,name=file1]",
     )
     assert result.code == 200
 
@@ -1485,7 +1485,7 @@ async def test_resource_deploy_done_invalid_state(server, client, environment, a
     )
     await cm.insert()
 
-    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+    rvid_r1_v1 = f"std::testing::NullResource[agent1,name=file1],v={model_version}"
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.available,
@@ -1524,7 +1524,7 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
     )
     await cm.insert()
 
-    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+    rvid_r1_v1 = f"std::testing::NullResource[agent1,name=file1],v={model_version}"
 
     # Resource doesn't exist
     result = await agent._client.resource_deploy_done(
@@ -1635,11 +1635,11 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
         is_suitable_for_partial_compiles=False,
     ).insert()
 
-    path = "/etc/file1"
-    resource_id = f"std::File[agent4,path={path}]"
+    name = "file1"
+    resource_id = f"std::testing::NullResource[agent4,name={name}]"
 
     await data.Resource.new(
-        environment=env1.id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"path": path}
+        environment=env1.id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"name": name}
     ).insert()
 
     # should get purged

@@ -1,0 +1,4 @@
+description: Add default display value for modules compatibility ranges. This fixes an error in the docs build
+  where the ``centered`` directive was called without arguments.
+change-type: patch
+destination-branches: [iso6]

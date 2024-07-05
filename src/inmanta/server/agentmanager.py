@@ -18,11 +18,12 @@
 import asyncio
 import logging
 import os
+import shutil
 import sys
 import time
 import uuid
 from asyncio import queues, subprocess
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence, Set
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, Union, cast
@@ -30,6 +31,7 @@ from uuid import UUID
 
 import asyncpg.connection
 
+import inmanta.config
 from inmanta import const, data
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
@@ -631,13 +633,23 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             return None
 
-    async def are_agents_active(self, tid: uuid.UUID, endpoints: list[str]) -> bool:
+    async def expire_sessions_for_agents(self, env_id: uuid.UUID, endpoints: Set[str]) -> None:
+        """
+        Expire all sessions for any of the requested agent endpoints.
+        """
+        async with self.session_lock:
+            sessions_to_expire: Iterator[protocol.Session] = (
+                session for session in self.sessions.values() if endpoints & session.endpoint_names and session.tid == env_id
+            )
+            await asyncio.gather(*(s.expire_and_abort(timeout=0) for s in sessions_to_expire))
+
+    async def are_agents_active(self, tid: uuid.UUID, endpoints: Iterable[str]) -> bool:
         """
         Return true iff all the given agents are in the up or the paused state.
         """
         return all(active for (_, active) in await self.get_agent_active_status(tid, endpoints))
 
-    async def get_agent_active_status(self, tid: uuid.UUID, endpoints: list[str]) -> list[tuple[str, bool]]:
+    async def get_agent_active_status(self, tid: uuid.UUID, endpoints: Iterable[str]) -> list[tuple[str, bool]]:
         """
         Return a list of tuples where the first element of the tuple contains the name of an endpoint
         and the second a boolean indicating where there is an active (up or paused) agent for that endpoint.
@@ -968,9 +980,14 @@ class AutostartedAgentManager(ServerSlice):
         LOGGER.debug("Restarting agents in environment %s", env.id)
         agents = await data.Agent.get_list(environment=env.id)
         agent_list = [a.name for a in agents]
-        await self._ensure_agents(env, agent_list, True)
+        await self._ensure_agents(env, agent_list, restart=True)
 
-    async def stop_agents(self, env: data.Environment) -> None:
+    async def stop_agents(
+        self,
+        env: data.Environment,
+        *,
+        delete_venv: bool = False,
+    ) -> None:
         """
         Stop all agents for this environment and close sessions
         """
@@ -981,9 +998,56 @@ class AutostartedAgentManager(ServerSlice):
                 self._stop_process(subproc)
                 await self._wait_for_proc_bounded([subproc])
                 del self._agent_procs[env.id]
+            if delete_venv:
+                self._remove_venv_for_agent_in_env(env.id)
 
             LOGGER.debug("Expiring all sessions for %s", env.id)
             await self._agent_manager.expire_all_sessions_for_environment(env.id)
+
+    async def _stop_autostarted_agents(
+        self,
+        env: data.Environment,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """
+        Stop the autostarted agent process for this environment and expire all its sessions.
+        Does not expire non-autostarted agents' sessions.
+
+        Must be called under the agent lock
+        """
+        LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
+        if env.id in self._agent_procs:
+            subproc = self._agent_procs[env.id]
+            self._stop_process(subproc)
+            await self._wait_for_proc_bounded([subproc])
+            del self._agent_procs[env.id]
+
+        # fetch the agent map after stopping the process to prevent races with agent map update notifying the process
+        agent_map: Mapping[str, str] = cast(
+            Mapping[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
+        )  # we know the type of this map
+
+        LOGGER.debug("Expiring sessions for autostarted agents %s", sorted(agent_map.keys()))
+        await self._agent_manager.expire_sessions_for_agents(env.id, agent_map.keys())
+
+    def _get_state_dir_for_agent_in_env(self, env_id: uuid.UUID) -> str:
+        """
+        Return the state dir to be used by the auto-started agent in the given environment.
+        """
+        state_dir: str = inmanta.config.state_dir.get()
+        return os.path.join(state_dir, str(env_id))
+
+    def _remove_venv_for_agent_in_env(self, env_id: uuid.UUID) -> None:
+        """
+        Remove the venv for the auto-started agent in the given environment.
+        """
+        agent_state_dir: str = self._get_state_dir_for_agent_in_env(env_id)
+        venv_dir: str = os.path.join(agent_state_dir, "agent", "env")
+        try:
+            shutil.rmtree(venv_dir)
+        except FileNotFoundError:
+            pass
 
     def _stop_process(self, process: subprocess.Process) -> None:
         try:
@@ -1005,62 +1069,91 @@ class AutostartedAgentManager(ServerSlice):
     async def _ensure_agents(
         self,
         env: data.Environment,
-        agents: list[str],
-        restart: bool = False,
+        agents: Collection[str],
         *,
+        restart: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> bool:
         """
         Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
 
         :param env: The environment to start the agents for
-        :param agents: A list of agent names that possibly should be started in this environment.
+        :param agents: A list of agent names that should be running in this environment. Waits for the agents that are both in
+            this list and in the agent map to be active before returning.
         :param restart: Restart all agents even if the list of agents is up to date.
+        :param connection: The database connection to use. Must not be in a transaction context.
+
+        :return: True iff a new agent process was started.
         """
         if self._stopping:
             raise ShutdownInProgress()
 
-        agent_map: dict[str, str] = cast(
-            dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
-        )  # we know the type of this map
+        if connection is not None and connection.is_in_transaction():
+            # Should not be called in a transaction context because it has (immediate) side effects outside of the database
+            # that are tied to the database state. Several inconsistency issues could occur if this runs in a transaction
+            # context:
+            #   - side effects based on oncommitted reads (may even need to be rolled back)
+            #   - race condition with similar side effect flows due to stale reads (e.g. other flow pauses agent and kills
+            #       process, this one brings it back because it reads the agent as unpaused)
+            raise Exception("_ensure_agents should not be called in a transaction context")
 
-        agents = [agent for agent in agents if agent in agent_map]
-        needsstart = restart
-        if len(agents) == 0:
-            return False
+        async with data.Agent.get_connection(connection) as connection:
+            agent_map: Mapping[str, str] = cast(
+                Mapping[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
+            )  # we know the type of this map
 
-        async def is_start_agent_required() -> bool:
-            if needsstart:
-                return True
-            return not await self._agent_manager.are_agents_active(env.id, agents)
-
-        async with self.agent_lock:
-            # silently ignore requests if this environment is halted
-            refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
-            if refreshed_env is None:
-                raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
-            env = refreshed_env
-            if env.halted:
+            autostart_agents: Set[str] = set(agents) & agent_map.keys()
+            if len(autostart_agents) == 0:
                 return False
 
-            if await is_start_agent_required():
-                LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
-                res = await self.__do_start_agent(agents, env, connection=connection)
-                return res
-        return False
+            async with self.agent_lock:
+                # silently ignore requests if this environment is halted
+                refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+                if refreshed_env is None:
+                    raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
+                env = refreshed_env
+                if env.halted:
+                    return False
+
+                if not restart and await self._agent_manager.are_agents_active(env.id, autostart_agents):
+                    # do not start a new agent process if the agents are already active, regardless of whether their session
+                    # is with an autostarted process or not.
+                    return False
+
+                start_new_process: bool
+                if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is not None:
+                    # Start new process if none is currently running for this environment.
+                    # Otherwise trust that it tracks any changes to the agent map.
+                    LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_agents)
+                    start_new_process = True
+                elif restart:
+                    LOGGER.info(
+                        "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
+                        autostart_agents,
+                        self._agent_procs[env.id],
+                    )
+                    await self._stop_autostarted_agents(env, connection=connection)
+                    start_new_process = True
+                else:
+                    start_new_process = False
+
+                if start_new_process:
+                    self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
+
+                # Wait for all agents to start
+                try:
+                    await self._wait_for_agents(env, autostart_agents, connection=connection)
+                except asyncio.TimeoutError:
+                    LOGGER.warning("Not all agent instances started successfully")
+                return start_new_process
 
     async def __do_start_agent(
-        self, agents: list[str], env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> bool:
+        self, env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> subprocess.Process:
         """
-        Start an agent process for the given agents in the given environment
-
-        Note: Always call under agent_lock
+        Start an autostarted agent process for the given environment. Should only be called if none is running yet.
         """
-        agent_map: dict[str, str]
-        agent_map = cast(dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection))
-        config: str
-        config = await self._make_agent_config(env, agents, agent_map, connection=connection)
+        config: str = await self._make_agent_config(env, connection=connection)
 
         config_dir = os.path.join(self._server_storage["agents"], str(env.id))
         if not os.path.exists(config_dir):
@@ -1075,94 +1168,29 @@ class AutostartedAgentManager(ServerSlice):
 
         agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
 
-        proc: Optional[subprocess.Process] = None
-        try:
-            proc = await self._fork_inmanta(
-                [
-                    "--log-file-level",
-                    "DEBUG",
-                    "--timed-logs",
-                    "--config",
-                    config_path,
-                    "--config-dir",
-                    Config._config_dir if Config._config_dir is not None else "",
-                    "--log-file",
-                    agent_log,
-                    "agent",
-                ],
-                out,
-                err,
-            )
-
-            if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
-                # If the return code is not None the process is already terminated
-                if self._agent_procs[env.id].returncode is None:
-                    LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].pid)
-                    self._agent_procs[env.id].terminate()
-                    await self._wait_for_proc_bounded([self._agent_procs[env.id]])
-            self._agent_procs[env.id] = proc
-        except Exception as e:
-            # Prevent dangling processes
-            if proc is not None and proc.returncode is None:
-                proc.kill()
-            raise e
-
-        async def _wait_until_agent_instances_are_active() -> None:
-            """
-            Wait until all AgentInstances for the endpoints `agents` are active.
-            A TimeoutError is raised when not all AgentInstances are active and no new AgentInstance
-            became active in the last 5 seconds.
-            """
-            agent_statuses: dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(env.id, set(agents))
-            # Only wait for agents that are not paused
-            expected_agents_in_up_state: set[str] = {
-                agent_name
-                for agent_name, status in agent_statuses.items()
-                if status is not None and status is not AgentStatus.paused
-            }
-            actual_agents_in_up_state: set[str] = set()
-            started = int(time.time())
-            last_new_agent_seen = started
-            last_log = started
-
-            while len(expected_agents_in_up_state) != len(actual_agents_in_up_state):
-                await asyncio.sleep(0.1)
-                now = int(time.time())
-                if now - last_new_agent_seen > AUTO_STARTED_AGENT_WAIT:
-                    raise asyncio.TimeoutError()
-                if now - last_log > AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL:
-                    last_log = now
-                    LOGGER.debug(
-                        "Waiting for agent with PID %s, waited %d seconds, %d/%d instances up",
-                        proc.pid,
-                        now - started,
-                        len(actual_agents_in_up_state),
-                        len(expected_agents_in_up_state),
-                    )
-                new_actual_agents_in_up_state = {
-                    agent_name
-                    for agent_name in expected_agents_in_up_state
-                    if (env.id, agent_name) in self._agent_manager.tid_endpoint_to_session
-                }
-                if len(new_actual_agents_in_up_state) > len(actual_agents_in_up_state):
-                    # Reset timeout timer because a new instance became active
-                    last_new_agent_seen = now
-                actual_agents_in_up_state = new_actual_agents_in_up_state
+        proc: subprocess.Process = await self._fork_inmanta(
+            [
+                "--log-file-level",
+                "DEBUG",
+                "--timed-logs",
+                "--config",
+                config_path,
+                "--config-dir",
+                Config._config_dir if Config._config_dir is not None else "",
+                "--log-file",
+                agent_log,
+                "agent",
+            ],
+            out,
+            err,
+        )
 
         LOGGER.debug("Started new agent with PID %s", proc.pid)
-        # Wait for all agents to start
-        try:
-            await _wait_until_agent_instances_are_active()
-            LOGGER.debug("Agent with PID %s is up", proc.pid)
-        except asyncio.TimeoutError:
-            LOGGER.warning("Timeout: agent with PID %s took too long to start", proc.pid)
-        return True
+        return proc
 
     async def _make_agent_config(
         self,
         env: data.Environment,
-        agent_names: list[str],
-        agent_map: dict[str, str],
         *,
         connection: Optional[asyncpg.connection.Connection],
     ) -> str:
@@ -1170,14 +1198,12 @@ class AutostartedAgentManager(ServerSlice):
         Generate the config file for the process that hosts the autostarted agents
 
         :param env: The environment for which to autostart agents
-        :param agent_names: The names of the agents
-        :param agent_map: The agent mapping to use
         :return: A string that contains the config file content.
         """
         environment_id = str(env.id)
         port: int = opt.get_bind_port()
 
-        privatestatedir: str = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
+        privatestatedir: str = self._get_state_dir_for_agent_in_env(env.id)
 
         agent_deploy_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, connection=connection))
         agent_deploy_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection))
@@ -1185,16 +1211,11 @@ class AutostartedAgentManager(ServerSlice):
         agent_repair_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME, connection=connection))
         agent_repair_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection))
 
-        # The internal agent always needs to have a session. Otherwise the agentmap update trigger doesn't work
-        if "internal" not in agent_names:
-            agent_names.append("internal")
-
         # generate config file
         config = """[config]
 state-dir=%(statedir)s
 
 use_autostart_agent_map=true
-agent-names = %(agents)s
 environment=%(env_id)s
 
 agent-deploy-splay-time=%(agent_deploy_splay)d
@@ -1208,7 +1229,6 @@ agent-get-resource-backoff=%(agent_get_resource_backoff)f
 port=%(port)s
 host=%(serveradress)s
 """ % {
-            "agents": ",".join(agent_names),
             "env_id": environment_id,
             "port": port,
             "statedir": privatestatedir,
@@ -1271,6 +1291,75 @@ ssl=True
                 outhandle.close()
             if errhandle is not None:
                 errhandle.close()
+
+    async def _wait_for_agents(
+        self, env: data.Environment, agents: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        """
+        Wait until all requested autostarted agent instances are active, e.g. after starting a new agent process.
+
+        Must be called under the agent lock.
+
+        :param env: The environment for which to wait for agents.
+        :param agents: Autostarted agent endpoints to wait for.
+
+        :raises TimeoutError: When not all agent instances are active and no new agent instance became active in the last
+            5 seconds.
+        """
+        agent_statuses: dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(env.id, agents, connection=connection)
+        # Only wait for agents that are not paused
+        expected_agents_in_up_state: Set[str] = {
+            agent_name
+            for agent_name, status in agent_statuses.items()
+            if status is not None and status is not AgentStatus.paused
+        }
+
+        assert env.id in self._agent_procs
+        proc = self._agent_procs[env.id]
+
+        actual_agents_in_up_state: set[str] = set()
+        started = int(time.time())
+        last_new_agent_seen = started
+        last_log = started
+
+        while len(expected_agents_in_up_state) != len(actual_agents_in_up_state):
+            await asyncio.sleep(0.1)
+            now = int(time.time())
+            if now - last_new_agent_seen > AUTO_STARTED_AGENT_WAIT:
+                LOGGER.warning(
+                    "Timeout: agent with PID %s took too long to start: still waiting for agent instances %s",
+                    proc.pid,
+                    ",".join(sorted(expected_agents_in_up_state - actual_agents_in_up_state)),
+                )
+                raise asyncio.TimeoutError()
+            if now - last_log > AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL:
+                last_log = now
+                LOGGER.debug(
+                    "Waiting for agent with PID %s, waited %d seconds, %d/%d instances up",
+                    proc.pid,
+                    now - started,
+                    len(actual_agents_in_up_state),
+                    len(expected_agents_in_up_state),
+                )
+            new_actual_agents_in_up_state = {
+                agent_name
+                for agent_name in expected_agents_in_up_state
+                if (
+                    (session := self._agent_manager.tid_endpoint_to_session.get((env.id, agent_name), None)) is not None
+                    # make sure to check for expiry because sessions are unregistered from the agent manager asynchronously
+                    and not session.expired
+                )
+            }
+            if len(new_actual_agents_in_up_state) > len(actual_agents_in_up_state):
+                # Reset timeout timer because a new instance became active
+                last_new_agent_seen = now
+            actual_agents_in_up_state = new_actual_agents_in_up_state
+
+        LOGGER.debug(
+            "Agent process with PID %s is up for agent instances %s",
+            proc.pid,
+            ",".join(sorted(expected_agents_in_up_state)),
+        )
 
     async def notify_agent_about_agent_map_update(self, env: data.Environment) -> None:
         agent_client = self._agent_manager.get_agent_client(tid=env.id, endpoint="internal", live_agent_only=False)

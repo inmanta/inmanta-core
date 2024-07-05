@@ -28,12 +28,12 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Sequence, Set
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from re import Pattern
-from typing import Any, Callable, Generic, NewType, Optional, TypeVar, Union, cast, overload
+from typing import Any, Generic, NewType, Optional, TypeVar, Union, cast, overload
 from uuid import UUID
 
 import asyncpg
@@ -1274,7 +1274,7 @@ class BaseDocument(metaclass=DocumentMeta):
         """
         if connection is not None:
             return util.nullcontext(connection)
-        # Make pypi happy
+        # Make mypy happy
         assert cls._connection_pool is not None
         return cls._connection_pool.acquire()
 
@@ -2596,7 +2596,7 @@ class Environment(BaseDocument):
             typ="str",
             default="600",
             doc="The deployment interval of the autostarted agents. Can be specified as a number of seconds"
-            " or as a cron-like expression."
+            " or as a cron-like expression. Set this to 0 to disable the automatic scheduling of deploy runs."
             " See also: :inmanta.config:option:`config.agent-deploy-interval`",
             validator=validate_cron_or_int,
             agent_restart=True,
@@ -2616,7 +2616,7 @@ class Environment(BaseDocument):
             default="86400",
             doc=(
                 "The repair interval of the autostarted agents. Can be specified as a number of seconds"
-                " or as a cron-like expression."
+                " or as a cron-like expression. Set this to 0 to disable the automatic scheduling of repair runs."
                 " See also: :inmanta.config:option:`config.agent-repair-interval`"
             ),
             validator=validate_cron_or_int,
@@ -2722,9 +2722,9 @@ class Environment(BaseDocument):
         ENVIRONMENT_METRICS_RETENTION: Setting(
             name=ENVIRONMENT_METRICS_RETENTION,
             typ="int",
-            default=8760,
+            default=336,
             doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
-            "Default=8760 hours (1 year). Set to 0 to disable automatic cleanups.",
+            "Default=336 hours (2 weeks). Set to 0 to disable automatic cleanups.",
             validator=convert_int,
         ),
     }
@@ -3421,10 +3421,12 @@ class Agent(BaseDocument):
         return super().get_valid_field_names() + ["process_name", "status"]
 
     @classmethod
-    async def get_statuses(cls, env_id: uuid.UUID, agent_names: set[str]) -> dict[str, Optional[AgentStatus]]:
+    async def get_statuses(
+        cls, env_id: uuid.UUID, agent_names: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> dict[str, Optional[AgentStatus]]:
         result: dict[str, Optional[AgentStatus]] = {}
         for agent_name in agent_names:
-            agent = await cls.get_one(environment=env_id, name=agent_name)
+            agent = await cls.get_one(environment=env_id, name=agent_name, connection=connection)
             if agent:
                 result[agent_name] = agent.get_status()
             else:

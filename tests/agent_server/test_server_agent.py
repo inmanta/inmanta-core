@@ -18,8 +18,10 @@
 import asyncio
 import dataclasses
 import logging
+import os
 import time
 import uuid
+from collections.abc import Mapping
 from functools import partial
 from itertools import groupby
 from logging import DEBUG
@@ -525,9 +527,7 @@ async def test_env_setting_wiring_to_autostarted_agent(
         env = await data.Environment.get_by_id(env_id)
         autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
 
-        config = await autostarted_agent_manager._make_agent_config(
-            env, agent_names=[], agent_map={"internal": ""}, connection=None
-        )
+        config = await autostarted_agent_manager._make_agent_config(env, connection=None)
 
         assert f"agent-deploy-interval={interval}" in config
         assert f"agent-repair-interval={interval}" in config
@@ -1632,7 +1632,54 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     assert len(new_agent_processes) == 0, new_agent_processes
 
 
-async def test_autostart_mapping_update_uri(server, client, environment, async_finalizer, caplog):
+@pytest.mark.parametrize("autostarted", (True, False))
+async def test_autostart_mapping_overrides_config(server, client, environment, async_finalizer, caplog, autostarted: bool):
+    """
+    Verify that the use_autostart_agent_map setting takes precedence over agents configured in the config file.
+    When the option is set the server's agent map should be the authority for which agents to manage.
+    """
+    # configure agent as an autostarted agent or not
+    agent_config.use_autostart_agent_map.set(str(autostarted).lower())
+    # also configure the agent with an explicit agent config and agent map, which should be ignored
+    configured_agent: str = "configured_agent"
+    agent_config.agent_names.set(configured_agent)
+
+    env_uuid = uuid.UUID(environment)
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    # configure server's autostarted agent map
+    autostarted_agent: str = "autostarted_agent"
+    result = await client.set_setting(
+        env_uuid,
+        data.AUTOSTART_AGENT_MAP,
+        {"internal": "localhost", autostarted_agent: "localhost"},
+    )
+    assert result.code == 200
+
+    # Start agent
+    a = agent.Agent(environment=env_uuid, code_loader=False)
+    await a.start()
+    async_finalizer(a.stop)
+
+    # Wait until agents are up
+    await retry_limited(lambda: len(agent_manager.tid_endpoint_to_session) == (2 if autostarted else 1), timeout=2)
+
+    endpoint_sessions: Mapping[str, UUID] = {
+        key[1]: session.id for key, session in agent_manager.tid_endpoint_to_session.items()
+    }
+    assert endpoint_sessions == (
+        {
+            "internal": a.sessionid,
+            autostarted_agent: a.sessionid,
+        }
+        if autostarted
+        else {
+            configured_agent: a.sessionid,
+        }
+    )
+
+
+async def test_autostart_mapping_update_uri(server, client, environment, async_finalizer, caplog, no_agent_backoff):
     caplog.set_level(logging.INFO)
     agent_config.use_autostart_agent_map.set("true")
     env_uuid = uuid.UUID(environment)
@@ -1723,8 +1770,16 @@ async def test_autostart_clear_environment(server, client, resource_container, e
     # One autostarted agent should running as a subprocess
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    venv_dir_agent1 = os.path.join(
+        autostarted_agent_manager._get_state_dir_for_agent_in_env(uuid.UUID(environment)), "agent", "env"
+    )
+
     # clear environment
-    await client.clear_environment(environment)
+    assert os.path.exists(venv_dir_agent1)
+    result = await client.clear_environment(environment)
+    assert result.code == 200
+    assert not os.path.exists(venv_dir_agent1)
 
     # Autostarted agent should be terminated after clearing the environment
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=0)
@@ -1779,6 +1834,57 @@ async def test_autostart_clear_environment(server, client, resource_container, e
 
     # One autostarted agent should running as a subprocess
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
+
+
+@pytest.mark.parametrize("delete_project", [True, False])
+async def test_autostart_clear_agent_venv_on_delete(
+    server, client, resource_container, project_default: str, environment: str, no_agent_backoff, delete_project: bool
+) -> None:
+    """
+    Ensure that the venv of an auto-started agent gets cleaned up when its environment or project is deleted.
+    """
+    resource_container.Provider.reset()
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
+    await env.set(data.AUTO_DEPLOY, True)
+    await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
+    await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
+    await env.set(data.AUTOSTART_ON_START, True)
+
+    clienthelper = ClientHelper(client, environment)
+    version = await clienthelper.get_version()
+    await clienthelper.put_version_simple(
+        [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": f"test::Resource[agent1,key=key1],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            }
+        ],
+        version,
+    )
+
+    # check deploy
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    venv_dir_agent1 = os.path.join(
+        autostarted_agent_manager._get_state_dir_for_agent_in_env(uuid.UUID(environment)), "agent", "env"
+    )
+
+    assert os.path.exists(venv_dir_agent1)
+
+    if delete_project:
+        result = await client.delete_project(project_default)
+        assert result.code == 200
+    else:
+        result = await client.delete_environment(environment)
+        assert result.code == 200
+
+    assert not os.path.exists(venv_dir_agent1)
 
 
 async def setup_environment_with_agent(client, project_name):
