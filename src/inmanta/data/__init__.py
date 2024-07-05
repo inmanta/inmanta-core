@@ -29,7 +29,7 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Sequence, Set
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
@@ -1219,7 +1219,7 @@ class BaseDocument(metaclass=DocumentMeta):
         """
         if connection is not None:
             return util.nullcontext(connection)
-        # Make pypi happy
+        # Make mypy happy
         assert cls._connection_pool is not None
         return cls._connection_pool.acquire()
 
@@ -2531,7 +2531,7 @@ class Environment(BaseDocument):
             typ="str",
             default="600",
             doc="The deployment interval of the autostarted agents. Can be specified as a number of seconds"
-            " or as a cron-like expression."
+            " or as a cron-like expression. Set this to 0 to disable the automatic scheduling of deploy runs."
             " See also: :inmanta.config:option:`config.agent-deploy-interval`",
             validator=validate_cron_or_int,
             agent_restart=True,
@@ -2551,7 +2551,7 @@ class Environment(BaseDocument):
             default="86400",
             doc=(
                 "The repair interval of the autostarted agents. Can be specified as a number of seconds"
-                " or as a cron-like expression."
+                " or as a cron-like expression. Set this to 0 to disable the automatic scheduling of repair runs."
                 " See also: :inmanta.config:option:`config.agent-repair-interval`"
             ),
             validator=validate_cron_or_int,
@@ -2641,9 +2641,9 @@ class Environment(BaseDocument):
         ENVIRONMENT_METRICS_RETENTION: Setting(
             name=ENVIRONMENT_METRICS_RETENTION,
             typ="int",
-            default=8760,
+            default=336,
             doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
-            "Default=8760 hours (1 year). Set to 0 to disable automatic cleanups.",
+            "Default=336 hours (2 weeks). Set to 0 to disable automatic cleanups.",
             validator=convert_int,
         ),
     }
@@ -3344,10 +3344,12 @@ class Agent(BaseDocument):
         return super().get_valid_field_names() + ["process_name", "status"]
 
     @classmethod
-    async def get_statuses(cls, env_id: uuid.UUID, agent_names: set[str]) -> dict[str, Optional[AgentStatus]]:
+    async def get_statuses(
+        cls, env_id: uuid.UUID, agent_names: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> dict[str, Optional[AgentStatus]]:
         result: dict[str, Optional[AgentStatus]] = {}
         for agent_name in agent_names:
-            agent = await cls.get_one(environment=env_id, name=agent_name)
+            agent = await cls.get_one(environment=env_id, name=agent_name, connection=connection)
             if agent:
                 result[agent_name] = agent.get_status()
             else:
@@ -3581,7 +3583,7 @@ class Compile(BaseDocument):
     :param requested: Time the compile was requested
     :param started: Time the compile started
     :param completed: Time to compile was completed
-    :param do_export: should this compiler perform an export
+    :param do_export: should this compile perform an export
     :param force_update: should this compile definitely update
     :param metadata: exporter metadata to be passed to the compiler
     :param requested_environment_variables: environment variables requested to be passed to the compiler
@@ -3686,25 +3688,31 @@ class Compile(BaseDocument):
         return results[0]
 
     @classmethod
-    async def get_next_run(cls, environment_id: uuid.UUID) -> Optional["Compile"]:
+    async def get_next_run(
+        cls, environment_id: uuid.UUID, *, connection: Optional[asyncpg.Connection] = None
+    ) -> Optional["Compile"]:
         """Get the next compile in the queue for the given environment"""
-        results = await cls.select_query(
-            f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND completed IS NULL ORDER BY requested ASC LIMIT 1",
-            [cls._get_value(environment_id)],
-        )
-        if not results:
-            return None
-        return results[0]
+        async with cls.get_connection(connection) as con:
+            results = await cls.select_query(
+                f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND completed IS NULL ORDER BY requested ASC LIMIT 1",
+                [cls._get_value(environment_id)],
+                connection=con,
+            )
+            if not results:
+                return None
+            return results[0]
 
     @classmethod
-    async def get_next_run_all(cls) -> "Sequence[Compile]":
+    async def get_next_run_all(cls, *, connection: Optional[asyncpg.Connection] = None) -> "Sequence[Compile]":
         """Get the next compile in the queue for each environment"""
-        results = await cls.select_query(
-            f"SELECT DISTINCT ON (environment) * FROM {cls.table_name()} WHERE completed IS NULL ORDER BY environment, "
-            f"requested ASC",
-            [],
-        )
-        return results
+        async with cls.get_connection(connection) as con:
+            results = await cls.select_query(
+                f"SELECT DISTINCT ON (environment) * FROM {cls.table_name()} WHERE completed IS NULL ORDER BY environment, "
+                f"requested ASC",
+                [],
+                connection=con,
+            )
+            return results
 
     @classmethod
     async def get_unhandled_compiles(cls) -> "Sequence[Compile]":
@@ -3737,10 +3745,13 @@ class Compile(BaseDocument):
         return await cls._fetch_int(query)
 
     @classmethod
-    async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "Sequence[Compile]":
+    async def get_by_remote_id(
+        cls, environment_id: uuid.UUID, remote_id: uuid.UUID, *, connection: Optional[asyncpg.Connection] = None
+    ) -> "Sequence[Compile]":
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND remote_id=$2",
             [cls._get_value(environment_id), cls._get_value(remote_id)],
+            connection=connection,
         )
         return results
 
@@ -4467,13 +4478,16 @@ class Resource(BaseDocument):
     A specific version of a resource. This entity contains the desired state of a resource.
 
     :param environment: The environment this resource version is defined in
-    :param rid: The id of the resource and its version
-    :param resource: The resource for which this defines the state
-    :param model: The configuration model (versioned) this resource state is associated with
-    :param attributes: The state of this version of the resource
+    :param model: The version of the configuration model this resource state is associated with
+    :param resource_id: The id of the resource (without the version)
+    :param resource_type: The type of the resource
+    :param resource_id_value: The attribute value from the resource id
+    :param agent: The name of the agent responsible for deploying this resource
+    :param attributes: The desired state for this version of the resource as a dict of attributes
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
-    :param resource_id_value: The attribute value from the resource id
+    :param status: The state of this resource, used e.g. in scheduling
+    :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
     """
 
     __primary_key__ = ("environment", "model", "resource_id")
@@ -4627,6 +4641,47 @@ class Resource(BaseDocument):
             """
         out = await cls.select_query(query, [env, model_version, rids], no_obj=True)
         return {ResourceIdStr(r["resource_id"]): ResourceState[r["status"]] for r in out}
+
+    @stable_api
+    @classmethod
+    async def get_current_resource_state(cls, env: uuid.UUID, rid: ResourceIdStr) -> Optional[ResourceState]:
+        """
+        Return the state of the given resource in the latest version of the configuration model
+        or None if the resource is not present in the latest version.
+        """
+        query = """
+            WITH latest_released_version AS (
+                SELECT max(version) AS version
+                FROM configurationmodel
+                WHERE environment=$1 AND released
+            )
+            SELECT (
+                CASE
+                    -- The resource_persistent_state.last_non_deploying_status column is only populated for
+                    -- actual deployment operations to prevent locking issues. This case-statement calculates
+                    -- the correct state from the combination of the resource table and the
+                    -- resource_persistent_state table.
+                    WHEN r.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
+                        -- The deploying, undefined and skipped_for_undefined states are not tracked in the
+                        -- resource_persistent_state table.
+                        THEN r.status::text
+                    WHEN rps.last_deployed_attribute_hash != r.attribute_hash
+                        -- The hash changed since the last deploy -> new desired state
+                        THEN r.status::text
+                        -- No override required, use last known state from actual deployment
+                        ELSE rps.last_non_deploying_status::text
+                END
+            ) AS status
+            FROM resource AS r
+                 INNER JOIN resource_persistent_state AS rps ON r.environment=rps.environment AND r.resource_id=rps.resource_id
+                 INNER JOIN configurationmodel AS c ON c.environment=r.environment AND c.version=r.model
+            WHERE r.environment=$1 AND r.model = (SELECT version FROM latest_released_version) AND r.resource_id=$2
+            """
+        results = await cls.select_query(query, [env, rid], no_obj=True)
+        if not results:
+            return None
+        assert len(results) == 1
+        return const.ResourceState(results[0]["status"])
 
     @classmethod
     async def set_deployed_multi(
@@ -4947,27 +5002,43 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
-        status_subquery = """
-        (CASE WHEN
-            (SELECT resource.model < MAX(configurationmodel.version)
-            FROM configurationmodel
-            WHERE configurationmodel.released=TRUE
-            AND environment = $1)
-        THEN 'orphaned'
-        ELSE resource.status::text END
-        ) as status
-        """
+        def status_sub_query(resource_table_name: str) -> str:
+            return f"""
+            (CASE
+               -- The resource_persistent_state.last_non_deploying_status column is only populated for
+               -- actual deployment operations to prevent locking issues. This case-statement calculates
+               -- the correct state from the combination of the resource table and the
+               -- resource_persistent_state table.
+               WHEN (SELECT {resource_table_name}.model < MAX(configurationmodel.version)
+                       FROM configurationmodel
+                       WHERE configurationmodel.released=TRUE
+                       AND environment = $1
+                 )
+                 -- Resource is no longer present in latest released configurationmodel
+                 THEN 'orphaned'
+               WHEN {resource_table_name}.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
+                 -- The deploying, undefined and skipped_for_undefined states are not tracked in the
+                 -- resource_persistent_state table.
+                 THEN {resource_table_name}.status::text
+               WHEN ps.last_deployed_attribute_hash != {resource_table_name}.attribute_hash
+                 -- The hash changed since the last deploy -> new desired state
+                 THEN {resource_table_name}.status::text
+                 -- No override required, use last known state from actual deployment
+                 ELSE ps.last_non_deploying_status::text
+             END
+            ) as status
+            """
 
         query = f"""
         SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
         first.model as first_model, latest.model AS latest_model, latest.resource_id as latest_resource_id,
         latest.resource_type, latest.agent, latest.resource_id_value, ps.last_deploy as latest_deploy, latest.attributes,
-        latest.status
+        {status_sub_query('latest')}
         FROM resource first
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
             (SELECT distinct on (resource_id) resource_id, attribute_hash, model, attributes,
-                resource_type, agent, resource_id_value, {status_subquery}
+                resource_type, agent, resource_id_value,  resource.status as status
                 FROM resource
                 JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
                 WHERE resource.environment = $1 AND resource_id = $2 AND cm.released = TRUE
@@ -4999,11 +5070,13 @@ class Resource(BaseDocument):
         # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
         # fields requires to calculate the status for each resource record, before it is filtered
         status_query = f"""
-        SELECT DISTINCT ON (resource_id) resource_id, {status_subquery}
+        SELECT DISTINCT ON (resource.resource_id) resource.resource_id, {status_sub_query('resource')}
         FROM resource
         INNER JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
-        WHERE resource.environment = $1 AND cm.released = TRUE AND resource_id = ANY($2)
-        ORDER BY resource_id, model DESC;
+        INNER JOIN resource_persistent_state ps
+              ON ps.resource_id = resource.resource_id AND resource.environment = ps.environment
+        WHERE resource.environment = $1 AND cm.released = TRUE AND resource.resource_id = ANY($2)
+        ORDER BY resource.resource_id, model DESC;
         """
         status_result = await cls.select_query(status_query, [cls._get_value(env), cls._get_value(requires)], no_obj=True)
 
@@ -5046,11 +5119,13 @@ class Resource(BaseDocument):
         inner_query = f"""
         SELECT r.resource_id as resource_id,
         (
-            CASE WHEN (r.status = 'deploying')
-                THEN
-                    r.status::text
-                ELSE
-                    rps.last_non_deploying_status::text
+            CASE WHEN r.status IN ('deploying', 'undefined', 'skipped_for_undefined')
+                     THEN r.status::text
+                 WHEN rps.last_deployed_attribute_hash != r.attribute_hash
+                     -- The hash changed since the last deploy -> new desired state
+                     THEN r.status::text
+                 ELSE
+                     rps.last_non_deploying_status::text
             END
         ) as status
         FROM {cls.table_name()} as r

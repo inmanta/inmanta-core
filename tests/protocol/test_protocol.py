@@ -60,26 +60,7 @@ from inmanta.server.config import server_bind_port
 from inmanta.server.protocol import Server, ServerSlice
 from inmanta.types import Apireturn
 from inmanta.util import hash_file
-from utils import configure
-
-
-def make_random_file(size=0):
-    """
-    Generate a random file.
-
-    :param size: If size is > 0 content is generated that is equal or more than size.
-    """
-    randomvalue = str(random.randint(0, 10000))
-    if size > 0:
-        while len(randomvalue) < size:
-            randomvalue += randomvalue
-
-    content = ("Hello world %s\n" % (randomvalue)).encode()
-    hash = hash_file(content)
-
-    body = base64.b64encode(content).decode("ascii")
-
-    return (hash, content, body)
+from utils import configure, make_random_file
 
 
 async def test_client_files(client):
@@ -153,6 +134,27 @@ async def test_client_files_stat(client):
     other_files = ["testtest"]
     result = await client.stat_files(files=file_names + other_files)
     assert len(result.result["files"]) == len(other_files)
+
+
+async def test_upload_file_twice(client):
+    """
+    This test checks that attempts to upload the same file twice (concurrently) don't cause an exception.
+    """
+
+    async def upload_and_stat(body: str, client, hash: str):
+        result = await client.upload_file(id=hash, content=body)
+        assert result.code == 200
+        result = await client.stat_files(files=[hash])
+        assert result.code == 200
+        assert len(result.result["files"]) == 0
+
+    (hash, content, body) = make_random_file()
+
+    result = await client.stat_files(files=[hash])
+    assert result.code == 200
+    assert len(result.result["files"]) == 1
+
+    await asyncio.gather(upload_and_stat(body, client, hash), upload_and_stat(body, client, hash))
 
 
 async def test_diff(client):
@@ -298,7 +300,13 @@ async def test_call_arguments_defaults():
         Create a new project
         """
 
-    call = CallArguments(protocol.common.MethodProperties.methods["test_method"][0], {"name": "test"}, {})
+    method = protocol.common.UrlMethod(
+        protocol.common.MethodProperties.methods["test_method"][0],
+        protocol.endpoints.CallTarget(),
+        test_method,
+        "test_method",
+    )
+    call = CallArguments(method, {"name": "test"}, {})
     await call.process()
 
     assert call.call_args["name"] == "test"
@@ -328,10 +336,14 @@ async def test_pydantic():
         Create a new project
         """
 
-    id = uuid.uuid4()
-    call = CallArguments(
-        protocol.common.MethodProperties.methods["test_method"][0], {"project": {"name": "test", "id": str(id)}}, {}
+    method = protocol.common.UrlMethod(
+        protocol.common.MethodProperties.methods["test_method"][0],
+        protocol.endpoints.CallTarget(),
+        test_method,
+        "test_method",
     )
+    id = uuid.uuid4()
+    call = CallArguments(method, {"project": {"name": "test", "id": str(id)}}, {})
     await call.process()
 
     project = call.call_args["project"]
@@ -339,9 +351,7 @@ async def test_pydantic():
     assert project.id == id
 
     with pytest.raises(exceptions.BadRequest):
-        call = CallArguments(
-            protocol.common.MethodProperties.methods["test_method"][0], {"project": {"name": "test", "id": "abcd"}}, {}
-        )
+        call = CallArguments(method, {"project": {"name": "test", "id": "abcd"}}, {})
         await call.process()
 
 

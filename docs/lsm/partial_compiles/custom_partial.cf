@@ -1,0 +1,85 @@
+import lsm
+import lsm::fsm
+import std::testing
+
+
+entity Tunnel extends lsm::ServiceEntity:
+    """
+        A service for managing tunnels
+    """
+    string tunnel_id
+end
+
+
+
+entity Port extends lsm::ServiceEntity:
+    """
+        A service for managing ports in a network
+    """
+    string name
+end
+
+
+index Port(instance_id)
+
+
+Tunnel.ports [2:2] lsm::__service__, lsm::__rwplus__ Port
+
+""" An Inter Service Relation between Tunnel and Port"""
+
+
+implementation tunnel_config for Tunnel:
+    self.owned_resources += self.resources
+    for port in self.ports:
+        # dummy resource to represent a tunnel endpoint config on the port
+        self.resources += std::testing::NullResource(name=f"{self.tunnel_id} {port.name}")
+        self.owned_resources += self.resources
+    end
+end
+
+
+
+implement Tunnel using tunnel_config, parents
+
+implement Port using parents
+# Port has no actual config in itself
+
+# Service binding for Tunnel
+
+binding_tunnel = lsm::ServiceEntityBinding(
+    service_entity="__config__::Tunnel",
+    lifecycle=lsm::fsm::simple_with_delete_validate,
+    service_entity_name="tunnel",
+    service_identity="tunnel_id",
+)
+
+# Service binding for Port
+
+binding_port = lsm::ServiceEntityBinding(
+    service_entity="__config__::Port",
+    lifecycle=lsm::fsm::simple_with_delete_validate,
+    service_entity_name="port",
+    service_identity="name",
+)
+
+
+# Normal Service unrolling
+for instance in lsm::all(binding_tunnel):
+    Tunnel(
+        instance_id = instance["id"],
+        entity_binding = binding_tunnel,
+        tunnel_id = instance["attributes"]["tunnel_id"],
+        ports = [Port[instance_id=port_id] for port_id in instance["attributes"]["ports"]],
+    )
+
+end
+
+
+for instance in lsm::all(binding_port):
+    Port(
+        instance_id = instance["id"],
+        entity_binding = binding_port,
+        name = instance["attributes"]["name"],
+    )
+
+end

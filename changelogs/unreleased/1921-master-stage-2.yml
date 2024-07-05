@@ -1,0 +1,5 @@
+change-type: patch
+description: Update constraint file path in tox.ini file.
+destination-branches:
+- master
+sections: {}

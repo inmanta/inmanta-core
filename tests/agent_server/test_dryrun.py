@@ -460,6 +460,7 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
 
     async def dryrun_finished():
         result = await client.list_dryruns(environment, version)
+        logger.info("%s", result.result)
         return result.result["data"][0]["todo"] == 0
 
     await retry_limited(dryrun_finished, 10)

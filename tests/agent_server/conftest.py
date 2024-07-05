@@ -84,10 +84,11 @@ async def _deploy_resources(client, environment, resources, version, push, agent
     return result
 
 
-async def wait_for_n_deployed_resources(client, environment, version, n, timeout=10):
+async def wait_for_n_deployed_resources(client, environment, version, n, timeout=5):
     async def is_deployment_finished():
         result = await client.get_version(environment, version)
         assert result.code == 200
+        print(result.result["model"])
         return result.result["model"]["done"] >= n
 
     await retry_limited(is_deployment_finished, timeout)
@@ -616,10 +617,10 @@ def resource_container(clean_reset):
             logger.info("Releasing waiter %s", self.traceid)
 
             Provider.read(resource.id.get_agent_name(), resource.key)
-            environment = self._agent._env_id
+            environment = self._agent.environment
 
             async def should_redeploy() -> bool:
-                client = self._agent.get_client()
+                client = self.get_client()
                 result = await client.get_resource_events(
                     environment,
                     resource.id.resource_version_str(),

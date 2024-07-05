@@ -1235,9 +1235,14 @@ async def test_are_agents_active(server, client, environment, agent_factory) -> 
     await retry_limited(agentmanager.are_agents_active, tid=env_id, endpoints=[agent_name], timeout=10)
 
 
-async def test_dont_start_paused_agent(server, client, environment, caplog) -> None:
+@pytest.mark.parametrize("autostarted", (True, False))
+async def test_dont_start_paused_agent(server, client, agent_factory, environment, caplog, autostarted: bool) -> None:
     """
     Ensure that the AutostartedAgentManager doesn't try to start an agent that is paused (inmanta/inmanta-core#4398).
+
+    :param autostarted: Whether the paused agent was started as an autostarted agent. In typical scenarios this would
+        always be the case, but even when it's a manually started one (e.g. in module test fixtures), no new process should
+        be started.
     """
     caplog.set_level(logging.DEBUG)
     env_id = UUID(environment)
@@ -1249,33 +1254,134 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     await agent_manager.ensure_agent_registered(env=env, nodename=agent_name)
 
     # Add agent1 to AUTOSTART_AGENT_MAP
+    # Even when autostarted=False, it's still an autostarted agent, their just happens to be a non-autostarted session active
     result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"internal": "", agent_name: ""})
     assert result.code == 200, result.result
 
-    # Start agent1
     autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+
+    # Start agent1
     env = await data.Environment.get_by_id(env_id)
     assert (env_id, agent_name) not in agent_manager.tid_endpoint_to_session
     caplog.clear()
-    await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name])
-    # Ensure we wait until a primary has been elected for agent1
-    assert (env_id, agent_name) in agent_manager.tid_endpoint_to_session
-    assert len(autostarted_agent_manager._agent_procs) == 1
-    assert "Started new agent with PID" in caplog.text
-    # Ensure no timeout happened
-    assert "took too long to start" not in caplog.text
+    if autostarted:
+        await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name])
+        # Ensure we wait until a primary has been elected for agent1
+        assert (env_id, agent_name) in agent_manager.tid_endpoint_to_session
+        assert len(autostarted_agent_manager._agent_procs) == 1
+        assert "Started new agent with PID" in caplog.text
+        # Ensure no timeout happened
+        assert "took too long to start" not in caplog.text
+    else:
+        await agent_factory(environment=env_id, code_loader=False, agent_map={agent_name: ""}, agent_names=[agent_name])
 
     # Pause agent1
     result = await client.agent_action(tid=env_id, name=agent_name, action=AgentAction.pause.value)
     assert result.code == 200, result.result
 
+    # Pausing an agent should have no direct effect on the autostarted agent manager
+    assert len(autostarted_agent_manager._agent_procs) == (1 if autostarted else 0)
+
     # Execute _ensure_agents() again and verify that no restart is triggered
     caplog.clear()
     await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name])
-    assert len(autostarted_agent_manager._agent_procs) == 1
+    assert len(autostarted_agent_manager._agent_procs) == (1 if autostarted else 0)
     assert "Started new agent with PID" not in caplog.text
     # Ensure no timeout happened
     assert "took too long to start" not in caplog.text
+
+
+async def test_wait_for_agent_map_update(server, client, environment) -> None:
+    """
+    Verify that when _ensure_agents is called with an agent that is still starting, we wait for it rather than to kill the
+    current process and to start a new one.
+    """
+    env_id: UUID = UUID(environment)
+    agent1: str = "agent1"
+    agent2: str = "agent2"
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+
+    # Register agents in model
+    env = await data.Environment.get_by_id(env_id)
+    assert env is not None
+    await agent_manager.ensure_agent_registered(env=env, nodename=agent1)
+    await agent_manager.ensure_agent_registered(env=env, nodename=agent2)
+
+    # Add agent1 to AUTOSTART_AGENT_MAP
+    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"internal": "", agent1: ""})
+    assert result.code == 200, result.result
+
+    env: Optional[data.Environment]
+
+    # Start agent1
+    assert (env_id, agent1) not in agent_manager.tid_endpoint_to_session
+    env = await data.Environment.get_by_id(env_id)
+    assert env is not None
+    started: bool = await autostarted_agent_manager._ensure_agents(env=env, agents=[agent1])
+    assert started
+    assert (env_id, agent1) in agent_manager.tid_endpoint_to_session
+    assert len(autostarted_agent_manager._agent_procs) == 1
+
+    # Add agent2 to AUTOSTART_AGENT_MAP
+    result = await client.set_setting(
+        tid=environment,
+        id=data.AUTOSTART_AGENT_MAP,
+        value={"internal": "", agent1: "", agent2: ""},
+    )
+    assert result.code == 200, result.result
+
+    # Call _ensure_agents with agent2 very shortly after adding it to the agent map (before the new instance has connected)
+    env = await data.Environment.get_by_id(env_id)
+    assert env is not None
+    started = await autostarted_agent_manager._ensure_agents(env=env, agents=[agent1, agent2])
+    assert (env_id, agent2) in agent_manager.tid_endpoint_to_session
+    # Verify that we did not start a new process
+    assert not started
+
+
+async def test_expire_sessions_on_restart(server, client, environment) -> None:
+    """
+    Verify that when _ensure_agents is called for an explicit restart, we properly expire the old session instead of letting
+    it time out.
+    """
+    env_id: UUID = UUID(environment)
+    agent_name: str = "agent1"
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+
+    # Register agents in model
+    env = await data.Environment.get_by_id(env_id)
+    assert env is not None
+    await agent_manager.ensure_agent_registered(env=env, nodename=agent_name)
+
+    # Add agent1 to AUTOSTART_AGENT_MAP
+    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"internal": "", agent_name: ""})
+    assert result.code == 200, result.result
+
+    env: Optional[data.Environment]
+
+    # Start agent1
+    assert (env_id, agent_name) not in agent_manager.tid_endpoint_to_session
+    env = await data.Environment.get_by_id(env_id)
+    assert env is not None
+    started: bool = await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name])
+    assert started
+    current_session: Optional[protocol.Session] = agent_manager.tid_endpoint_to_session.get((env_id, agent_name), None)
+    assert current_session is not None
+    current_process: object = autostarted_agent_manager._agent_procs.get(env_id, None)
+    assert current_process is not None
+
+    # restart agent1
+    started = await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name], restart=True)
+    assert started
+    new_session: Optional[protocol.Session] = agent_manager.tid_endpoint_to_session.get((env_id, agent_name), None)
+    assert new_session is not None
+    new_process: object = autostarted_agent_manager._agent_procs.get(env_id, None)
+    assert new_process is not None
+    # assertions: should have started a new process, and expired the old session, then wait until the new one becomes active
+    assert new_process is not current_process
+    assert current_session.id != new_session.id
 
 
 async def test_auto_started_agent_log_in_debug_mode(server, environment):
@@ -1312,6 +1418,11 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     caplog.set_level(logging.WARNING)
     hanglock = asyncio.Event()
 
+    async def unlock():
+        hanglock.set()
+
+    async_finalizer(unlock)
+
     @typedmethod(
         path="/test",
         operation="GET",
@@ -1339,7 +1450,7 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
 
     server = TestSlice(name="test_slice")
 
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
     ctx = ibl.load_slices()
 
     for mypart in ctx.get_slices():
@@ -1388,15 +1499,15 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
         return False
 
     await retry_limited(did_exceed_capacity, 10)
-
     caplog.set_level(logging.NOTSET)
     caplog.clear()
+    LOGGER.info("Locked, Waiting for heartbeat")
 
     def still_sending_heartbeats():
         count = caplog.text.count("Level 3 sending heartbeat for")
         return count > 2
 
     await retry_limited(still_sending_heartbeats, 10)
-
+    LOGGER.info("Heartbeat good, unlocking")
     hanglock.set()
     await hangers

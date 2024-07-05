@@ -20,6 +20,7 @@ import json
 
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
+from inmanta.data.model import ResourceVersionIdStr
 from inmanta.server.config import get_bind_port
 
 
@@ -92,33 +93,88 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
         assert result.result["data"]["values"] == res["values"]
 
 
-async def test_discovered_resource_get_paging(server, client, agent, environment):
+async def test_discovered_resource_get_paging(server, client, agent, environment, clienthelper):
     """
     Test that discovered resources can be retrieved with paging. The test creates multiple resources, retrieves them
     with various paging options, and verifies that the expected resources are returned.
+
+    Also test the linking between unmanaged and managed resources and correct filtering via the 'managed' filter i.e.:
+
+    - True: Activate filtering and keep only discovered resources that are managed.
+    - False: Activate filtering and keep only discovered resources that are NOT managed.
+    - None: Disable filtering: return all discovered resources regardless of whether they're managed.
     """
-    resources = [
-        {"discovered_resource_id": "test::Resource[agent1,key1=key1]", "values": {"value1": "test1", "value2": "test2"}},
-        {"discovered_resource_id": "test::Resource[agent1,key2=key2]", "values": {"value1": "test3", "value2": "test4"}},
-        {"discovered_resource_id": "test::Resource[agent1,key3=key3]", "values": {"value1": "test5", "value2": "test6"}},
-        {"discovered_resource_id": "test::Resource[agent1,key4=key4]", "values": {"value1": "test7", "value2": "test8"}},
-        {"discovered_resource_id": "test::Resource[agent1,key5=key5]", "values": {"value1": "test9", "value2": "test10"}},
-        {"discovered_resource_id": "test::Resource[agent1,key6=key6]", "values": {"value1": "test11", "value2": "test12"}},
+
+    # Resource repartition and expected filtering results:
+
+    #                                        |              FILTER
+    # discovered    managed   orphaned       |  TRUE        FALSE          NONE
+    # ---------------------------------------+-------------------------------------
+    #     R1            x                    |   x                           x
+    #     R2            x                    |   x                           x
+    #     R3                      x          |   x                           x
+    #     R4                      x          |   x                           x
+    #     R5                                 |                x              x
+    #     R6                                 |                x              x
+
+    discovered_resources = []
+    for i in range(1, 7):
+        rid = f"test::Resource[agent1,key{i}=key{i}]"
+        discovered_resources.append(
+            {
+                "discovered_resource_id": rid,
+                "values": {"value1": f"test{i}", "value2": f"test{i+1}"},
+                "managed_resource_uri": (
+                    f"/api/v2/resource/{rid}" if i <= 4 else None
+                ),  # Last 2 resources are not known to the orchestrator
+            }
+        )
+
+    result = await agent._client.discovered_resource_create_batch(environment, discovered_resources)
+    assert result.code == 200
+
+    version1 = await clienthelper.get_version()
+    orphaned_resources = [
+        {
+            "id": ResourceVersionIdStr(f"{res['discovered_resource_id']},v={version1}"),
+            "values": res["values"],
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+        }
+        for res in discovered_resources[2:-2]
     ]
+    await clienthelper.put_version_simple(resources=orphaned_resources, version=version1)
 
-    result = await agent._client.discovered_resource_create_batch(environment, resources)
-    assert result.code == 200
+    # Create some Resources that are already managed:
+    version2 = await clienthelper.get_version()
+    managed_resources = [
+        {
+            "id": ResourceVersionIdStr(f"{res['discovered_resource_id']},v={version2}"),
+            "values": res["values"],
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+        }
+        for res in discovered_resources[:2]
+    ]
+    await clienthelper.put_version_simple(resources=managed_resources, version=version2)
 
-    result = await client.discovered_resources_get_batch(
-        environment,
-    )
-    assert result.code == 200
-    assert len(result.result["data"]) == 6
+    filter_values = [None, {"managed": True}, {"managed": False}]
+    expected_results = [discovered_resources, discovered_resources[:-2], discovered_resources[-2:]]
+
+    for filter, expected_result in zip(filter_values, expected_results):
+        result = await client.discovered_resources_get_batch(
+            environment,
+            filter=filter,
+        )
+        assert result.code == 200
+        assert result.result["data"] == expected_result
 
     result = await client.discovered_resources_get_batch(environment, limit=2)
     assert result.code == 200
     assert len(result.result["data"]) == 2
-    assert result.result["data"] == resources[:2]
+    assert result.result["data"] == discovered_resources[:2]
 
     assert result.result["metadata"] == {"total": 6, "before": 0, "after": 4, "page_size": 2}
     assert result.result["links"].get("next") is not None
@@ -138,7 +194,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     response = await http_client.fetch(request, raise_error=False)
     assert response.code == 200
     response = json.loads(response.body.decode("utf-8"))
-    assert response["data"] == resources[2:4]
+    assert response["data"] == discovered_resources[2:4]
     assert response["links"].get("prev") is not None
     assert response["links"].get("next") is not None
     assert response["metadata"] == {"total": 6, "before": 2, "after": 2, "page_size": 2}
@@ -153,7 +209,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     response = await http_client.fetch(request, raise_error=False)
     assert response.code == 200
     response = json.loads(response.body.decode("utf-8"))
-    assert response["data"] == resources[0:2]
+    assert response["data"] == discovered_resources[0:2]
     assert response["links"].get("prev") is None
     assert response["links"].get("next") is not None
     assert response["metadata"] == {"total": 6, "before": 0, "after": 4, "page_size": 2}
