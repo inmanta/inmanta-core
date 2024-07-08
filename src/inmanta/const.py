@@ -251,6 +251,9 @@ NAME_RESOURCE_ACTION_LOGGER = "resource_action_logger"
 SHUTDOWN_GRACE_IOLOOP = 10
 # Time we give the server/agent to shutdown gracefully, before we execute sys.exit(3)
 SHUTDOWN_GRACE_HARD = 15
+# Time we give the executor to shutdown gracefully, before we execute sys.exit(3)
+EXECUTOR_GRACE_HARD = 3
+
 # Hard shutdown exit code
 EXIT_HARD = 3
 # Startup failed exit code
