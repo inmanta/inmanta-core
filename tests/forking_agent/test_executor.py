@@ -227,6 +227,8 @@ def test():
             (f"Stopping executor {full_runner.executor_id.identity()} because it was inactive for"),
         )
 
+    utils.assert_no_warning(caplog)
+
 
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     manager = mpmanager
