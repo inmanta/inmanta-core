@@ -37,7 +37,7 @@ from inmanta import config as global_config
 from inmanta import const, data
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
-from inmanta.const import AgentAction, AgentStatus, UNDEPLOYABLE_NAMES
+from inmanta.const import UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, InvalidSort, model
 from inmanta.data.model import ResourceIdStr
 from inmanta.protocol import encode_token, handle, methods, methods_v2
