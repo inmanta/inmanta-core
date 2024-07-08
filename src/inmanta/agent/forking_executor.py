@@ -27,6 +27,7 @@ import logging.config
 import multiprocessing
 import os
 import socket
+import threading
 import typing
 import uuid
 from asyncio import Future, transports
@@ -414,6 +415,7 @@ class MPExecutor(executor.Executor):
         self.closing = False
         self.closed = False
         self.owner = owner
+        self.termination_lock = threading.Lock()
         # Pure for debugging purpose
         self.executor_id = executor_id
         self.executor_virtual_env = venv
@@ -455,34 +457,42 @@ class MPExecutor(executor.Executor):
         """This method will never raise an exeption, but log it instead, as it is used as a finalizer"""
         if self.closed:
             return
-        try:
-            if self.process.exitcode is None:
-                # Running
-                self.process.join(grace_time)
+        with self.termination_lock:
+            # This code doesn't work when two threads go through it
+            # Multiprocessing it too brittle for that
+            if self.closed:
+                return
+            try:
 
-            if self.process.exitcode is None:
-                LOGGER.warning(
-                    "Executor for agent %s with id %s didn't stop after timeout of %d seconds. Killing it.",
-                    self.executor_id.agent_name,
-                    self.executor_id.identity(),
-                    grace_time,
-                )
-                # still running! Be a bit more firm
-                self.process.kill()
-                self.process.join()
-            # Mypy is not happy about this, but I see no other way
-            # Much of the internal logic of multi-processing depends on this flag
-            # Methods are prone to failing when called out-of-sequence and
-            #   we have two code paths leading here (join and connection lost)
-            # The exception they raise are undocumented and too generic to handle well
-            if not self.process._closed:
+                if self.process.exitcode is None:
+                    # Running
+                    self.process.join(grace_time)
+
+                if self.process.exitcode is None:
+                    LOGGER.warning(
+                        "Executor for agent %s with id %s didn't stop after timeout of %d seconds. Killing it.",
+                        self.executor_id.agent_name,
+                        self.executor_id.identity(),
+                        grace_time,
+                    )
+                    # still running! Be a bit more firm
+                    self.process.kill()
+                    self.process.join()
                 self.process.close()
-        except ValueError as e:
-            if "process object is closed" in str(e):
-                # process already closed
-                # raises a value error, so we also check the message
-                pass
-            else:
+            except ValueError as e:
+                if "process object is closed" in str(e):
+                    # process already closed
+                    # raises a value error, so we also check the message
+                    pass
+                else:
+                    LOGGER.warning(
+                        "Executor for agent %s with id %s and pid %s failed to shutdown.",
+                        self.executor_id.agent_name,
+                        self.executor_id.identity(),
+                        self.process.pid,
+                        exc_info=True,
+                    )
+            except Exception:
                 LOGGER.warning(
                     "Executor for agent %s with id %s and pid %s failed to shutdown.",
                     self.executor_id.agent_name,
@@ -490,16 +500,8 @@ class MPExecutor(executor.Executor):
                     self.process.pid,
                     exc_info=True,
                 )
-        except Exception:
-            LOGGER.warning(
-                "Executor for agent %s with id %s and pid %s failed to shutdown.",
-                self.executor_id.agent_name,
-                self.executor_id.identity(),
-                self.process.pid,
-                exc_info=True,
-            )
-        # Discard this executor, even if we could not close it
-        self._set_closed()
+            # Discard this executor, even if we could not close it
+            self._set_closed()
 
     def _set_closed(self) -> None:
         # this code can be raced from the join call and the disconnect handler
