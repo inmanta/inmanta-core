@@ -23,7 +23,7 @@ import os
 import subprocess
 import warnings
 from collections import abc
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Sequence, Type, TypeVar
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
@@ -583,7 +583,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # would have raised as exception
             raise RuntimeException(None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}")
 
-    def check_args(self, args: list[object], kwargs: dict[str, object]) -> bool:
+    def check_args(self, args: Sequence[object], kwargs: Mapping[str, object]) -> bool:
         """
         Check if the arguments of the call match the function signature.
 

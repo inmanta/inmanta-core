@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2024 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -16,18 +16,6 @@
     Contact: code@inmanta.com
 """
 
-COMPILER_VERSION = "2025.0"
-# This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
-# (See the bumpversion.cfg file for relevant locations).
-__version__ = "13.0.1"
+from setproctitle import setproctitle
 
-RUNNING_TESTS = False
-"""
-    This is enabled/disabled by the test suite when tests are run.
-    This variable is used to disable certain features that shouldn't run during tests.
-"""
-
-if __name__ == "__main__":
-    import inmanta.app
-
-    inmanta.app.app()
+setproctitle("inmanta: multiprocessing fork server")

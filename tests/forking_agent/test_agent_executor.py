@@ -313,11 +313,14 @@ def test():
     blueprint3 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
 
     executor_manager = mpmanager_light
-    executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.gather(
-        executor_manager.get_executor("agent1", "local:", code_for(blueprint1)),
-        executor_manager.get_executor("agent1", "local:", code_for(blueprint1)),
-        executor_manager.get_executor("agent1", "local:", code_for(blueprint2)),
-        executor_manager.get_executor("agent1", "local:", code_for(blueprint3)),
+    executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.wait_for(
+        asyncio.gather(
+            executor_manager.get_executor("agent1", "local:", code_for(blueprint1)),
+            executor_manager.get_executor("agent1", "local:", code_for(blueprint1)),
+            executor_manager.get_executor("agent1", "local:", code_for(blueprint2)),
+            executor_manager.get_executor("agent1", "local:", code_for(blueprint3)),
+        ),
+        10,
     )
 
     assert executor_1 is executor_1_reuse, "Expected the same executor instance for identical blueprint"
