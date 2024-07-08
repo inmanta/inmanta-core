@@ -78,7 +78,7 @@ class TestLoader(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
 
 
 @pytest.fixture
-def set_custom_executor_policy():
+def set_custom_executor_policy(server_config):
     """
     Fixture to temporarily set the policy for executor management.
     """
