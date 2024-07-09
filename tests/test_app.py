@@ -327,22 +327,22 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
         (
             3,
             [
-                r"[a-z.]*[ ]*INFO[\s]+[a-z\.A-Z]*[\s]Starting server endpoint",
-                r"[a-z.]*[ ]*DEBUG[\s]+[a-z\.A-Z]*[\s]Starting Server Rest Endpoint",
+                r"INFO\s+Starting server endpoint",
+                r"DEBUG\s+Starting Server Rest Endpoint",
             ],
             [],
         ),
         (
             2,
-            [r"[a-z.]*[ ]*INFO[\s]+[a-z\.A-Z]*[\s]Starting server endpoint"],
-            [r"[a-z.]*[ ]*DEBUG[\s]+[a-z\.A-Z]*[\s]Starting Server Rest Endpoint"],
+            [r"INFO\s+Starting server endpoint"],
+            [r"DEBUG\s+Starting Server Rest Endpoint"],
         ),
         (
             1,
             [],
             [
-                r"[a-z.]*[ ]*DEBUG[\s]+[a-z\.A-Z]*[\s]Starting Server Rest Endpoint",
-                r"[a-z.]*[ ]*INFO[\s]+[a-z\.A-Z]*[\s]Starting server endpoint",
+                r"INFO\s+Starting server endpoint",
+                r"DEBUG\s+Starting Server Rest Endpoint",
             ],
         ),
     ],
@@ -362,10 +362,10 @@ def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed
     for line in log_lines:
         print(line)
     for regex in compiled_regexes_requires_lines:
-        if not any(regex.match(line) for line in log_lines):
+        if not any(regex.search(line) for line in log_lines):
             pytest.fail(f"Required pattern was not found in log lines: {regex.pattern}")
     for regex in compiled_regexes_forbidden_lines:
-        if any(regex.match(line) for line in log_lines):
+        if any(regex.search(line) for line in log_lines):
             pytest.fail(f"Forbidden pattern found in log lines: {regex.pattern}")
 
 
