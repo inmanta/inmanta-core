@@ -36,7 +36,7 @@ from inmanta.agent.executor import ExecutorBlueprint
 from inmanta.agent.forking_executor import MPManager
 from inmanta.data import PipConfig
 from inmanta.protocol.ipc_light import ConnectionLost
-from utils import log_contains, retry_limited, NOISY_LOGGERS
+from utils import NOISY_LOGGERS, log_contains, retry_limited
 
 
 class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
@@ -230,7 +230,7 @@ def test():
     # We can get `Caught subprocess termination from unknown pid: %d -> %d`
     # When we capture signals from the pip installs
     # Can't happen in real deployment as these things happen in different processes
-    utils.assert_no_warning(caplog, NOISY_LOGGERS+["asyncio"])
+    utils.assert_no_warning(caplog, NOISY_LOGGERS + ["asyncio"])
 
 
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
