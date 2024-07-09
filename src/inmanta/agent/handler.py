@@ -138,7 +138,7 @@ def cache(
     def actual(f: Callable[..., object]) -> T_FUNC:
         myignore = set(ignore)
         sig = inspect.signature(f)
-        myargs = list(sig.parameters.keys())[1:]
+        myargs = list(sig.parameters.keys())[1:]  # why 1: ?
 
         def wrapper(self: HandlerAPI[TResource], *args: object, **kwds: object) -> object:
             kwds.update(dict(zip(myargs, args)))

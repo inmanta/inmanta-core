@@ -94,7 +94,8 @@ class AgentCache:
         :param agent_instance: The AgentInstance that is using the cache. The value is None when the cache
                                is used from pytest-inmanta.
         """
-        self.cache: dict[str, Any] = {}
+        # The cache itself
+        self.cache: dict[str, CacheItem] = {}
         self.counterforVersion: dict[int, int] = {}
         self.keysforVersion: dict[int, set[str]] = {}
         self.timerqueue: list[CacheItem] = []
@@ -228,7 +229,7 @@ class AgentCache:
         """
         add a value to the cache with the given key
 
-        if a resource or version is given, these are prepended to the key and expiry is adapted accordingly
+        if a resource or version is given, these are appended to the key and expiry is adapted accordingly
 
         :param timeout: nr of second before this value is expired
         :param call_on_delete: A callback function that is called when the value is removed from the cache.
@@ -239,7 +240,7 @@ class AgentCache:
         """
         find a value in the cache with the given key
 
-        if a resource or version is given, these are prepended to the key
+        if a resource or version is given, these are appended to the key
 
         :raise KeyError: if the value is not found
         """

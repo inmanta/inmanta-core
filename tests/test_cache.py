@@ -39,13 +39,21 @@ def my_resource():
 
 
 def test_base():
+    """
+    Basic test:
+        - cache write
+        - cache read
+    """
     cache = AgentCache()
     value = "test too"
     cache.cache_value("test", value)
     assert value == cache.find("test")
 
 
-def test_timout():
+def test_timeout():
+    """
+    Test timeout parameter: test that expired entry is removed from the cache
+    """
     cache = AgentCache()
     value = "test too"
     cache.cache_value("test", value, timeout=0.1)
@@ -53,23 +61,26 @@ def test_timout():
 
     assert value == cache.find("test")
     sleep(0.2)
-    try:
+    with pytest.raises(KeyError):
         assert value == cache.find("test")
-        raise AssertionError("Should get exception")
-    except KeyError:
-        pass
 
     assert value == cache.find("test2")
 
 
 def test_base_fail():
+    """
+    Test cache read on non-existing entry
+    """
     cache = AgentCache()
     value = "test too"
     with pytest.raises(KeyError):
         assert value == cache.find("test")
 
 
-def test_resource():
+def test_resource(my_resource):
+    """
+    Test writing and reading a resource from the agent cache
+    """
     cache = AgentCache()
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
@@ -78,6 +89,9 @@ def test_resource():
 
 
 def test_resource_fail(my_resource):
+    """
+    Test that caching a resource correctly creates a single entry in the cache for the full key (args+resource_id)
+    """
     cache = AgentCache()
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
@@ -88,15 +102,22 @@ def test_resource_fail(my_resource):
 
 
 def test_version_closed():
+    """
+    Test caching a value for a version that is not opened is not allowed
+    """
     cache = AgentCache()
     value = "test too"
     version = 200
-    with pytest.raises(Exception):
+    with pytest.raises(Exception) as e:
         cache.cache_value("test", value, version=version)
-        assert value == cache.find("test", version=version)
+
+    assert "Added data to version that is not open" in str(e.value)
 
 
 def test_version():
+    """
+    Test cache write then read using version
+    """
     cache = AgentCache()
     value = "test too"
     version = 200

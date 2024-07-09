@@ -66,6 +66,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         # threads to work
         self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="Pool_%s" % self.name)
 
+        # -> run cache cleanup on this when nothing else is running
+
         self._cache = inmanta.agent.cache.AgentCache(self)
 
         self.logger: logging.Logger = parent_logger.getChild(self.name)
