@@ -151,20 +151,6 @@ def run_with_tty(args, killtime=3, termtime=2):
     return run_without_tty(args, env=env, killtime=killtime, termtime=termtime)
 
 
-def get_timestamp_regex():
-    return r"[\d]{4}\-[\d]{2}\-[\d]{2} [\d]{2}\:[\d]{2}\:[\d]{2}\,[\d]{3}"
-
-
-def get_compiled_regexes(regexes, timed):
-    result = []
-    for regex in regexes:
-        if timed:
-            regex = get_timestamp_regex() + " " + regex
-        compiled_regex = re.compile(regex)
-        result.append(compiled_regex)
-    return result
-
-
 def is_colorama_package_available():
     try:
         import colorama  # noqa: F401
@@ -184,6 +170,8 @@ def test_verify_that_colorama_package_is_not_present():
 # Log lines emitted by the --version command of inmanta.app on the cli or a log file (with logger between level and message)
 INFO_MSG = r"INFO\s+[a-z\.]*\s+Starting server endpoint"
 DEBUG_MSG = r"DEBUG\s+[a-z\.]*\s+Using selector: EpollSelector"
+INFO_MSG_TTY = r"INFO\s+[a-z\.]*\s+\x1b\[0m\x1b\[34mStarting server endpoint"
+DEBUG_MSG_TTY = r"DEBUG\s+[a-z\.]*\s+\x1b\[0m\x1b\[34mUsing selector: EpollSelector"
 
 # The number of v arguments provided to get this level of logs
 LEVEL_WARNING = 1
@@ -194,68 +182,14 @@ LEVEL_DEBUG = 3
 @pytest.mark.parametrize_any(
     "log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines",
     [
-        (
-            LEVEL_DEBUG,
-            False,
-            False,
-            [r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint", r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint"],
-            [],
-        ),
-        (
-            LEVEL_INFO,
-            False,
-            False,
-            [r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint"],
-            [r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint"],
-        ),
-        (
-            LEVEL_DEBUG,
-            False,
-            True,
-            [
-                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint",
-                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint",
-            ],
-            [],
-        ),
-        (
-            LEVEL_INFO,
-            False,
-            True,
-            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint"],
-            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint"],
-        ),
-        (
-            LEVEL_DEBUG,
-            True,
-            False,
-            [r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint", r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint"],
-            [],
-        ),
-        (
-            LEVEL_INFO,
-            True,
-            False,
-            [r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint"],
-            [r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint"],
-        ),
-        (
-            LEVEL_DEBUG,
-            True,
-            True,
-            [
-                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint",
-                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint",
-            ],
-            [],
-        ),
-        (
-            LEVEL_INFO,
-            True,
-            True,
-            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint"],
-            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint"],
-        ),
+        (LEVEL_DEBUG, False, False, [INFO_MSG, DEBUG_MSG], []),
+        (LEVEL_INFO, False, False, [INFO_MSG], [DEBUG_MSG]),
+        (LEVEL_DEBUG, False, True, [INFO_MSG_TTY, DEBUG_MSG_TTY], []),
+        (LEVEL_INFO, False, True, [INFO_MSG_TTY], [DEBUG_MSG_TTY]),
+        (LEVEL_DEBUG, True, False, [INFO_MSG, DEBUG_MSG], []),
+        (LEVEL_INFO, True, False, [INFO_MSG], [DEBUG_MSG]),
+        (LEVEL_DEBUG, True, True, [INFO_MSG_TTY, DEBUG_MSG_TTY], []),
+        (LEVEL_INFO, True, True, [INFO_MSG_TTY], [DEBUG_MSG_TTY]),
     ],
 )
 @pytest.mark.timeout(20)
@@ -326,22 +260,24 @@ def test_log_stdout_log_level(log_level, regexes_required_lines, regexes_forbidd
 
 
 def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed):
-    compiled_regexes_requires_lines = get_compiled_regexes(regexes_required_lines, timed)
-    compiled_regexes_forbidden_lines = get_compiled_regexes(regexes_forbidden_lines, timed)
-
     if not log_lines:
         print("No lines logged")
 
     for line in log_lines:
         print(line)
 
-    for regex in compiled_regexes_requires_lines:
-        if not any(regex.search(line) for line in log_lines):
-            pytest.fail(f"Required pattern was not found in log lines: {regex.pattern}")
+    for regex in regexes_required_lines:
+        if not any(re.search(regex, line) for line in log_lines):
+            pytest.fail(f"Required pattern was not found in log lines: {regex}")
 
-    for regex in compiled_regexes_forbidden_lines:
-        if any(regex.search(line) for line in log_lines):
-            pytest.fail(f"Forbidden pattern found in log lines: {regex.pattern}")
+        if timed and not any(
+            re.match(r"[\d]{4}\-[\d]{2}\-[\d]{2} [\d]{2}\:[\d]{2}\:[\d]{2}\,[\d]{3}", line) for line in log_lines
+        ):
+            pytest.fail("Timed log should start with timestamp.")
+
+    for regex in regexes_forbidden_lines:
+        if any(re.search(regex, line) for line in log_lines):
+            pytest.fail(f"Forbidden pattern found in log lines: {regex}")
 
 
 def test_check_shutdown():
@@ -461,7 +397,7 @@ def test_warning_config_dir_option_on_server_command(tmpdir):
     non_existing_dir = os.path.join(tmpdir, "non_existing_dir")
     assert not os.path.isdir(non_existing_dir)
     (args, _) = get_command(tmpdir, stdout_log_level=3, config_dir=non_existing_dir)
-    (stdout, _, _) = run_without_tty(args, 10, 5)
+    (stdout, _, _) = run_without_tty(args, killtime=10, termtime=5)
     stdout = "".join(stdout)
     assert "Starting server endpoint" in stdout
     assert f"Config directory {non_existing_dir} doesn't exist" in stdout
