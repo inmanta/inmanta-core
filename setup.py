@@ -18,6 +18,7 @@ requires = [
     "jinja2~=3.0",
     "logfire~=0.46",
     "more-itertools>=8,<11",
+    "opentelemetry-instrumentation-asyncpg~=0.46b0",
     # leave upper bound floating for fast-moving and extremely stable packaging
     "packaging>=21.3",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
