@@ -104,7 +104,7 @@ def convert_to_ascii(text):
     return [line for line in text.decode("ascii").split("\n") if line != ""]
 
 
-def do_kill(process, killtime=3, termtime=2):
+def do_kill(process, killtime=4, termtime=3):
     def do_and_log(func, msg):
         def w():
             print(msg)
