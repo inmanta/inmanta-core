@@ -631,7 +631,7 @@ class RESTBase(util.TaskHandler[None]):
                 arguments.auth_username if arguments.auth_username else "<>",
             )
 
-            with logfire.span(f"Calling method {config.method_name}", **arguments.call_args):
+            with logfire.span("Calling method " + config.method_name, **arguments.call_args):
                 result = await config.handler(**arguments.call_args)
 
             return await arguments.process_return(result)
