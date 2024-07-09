@@ -17,6 +17,7 @@ requires = [
     "execnet>=1,<2",
     "importlib_metadata>=4,<9",
     "jinja2~=3.0",
+    "logfire~=0.46",
     "more-itertools>=8,<11",
     # leave upper bound floating for fast-moving and extremely stable packaging
     "packaging>=21.3",
