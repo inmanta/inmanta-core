@@ -226,8 +226,8 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     ]
 
     resource_states = {
-        "test::Fact[agent1,key=key4],v=%d" % version: const.ResourceState.undefined,
-        "test::Fact[agent1,key=key5],v=%d" % version: const.ResourceState.undefined,
+        "test::Fact[agent1,key=key4]": const.ResourceState.undefined,
+        "test::Fact[agent1,key=key5]": const.ResourceState.undefined,
     }
 
     async def get_fact(rid, result_code=200, limit=10, lower_limit=2):
@@ -257,8 +257,8 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     await get_fact("test::Fact[agent1,key=key1]")  # undeployable
     await get_fact("test::Fact[agent1,key=key2]")  # normal
     await get_fact("test::Fact[agent1,key=key3]", 503)  # not present
-    await get_fact("test::Fact[agent1,key=key4]")  # unknown
-    await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
+    await get_fact("test::Fact[agent1,key=key4]", 404)  # unknown
+    await get_fact("test::Fact[agent1,key=key5]", 404)  # broken
     f6 = await get_fact("test::Fact[agent1,key=key6]")  # normal
     f7 = await get_fact("test::Fact[agent1,key=key7]")  # normal
 
@@ -270,11 +270,11 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
 
     await _wait_until_deployment_finishes(client, environment, version)
 
-    await get_fact("test::Fact[agent1,key=key1]")  # undeployable
+    await get_fact("test::Fact[agent1,key=key1]", )  # undeployable
     await get_fact("test::Fact[agent1,key=key2]")  # normal
     await get_fact("test::Fact[agent1,key=key3]")  # not present -> present
-    await get_fact("test::Fact[agent1,key=key4]")  # unknown
-    await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
+    await get_fact("test::Fact[agent1,key=key4]", 404)  # unknown
+    await get_fact("test::Fact[agent1,key=key5]", 404)  # broken
 
     await agent.stop()
 

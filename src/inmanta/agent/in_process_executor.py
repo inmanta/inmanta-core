@@ -404,8 +404,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         messages=ctx.logs,
                     )
 
-                except Exception:
-                    self.logger.exception("Unable to retrieve fact")
+                except Exception as e:
+                    self.logger.exception("Unable to retrieve fact for res %s exc %e" % resource, e)
 
         except Exception:
             self.logger.exception("Unable to find a handler for %s", resource.id)
