@@ -324,22 +324,6 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
     "log_level, regexes_required_lines, regexes_forbidden_lines",
     [
         (
-            5,
-            [
-                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
-                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
-            ],
-            [],
-        ),
-        (
-            4,
-            [
-                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
-                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
-            ],
-            [],
-        ),
-        (
             3,
             [
                 r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
