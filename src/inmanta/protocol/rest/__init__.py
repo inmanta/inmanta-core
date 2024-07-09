@@ -613,8 +613,7 @@ class RESTBase(util.TaskHandler[None]):
                 if "sid" not in message or not isinstance(message["sid"], str):
                     raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
 
-                sid = uuid.UUID(str(message["sid"]))
-                if not isinstance(sid, uuid.UUID) or not self.validate_sid(sid):
+                if not self.validate_sid(uuid.UUID(str(message["sid"]))):
                     raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
             # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
