@@ -22,6 +22,7 @@ import re
 import signal
 import subprocess
 import sys
+import typing
 from subprocess import TimeoutExpired
 from threading import Timer
 
@@ -30,6 +31,8 @@ import pytest
 import inmanta.util
 from inmanta import const
 from inmanta.app import CompileSummaryReporter
+
+LOGGER = logging.getLogger(__name__)
 
 
 def get_command(
@@ -93,7 +96,10 @@ def get_command(
     return (args, log_dir)
 
 
-def do_run(args, env={}, cwd=None):
+def do_run(args: list[str], env: typing.Optional[dict[str, str]] = None, cwd: typing.Optional[str] = None) -> subprocess.Popen:
+    if env is None:
+        env = {}
+    LOGGER.info("Running %s with env %s and cwd %s", args, env, cwd)
     baseenv = os.environ.copy()
     baseenv.update(env)
     process = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv)
@@ -104,16 +110,18 @@ def convert_to_ascii(text):
     return [line for line in text.decode("ascii").split("\n") if line != ""]
 
 
-def do_kill(process, killtime=4, termtime=3):
+def do_kill(process: subprocess.Popen, killtime: int = 10, termtime: int = 5) -> tuple[str, str, int]:
+    """Terminate the process after termtime and kill it after killtime"""
+
     def do_and_log(func, msg):
         def w():
-            print(msg)
+            LOGGER.warning(msg)
             func()
 
         return w
 
-    t1 = Timer(killtime, do_and_log(process.kill, "killed process"))
-    t2 = Timer(termtime, do_and_log(process.terminate, "terminated process"))
+    t1 = Timer(killtime, do_and_log(process.kill, f"killed process after {killtime}"))
+    t2 = Timer(termtime, do_and_log(process.terminate, f"terminated process {termtime}"))
     t1.start()
     t2.start()
 
@@ -127,7 +135,10 @@ def do_kill(process, killtime=4, termtime=3):
     return (stdout, stderr, process.returncode)
 
 
-def run_without_tty(args, env={}, killtime=3, termtime=2):
+def run_without_tty(
+    args: list[str], env: typing.Optional[dict[str, str]] = None, killtime: int = 3, termtime: int = 2
+) -> tuple[str, str, int]:
+    """Run the given command without a tty"""
     process = do_run(args, env)
     return do_kill(process, killtime, termtime)
 
