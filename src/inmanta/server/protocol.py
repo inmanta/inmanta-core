@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import importlib.metadata
 import logging
 import re
 import socket
@@ -26,7 +27,6 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import timedelta
 from typing import TYPE_CHECKING, Callable, Optional, Union
-import importlib.metadata
 
 from tornado import gen, queues, routing, web
 
