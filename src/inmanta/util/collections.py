@@ -28,10 +28,12 @@ V = TypeVar("V", bound=Hashable)
 
 
 # TODO: review
+# TODO: unit tests
 
 
 # TODO: better name?
 class BidirectionalManyToManyMapping(MutableMapping[P, Set[S]], Generic[P, S]):
+    # TODO: docstring + mention that it only supports methods on the mapping, not on the underlying sets
     def __init__(self) -> None:
         # TODO: better names than primary and secondary?
         self._primary: dict[P, set[S]] = {}
@@ -95,6 +97,12 @@ class BidirectionalManyToManyMapping(MutableMapping[P, Set[S]], Generic[P, S]):
     def __len__(self) -> int:
         return len(self._primary)
 
+    def __repr__(self) -> int:
+        return f"BidirectionalManyToManyMapping({self._primary!r})"
+
+    def __str__(self) -> int:
+        return str(self._primary)
+
 
 class _BidirectionalManyToManyMappingReverse(BidirectionalManyToManyMapping[S, P], Generic[P, S]):
     def __init__(self, base: BidirectionalManyToManyMapping[P, S]) -> None:
@@ -104,3 +112,50 @@ class _BidirectionalManyToManyMappingReverse(BidirectionalManyToManyMapping[S, P
 
     def reverse(self) -> BidirectionalManyToManyMapping[P, S]:
         return self._base
+
+
+# TODO: drop or move to test case
+import math
+import random
+import time
+from collections.abc import Mapping
+from dataclasses import dataclass
+
+@dataclass
+class ScalingTest:
+    size: int
+    nb_targets: int
+    nb_updates: int
+
+    @staticmethod
+    def generate_mapping(*, size: int, nb_targets: int) -> Mapping[int, int]:
+        return {
+            i: {random.randint(1, size) for _ in range(nb_targets)}
+            for i in range(size)
+        }
+
+    def test(self) -> None:
+        init_mapping: Mapping[int, int] = self.generate_mapping(size=self.size, nb_targets=self.nb_targets)
+        updates: Mapping[int, int] = self.generate_mapping(size=self.nb_updates, nb_targets=self.nb_targets)
+
+        m = BidirectionalManyToManyMapping()
+        time_start: float = time.process_time()
+        for k, v in init_mapping.items():
+            m[k] = v
+        time_populated: float = time.process_time()
+        for k, v in updates.items():
+            m[k] = v
+        time_updated: float = time.process_time()
+
+        print(
+            f"Initial population with {self.size} items with {self.nb_targets} each: {time_populated - time_start},"
+            f" update: of {self.nb_updates} items: {time_updated - time_populated}."
+        )
+
+
+ScalingTest(size=int(math.pow(10, 2)), nb_targets=10, nb_updates=int(math.pow(10, 1))).test()
+ScalingTest(size=int(math.pow(10, 5)), nb_targets=20, nb_updates=int(math.pow(10, 2))).test()
+ScalingTest(size=int(math.pow(10, 5)), nb_targets=20, nb_updates=int(math.pow(10, 3))).test()
+ScalingTest(size=int(math.pow(10, 5)), nb_targets=20, nb_updates=int(math.pow(10, 4))).test()
+ScalingTest(size=int(math.pow(10, 5)), nb_targets=20, nb_updates=int(math.pow(10, 5))).test()
+ScalingTest(size=int(math.pow(10, 6)), nb_targets=100, nb_updates=int(math.pow(10, 3))).test()
