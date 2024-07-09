@@ -26,8 +26,8 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import timedelta
 from typing import TYPE_CHECKING, Callable, Optional, Union
+import importlib.metadata
 
-import importlib_metadata
 from tornado import gen, queues, routing, web
 
 import inmanta.protocol.endpoints
@@ -381,9 +381,9 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | No
         # workaround for #2586
         package_name = "inmanta-core" if source_package_name == "inmanta" else source_package_name
         try:
-            distribution = importlib_metadata.distribution(package_name)
+            distribution = importlib.metadata.distribution(package_name)
             return ExtensionStatus(name=ext_name, package=ext_name, version=distribution.version)
-        except importlib_metadata.PackageNotFoundError:
+        except importlib.metadata.PackageNotFoundError:
             LOGGER.info(
                 "Package %s of slice %s is not packaged in a distribution. Unable to determine its extension.",
                 package_name,
