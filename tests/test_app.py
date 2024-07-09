@@ -49,7 +49,9 @@ def get_command(
     config_dir=None,
     server_extensions=[],
     version=False,
+    command: str = "server",
 ):
+    """Build an argument string for subprocess to run the orchestrator inmanta.app entrypoint"""
     root_dir = tmp_dir.mkdir("root").strpath
     log_dir = os.path.join(root_dir, "log")
     state_dir = os.path.join(root_dir, "data")
@@ -92,7 +94,7 @@ def get_command(
         args += ["--config-dir", config_dir]
     if version:
         args += ["--version"]
-    args += ["-c", config_file, "server"]
+    args += ["-c", config_file, command]
     return (args, log_dir)
 
 
@@ -339,42 +341,48 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
             3,
             [
                 r"INFO\s+Starting server endpoint",
-                r"DEBUG\s+Starting Server Rest Endpoint",
+                r"DEBUG\s+Using selector: EpollSelector",
             ],
             [],
         ),
         (
             2,
             [r"INFO\s+Starting server endpoint"],
-            [r"DEBUG\s+Starting Server Rest Endpoint"],
+            [r"DEBUG\s+Using selector: EpollSelector"],
         ),
         (
             1,
             [],
             [
+                r"DEBUG\s+Using selector: EpollSelector",
                 r"INFO\s+Starting server endpoint",
-                r"DEBUG\s+Starting Server Rest Endpoint",
             ],
         ),
     ],
 )
 @pytest.mark.timeout(60)
-def test_log_stdout_log_level(tmpdir, log_level, regexes_required_lines, regexes_forbidden_lines):
+def test_log_stdout_log_level(log_level, regexes_required_lines, regexes_forbidden_lines):
     """Check if the inmanta command prints out the correct logs depending on the amount of provided -v flags on the CLI"""
-    args = [sys.executable, "-m", "inmanta.app", "-" + "v" * log_level, "server"]
+    args = [sys.executable, "-m", "inmanta.app", "-" + "v" * log_level, "--version"]
     logging.getLogger(__name__).info("Starting inmanta: %s", args)
-    (stdout, _, _) = run_without_tty(args)
+    (stdout, err, _) = run_without_tty(args)
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed=False)
 
 
 def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed):
     compiled_regexes_requires_lines = get_compiled_regexes(regexes_required_lines, timed)
     compiled_regexes_forbidden_lines = get_compiled_regexes(regexes_forbidden_lines, timed)
+
+    if not log_lines:
+        print("No lines logged")
+
     for line in log_lines:
         print(line)
+
     for regex in compiled_regexes_requires_lines:
         if not any(regex.search(line) for line in log_lines):
             pytest.fail(f"Required pattern was not found in log lines: {regex.pattern}")
+
     for regex in compiled_regexes_forbidden_lines:
         if any(regex.search(line) for line in log_lines):
             pytest.fail(f"Forbidden pattern found in log lines: {regex.pattern}")
