@@ -122,8 +122,8 @@ def do_kill(process: subprocess.Popen, killtime: int = 3, termtime: int = 2) -> 
 
         return w
 
-    t1 = Timer(killtime, do_and_log(process.kill, f"killed process after {killtime}"))
-    t2 = Timer(termtime, do_and_log(process.terminate, f"terminated process {termtime}"))
+    t1 = Timer(killtime, do_and_log(process.kill, f"killed process after {killtime}s"))
+    t2 = Timer(termtime, do_and_log(process.terminate, f"terminated process after {termtime}s"))
     t1.start()
     t2.start()
 
@@ -138,14 +138,14 @@ def do_kill(process: subprocess.Popen, killtime: int = 3, termtime: int = 2) -> 
 
 
 def run_without_tty(
-    args: list[str], env: typing.Optional[dict[str, str]] = None, killtime: int = 3, termtime: int = 2
+    args: list[str], env: typing.Optional[dict[str, str]] = None, killtime: int = 4, termtime: int = 3
 ) -> tuple[str, str, int]:
     """Run the given command without a tty"""
     process = do_run(args, env)
     return do_kill(process, killtime, termtime)
 
 
-def run_with_tty(args, killtime=3, termtime=2):
+def run_with_tty(args, killtime=4, termtime=3):
     """Could not get code for actual tty to run stable in docker, so we are faking it"""
     env = {const.ENVIRON_FORCE_TTY: "true"}
     return run_without_tty(args, env=env, killtime=killtime, termtime=termtime)

@@ -78,6 +78,8 @@ LOGGER = logging.getLogger("inmanta")
 
 def configure_logfire(service: str) -> None:
     """Configure logfire"""
+    LOGGER.info("Setting up telemetry")
+
     AsyncPGInstrumentor(capture_parameters=True).instrument()
 
     logfire.configure(
