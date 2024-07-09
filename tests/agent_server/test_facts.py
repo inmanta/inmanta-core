@@ -23,7 +23,7 @@ import uuid
 from inmanta import const, data, resources
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
-from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs, retry_limited, wait_until_logs_are_available
+from utils import _wait_until_deployment_finishes, no_error_in_logs, retry_limited, wait_until_logs_are_available
 
 
 async def test_get_facts(resource_container, client, clienthelper, environment, agent, caplog):
@@ -276,7 +276,6 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     await get_fact("test::Fact[agent1,key=key3]")  # not present -> present
     await get_fact("test::Fact[agent1,key=key4]", 404)  # unknown
     await get_fact("test::Fact[agent1,key=key5]", 404)  # broken
-
 
 
 async def test_purged_resources(resource_container, client, clienthelper, server, environment, agent, no_agent_backoff):
