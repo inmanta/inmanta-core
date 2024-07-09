@@ -23,6 +23,7 @@ import subprocess
 import sys
 from subprocess import TimeoutExpired
 from threading import Timer
+import logging
 
 import pytest
 
@@ -326,29 +327,31 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
         (
             3,
             [
-                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
-                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+                r"[a-z.]*[ ]*INFO[\s]+[a-z\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-z\.A-Z]*[\s]Starting Server Rest Endpoint",
             ],
             [],
         ),
         (
             2,
-            [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
-            [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
+            [r"[a-z.]*[ ]*INFO[\s]+[a-z\.A-Z]*[\s]Starting server endpoint"],
+            [r"[a-z.]*[ ]*DEBUG[\s]+[a-z\.A-Z]*[\s]Starting Server Rest Endpoint"],
         ),
         (
             1,
             [],
             [
-                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
-                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-z\.A-Z]*[\s]Starting Server Rest Endpoint",
+                r"[a-z.]*[ ]*INFO[\s]+[a-z\.A-Z]*[\s]Starting server endpoint",
             ],
         ),
     ],
 )
 @pytest.mark.timeout(60)
 def test_log_stdout_log_level(tmpdir, log_level, regexes_required_lines, regexes_forbidden_lines):
-    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level)
+    """ Check if the inmanta command prints out the correct logs depending on the amount of provided -v flags on the CLI """
+    args = [sys.executable, "-m", "inmanta.app", "-" + "v" * log_level, "server"]
+    logging.getLogger(__name__).info("Starting inmanta: %s", args)
     (stdout, _, _) = run_without_tty(args)
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed=False)
 
