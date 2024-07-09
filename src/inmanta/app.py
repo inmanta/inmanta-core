@@ -79,7 +79,6 @@ LOGGER = logging.getLogger("inmanta")
 def configure_logfire(service: str) -> None:
     """Configure logfire"""
     AsyncPGInstrumentor(capture_parameters=True).instrument()
-    os.environ["OTEL_RESOURCE_ATTRIBUTES"] = "inmanta.dev=bart"
 
     logfire.configure(
         service_name=service,
