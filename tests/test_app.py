@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import logging
 import os
 import re
 import signal
@@ -23,7 +24,6 @@ import subprocess
 import sys
 from subprocess import TimeoutExpired
 from threading import Timer
-import logging
 
 import pytest
 
@@ -349,7 +349,7 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
 )
 @pytest.mark.timeout(60)
 def test_log_stdout_log_level(tmpdir, log_level, regexes_required_lines, regexes_forbidden_lines):
-    """ Check if the inmanta command prints out the correct logs depending on the amount of provided -v flags on the CLI """
+    """Check if the inmanta command prints out the correct logs depending on the amount of provided -v flags on the CLI"""
     args = [sys.executable, "-m", "inmanta.app", "-" + "v" * log_level, "server"]
     logging.getLogger(__name__).info("Starting inmanta: %s", args)
     (stdout, _, _) = run_without_tty(args)
