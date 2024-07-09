@@ -112,7 +112,7 @@ def convert_to_ascii(text):
     return [line for line in text.decode("ascii").split("\n") if line != ""]
 
 
-def do_kill(process: subprocess.Popen, killtime: int = 10, termtime: int = 5) -> tuple[str, str, int]:
+def do_kill(process: subprocess.Popen, killtime: int = 3, termtime: int = 2) -> tuple[str, str, int]:
     """Terminate the process after termtime and kill it after killtime"""
 
     def do_and_log(func, msg):
@@ -181,25 +181,35 @@ def test_verify_that_colorama_package_is_not_present():
     assert not is_colorama_package_available()
 
 
+# Log lines emitted by the --version command of inmanta.app on the cli or a log file (with logger between level and message)
+INFO_MSG = r"INFO\s+[a-z\.]*\s+Starting server endpoint"
+DEBUG_MSG = r"DEBUG\s+[a-z\.]*\s+Using selector: EpollSelector"
+
+# The number of v arguments provided to get this level of logs
+LEVEL_WARNING = 1
+LEVEL_INFO = 2
+LEVEL_DEBUG = 3
+
+
 @pytest.mark.parametrize_any(
     "log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines",
     [
         (
-            3,
+            LEVEL_DEBUG,
             False,
             False,
             [r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint", r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint"],
             [],
         ),
         (
-            2,
+            LEVEL_INFO,
             False,
             False,
             [r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint"],
             [r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint"],
         ),
         (
-            3,
+            LEVEL_DEBUG,
             False,
             True,
             [
@@ -209,28 +219,28 @@ def test_verify_that_colorama_package_is_not_present():
             [],
         ),
         (
-            2,
+            LEVEL_INFO,
             False,
             True,
             [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint"],
             [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint"],
         ),
         (
-            3,
+            LEVEL_DEBUG,
             True,
             False,
             [r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint", r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint"],
             [],
         ),
         (
-            2,
+            LEVEL_INFO,
             True,
             False,
             [r"[a-z.]*[ ]*INFO[\s]+Starting server endpoint"],
             [r"[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint"],
         ),
         (
-            3,
+            LEVEL_DEBUG,
             True,
             True,
             [
@@ -240,7 +250,7 @@ def test_verify_that_colorama_package_is_not_present():
             [],
         ),
         (
-            2,
+            LEVEL_INFO,
             True,
             True,
             [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint"],
@@ -250,10 +260,11 @@ def test_verify_that_colorama_package_is_not_present():
 )
 @pytest.mark.timeout(20)
 def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines):
+    """Test if"""
     if is_colorama_package_available() and with_tty:
         pytest.skip("Colorama is present")
 
-    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, timed=timed)
+    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, timed=timed, command="--version")
     if with_tty:
         (stdout, _, _) = run_with_tty(args)
     else:
@@ -267,60 +278,22 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
 @pytest.mark.parametrize_any(
     "log_level,with_tty, regexes_required_lines, regexes_forbidden_lines",
     [
-        (
-            3,
-            False,
-            [
-                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
-                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
-            ],
-            [],
-        ),
-        (
-            "DEBUG",
-            False,
-            [
-                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
-                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
-            ],
-            [],
-        ),
-        (
-            2,
-            False,
-            [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
-            [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
-        ),
-        (
-            "INFO",
-            False,
-            [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
-            [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
-        ),
-        (
-            3,
-            True,
-            [
-                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
-                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
-            ],
-            [],
-        ),
-        (
-            2,
-            True,
-            [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
-            [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
-        ),
+        (LEVEL_DEBUG, False, [INFO_MSG, DEBUG_MSG], []),
+        ("DEBUG", False, [INFO_MSG, DEBUG_MSG], []),
+        (LEVEL_INFO, False, [INFO_MSG], [DEBUG_MSG]),
+        ("INFO", False, [INFO_MSG], [DEBUG_MSG]),
+        (LEVEL_DEBUG, True, [INFO_MSG, DEBUG_MSG], []),
+        (LEVEL_INFO, True, [INFO_MSG], [DEBUG_MSG]),
     ],
 )
 @pytest.mark.timeout(60)
 def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regexes_forbidden_lines):
+    """Check if lines are logged correctly to file and those lines are not emited on the commandline"""
     if is_colorama_package_available() and with_tty:
         pytest.skip("Colorama is present")
 
     log_file = "server.log"
-    (args, log_dir) = get_command(tmpdir, log_file=log_file, log_level_log_file=log_level)
+    (args, log_dir) = get_command(tmpdir, log_file=log_file, log_level_log_file=log_level, command="--version")
     if with_tty:
         (stdout, _, _) = run_with_tty(args)
     else:
@@ -329,35 +302,18 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
     log_file = os.path.join(log_dir, log_file)
     with open(log_file) as f:
         log_lines = f.readlines()
-    check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed=True)
-    check_logs(stdout, [], regexes_required_lines, timed=True)
+
+    check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed=False)
+    # Check if the message appears in the logs, it is not a full line match so timing is not relevant
     check_logs(stdout, [], regexes_required_lines, timed=False)
 
 
 @pytest.mark.parametrize_any(
     "log_level, regexes_required_lines, regexes_forbidden_lines",
     [
-        (
-            3,
-            [
-                r"INFO\s+Starting server endpoint",
-                r"DEBUG\s+Using selector: EpollSelector",
-            ],
-            [],
-        ),
-        (
-            2,
-            [r"INFO\s+Starting server endpoint"],
-            [r"DEBUG\s+Using selector: EpollSelector"],
-        ),
-        (
-            1,
-            [],
-            [
-                r"DEBUG\s+Using selector: EpollSelector",
-                r"INFO\s+Starting server endpoint",
-            ],
-        ),
+        (LEVEL_DEBUG, [INFO_MSG, DEBUG_MSG], []),
+        (LEVEL_INFO, [INFO_MSG], [DEBUG_MSG]),
+        (LEVEL_WARNING, [], [INFO_MSG, DEBUG_MSG]),
     ],
 )
 @pytest.mark.timeout(60)
@@ -505,7 +461,7 @@ def test_warning_config_dir_option_on_server_command(tmpdir):
     non_existing_dir = os.path.join(tmpdir, "non_existing_dir")
     assert not os.path.isdir(non_existing_dir)
     (args, _) = get_command(tmpdir, stdout_log_level=3, config_dir=non_existing_dir)
-    (stdout, _, _) = run_without_tty(args)
+    (stdout, _, _) = run_without_tty(args, 10, 5)
     stdout = "".join(stdout)
     assert "Starting server endpoint" in stdout
     assert f"Config directory {non_existing_dir} doesn't exist" in stdout
