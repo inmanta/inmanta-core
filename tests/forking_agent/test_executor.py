@@ -78,7 +78,7 @@ class TestLoader(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
 
 
 @pytest.fixture
-def set_custom_executor_policy():
+def set_custom_executor_policy(server_config):
     """
     Fixture to temporarily set the policy for executor management.
     """
@@ -226,6 +226,8 @@ def test():
             logging.DEBUG,
             (f"Stopping executor {full_runner.executor_id.identity()} because it was inactive for"),
         )
+
+    utils.assert_no_warning(caplog)
 
 
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
