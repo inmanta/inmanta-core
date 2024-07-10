@@ -291,12 +291,13 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
 
         return failed
 
-    async def cleanup_stale_cache_entries(self, context) -> None:
+    async def cleanup_stale_cache_entries(self, context: ExecutorContext) -> None:
         """
         This task periodically pokes the cache
         """
         while True:
             reschedule_interval: float = 0.1
+            assert context.executor
             async with context.executor.wip_lock:
                 LOGGER.info(f"POKING CACHE {context.executor._cache.cache}")
                 context.executor._cache.clean_stale_entries()

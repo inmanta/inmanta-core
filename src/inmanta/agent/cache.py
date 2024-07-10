@@ -110,7 +110,7 @@ class AgentCache:
         # The cache itself
         self.cache: dict[str, CacheItem] = {}
         self.counterforVersion: dict[int, int] = {}
-        # self.keysforVersion: dict[int, set[str]] = {}
+        self.keysforVersion: dict[int, set[str]] = {}
         self.timerqueue: list[CacheItem] = []
         self.nextAction: float = sys.maxsize
         self.addLock = Lock()
@@ -190,7 +190,7 @@ class AgentCache:
             # already gone
             pass
 
-    def clean_stale_entries(self):
+    def clean_stale_entries(self) -> None:
         now = datetime.datetime.now().astimezone()
         stale_keys = [key for key, item in self.cache.items() if item.is_stale(now)]
         for key in stale_keys:
