@@ -159,7 +159,10 @@ class ResourceAction(ResourceActionBase):
 
     async def execute(self, dummy: "ResourceActionBase", generation: Mapping[ResourceIdStr, ResourceActionBase]) -> None:
         self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
-        async with self.executor.wip_lock:
+        # TODO replace versioned cache with something like this:
+        # async with self.wip_lock
+        # To prevent cache cleanup when work is being done
+        async with self.executor.cache(self.resource.model_version):
             self.dependencies = [generation[resource_id.resource_str()] for resource_id in self.resource.requires]
             waiters = [x.future for x in self.dependencies]
             waiters.append(dummy.future)

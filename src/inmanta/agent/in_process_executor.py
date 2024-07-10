@@ -223,8 +223,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             )
             raise
 
-    def get_wip_lock(self):
-        return self.wip_lock
     async def execute(
         self,
         gid: uuid.UUID,
