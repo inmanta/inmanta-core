@@ -20,7 +20,6 @@ import asyncio
 import importlib
 import logging
 import pkgutil
-from asyncio import FastChildWatcher
 from collections.abc import Generator
 from pkgutil import ModuleInfo
 from types import ModuleType
