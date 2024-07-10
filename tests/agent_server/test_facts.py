@@ -255,11 +255,11 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     )
     assert result.code == 200
 
-    await get_fact("test::Fact[agent1,key=key1]", 404)  # undeployable
+    await get_fact("test::Fact[agent1,key=key1]", 503)  # undeployable
     await get_fact("test::Fact[agent1,key=key2]")  # normal
     await get_fact("test::Fact[agent1,key=key3]", 503)  # not present
-    await get_fact("test::Fact[agent1,key=key4]", 404)  # unknown
-    await get_fact("test::Fact[agent1,key=key5]", 404)  # broken
+    await get_fact("test::Fact[agent1,key=key4]", 503)  # unknown
+    await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
     f6 = await get_fact("test::Fact[agent1,key=key6]")  # normal
     f7 = await get_fact("test::Fact[agent1,key=key7]")  # normal
 
@@ -271,11 +271,11 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
 
     await _wait_until_deployment_finishes(client, environment, version)
 
-    await get_fact("test::Fact[agent1,key=key1]", 404)  # undeployable
+    await get_fact("test::Fact[agent1,key=key1]", 503)  # undeployable
     await get_fact("test::Fact[agent1,key=key2]")  # normal
     await get_fact("test::Fact[agent1,key=key3]")  # not present -> present
-    await get_fact("test::Fact[agent1,key=key4]", 404)  # unknown
-    await get_fact("test::Fact[agent1,key=key5]", 404)  # broken
+    await get_fact("test::Fact[agent1,key=key4]", 503)  # unknown
+    await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
 
 
 async def test_purged_resources(resource_container, client, clienthelper, server, environment, agent, no_agent_backoff):

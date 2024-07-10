@@ -858,7 +858,7 @@ class AgentManager(ServerSlice, SessionListener):
                     "Ignore fact request for %s, resource is in an undeployable state.",
                     resource_id,
                 )
-                return 404, {"message": "The resource is in an undeployable state."}
+                return 503, {"message": "The resource is in an undeployable state."}
 
             rid: Id = Id.parse_id(res.resource_version_id)
             version: int = rid.version
