@@ -29,7 +29,6 @@ from inmanta.protocol import auth
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging import version
 
-
 """
 About the use of @parametrize_any and @slowtest:
 

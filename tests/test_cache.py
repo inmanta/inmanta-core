@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 from threading import Lock, Thread
 from time import sleep
@@ -54,6 +55,8 @@ def test_base():
 
 def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpec]:
     return [executor.ResourceInstallSpec("test::Test", 5, bp)]
+
+
 async def test_timeout(agent, pip_index):
     """
     Test timeout parameter: test that expired entry is removed from the cache

@@ -70,7 +70,7 @@ class CacheItem:
     def __del__(self) -> None:
         self.delete()
 
-    def mark_as_stale(self):
+    def mark_as_stale(self) -> None:
         LOGGER.debug(f"Marking item {self.key} as stale")
 
         self.stale = True
