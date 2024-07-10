@@ -168,9 +168,9 @@ def test_verify_that_colorama_package_is_not_present():
 
 
 # Log lines emitted by the --version command of inmanta.app on the cli or a log file (with logger between level and message)
-INFO_MSG = r"INFO\s+[a-z\.]*\s+Starting server endpoint"
+INFO_MSG = r"INFO\s+[a-z\.]*\s+Discovered extensions:"
 DEBUG_MSG = r"DEBUG\s+[a-z\.]*\s+Using selector: EpollSelector"
-INFO_MSG_TTY = r"INFO\s+[a-z\.]*\s+\x1b\[0m\x1b\[34mStarting server endpoint"
+INFO_MSG_TTY = r"INFO\s+[a-z\.]*\s+\x1b\[0m\x1b\[34mDiscovered extensions:"
 DEBUG_MSG_TTY = r"DEBUG\s+[a-z\.]*\s+\x1b\[0m\x1b\[34mUsing selector: EpollSelector"
 
 # The number of v arguments provided to get this level of logs
