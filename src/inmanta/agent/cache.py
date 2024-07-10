@@ -110,7 +110,6 @@ class AgentCache:
         self.cache: dict[str, CacheItem] = {}
         self.counterforVersion: dict[int, int] = {}
         self.keysforVersion: dict[int, set[str]] = {}
-        self.timerqueue: list[CacheItem] = []
         self.nextAction: float = sys.maxsize
         self.addLock = Lock()
         self.addLocks: dict[str, Lock] = {}
@@ -124,7 +123,6 @@ class AgentCache:
             while self.is_open(version):
                 self.close_version(version)
         self.nextAction = sys.maxsize
-        # self.timerqueue.clear()
         for key in list(self.cache.keys()):
             self._evict_item(key)
 
@@ -193,16 +191,6 @@ class AgentCache:
         stale_keys = [key for key, item in self.cache.items() if item.is_stale(now)]
         for key in stale_keys:
             self._evict_item(key)
-
-    # def _advance_time(self) -> None:
-    #     now = time.time()
-    #     while now > self.nextAction and len(self.timerqueue) > 0:
-    #         item = self.timerqueue.pop(0)
-    #         self._evict_item(item.key)
-    #         if len(self.timerqueue) > 0:
-    #             self.nextAction = self.timerqueue[0].time
-    #         else:
-    #             self.nextAction = sys.maxsize
 
     def _get(self, key: str) -> CacheItem:
         item = self.cache[key]
