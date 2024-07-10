@@ -116,7 +116,6 @@ class AgentCache:
         self.addLock = Lock()
         self.addLocks: dict[str, Lock] = {}
         self._agent_instance = agent_instance
-        self.retention_time: float = 0.1
 
     def close(self) -> None:
         """
@@ -194,9 +193,7 @@ class AgentCache:
         now = datetime.datetime.now().astimezone()
         stale_keys = [key for key, item in self.cache.items() if item.is_stale(now)]
         for key in stale_keys:
-            self.cache.pop(key)
-            # :
-            #     self._evict_item(key)
+            self._evict_item(key)
 
     # def _advance_time(self) -> None:
     #     now = time.time()
@@ -209,8 +206,10 @@ class AgentCache:
     #             self.nextAction = sys.maxsize
 
     def _get(self, key: str) -> CacheItem:
-        # self._advance_time()
-        return self.cache[key]
+        item = self.cache[key]
+        item.lua = datetime.datetime.now().astimezone()
+
+        return item
 
     def _cache(self, item: CacheItem) -> None:
 
