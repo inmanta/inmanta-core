@@ -1,0 +1,3 @@
+description: Attempt to diagnose shutdown issue
+change-type: patch
+destination-branches: [master]
