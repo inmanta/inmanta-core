@@ -363,7 +363,7 @@ def test_decorator():
     xcache = AgentCache()
 
     class DT:
-        def __init__(self, cache):
+        def __init__(self, cache: AgentCache):
             self.cache = cache
             self.count = 0
             self.c2 = 0
