@@ -137,6 +137,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.logger.info(f"Started executor with PID: {os.getpid()}")
         self.set_status("connected")
 
+
     def _detach_log_shipper(self) -> None:
         # Once connection is lost, we want to detach asap to keep the logging clean and efficient
         if self.log_transport:
@@ -287,7 +288,21 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
                 failed.append(module_source)
 
+        self.cache_poking_job = asyncio.create_task(self.cleanup_stale_cache_entries(context))
+
         return failed
+
+    async def cleanup_stale_cache_entries(self, context) -> None:
+        """
+        This task periodically pokes the cache
+        """
+        while True:
+            reschedule_interval: float = .1
+            async with context.executor.wip_lock:
+                LOGGER.info(f"POKING CACHE {context.executor._cache.cache}")
+                context.executor._cache.clean_stale_entries()
+            await asyncio.sleep(reschedule_interval)
+
 
 
 class OpenVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):

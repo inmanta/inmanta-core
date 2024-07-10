@@ -18,6 +18,7 @@
 
 import bisect
 import contextlib
+import datetime
 import logging
 import sys
 import time
@@ -40,12 +41,14 @@ class Scope:
 
 
 class CacheItem:
-    def __init__(self, key: str, scope: Scope, value: Any, call_on_delete: Optional[Callable[[Any], None]]) -> None:
+    def __init__(self, key: str, scope: Scope, value: Any, call_on_delete: Optional[Callable[[Any], None]], lua: datetime.datetime, freshness_period: float) -> None:
         self.key = key
         self.scope = scope
         self.value = value
         self.time: float = time.time() + scope.timeout
         self.call_on_delete = call_on_delete
+        self.lua = lua
+        self.freshness_period = freshness_period
 
     def __lt__(self, other: "CacheItem") -> bool:
         return self.time < other.time
@@ -56,6 +59,9 @@ class CacheItem:
 
     def __del__(self) -> None:
         self.delete()
+
+    def is_stale(self, now: datetime.datetime) -> bool:
+        return (now-self.lua).total_seconds() > self.freshness_period
 
 
 class CacheVersionContext(contextlib.AbstractContextManager):
@@ -97,12 +103,13 @@ class AgentCache:
         # The cache itself
         self.cache: dict[str, CacheItem] = {}
         self.counterforVersion: dict[int, int] = {}
-        self.keysforVersion: dict[int, set[str]] = {}
+        # self.keysforVersion: dict[int, set[str]] = {}
         self.timerqueue: list[CacheItem] = []
         self.nextAction: float = sys.maxsize
         self.addLock = Lock()
         self.addLocks: dict[str, Lock] = {}
         self._agent_instance = agent_instance
+        self.retention_time: float = .1
 
     def close(self) -> None:
         """
@@ -112,7 +119,7 @@ class AgentCache:
             while self.is_open(version):
                 self.close_version(version)
         self.nextAction = sys.maxsize
-        self.timerqueue.clear()
+        # self.timerqueue.clear()
         for key in list(self.cache.keys()):
             self._evict_item(key)
 
@@ -175,19 +182,25 @@ class AgentCache:
         except KeyError:
             # already gone
             pass
+    def clean_stale_entries(self):
+        now = datetime.datetime.now().astimezone()
+        stale_keys = [key for key, item in self.cache.items() if item.is_stale(now)]
+        for key in stale_keys:
+            self.cache.pop(key)
+            # :
+            #     self._evict_item(key)
+    # def _advance_time(self) -> None:
+    #     now = time.time()
+    #     while now > self.nextAction and len(self.timerqueue) > 0:
+    #         item = self.timerqueue.pop(0)
+    #         self._evict_item(item.key)
+    #         if len(self.timerqueue) > 0:
+    #             self.nextAction = self.timerqueue[0].time
+    #         else:
+    #             self.nextAction = sys.maxsize
 
-    def _advance_time(self) -> None:
-        now = time.time()
-        while now > self.nextAction and len(self.timerqueue) > 0:
-            item = self.timerqueue.pop(0)
-            self._evict_item(item.key)
-            if len(self.timerqueue) > 0:
-                self.nextAction = self.timerqueue[0].time
-            else:
-                self.nextAction = sys.maxsize
-
-    def _get(self, key: str) -> Any:
-        self._advance_time()
+    def _get(self, key: str) -> CacheItem:
+        # self._advance_time()
         return self.cache[key]
 
     def _cache(self, item: CacheItem) -> None:
@@ -198,16 +211,6 @@ class AgentCache:
 
         self.cache[item.key] = item
 
-        if scope.version != 0:
-            try:
-                self.keysforVersion[scope.version].add(item.key)
-            except KeyError:
-                raise Exception("Added data to version that is not open")
-
-        bisect.insort_right(self.timerqueue, item)
-        if item.time < self.nextAction:
-            self.nextAction = item.time
-        self._advance_time()
 
     def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
         key_parts = [key]
@@ -234,7 +237,7 @@ class AgentCache:
         :param timeout: nr of second before this value is expired
         :param call_on_delete: A callback function that is called when the value is removed from the cache.
         """
-        self._cache(CacheItem(self._get_key(key, resource, version), Scope(timeout, version), value, call_on_delete))
+        self._cache(CacheItem(self._get_key(key, resource, version), Scope(timeout, version), value, call_on_delete, lua=datetime.datetime.now().astimezone(), freshness_period=timeout))
 
     def find(self, key: str, resource: Optional[Resource] = None, version: int = 0) -> Any:
         """

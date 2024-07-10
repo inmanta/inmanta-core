@@ -69,6 +69,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         # -> run cache cleanup on this when nothing else is running
 
         self._cache = inmanta.agent.cache.AgentCache(self)
+        self.wip_lock = asyncio.Lock()
 
         self.logger: logging.Logger = parent_logger.getChild(self.name)
 
@@ -281,7 +282,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         model_version: int = resources[0].model_version
         env_id: uuid.UUID = resources[0].env_id
 
-        async with self.cache(model_version):
+        # async with self.cache(model_version):
+        async with self.wip_lock:
             for resource in resources:
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
@@ -362,7 +364,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         Get facts for a given resource
         :param resource: The resource for which to get facts.
         """
-        model_version: int = resource.model_version
         env_id: uuid.UUID = resource.env_id
 
         provider = None
@@ -373,8 +374,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 return 500
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
-
-            async with self.cache(model_version):
+            self.cache()
+            async with self.wip_lock:
                 try:
                     started = datetime.datetime.now().astimezone()
                     provider = await self.get_provider(resource_obj)

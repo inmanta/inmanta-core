@@ -61,6 +61,9 @@ def test_timeout():
 
     assert value == cache.find("test")
     sleep(0.2)
+    # We have to explicitly call clean_stale_entries since this mechanism
+    # is no longer controlled by the cache itself
+    cache.clean_stale_entries()
     with pytest.raises(KeyError):
         assert value == cache.find("test")
 
