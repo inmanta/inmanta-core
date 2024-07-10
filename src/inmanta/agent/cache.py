@@ -46,7 +46,6 @@ class CacheItem:
         scope: Scope,
         value: Any,
         call_on_delete: Optional[Callable[[Any], None]],
-        lua: datetime.datetime,
         freshness_period: float,
     ) -> None:
         self.key = key
@@ -54,7 +53,7 @@ class CacheItem:
         self.value = value
         self.time: float = time.time() + scope.timeout
         self.call_on_delete = call_on_delete
-        self.lua = lua
+        self.last_used_at = datetime.datetime.now().astimezone()
         self.freshness_period = freshness_period
 
     def __lt__(self, other: "CacheItem") -> bool:
@@ -68,7 +67,7 @@ class CacheItem:
         self.delete()
 
     def is_stale(self, now: datetime.datetime) -> bool:
-        return (now - self.lua).total_seconds() > self.freshness_period
+        return (now - self.last_used_at).total_seconds() > self.freshness_period
 
 
 class CacheVersionContext(contextlib.AbstractContextManager):
@@ -207,7 +206,7 @@ class AgentCache:
 
     def _get(self, key: str) -> CacheItem:
         item = self.cache[key]
-        item.lua = datetime.datetime.now().astimezone()
+        item.last_used_at = datetime.datetime.now().astimezone()
 
         return item
 
@@ -249,7 +248,6 @@ class AgentCache:
                 Scope(timeout, version),
                 value,
                 call_on_delete,
-                lua=datetime.datetime.now().astimezone(),
                 freshness_period=timeout,
             )
         )
