@@ -254,7 +254,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
             eventloop=loop,
             parent_logger=parent_logger,
         )
-
+        await context.executor.start()
         # activate venv
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
@@ -287,20 +287,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
                 failed.append(module_source)
 
-        self.periodic_cache_cleanup_job = asyncio.create_task(self.cleanup_stale_cache_entries(context))
-
         return failed
-
-    async def cleanup_stale_cache_entries(self, context: ExecutorContext) -> None:
-        """
-        This task periodically cleans up stale entries in the cache
-        """
-        while True:
-            reschedule_interval: float = 1.0
-            assert context.executor
-            async with context.executor.wip_lock:
-                context.executor._cache.clean_stale_entries()
-            await asyncio.sleep(reschedule_interval)
 
 
 class OpenVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):

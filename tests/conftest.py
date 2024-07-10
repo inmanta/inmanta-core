@@ -27,6 +27,8 @@ from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
+from packaging import version
+
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -1937,3 +1939,22 @@ def disable_version_and_agent_cleanup_job():
     orchestrationservice.PERFORM_CLEANUP = False
     yield
     orchestrationservice.PERFORM_CLEANUP = old_perform_cleanup
+
+
+@pytest.fixture(scope="session")
+def pip_index(tmp_path_factory) -> utils.PipIndex:
+    tmpdir = tmp_path_factory.mktemp("pip_index")
+    pip_index = utils.PipIndex(artifact_dir=str(tmpdir))
+    utils.create_python_package(
+        name="pkg1",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "pkg1"),
+        publish_index=pip_index,
+    )
+    utils.create_python_package(
+        name="pkg2",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "pkg2"),
+        publish_index=pip_index,
+    )
+    return pip_index

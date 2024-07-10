@@ -76,6 +76,20 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self._stopped = False
 
         self.failed_resource_types: FailedResourcesSet = set()
+        self.periodic_cache_cleanup_job: Optional[asyncio.Task] = None
+
+    async def start(self):
+        self.periodic_cache_cleanup_job = asyncio.create_task(self.cleanup_stale_cache_entries())
+
+    async def cleanup_stale_cache_entries(self) -> None:
+        """
+        This task periodically cleans up stale entries in the cache
+        """
+        while True:
+            reschedule_interval: float = 1.0
+            async with self.wip_lock:
+                self._cache.clean_stale_entries()
+            await asyncio.sleep(reschedule_interval)
 
     def stop(self) -> None:
         self._stopped = True
@@ -252,7 +266,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             ctx.exception("Failed to report the start of the deployment to the server")
             return
 
-        await self._execute(resource, gid=gid, ctx=ctx, requires=requires)
+        async with self.wip_lock:
+            await self._execute(resource, gid=gid, ctx=ctx, requires=requires)
 
         ctx.debug(
             "End run for resource %(r_id)s in deploy %(deploy_id)s",
@@ -286,7 +301,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         # TODO replace versioned cache with something like this:
         # async with self.wip_lock
         # To prevent cache cleanup when work is being done
-        async with self.cache(model_version):
+        async with self.wip_lock:
             for resource in resources:
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
@@ -381,7 +396,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             # TODO replace versioned cache with something like this:
             # async with self.wip_lock
             # To prevent cache cleanup when work is being done
-            async with self.cache(model_version):
+            async with self.wip_lock:
                 try:
                     started = datetime.datetime.now().astimezone()
                     provider = await self.get_provider(resource_obj)
@@ -504,6 +519,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     out = self.executors[agent_name]
                 else:
                     out = InProcessExecutor(agent_name, agent_uri, self.environment, self.client, self.eventloop, self.logger)
+                    await out.start()
                     self.executors[agent_name] = out
         assert out.uri == agent_uri
         failed_resource_types: FailedResourcesSet = await self.process.ensure_code(code)

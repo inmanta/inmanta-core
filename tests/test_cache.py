@@ -15,15 +15,17 @@
 
     Contact: code@inmanta.com
 """
-
+import asyncio
 from threading import Lock, Thread
 from time import sleep
 
 import pytest
 from pytest import fixture
 
+from inmanta.agent import executor
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import cache
+from inmanta.data import PipConfig
 from inmanta.resources import Id, Resource, resource
 
 
@@ -50,20 +52,26 @@ def test_base():
     assert value == cache.find("test")
 
 
-def test_timeout():
+def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpec]:
+    return [executor.ResourceInstallSpec("test::Test", 5, bp)]
+async def test_timeout(agent, pip_index):
     """
     Test timeout parameter: test that expired entry is removed from the cache
     """
-    cache = AgentCache()
+    pip_config = PipConfig(index_url=pip_index.url)
+
+    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=(), sources=[])
+
+    myagent_instance = await agent.executor_manager.get_executor("agent1", "local:", code_for(blueprint1))
+
+    cache = AgentCache(agent_instance=myagent_instance)
     value = "test too"
     cache.cache_value("test", value, timeout=0.1)
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
-    sleep(0.2)
-    # We have to explicitly call clean_stale_entries since this mechanism
-    # is no longer controlled by the cache itself
-    cache.clean_stale_entries()
+    await asyncio.sleep(0.2)
+
     with pytest.raises(KeyError):
         assert value == cache.find("test")
 
@@ -181,6 +189,7 @@ def test_multi_threaded():
         def delete(self):
             print(f"before {self.deleted}")
             self.deleted += 1
+            # breakpoint()
             print(f"after {self.deleted}")
 
     cache = AgentCache()
