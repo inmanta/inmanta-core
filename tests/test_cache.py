@@ -179,7 +179,9 @@ def test_multi_threaded():
             return self
 
         def delete(self):
+            print(f"before {self.deleted}")
             self.deleted += 1
+            print(f"after {self.deleted}")
 
     cache = AgentCache()
     version = 200
@@ -243,7 +245,7 @@ def test_timeout_and_version():
     assert value == cache.find("testx")
 
 
-def test_version_and_timout():
+def test_version_and_timeout():
     cache = AgentCache()
     version = 200
 
