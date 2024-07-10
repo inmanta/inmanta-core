@@ -220,7 +220,7 @@ def test_multi_threaded():
     assert beta.deleted == beta.created
 
 
-def test_timout_and_version():
+def test_timeout_and_version():
     cache = AgentCache()
     version = 200
 

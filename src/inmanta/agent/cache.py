@@ -199,11 +199,18 @@ class AgentCache:
         return item
 
     def _cache(self, item: CacheItem) -> None:
+        scope = item.scope
 
         if item.key in self.cache:
             raise Exception("Added same item twice")
 
         self.cache[item.key] = item
+
+        if scope.version != 0:
+            try:
+                self.keysforVersion[scope.version].add(item.key)
+            except KeyError:
+                raise Exception("Added data to version that is not open")
 
     def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
         key_parts = [key]
