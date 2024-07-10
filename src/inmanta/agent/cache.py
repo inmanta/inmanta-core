@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import bisect
 import contextlib
 import datetime
 import logging
@@ -41,7 +40,15 @@ class Scope:
 
 
 class CacheItem:
-    def __init__(self, key: str, scope: Scope, value: Any, call_on_delete: Optional[Callable[[Any], None]], lua: datetime.datetime, freshness_period: float) -> None:
+    def __init__(
+        self,
+        key: str,
+        scope: Scope,
+        value: Any,
+        call_on_delete: Optional[Callable[[Any], None]],
+        lua: datetime.datetime,
+        freshness_period: float,
+    ) -> None:
         self.key = key
         self.scope = scope
         self.value = value
@@ -61,7 +68,7 @@ class CacheItem:
         self.delete()
 
     def is_stale(self, now: datetime.datetime) -> bool:
-        return (now-self.lua).total_seconds() > self.freshness_period
+        return (now - self.lua).total_seconds() > self.freshness_period
 
 
 class CacheVersionContext(contextlib.AbstractContextManager):
@@ -109,7 +116,7 @@ class AgentCache:
         self.addLock = Lock()
         self.addLocks: dict[str, Lock] = {}
         self._agent_instance = agent_instance
-        self.retention_time: float = .1
+        self.retention_time: float = 0.1
 
     def close(self) -> None:
         """
@@ -182,6 +189,7 @@ class AgentCache:
         except KeyError:
             # already gone
             pass
+
     def clean_stale_entries(self):
         now = datetime.datetime.now().astimezone()
         stale_keys = [key for key, item in self.cache.items() if item.is_stale(now)]
@@ -189,6 +197,7 @@ class AgentCache:
             self.cache.pop(key)
             # :
             #     self._evict_item(key)
+
     # def _advance_time(self) -> None:
     #     now = time.time()
     #     while now > self.nextAction and len(self.timerqueue) > 0:
@@ -204,13 +213,11 @@ class AgentCache:
         return self.cache[key]
 
     def _cache(self, item: CacheItem) -> None:
-        scope = item.scope
 
         if item.key in self.cache:
             raise Exception("Added same item twice")
 
         self.cache[item.key] = item
-
 
     def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
         key_parts = [key]
@@ -237,7 +244,16 @@ class AgentCache:
         :param timeout: nr of second before this value is expired
         :param call_on_delete: A callback function that is called when the value is removed from the cache.
         """
-        self._cache(CacheItem(self._get_key(key, resource, version), Scope(timeout, version), value, call_on_delete, lua=datetime.datetime.now().astimezone(), freshness_period=timeout))
+        self._cache(
+            CacheItem(
+                self._get_key(key, resource, version),
+                Scope(timeout, version),
+                value,
+                call_on_delete,
+                lua=datetime.datetime.now().astimezone(),
+                freshness_period=timeout,
+            )
+        )
 
     def find(self, key: str, resource: Optional[Resource] = None, version: int = 0) -> Any:
         """

@@ -279,7 +279,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param resources: Sequence of resources for which to perform a dryrun.
         :param dry_run_id: id for this dryrun
         """
-        model_version: int = resources[0].model_version
         env_id: uuid.UUID = resources[0].env_id
 
         # async with self.cache(model_version):
