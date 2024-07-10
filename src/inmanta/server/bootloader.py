@@ -101,13 +101,6 @@ class InmantaBootloader:
             inmanta_logger_config.apply_options(inmanta_logging.Options())
 
     async def start(self) -> None:
-
-        # Use the fast child watcher
-        # It also servers as a reaper when the server is pid 1 in a container
-        childwatcher = FastChildWatcher()
-        childwatcher.attach_loop(asyncio.get_running_loop())
-        asyncio.set_child_watcher(childwatcher)
-
         db_wait_time: int = config.db_wait_time.get()
         if db_wait_time != 0:
             # Wait for the database to be up before starting the server
