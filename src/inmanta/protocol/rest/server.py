@@ -115,7 +115,7 @@ class RESTHandler(tornado.web.RequestHandler):
         with logfire.propagate.attach_context(
             {const.TRACEPARENT: self.request.headers[const.TRACEPARENT]} if const.TRACEPARENT in self.request.headers else {}
         ):
-            with logfire.span("rpc." + call_config.method_name):
+            with logfire.span("rpc." + call_config.method_name, _tags={"rpc-call"}):
                 with timer("rpc." + call_config.method_name).time():
                     self._transport.start_request()
                     try:
