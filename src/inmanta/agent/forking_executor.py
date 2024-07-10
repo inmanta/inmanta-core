@@ -287,19 +287,18 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
                 failed.append(module_source)
 
-        self.cache_poking_job = asyncio.create_task(self.cleanup_stale_cache_entries(context))
+        self.periodic_cache_cleanup_job = asyncio.create_task(self.cleanup_stale_cache_entries(context))
 
         return failed
 
     async def cleanup_stale_cache_entries(self, context: ExecutorContext) -> None:
         """
-        This task periodically pokes the cache
+        This task periodically cleans up stale entries in the cache
         """
         while True:
-            reschedule_interval: float = 0.1
+            reschedule_interval: float = 1.0
             assert context.executor
             async with context.executor.wip_lock:
-                LOGGER.info(f"POKING CACHE {context.executor._cache.cache}")
                 context.executor._cache.clean_stale_entries()
             await asyncio.sleep(reschedule_interval)
 
