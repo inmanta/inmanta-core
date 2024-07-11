@@ -55,10 +55,8 @@ from tornado.ioloop import IOLoop
 
 import inmanta.compiler as compiler
 import logfire
-import logfire.integrations
-import logfire.integrations.pydantic
 import logfire.propagate
-from inmanta import const, module, moduletool, protocol, util
+from inmanta import const, module, moduletool, protocol, tracing, util
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -71,33 +69,8 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
-from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
 
 LOGGER = logging.getLogger("inmanta")
-
-
-def configure_logfire(service: str) -> None:
-    """Configure logfire to collect telemetry from the spans and instrument libraries such as asyncpg. By default, no traces
-    will be processed and sent, this requires configuration in environemnt variables:
-
-    - LOGFIRE_TOKEN: This variable needs to be set to enable the exporter. When set to a https://logfire.pydantic.dev token
-      the traces will be sent to logfire. Be aware that by enabling capture parameters for asyncpg and pydantic, quite some
-      data will be sent to logfire. See the other options for using another trace endpoint.
-    - OTEL_RESOURCE_ATTRIBUTES: A comma separated list of attributes that are added to each trace. These can used to disinguish
-      traces from different instances, developers, ci runs, ...
-    - OTEL_EXPORTER_OTLP_PROTOCOL and OTEL_EXPORTER_OTLP_ENDPOINT: These variables can be used to send the traces to different
-      collectors. Either to aggregate before shipping them to logfire or to sent them to entirely different systems.
-    """
-    LOGGER.info("Setting up telemetry")
-
-    AsyncPGInstrumentor(capture_parameters=True).instrument()
-
-    logfire.configure(
-        service_name=service,
-        send_to_logfire="if-token-present",
-        console=False,
-        pydantic_plugin=logfire.integrations.pydantic.PydanticPlugin(record="all"),
-    )
 
 
 def server_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[argparse.ArgumentParser]) -> None:
@@ -121,7 +94,7 @@ def start_server(options: argparse.Namespace) -> None:
     if options.db_wait_time is not None:
         Config.set("database", "wait_time", str(options.db_wait_time))
 
-    configure_logfire("server")
+    tracing.configure_logfire("server")
     util.ensure_event_loop()
 
     ibl = InmantaBootloader()
@@ -161,7 +134,7 @@ def start_agent(options: argparse.Namespace) -> None:
     if max_clients:
         AsyncHTTPClient.configure(None, max_clients=max_clients)
 
-    configure_logfire("agent")
+    tracing.configure_logfire("agent")
     util.ensure_event_loop()
     a = agent.Agent()
 
@@ -545,7 +518,7 @@ def export(options: argparse.Namespace) -> None:
         if options.feature_compiler_cache is False:
             Config.set("compiler", "cache", "false")
 
-        configure_logfire("compiler")
+        tracing.configure_logfire("compiler")
 
         # try to parse the metadata as json. If a normal string, create json for it.
         if options.metadata is not None and len(options.metadata) > 0:
