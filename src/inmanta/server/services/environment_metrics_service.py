@@ -28,6 +28,7 @@ from typing import Optional, Union
 
 import asyncpg
 
+import logfire
 from inmanta.data import (
     ENVIRONMENT_METRICS_RETENTION,
     Agent,
@@ -240,6 +241,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         else:
             raise Exception(f"There already is a metric collector with the name {metrics_collector.get_metric_name()}")
 
+    @logfire.instrument("EnvironmentMetricsService.flush_metrics")
     async def flush_metrics(self) -> None:
         """
         Invoked at the end of the metrics collection interval. Writes the metrics
