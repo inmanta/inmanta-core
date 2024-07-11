@@ -17,7 +17,6 @@
 """
 
 import contextlib
-import datetime
 import logging
 import sys
 import time
