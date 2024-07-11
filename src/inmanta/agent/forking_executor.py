@@ -77,10 +77,10 @@ class ExecutorContext:
     async def stop(self) -> None:
         """Request the executor to stop"""
         if self.executor:
-            self.executor.stop()
+            await self.executor.stop()
         if self.executor:
             # threadpool finalizer is not used, we expect threadpools to be terminated with the process
-            self.executor.join([])
+            await self.executor.join([])
         await self.server.stop()
 
 

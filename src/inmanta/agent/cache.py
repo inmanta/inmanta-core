@@ -64,7 +64,7 @@ class CacheItem:
         self.delete()
 
     def __repr__(self) -> str:
-        return f"{self.key=} {self.value=} {self.stale=}"
+        return f"{self.key=} {self.value=}"
 
 
 class CacheVersionContext(contextlib.AbstractContextManager):
@@ -111,7 +111,7 @@ class AgentCache:
         self.addLock = Lock()
         self.addLocks: dict[str, Lock] = {}
         self._agent_instance = agent_instance
-        self.timerqueue: heapq = []
+        self.timerqueue: list[CacheItem] = []
 
     def close(self) -> None:
         """
@@ -223,9 +223,6 @@ class AgentCache:
                 raise Exception("Added data to version that is not open")
         heapq.heappush(self.timerqueue, item)
 
-    def mark_item_as_stale(self, item: CacheItem) -> None:
-        item.mark_as_stale()
-        self.stale_keys.add(item.key)
 
     def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
         key_parts = [key]
@@ -258,7 +255,6 @@ class AgentCache:
                 Scope(timeout, version),
                 value,
                 call_on_delete,
-                freshness_period=timeout,
             )
         )
 
