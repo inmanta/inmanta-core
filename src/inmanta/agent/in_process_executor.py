@@ -66,9 +66,9 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         # threads to work
         self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="Pool_%s" % self.name)
 
-        # -> run cache cleanup on this when nothing else is running
-
         self._cache = inmanta.agent.cache.AgentCache(self)
+        # This lock ensures cache entry can not be cleaned up when
+        # the executor is actively working and vice versa
         self.wip_lock = asyncio.Lock()
 
         self.logger: logging.Logger = parent_logger.getChild(self.name)
@@ -298,10 +298,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         env_id: uuid.UUID = resources[0].env_id
 
-        # TODO replace versioned cache with something like this:
-        # async with self.wip_lock
-        # To prevent cache cleanup when work is being done
-        async with self.cache(model_version):
+        # TODO remove versioned cache:
+        async with self.wip_lock, self.cache(model_version):
             for resource in resources:
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
@@ -393,10 +391,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 return 500
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
-            # TODO replace versioned cache with something like this:
-            # async with self.wip_lock
-            # To prevent cache cleanup when work is being done
-            async with self.cache(model_version):
+            # TODO remove versioned cache:
+            async with self.wip_lock, self.cache(model_version):
                 try:
                     started = datetime.datetime.now().astimezone()
                     provider = await self.get_provider(resource_obj)
