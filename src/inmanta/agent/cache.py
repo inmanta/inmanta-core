@@ -17,13 +17,13 @@
 """
 
 import contextlib
+import heapq
 import logging
 import sys
 import time
 from threading import Lock
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-import inmanta
 from inmanta.resources import Resource
 from inmanta.stable_api import stable_api
 
@@ -46,17 +46,12 @@ class CacheItem:
         scope: Scope,
         value: Any,
         call_on_delete: Optional[Callable[[Any], None]],
-        freshness_period: float,
     ) -> None:
         self.key = key
         self.scope = scope
         self.value = value
         self.time: float = time.time() + scope.timeout
         self.call_on_delete = call_on_delete
-
-        self.freshness_period = freshness_period
-        # This item is automatically marked as stale once the freshness_period has expired
-        self.stale: bool = False
 
     def __lt__(self, other: "CacheItem") -> bool:
         return self.time < other.time
@@ -67,11 +62,6 @@ class CacheItem:
 
     def __del__(self) -> None:
         self.delete()
-
-    def mark_as_stale(self) -> None:
-        LOGGER.debug(f"Marking item {self.key} as stale")
-
-        self.stale = True
 
     def __repr__(self) -> str:
         return f"{self.key=} {self.value=} {self.stale=}"
@@ -121,7 +111,7 @@ class AgentCache:
         self.addLock = Lock()
         self.addLocks: dict[str, Lock] = {}
         self._agent_instance = agent_instance
-        self.stale_keys: set[str] = set()
+        self.timerqueue: heapq = []
 
     def close(self) -> None:
         """
@@ -133,6 +123,7 @@ class AgentCache:
         self.nextAction = sys.maxsize
         for key in list(self.cache.keys()):
             self._evict_item(key)
+        self.timerqueue.clear()
 
     def is_open(self, version: int) -> bool:
         """
@@ -196,9 +187,14 @@ class AgentCache:
             pass
 
     def clean_stale_entries(self) -> None:
-        while len(self.stale_keys) > 0:
-            key = self.stale_keys.pop()
-            self._evict_item(key)
+        now = time.time()
+        while now > self.nextAction and len(self.timerqueue) > 0:
+            item = heapq.heappop(self.timerqueue)
+            self._evict_item(item.key)
+            if len(self.timerqueue) > 0:
+                self.nextAction = self.timerqueue[0].time
+            else:
+                self.nextAction = sys.maxsize
 
     def _get(self, key: str) -> CacheItem:
         """
@@ -220,18 +216,12 @@ class AgentCache:
 
         self.cache[item.key] = item
 
-        if not self._agent_instance:
-            if not inmanta.RUNNING_TESTS:
-                raise Exception("No agent instance associated with this cache")
-        else:
-            # In all practical cases there should be an agent instance associated with this cache
-            self._agent_instance.eventloop.call_later(item.freshness_period, self.mark_item_as_stale, item)
-
         if scope.version != 0:
             try:
                 self.keysforVersion[scope.version].add(item.key)
             except KeyError:
                 raise Exception("Added data to version that is not open")
+        heapq.heappush(self.timerqueue, item)
 
     def mark_item_as_stale(self, item: CacheItem) -> None:
         item.mark_as_stale()
@@ -278,15 +268,9 @@ class AgentCache:
 
         if a resource or version is given, these are appended to the key
 
-        :raise KeyError: if the value is not found or if the item was stale and has been deleted
+        :raise KeyError: if the value is not found
         """
-        full_key = self._get_key(key, resource, version)
-        item = self._get(full_key)
-        if item.stale:
-            LOGGER.debug("Cache hit for item %s but item is stale, removing item..." % full_key)
-            self._evict_item(full_key)
-            raise KeyError("Item was stale and has been removed from the cache")
-        return item.value
+        return self._get(self._get_key(key, resource, version)).value
 
     def get_or_else(
         self,

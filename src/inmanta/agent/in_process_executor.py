@@ -83,21 +83,23 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
     async def cleanup_stale_cache_entries(self) -> None:
         """
-        This task periodically cleans up stale entries in the cache
+        Periodically cleans up stale entries in the cache. The clean_stale_entries
+        has to be called on the thread pool because it might call finalizers.
         """
-        while True:
+        while not self._stopped:
             reschedule_interval: float = 1.0
             async with self.wip_lock:
-                self._cache.clean_stale_entries()
+                await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.clean_stale_entries)
             await asyncio.sleep(reschedule_interval)
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         self._stopped = True
-        self._cache.close()
+        async with self.wip_lock:
+            await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.close)
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
 
-    def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
+    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
         """
         Called after stop to ensure complete shutdown
 
@@ -106,6 +108,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         assert self._stopped
         thread_pool_finalizer.append(self.provider_thread_pool)
         thread_pool_finalizer.append(self.thread_pool)
+        if self.periodic_cache_cleanup_job:
+            await self.periodic_cache_cleanup_job
 
     def is_stopped(self) -> bool:
         return self._stopped
@@ -485,13 +489,13 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         if agent_name in self.executors:
             out = self.executors[agent_name]
             del self.executors[agent_name]
-            out.stop()
+            await out.stop()
             return [out]
         return []
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
         for child in self.executors.values():
-            child.join(thread_pool_finalizer)
+            await child.join(thread_pool_finalizer)
 
     async def get_executor(
         self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]

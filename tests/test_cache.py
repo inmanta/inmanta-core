@@ -57,11 +57,11 @@ def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpe
     return [executor.ResourceInstallSpec("test::Test", 5, bp)]
 
 
-async def test_timeout(agent, pip_index):
+async def test_timeout(agent):
     """
     Test timeout parameter: test that expired entry is removed from the cache
     """
-    pip_config = PipConfig(index_url=pip_index.url)
+    pip_config = PipConfig()
 
     blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=(), sources=[])
 
