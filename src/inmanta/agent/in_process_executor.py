@@ -294,13 +294,14 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param resources: Sequence of resources for which to perform a dryrun.
         :param dry_run_id: id for this dryrun
         """
+        model_version: int = resources[0].model_version
 
         env_id: uuid.UUID = resources[0].env_id
 
         # TODO replace versioned cache with something like this:
         # async with self.wip_lock
         # To prevent cache cleanup when work is being done
-        async with self.wip_lock:
+        async with self.cache(model_version):
             for resource in resources:
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
@@ -381,6 +382,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         Get facts for a given resource
         :param resource: The resource for which to get facts.
         """
+        model_version: int = resource.model_version
         env_id: uuid.UUID = resource.env_id
 
         provider = None
@@ -394,7 +396,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             # TODO replace versioned cache with something like this:
             # async with self.wip_lock
             # To prevent cache cleanup when work is being done
-            async with self.wip_lock:
+            async with self.cache(model_version):
                 try:
                     started = datetime.datetime.now().astimezone()
                     provider = await self.get_provider(resource_obj)
