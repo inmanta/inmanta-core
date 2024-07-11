@@ -54,7 +54,6 @@ class CacheItem:
         self.value = value
         self.time: float = time.time() + scope.timeout
         self.call_on_delete = call_on_delete
-        self.last_used_at = datetime.datetime.now().astimezone()
 
         self.freshness_period = freshness_period
         # This item is automatically marked as stale once the freshness_period has expired
@@ -74,9 +73,6 @@ class CacheItem:
         LOGGER.debug(f"Marking item {self.key} as stale")
 
         self.stale = True
-
-    def is_stale(self, now: datetime.datetime) -> bool:
-        return (now - self.last_used_at).total_seconds() > self.freshness_period
 
 
 class CacheVersionContext(contextlib.AbstractContextManager):
