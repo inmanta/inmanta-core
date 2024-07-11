@@ -47,6 +47,9 @@ class CacheItem:
         value: Any,
         call_on_delete: Optional[Callable[[Any], None]],
     ) -> None:
+        """
+        TODO docstring
+        """
         self.key = key
         self.scope = scope
         self.value = value
@@ -105,13 +108,17 @@ class AgentCache:
         """
         # The cache itself
         self.cache: dict[str, CacheItem] = {}
+
         self.counterforVersion: dict[int, int] = {}
         self.keysforVersion: dict[int, set[str]] = {}
+
+        # Time-based eviction mechanism
         self.nextAction: float = sys.maxsize
+        self.timerqueue: list[CacheItem] = []
+
         self.addLock = Lock()
         self.addLocks: dict[str, Lock] = {}
         self._agent_instance = agent_instance
-        self.timerqueue: list[CacheItem] = []
 
     def close(self) -> None:
         """
@@ -222,6 +229,9 @@ class AgentCache:
             except KeyError:
                 raise Exception("Added data to version that is not open")
         heapq.heappush(self.timerqueue, item)
+
+        if item.time < self.nextAction:
+            self.nextAction = item.time
 
     def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
         key_parts = [key]

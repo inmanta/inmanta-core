@@ -86,6 +86,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         Periodically cleans up stale entries in the cache. The clean_stale_entries
         has to be called on the thread pool because it might call finalizers.
         """
+
         while not self._stopped:
             reschedule_interval: float = 1.0
             async with self.wip_lock:
