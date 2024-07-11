@@ -178,6 +178,8 @@ def test_context_manager():
 
 
 def test_multi_threaded():
+    import traceback
+
     class Spy:
         def __init__(self):
             self.created = 0
@@ -191,9 +193,12 @@ def test_multi_threaded():
 
         def delete(self):
             print(f"before {self.deleted}")
-            self.deleted += 1
+            with self.lock:
+                self.deleted += 1
             # breakpoint()
             print(f"after {self.deleted}")
+            for line in traceback.format_stack():
+                print(line.strip())
 
     cache = AgentCache()
     version = 200

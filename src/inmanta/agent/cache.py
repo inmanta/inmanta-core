@@ -73,6 +73,9 @@ class CacheItem:
 
         self.stale = True
 
+    def __repr__(self) -> str:
+        return f"{self.key=} {self.value=} {self.stale=}"
+
 
 class CacheVersionContext(contextlib.AbstractContextManager):
     """
@@ -185,6 +188,7 @@ class AgentCache:
     def _evict_item(self, key: str) -> None:
         try:
             item = self.cache[key]
+            LOGGER.info(f"ITEM....{item}")
             item.delete()
             del self.cache[key]
         except KeyError:
@@ -192,13 +196,20 @@ class AgentCache:
             pass
 
     def clean_stale_entries(self) -> None:
-        for key in self.stale_keys:
+        while len(self.stale_keys) > 0:
+            key = self.stale_keys.pop()
             self._evict_item(key)
 
     def _get(self, key: str) -> CacheItem:
+        """
+        Retrieve cache item with the given key
+
+        :param key: Key of the item being retrieved from the cache
+        :return: The cached item
+
+        :raises KeyError: If the key is not present in the cache
+        """
         item = self.cache[key]
-        if item.stale:
-            raise KeyError("item %s is stale and marked for deletion" % item.key)
         return item
 
     def _cache(self, item: CacheItem) -> None:
@@ -267,9 +278,15 @@ class AgentCache:
 
         if a resource or version is given, these are appended to the key
 
-        :raise KeyError: if the value is not found or if the item is stale but not yet deleted
+        :raise KeyError: if the value is not found or if the item was stale and has been deleted
         """
-        return self._get(self._get_key(key, resource, version)).value
+        full_key = self._get_key(key, resource, version)
+        item = self._get(full_key)
+        if item.stale:
+            LOGGER.debug("Cache hit for item %s but item is stale, removing item..." % full_key)
+            self._evict_item(full_key)
+            raise KeyError("Item was stale and has been removed from the cache")
+        return item.value
 
     def get_or_else(
         self,
