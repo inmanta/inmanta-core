@@ -223,7 +223,6 @@ class AgentCache:
                 raise Exception("Added data to version that is not open")
         heapq.heappush(self.timerqueue, item)
 
-
     def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
         key_parts = [key]
         if resource is not None:
