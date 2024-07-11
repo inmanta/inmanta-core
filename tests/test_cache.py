@@ -57,7 +57,7 @@ def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpe
     return [executor.ResourceInstallSpec("test::Test", 5, bp)]
 
 
-async def test_timeout(agent):
+async def test_timeout_automatic_cleanup(agent):
     """
     Test timeout parameter: test that expired entry is removed from the cache
     """
@@ -67,14 +67,29 @@ async def test_timeout(agent):
 
     myagent_instance = await agent.executor_manager.get_executor("agent1", "local:", code_for(blueprint1))
 
-    cache = AgentCache(agent_instance=myagent_instance)
+    cache = myagent_instance._cache
     value = "test too"
     cache.cache_value("test", value, timeout=0.1)
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
-    await asyncio.sleep(0.2)
+    # Cache cleanup job is periodically triggered with a 1s delay
+    await asyncio.sleep(2)
+    with pytest.raises(KeyError):
+        assert value == cache.find("test")
 
+    assert value == cache.find("test2")
+
+
+def test_timout_manual_cleanup():
+    cache = AgentCache()
+    value = "test too"
+    cache.cache_value("test", value, timeout=0.1)
+    cache.cache_value("test2", value)
+
+    assert value == cache.find("test")
+    sleep(0.2)
+    cache.clean_stale_entries()
     with pytest.raises(KeyError):
         assert value == cache.find("test")
 

@@ -94,6 +94,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             await asyncio.sleep(reschedule_interval)
 
     async def stop(self) -> None:
+        if self._stopped:
+            return
         self._stopped = True
         async with self.wip_lock:
             await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.close)
