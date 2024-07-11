@@ -31,7 +31,7 @@ from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overl
 from tornado import concurrent
 
 import inmanta
-from inmanta import const, data, protocol, resources
+from inmanta import const, data, protocol, resources, warnings
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
@@ -40,6 +40,7 @@ from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
 from inmanta.util import hash_file
+from inmanta.warnings import InmantaWarning
 
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent
@@ -107,7 +108,8 @@ def cache(
     func: Optional[T_FUNC] = None,
     ignore: list[str] = [],
     timeout: int = 5000,
-    for_version: bool = True,
+    # deprecated param kept for backwards compatibility
+    for_version: Optional[bool] = True,
     cache_none: bool = True,
     # deprecated parameter kept for backwards compatibility: if set, overrides cache_none
     cacheNone: Optional[bool] = None,  # noqa: N803
@@ -128,12 +130,14 @@ def cache(
     it is assumed to be a resource and its ID is used, without the version information
 
     :param timeout: the number of second this cache entry should live
-    :param for_version: if true, this value is evicted from the cache when this deploy is ready
+    :param for_version: [DEPRECATED] if true, this value is evicted from the cache when this deploy is ready
     :param ignore: a list of argument names that should not be part of the cache key
     :param cache_none: allow the caching of None values
     :param call_on_delete: A callback function that is called when the value is removed from the cache,
             with the value as argument.
     """
+    if for_version is not None:
+        warnings.warn(InmantaWarning("Version-based cache is deprecated, use the timeout parameter "))
 
     def actual(f: Callable[..., object]) -> T_FUNC:
         myignore = set(ignore)
@@ -149,7 +153,6 @@ def cache(
             return self.cache.get_or_else(
                 f.__name__,
                 bound,
-                for_version,
                 timeout,
                 myignore,
                 cacheNone if cacheNone is not None else cache_none,
@@ -1089,7 +1092,7 @@ class Commander:
         resource_id = resource.id
         resource_type = resource_id.get_entity_type()
         try:
-            agent_io = io.get_io(cache, agent.uri, resource_id.get_version())
+            agent_io = io.get_io(cache, agent.uri)
         except Exception:
             LOGGER.exception("Exception raised during creation of IO for uri %s", agent.uri)
             raise Exception("No handler available for %s (no io available)" % resource_id)

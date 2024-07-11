@@ -305,8 +305,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         env_id: uuid.UUID = resources[0].env_id
 
-        # TODO remove versioned cache:
-        async with self.wip_lock, self.cache(model_version):
+        async with self.wip_lock:
             for resource in resources:
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
@@ -398,8 +397,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 return 500
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
-            # TODO remove versioned cache:
-            async with self.wip_lock, self.cache(model_version):
+            async with self.wip_lock:
                 try:
                     started = datetime.datetime.now().astimezone()
                     provider = await self.get_provider(resource_obj)

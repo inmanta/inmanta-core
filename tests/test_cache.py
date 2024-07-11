@@ -158,38 +158,21 @@ def test_version():
 def test_version_close():
     cache = AgentCache()
     value = "test too"
-    version = 200
-    cache.open_version(version)
-    cache.cache_value("test", value, version=version)
-    cache.cache_value("test0", value, version=version)
-    cache.cache_value("test4", value, version=version)
+
+    cache.cache_value("test", value)
+    cache.cache_value("test0", value)
+    cache.cache_value("test4", value)
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     cache.cache_value("testx", value, resource=resource)
-    assert value == cache.find("test", version=version)
+    assert value == cache.find("test")
     assert value == cache.find("testx", resource=resource)
-    cache.close_version(version)
     assert value, cache.find("testx", resource=resource)
     with pytest.raises(KeyError):
-        assert value == cache.find("test", version=version)
+        assert value == cache.find("test")
         raise AssertionError("Should get exception")
 
 
-def test_context_manager():
-    cache = AgentCache()
-    value = "test too"
-    version = 200
-    with cache.manager(version):
-        cache.cache_value("test", value, version=version)
-        cache.cache_value("test0", value, version=version)
-        cache.cache_value("test4", value, version=version)
-        resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-        cache.cache_value("testx", value, resource=resource)
-        assert value == cache.find("test", version=version)
-        assert value == cache.find("testx", resource=resource)
 
-    assert value, cache.find("testx", resource=resource)
-    with pytest.raises(KeyError):
-        assert value == cache.find("test", version=version)
 
 
 def test_multi_threaded():
@@ -226,12 +209,12 @@ def test_multi_threaded():
 
     t1 = Thread(
         target=lambda: cache.get_or_else(
-            "test", lambda version: alpha.create(), version=version, call_on_delete=lambda x: x.delete()
+            "test", lambda version: alpha.create(), call_on_delete=lambda x: x.delete()
         )
     )
     t2 = Thread(
         target=lambda: cache.get_or_else(
-            "test", lambda version: beta.create(), version=version, call_on_delete=lambda x: x.delete()
+            "test", lambda version: beta.create(), call_on_delete=lambda x: x.delete()
         )
     )
 
@@ -335,12 +318,12 @@ def test_get_or_else(my_resource):
     assert 200 == resourcev2.id.version
     version = 200
     cache.open_version(version)
-    assert value == cache.get_or_else("test", creator, resource=resource, version=version, param=value)
-    assert value == cache.get_or_else("test", creator, resource=resource, version=version, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resource, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resource, param=value)
     assert len(called) == 1
-    assert value == cache.get_or_else("test", creator, resource=resourcev2, version=version, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resourcev2, param=value)
     assert len(called) == 1
-    assert value2 == cache.get_or_else("test", creator, resource=resource, version=version, param=value2)
+    assert value2 == cache.get_or_else("test", creator, resource=resource, param=value2)
 
 
 def test_get_or_else_none():
@@ -365,24 +348,24 @@ def test_get_or_else_none():
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     version = 100
     cache.open_version(version)
-    assert None is cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=None)
+    assert None is cache.get_or_else("test", creator, resource=resource, cache_none=False, param=None)
     assert len(called) == 1
-    assert None is cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=None)
+    assert None is cache.get_or_else("test", creator, resource=resource, cache_none=False, param=None)
     assert len(called) == 2
-    assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
-    assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resource, cache_none=False, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resource, cache_none=False, param=value)
     assert len(called) == 3
 
     seq = Sequencer([None, None, "A"])
-    assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert None is cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 1
-    assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert None is cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 2
-    assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert "A" == cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 3
-    assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert "A" == cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 3
-    assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert "A" == cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 3
 
 
