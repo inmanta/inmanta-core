@@ -1102,7 +1102,7 @@ class Commander:
         resource_id = resource.id
         resource_type = resource_id.get_entity_type()
         try:
-            agent_io = io.get_io(cache, agent.uri)
+            agent_io = io.get_io(cache, agent.uri, resource_id.get_version())
         except Exception:
             LOGGER.exception("Exception raised during creation of IO for uri %s", agent.uri)
             raise Exception("No handler available for %s (no io available)" % resource_id)
