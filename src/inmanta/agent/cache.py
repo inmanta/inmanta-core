@@ -37,6 +37,7 @@ class Scope:
         self.timeout = timeout
         self.version = version
 
+
 class CacheItem:
     def __init__(
         self,
@@ -66,6 +67,7 @@ class CacheItem:
 
     def __repr__(self) -> str:
         return f"{self.key=} {self.value=}"
+
 
 @stable_api
 class AgentCache:

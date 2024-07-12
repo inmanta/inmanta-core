@@ -31,7 +31,7 @@ from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overl
 from tornado import concurrent
 
 import inmanta
-from inmanta import const, data, protocol, resources, warnings
+from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
@@ -40,7 +40,6 @@ from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
 from inmanta.util import hash_file
-from inmanta.warnings import InmantaWarning
 
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent
@@ -135,6 +134,7 @@ def cache(
     :param call_on_delete: A callback function that is called when the value is removed from the cache,
             with the value as argument.
     """
+
     def actual(f: Callable[..., object]) -> T_FUNC:
         myignore = set(ignore)
         sig = inspect.signature(f)
