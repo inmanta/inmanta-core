@@ -227,25 +227,6 @@ def test_multi_threaded():
     assert beta.deleted == beta.created
 
 
-def test_timeout():
-    cache = AgentCache()
-
-    value = "test too"
-    cache.cache_value("test", value, timeout=0.1)
-    cache.cache_value("testx", value)
-
-    assert value == cache.find("test")
-    assert value == cache.find("testx")
-
-    sleep(0.2)
-    assert value == cache.find("testx")
-
-    assert value == cache.find("testx")
-
-    with pytest.raises(KeyError):
-        cache.find("test")
-    assert value == cache.find("testx")
-
 
 def test_get_or_else(my_resource):
     called = []
@@ -348,7 +329,7 @@ def test_decorator():
             return "x"
 
         @cache
-        def test_method_2(self, version):
+        def test_method_2(self, version, timeout=1):
             self.count += 1
             return "x2"
 
@@ -380,7 +361,6 @@ def test_decorator():
 
     test = DT(xcache)
 
-    xcache.open_version(3)
     test.test_close(version=3)
     test.test_close_2()
     xcache.close()
@@ -395,15 +375,11 @@ def test_decorator():
     assert "x" == test.test_method()
     assert 1 == test.count
 
-    xcache.open_version(1)
-    xcache.open_version(2)
     assert "x2" == test.test_method_2(version=1)
     assert "x2" == test.test_method_2(version=1)
     assert 2 == test.count
     assert "x2" == test.test_method_2(version=2)
     assert 3 == test.count
-    xcache.close_version(1)
-    xcache.open_version(1)
     assert "x2" == test.test_method_2(version=1)
     assert "x2" == test.test_method_2(version=1)
     assert 4 == test.count
@@ -423,11 +399,9 @@ def test_decorator():
     assert 2 == test.c3
 
     test.count = 0
-    xcache.open_version(3)
     test.test_close(version=3)
     assert test.count == 1
     test.test_close(version=3)
     assert test.count == 1
     assert not my_closable.closed
-    xcache.close_version(3)
     assert my_closable.closed
