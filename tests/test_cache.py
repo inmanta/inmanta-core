@@ -17,12 +17,14 @@
 """
 
 import asyncio
+import datetime
 from threading import Lock, Thread
 from time import sleep
 
 import pytest
 from pytest import fixture
 
+import time_machine
 from inmanta.agent import executor
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import cache
@@ -130,53 +132,43 @@ def test_resource_fail(my_resource):
         assert value == cache.find("test")
 
 
-def test_version_closed():
+def test_default_timeout(my_resource):
     """
-    Test caching a value for a version that is not opened is not allowed
+    Test default timeout of cache entries for a regular entry (key='test') and
+    for an entry associated with a resource (key=('testx', resource))
     """
-    cache = AgentCache()
-    value = "test too"
-    version = 200
-    with pytest.raises(Exception) as e:
-        cache.cache_value("test", value, version=version)
-
-    assert "Added data to version that is not open" in str(e.value)
-
-
-def test_version():
-    """
-    Test cache write then read using version
-    """
-    cache = AgentCache()
-    value = "test too"
-    version = 200
-    cache.open_version(version)
-    cache.cache_value("test", value, version=version)
-    assert value == cache.find("test", version=version)
-
-
-def test_version_close():
     cache = AgentCache()
     value = "test too"
 
     cache.cache_value("test", value)
-    cache.cache_value("test0", value)
-    cache.cache_value("test4", value)
+    assert value == cache.find("test")
+
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     cache.cache_value("testx", value, resource=resource)
-    assert value == cache.find("test")
     assert value == cache.find("testx", resource=resource)
     assert value, cache.find("testx", resource=resource)
+
+    with pytest.raises(KeyError):
+        assert value == cache.find("testx")
+
+    # default timeout is 5000s
+    traveller = time_machine.travel(datetime.datetime.now() + datetime.timedelta(seconds=5001))
+    traveller.start()
+
+    # Check that values are still in the cache before running the cleanup job:
+    assert value == cache.find("test")
+    assert value == cache.find("testx", resource=resource)
+
+    # Run the cleanup job and check removal
+    cache.clean_stale_entries()
     with pytest.raises(KeyError):
         assert value == cache.find("test")
-        raise AssertionError("Should get exception")
 
-
-
+    with pytest.raises(KeyError):
+        assert value == cache.find("testx")
 
 
 def test_multi_threaded():
-    import traceback
 
     class Spy:
         def __init__(self):
@@ -190,18 +182,13 @@ def test_multi_threaded():
             return self
 
         def delete(self):
-            print(f"before {self.deleted}")
             with self.lock:
                 self.deleted += 1
-            # breakpoint()
-            print(f"after {self.deleted}")
-            for line in traceback.format_stack():
-                print(line.strip())
 
     cache = AgentCache()
-    version = 200
 
-    cache.open_version(version)
+    # Cache entry will be considered stale after 10s
+    cache_entry_expiry = 10
 
     alpha = Spy()
     beta = Spy()
@@ -209,12 +196,12 @@ def test_multi_threaded():
 
     t1 = Thread(
         target=lambda: cache.get_or_else(
-            "test", lambda version: alpha.create(), call_on_delete=lambda x: x.delete()
+            "test", lambda: alpha.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete()
         )
     )
     t2 = Thread(
         target=lambda: cache.get_or_else(
-            "test", lambda version: beta.create(), call_on_delete=lambda x: x.delete()
+            "test", lambda: beta.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete()
         )
     )
 
@@ -230,83 +217,40 @@ def test_multi_threaded():
     assert alpha.deleted == 0
     assert beta.deleted == 0
 
-    cache.close_version(version)
+    # Wait for cache entries to expire and run the cleanup job
+    traveller = time_machine.travel(datetime.datetime.now() + datetime.timedelta(seconds=cache_entry_expiry + 1))
+    traveller.start()
+    cache.clean_stale_entries()
 
     assert alpha.created + beta.created == 1
     assert alpha.deleted == alpha.created
     assert beta.deleted == beta.created
 
 
-def test_timeout_and_version():
+def test_timeout():
     cache = AgentCache()
-    version = 200
 
-    cache.open_version(version)
     value = "test too"
-    cache.cache_value("test", value, version=version, timeout=0.1)
+    cache.cache_value("test", value, timeout=0.1)
     cache.cache_value("testx", value)
 
-    assert value == cache.find("test", version=version)
+    assert value == cache.find("test")
     assert value == cache.find("testx")
 
     sleep(0.2)
     assert value == cache.find("testx")
 
-    cache.close_version(version)
     assert value == cache.find("testx")
 
     with pytest.raises(KeyError):
-        cache.find("test", version=version)
+        cache.find("test")
     assert value == cache.find("testx")
-
-
-def test_version_and_timeout():
-    cache = AgentCache()
-    version = 200
-
-    cache.open_version(version)
-    value = "test too"
-    cache.cache_value("test", value, version=version, timeout=0.1)
-    cache.cache_value("testx", value)
-
-    assert value == cache.find("test", version=version)
-    assert value == cache.find("testx")
-
-    cache.close_version(version)
-    assert value == cache.find("testx")
-
-    sleep(0.2)
-    assert value == cache.find("testx")
-
-    with pytest.raises(KeyError):
-        cache.find("test", version=version)
-
-
-def test_version_fail():
-    cache = AgentCache()
-    value = "test too"
-    version = 200
-    cache.open_version(version)
-    cache.cache_value("test", value, version=version)
-
-    with pytest.raises(KeyError):
-        assert value == cache.find("test")
-
-
-def test_resource_and_version():
-    cache = AgentCache()
-    value = "test too"
-    resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-    version = 200
-    cache.open_version(version)
-    cache.cache_value("test", value, resource=resource, version=version)
-    assert value == cache.find("test", resource=resource, version=version)
 
 
 def test_get_or_else(my_resource):
     called = []
 
-    def creator(param, resource, version):
+    def creator(param, resource):
         called.append("x")
         return param
 
@@ -316,8 +260,6 @@ def test_get_or_else(my_resource):
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     resourcev2 = Id("test::Resource", "test", "key", "test", 200).get_instance()
     assert 200 == resourcev2.id.version
-    version = 200
-    cache.open_version(version)
     assert value == cache.get_or_else("test", creator, resource=resource, param=value)
     assert value == cache.get_or_else("test", creator, resource=resource, param=value)
     assert len(called) == 1
@@ -326,10 +268,16 @@ def test_get_or_else(my_resource):
     assert value2 == cache.get_or_else("test", creator, resource=resource, param=value2)
 
 
-def test_get_or_else_none():
+def test_get_or_else_none(my_resource):
+    """
+    Test the get_or_else cache_none parameter. This parameter controls
+    whether None values are valid cache entries.
+    """
+
+    # This list is extended for each cache miss on the "creator" function
     called = []
 
-    def creator(param, resource, version):
+    def creator(param, resource):
         called.append("x")
         return param
 
@@ -346,17 +294,22 @@ def test_get_or_else_none():
     cache = AgentCache()
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-    version = 100
-    cache.open_version(version)
+
+    # Check for 2 successive cache miss since caching None is disabled
     assert None is cache.get_or_else("test", creator, resource=resource, cache_none=False, param=None)
     assert len(called) == 1
     assert None is cache.get_or_else("test", creator, resource=resource, cache_none=False, param=None)
     assert len(called) == 2
+
+    # Check for 1 cache miss and then a hit.
     assert value == cache.get_or_else("test", creator, resource=resource, cache_none=False, param=value)
     assert value == cache.get_or_else("test", creator, resource=resource, cache_none=False, param=value)
     assert len(called) == 3
 
+    # The Sequencer will return the next item in the sequence on each cache miss
     seq = Sequencer([None, None, "A"])
+
+    # Check that we have cache misses until the sequencer returns a non-None value.
     assert None is cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 1
     assert None is cache.get_or_else("testx", seq, resource=resource, cache_none=False)

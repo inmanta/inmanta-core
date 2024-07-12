@@ -18,14 +18,12 @@
 
 import abc
 import asyncio
-import contextlib
 import dataclasses
 import functools
 import hashlib
 import json
 import logging
 import os
-import types
 import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -421,8 +419,6 @@ class Executor(abc.ABC):
         :param resource: The resource for which to get facts.
         """
         pass
-
-
 
 
 E = typing.TypeVar("E", bound=Executor, covariant=True)

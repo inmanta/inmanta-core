@@ -290,26 +290,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         return failed
 
 
-class OpenVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
-
-    def __init__(self, version: int) -> None:
-        self.version = version
-
-    async def call(self, context: ExecutorContext) -> None:
-        assert context.executor is not None
-        await context.executor.open_version(self.version)
-
-
-class CloseVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
-
-    def __init__(self, version: int) -> None:
-        self.version = version
-
-    async def call(self, context: ExecutorContext) -> None:
-        assert context.executor is not None
-        await context.executor.close_version(self.version)
-
-
 class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
     def __init__(
@@ -516,12 +496,6 @@ class MPExecutor(executor.Executor):
             return
         assert self.closing
         await asyncio.get_running_loop().run_in_executor(self.owner.thread_pool, functools.partial(self._force_stop, timeout))
-
-    async def close_version(self, version: int) -> None:
-        await self.connection.call(CloseVersionCommand(version))
-
-    async def open_version(self, version: int) -> None:
-        await self.connection.call(OpenVersionCommand(version))
 
     async def dry_run(
         self,

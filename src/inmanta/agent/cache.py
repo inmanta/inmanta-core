@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import contextlib
 import heapq
 import logging
 import sys
@@ -31,7 +30,6 @@ if TYPE_CHECKING:
     from inmanta.agent.executor import AgentInstance
 
 LOGGER = logging.getLogger()
-
 
 
 class CacheItem:
@@ -235,6 +233,3 @@ class AgentCache:
             with self.addLock:
                 del self.addLocks[key]
             return value
-
-    def report(self) -> str:
-        return "\n".join([str(k) + " " + str(v) for k, v in self.counterforVersion.items()])
