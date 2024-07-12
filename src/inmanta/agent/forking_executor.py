@@ -45,6 +45,7 @@ import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
+from inmanta import tracing
 from inmanta.agent import executor
 from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import (
@@ -380,6 +381,9 @@ def mp_worker_entrypoint(
 
     # Load config
     inmanta.config.Config.load_config_from_dict(config)
+
+    # Make sure logfire is configured correctly
+    tracing.configure_logfire("agent.executor")
 
     async def serve() -> None:
         loop = asyncio.get_running_loop()

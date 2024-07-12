@@ -23,6 +23,7 @@ import asyncpg
 from pyformance import gauge
 from pyformance.meters import CallbackGauge
 
+import logfire
 from inmanta import data, util
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
@@ -68,6 +69,7 @@ class DatabaseService(protocol.ServerSlice):
     def get_dependencies(self) -> list[str]:
         return []
 
+    @logfire.instrument("connect_database")
     async def connect_database(self) -> None:
         """Connect to the database"""
         database_host = opt.db_host.get()
@@ -138,6 +140,7 @@ class DatabaseService(protocol.ServerSlice):
                 LOGGER.exception("Connection to PostgreSQL failed")
         return False
 
+    @logfire.instrument("purge_agent_processes")
     async def _purge_agent_processes(self) -> None:
         agent_processes_to_keep = opt.agent_processes_to_keep.get()
         await data.AgentProcess.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)

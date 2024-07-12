@@ -30,8 +30,10 @@ from urllib import parse
 
 import pydantic
 
+import logfire
+import logfire.propagate
 from inmanta import config as inmanta_config
-from inmanta import types, util
+from inmanta import const, types, util
 from inmanta.protocol import common, exceptions
 from inmanta.util import TaskHandler
 
@@ -299,7 +301,10 @@ class SessionEndpoint(Endpoint, CallTarget):
 
         body.update(kwargs)
 
-        response: common.Response = await transport._execute_call(config, body, method_call.headers)
+        with logfire.propagate.attach_context(
+            {const.TRACEPARENT: method_call.headers[const.TRACEPARENT]} if const.TRACEPARENT in method_call.headers else {}
+        ):
+            response: common.Response = await transport._execute_call(config, body, method_call.headers)
 
         if response.status_code == 500:
             msg = ""
