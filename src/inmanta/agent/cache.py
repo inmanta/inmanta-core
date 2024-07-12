@@ -200,7 +200,7 @@ class AgentCache:
         """
         self._cache(
             CacheItem(
-                self._get_key(key, resource),
+                self._get_key(key, resource, version),
                 Scope(timeout, version),
                 value,
                 call_on_delete,
