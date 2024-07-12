@@ -33,8 +33,8 @@ LOGGER = logging.getLogger()
 
 
 class Scope:
-    def __init__(self, expiry_time: float = 24 * 3600, version: int = 0) -> None:
-        self.expiry_time = expiry_time
+    def __init__(self, timeout: float = 24 * 3600, version: int = 0) -> None:
+        self.timeout = timeout
         self.version = version
 
 class CacheItem:
@@ -52,9 +52,10 @@ class CacheItem:
         self.scope: Scope = scope
         self.value = value
         self.call_on_delete = call_on_delete
+        self.expiry_time = time.time() + scope.timeout
 
     def __lt__(self, other: "CacheItem") -> bool:
-        return self.scope.expiry_time < other.scope.expiry_time
+        return self.expiry_time < other.expiry_time
 
     def delete(self) -> None:
         if callable(self.call_on_delete):
@@ -126,6 +127,11 @@ class AgentCache:
             else:
                 self.nextAction = sys.maxsize
 
+        for version, timer in self.timerforVersion.items():
+            if now > timer:
+                for key in self.keysforVersion[version]:
+                    self._evict_item(key)
+
     def _get(self, key: str) -> CacheItem:
         """
         Retrieve cache item with the given key
@@ -138,7 +144,13 @@ class AgentCache:
         item = self.cache[key]
         return item
 
-    def _cache(self, item: CacheItem, now: float) -> None:
+    def _set_version_expiry(self, version: int) -> None:
+        """
+        Update the expiry time for the given version
+        """
+        self.timerforVersion[version] = time.time() + 60
+
+    def _cache(self, item: CacheItem) -> None:
         scope = item.scope
         if item.key in self.cache:
             raise Exception("Added same item twice")
@@ -152,15 +164,18 @@ class AgentCache:
                 self.keysforVersion[scope.version].add(item.key)
             except KeyError:
                 self.keysforVersion[scope.version] = set(item.key)
-        self.timerforVersion[scope.version] = now + 60
+
+            self._set_version_expiry(scope.version)
 
         if item.expiry_time < self.nextAction:
             self.nextAction = item.expiry_time
 
-    def _get_key(self, key: str, resource: Optional[Resource]) -> str:
+    def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
         key_parts = [key]
         if resource is not None:
             key_parts.append(str(resource.id.resource_str()))
+        if version != 0:
+            key_parts.append(str(version))
         return "__".join(key_parts)
 
     def cache_value(
@@ -181,31 +196,35 @@ class AgentCache:
         :param version: The model version this cache entry belongs to
         :param call_on_delete: A callback function that is called when the value is removed from the cache.
         """
-        now = time.time()
         self._cache(
             CacheItem(
                 self._get_key(key, resource),
-                Scope(now+timeout, version),
+                Scope(timeout, version),
                 value,
                 call_on_delete,
             ),
-            now
         )
 
-    def find(self, key: str, resource: Optional[Resource] = None) -> Any:
+    def find(self, key: str, resource: Optional[Resource] = None, version: int = 0) -> Any:
         """
         find a value in the cache with the given key
 
-        if a resource is given, its id is appended to the key
+        if a resource or version is given, these are appended to the key
 
         :raise KeyError: if the value is not found
         """
-        return self._get(self._get_key(key, resource)).value
+        item = self._get(self._get_key(key, resource, version)).value
+
+        if version != 0:
+            self._set_version_expiry(version)
+
+        return item
 
     def get_or_else(
         self,
         key: str,
         function: Callable[..., Any],
+        for_version: bool = True,
         timeout: int = 5000,
         ignore: set[str] = set(),
         cache_none: bool = True,
@@ -222,11 +241,12 @@ class AgentCache:
 
         if a kwarg named version is found and forVersion is true, the value is cached only for that particular version
 
-
         :param forVersion: whether to use the version attribute to attach this value to the resource
 
         """
         acceptable = {"resource"}
+        if for_version:
+            acceptable.add("version")
         args = {k: v for k, v in kwargs.items() if k in acceptable and k not in ignore}
         others = sorted([k for k in kwargs.keys() if k not in acceptable and k not in ignore])
         for k in others:

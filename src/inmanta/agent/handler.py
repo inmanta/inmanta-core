@@ -108,8 +108,7 @@ def cache(
     func: Optional[T_FUNC] = None,
     ignore: list[str] = [],
     timeout: int = 5000,
-    # deprecated param kept for backwards compatibility
-    for_version: Optional[bool] = True,
+    for_version: bool = True,
     cache_none: bool = True,
     # deprecated parameter kept for backwards compatibility: if set, overrides cache_none
     cacheNone: Optional[bool] = None,  # noqa: N803
@@ -130,15 +129,12 @@ def cache(
     it is assumed to be a resource and its ID is used, without the version information
 
     :param timeout: the number of second this cache entry should live
-    :param for_version: [DEPRECATED] if true, this value is evicted from the cache when this deploy is ready
+    :param for_version: if true, this value is evicted from the cache when this deploy is ready
     :param ignore: a list of argument names that should not be part of the cache key
     :param cache_none: allow the caching of None values
     :param call_on_delete: A callback function that is called when the value is removed from the cache,
             with the value as argument.
     """
-    if for_version is not None:
-        warnings.warn(InmantaWarning("Explicit version-based caching is deprecated"))
-
     def actual(f: Callable[..., object]) -> T_FUNC:
         myignore = set(ignore)
         sig = inspect.signature(f)
@@ -153,6 +149,7 @@ def cache(
             return self.cache.get_or_else(
                 f.__name__,
                 bound,
+                for_version,
                 timeout,
                 myignore,
                 cacheNone if cacheNone is not None else cache_none,
