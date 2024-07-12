@@ -32,11 +32,16 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger()
 
 
+class Scope:
+    def __init__(self, expiry_time: float = 24 * 3600, version: int = 0) -> None:
+        self.expiry_time = expiry_time
+        self.version = version
+
 class CacheItem:
     def __init__(
         self,
         key: str,
-        timeout: float,
+        scope: Scope,
         value: Any,
         call_on_delete: Optional[Callable[[Any], None]],
     ) -> None:
@@ -44,12 +49,12 @@ class CacheItem:
         TODO docstring
         """
         self.key = key
+        self.scope: Scope = scope
         self.value = value
-        self.expiry_time: float = time.time() + timeout
         self.call_on_delete = call_on_delete
 
     def __lt__(self, other: "CacheItem") -> bool:
-        return self.expiry_time < other.expiry_time
+        return self.scope.expiry_time < other.scope.expiry_time
 
     def delete(self) -> None:
         if callable(self.call_on_delete):
@@ -61,18 +66,15 @@ class CacheItem:
     def __repr__(self) -> str:
         return f"{self.key=} {self.value=}"
 
-
 @stable_api
 class AgentCache:
     """
     Caching system for the agent:
 
-    cache items can expire based on:
-    1. time
-    2. version
+    cache items are removed from the cache either:
+    1. individually when their expiry_time is up
+    2. as a group when their version is not being used for a while (default 1 min)
 
-    versions are opened and closed
-    when a version is closed as many times as it was opened, all cache items linked to this version are dropped
     """
 
     def __init__(self, agent_instance: Optional["AgentInstance"] = None) -> None:
@@ -82,6 +84,10 @@ class AgentCache:
         """
         # The cache itself
         self.cache: dict[str, CacheItem] = {}
+
+        # Version-based caching
+        self.timerforVersion: dict[int, float] = {}
+        self.keysforVersion: dict[int, set[str]] = {}
 
         # Time-based eviction mechanism
         self.nextAction: float = sys.maxsize
@@ -132,14 +138,21 @@ class AgentCache:
         item = self.cache[key]
         return item
 
-    def _cache(self, item: CacheItem) -> None:
-
+    def _cache(self, item: CacheItem, now: float) -> None:
+        scope = item.scope
         if item.key in self.cache:
             raise Exception("Added same item twice")
 
         self.cache[item.key] = item
 
         heapq.heappush(self.timerqueue, item)
+
+        if scope.version != 0:
+            try:
+                self.keysforVersion[scope.version].add(item.key)
+            except KeyError:
+                self.keysforVersion[scope.version] = set(item.key)
+        self.timerforVersion[scope.version] = now + 60
 
         if item.expiry_time < self.nextAction:
             self.nextAction = item.expiry_time
@@ -155,6 +168,7 @@ class AgentCache:
         key: str,
         value: Any,
         resource: Optional[Resource] = None,
+        version: int = 0,
         timeout: int = 5000,
         call_on_delete: Optional[Callable[[Any], None]] = None,
     ) -> None:
@@ -164,15 +178,18 @@ class AgentCache:
         if a resource or version is given, these are appended to the key and expiry is adapted accordingly
 
         :param timeout: nr of second before this value is expired
+        :param version: The model version this cache entry belongs to
         :param call_on_delete: A callback function that is called when the value is removed from the cache.
         """
+        now = time.time()
         self._cache(
             CacheItem(
                 self._get_key(key, resource),
-                timeout,
+                Scope(now+timeout, version),
                 value,
                 call_on_delete,
-            )
+            ),
+            now
         )
 
     def find(self, key: str, resource: Optional[Resource] = None) -> Any:

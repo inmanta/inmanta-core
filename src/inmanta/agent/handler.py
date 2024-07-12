@@ -137,7 +137,7 @@ def cache(
             with the value as argument.
     """
     if for_version is not None:
-        warnings.warn(InmantaWarning("Version-based cache is deprecated, use the timeout parameter "))
+        warnings.warn(InmantaWarning("Explicit version-based caching is deprecated"))
 
     def actual(f: Callable[..., object]) -> T_FUNC:
         myignore = set(ignore)
