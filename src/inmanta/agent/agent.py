@@ -160,7 +160,6 @@ class ResourceAction(ResourceActionBase):
 
     async def execute(self, dummy: "ResourceActionBase", generation: Mapping[ResourceIdStr, ResourceActionBase]) -> None:
         self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
-        # TODO remove versioned cache:
         self.dependencies = [generation[resource_id.resource_str()] for resource_id in self.resource.requires]
         waiters = [x.future for x in self.dependencies]
         waiters.append(dummy.future)
