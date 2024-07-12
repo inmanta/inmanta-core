@@ -134,6 +134,9 @@ class AgentCache:
                 for key in self.keysforVersion[version]:
                     self._evict_item(key)
 
+                del self.timerforVersion[version]
+                del self.keysforVersion[version]
+
     def _get(self, key: str) -> CacheItem:
         """
         Retrieve cache item with the given key
@@ -204,7 +207,7 @@ class AgentCache:
                 Scope(timeout, version),
                 value,
                 call_on_delete,
-            ),
+            )
         )
 
     def find(self, key: str, resource: Optional[Resource] = None, version: int = 0) -> Any:

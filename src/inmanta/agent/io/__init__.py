@@ -89,12 +89,12 @@ def _get_io_instance(uri: str) -> "IOBase":
     return io
 
 
-def get_io(cache: AgentCache, uri: str) -> "IOBase":
+def get_io(cache: AgentCache, uri: str, version: int) -> "IOBase":
     """
     Get an IO instance for the given uri and version
     """
     if cache is None:
         io = _get_io_instance(uri)
     else:
-        io = cache.get_or_else(uri, lambda version: _get_io_instance(uri), call_on_delete=lambda x: x.close())
+        io = cache.get_or_else(uri, lambda version: _get_io_instance(uri), call_on_delete=lambda x: x.close(), version=version)
     return io
