@@ -18,6 +18,7 @@
 
 import asyncio
 import datetime
+import time
 from threading import Lock, Thread
 from time import sleep
 
@@ -58,25 +59,30 @@ def test_base():
 def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpec]:
     return [executor.ResourceInstallSpec("test::Test", 5, bp)]
 
-
-async def test_timeout_automatic_cleanup(agent):
-    """
-    Test timeout parameter: test that expired entry is removed from the cache
-    """
+@pytest.fixture(scope="function")
+async def agent_cache(agent):
     pip_config = PipConfig()
 
     blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=(), sources=[])
 
     myagent_instance = await agent.executor_manager.get_executor("agent1", "local:", code_for(blueprint1))
+    yield myagent_instance._cache
 
-    cache = myagent_instance._cache
+async def test_timeout_automatic_cleanup(agent_cache):
+    """
+    Test timeout parameter: test that expired entry is removed from the cache
+    """
+    cache = agent_cache
     value = "test too"
     cache.cache_value("test", value, timeout=0.1)
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
     # Cache cleanup job is periodically triggered with a 1s delay
+    print(cache)
+
     await asyncio.sleep(2)
+    print(cache)
     with pytest.raises(KeyError):
         assert value == cache.find("test")
 
@@ -303,7 +309,7 @@ def test_get_or_else_none(my_resource):
     assert seq.count == 3
 
 
-def test_decorator():
+async def test_decorator(agent_cache):
     class Closeable:
         def __init__(self):
             self.closed = False
@@ -314,7 +320,8 @@ def test_decorator():
     my_closable = Closeable()
     my_closable_2 = Closeable()
 
-    xcache = AgentCache()
+    xcache = agent_cache
+
 
     class DT:
         def __init__(self, cache: AgentCache):
@@ -380,6 +387,12 @@ def test_decorator():
     assert 2 == test.count
     assert "x2" == test.test_method_2(version=2)
     assert 3 == test.count
+    print(xcache)
+    print(time.time())
+    await asyncio.sleep(2)
+    print(xcache)
+    print(time.time())
+
     assert "x2" == test.test_method_2(version=1)
     assert "x2" == test.test_method_2(version=1)
     assert 4 == test.count

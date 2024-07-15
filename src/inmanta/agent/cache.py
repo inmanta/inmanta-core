@@ -20,6 +20,7 @@ import heapq
 import logging
 import sys
 import time
+import pprint
 from threading import Lock
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
@@ -66,7 +67,7 @@ class CacheItem:
         self.delete()
 
     def __repr__(self) -> str:
-        return f"{self.key=} {self.value=}"
+        return f"({self.value} | {self.expiry_time})"
 
 
 @stable_api
@@ -88,13 +89,17 @@ class AgentCache:
         # The cache itself
         self.cache: dict[str, CacheItem] = {}
 
-        # Version-based caching
-        self.timerforVersion: dict[int, float] = {}
-        self.keysforVersion: dict[int, set[str]] = {}
+        # Version-based caching:
+        # How long we keep each version after it was last used
+        self.version_expiry_time: float = 60
+        # Keep track of when each version can be deleted
+        self.timer_for_version: dict[int, float] = {}
+        # Keep track of which cache keys belong to which version
+        self.keys_for_version: dict[int, set[str]] = {}
 
         # Time-based eviction mechanism
-        self.nextAction: float = sys.maxsize
-        self.timerqueue: list[CacheItem] = []
+        self.next_action: float = sys.maxsize
+        self.timer_queue: list[CacheItem] = []
 
         self.addLock = Lock()
         self.addLocks: dict[str, Lock] = {}
@@ -104,10 +109,10 @@ class AgentCache:
         """
         Cleanly terminate the cache
         """
-        self.nextAction = sys.maxsize
+        self.next_action = sys.maxsize
         for key in list(self.cache.keys()):
             self._evict_item(key)
-        self.timerqueue.clear()
+        self.timer_queue.clear()
 
     def _evict_item(self, key: str) -> None:
         try:
@@ -120,22 +125,27 @@ class AgentCache:
             pass
 
     def clean_stale_entries(self) -> None:
+        LOGGER.error("clean_stale_entries")
+        LOGGER.error(f"{self.timer_queue=}")
         now = time.time()
-        while now > self.nextAction and len(self.timerqueue) > 0:
-            item = heapq.heappop(self.timerqueue)
+        while now > self.next_action and len(self.timer_queue) > 0:
+            item = heapq.heappop(self.timer_queue)
             self._evict_item(item.key)
-            if len(self.timerqueue) > 0:
-                self.nextAction = self.timerqueue[0].expiry_time
+            if len(self.timer_queue) > 0:
+                self.next_action = self.timer_queue[0].expiry_time
             else:
-                self.nextAction = sys.maxsize
+                self.next_action = sys.maxsize
 
-        for version, timer in self.timerforVersion.items():
+        copy = dict(self.timer_for_version.items())
+        LOGGER.error(f"{copy=}")
+        for version, timer in copy.items():
             if now > timer:
-                for key in self.keysforVersion[version]:
+                for key in self.keys_for_version[version]:
                     self._evict_item(key)
 
-                del self.timerforVersion[version]
-                del self.keysforVersion[version]
+                del self.timer_for_version[version]
+                del self.keys_for_version[version]
+        LOGGER.error("="*20)
 
     def _get(self, key: str) -> CacheItem:
         """
@@ -153,7 +163,7 @@ class AgentCache:
         """
         Update the expiry time for the given version
         """
-        self.timerforVersion[version] = time.time() + 60
+        self.timer_for_version[version] = time.time() + self.version_expiry_time
 
     def _cache(self, item: CacheItem) -> None:
         scope = item.scope
@@ -162,18 +172,18 @@ class AgentCache:
 
         self.cache[item.key] = item
 
-        heapq.heappush(self.timerqueue, item)
+        heapq.heappush(self.timer_queue, item)
 
         if scope.version != 0:
             try:
-                self.keysforVersion[scope.version].add(item.key)
+                self.keys_for_version[scope.version].add(item.key)
             except KeyError:
-                self.keysforVersion[scope.version] = set(item.key)
+                self.keys_for_version[scope.version] = set([item.key])
 
             self._set_version_expiry(scope.version)
 
-        if item.expiry_time < self.nextAction:
-            self.nextAction = item.expiry_time
+        if item.expiry_time < self.next_action:
+            self.next_action = item.expiry_time
 
     def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
         key_parts = [key]
@@ -275,3 +285,6 @@ class AgentCache:
             with self.addLock:
                 del self.addLocks[key]
             return value
+
+    def __repr__(self):
+        return pprint.saferepr({"CACHE":self.cache,"QUEUE": self.timer_queue})
