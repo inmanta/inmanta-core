@@ -190,7 +190,7 @@ async def test_multi_threaded(agent_cache):
 
     cache = agent_cache
 
-    # Cache entry will be considered stale after 4s
+    # Cache entry will be considered stale after 1s
     cache_entry_expiry = 1
 
     alpha = Spy()

@@ -18,7 +18,6 @@
 
 import heapq
 import logging
-import pprint
 import sys
 import time
 from threading import Lock
@@ -134,6 +133,11 @@ class AgentCache:
             pass
 
     def clean_stale_entries(self) -> None:
+        """
+        Clean up stale entries from the cache:
+            - individually for time-scoped entries
+            - version-wide for version-scoped entries belonging to a stale version
+        """
         now = time.time()
         while now > self.next_action and len(self.timer_queue) > 0:
             item = heapq.heappop(self.timer_queue)
