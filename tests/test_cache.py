@@ -196,7 +196,7 @@ async def test_multi_threaded(agent_cache):
     cache = agent_cache
 
     # Cache entry will be considered stale after 4s
-    cache_entry_expiry = 4
+    cache_entry_expiry = 1
 
     alpha = Spy()
     beta = Spy()
@@ -225,6 +225,8 @@ async def test_multi_threaded(agent_cache):
     assert alpha.deleted == 0
     assert beta.deleted == 0
 
+    await asyncio.sleep(2)
+    cache.clean_stale_entries()
 
     assert alpha.created + beta.created == 1
     assert beta.deleted == beta.created

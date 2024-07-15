@@ -55,12 +55,14 @@ class CacheItem:
         self.value = value
         self.call_on_delete = call_on_delete
         self.expiry_time = time.time() + scope.timeout
+        self.called_finalizer = False
 
     def __lt__(self, other: "CacheItem") -> bool:
         return self.expiry_time < other.expiry_time
 
     def delete(self) -> None:
-        if callable(self.call_on_delete):
+        if callable(self.call_on_delete) and not self.called_finalizer:
+            self.called_finalizer = True
             self.call_on_delete(self.value)
 
     def __del__(self) -> None:
