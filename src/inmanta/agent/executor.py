@@ -390,8 +390,11 @@ class PoolManager:
     retention_time: int
     _locks: inmanta.util.NamedLock
 
-    def __init__(self) -> None:
+    def __init__(self, retention_time: int, _locks: inmanta.util.NamedLock) -> None:
         self.running = False
+
+        self.retention_time: int = retention_time
+        self._locks: inmanta.util.NamedLock = _locks
 
         # We keep a reference to the periodic cleanup task to prevent it
         # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
@@ -420,7 +423,6 @@ class PoolManager:
         """
         while self.running:
             cleanup_start = datetime.datetime.now().astimezone()
-
             reschedule_interval: float = self.retention_time
             pool_members = await self.get_pool_members()
             for pool_member in pool_members:
@@ -450,14 +452,15 @@ class VirtualEnvironmentManager(PoolManager):
     """
 
     def __init__(self, envs_dir: str) -> None:
-        PoolManager.__init__(self)
-        self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
-        self.envs_dir: str = envs_dir
         # We rely on a Named lock (`self._locks`) to be able to lock specific entries of the `_environment_map` dict. This
         # allows us to prevent creating and deleting the same venv at a given time. The keys of this named lock are the hash of
         # venv
-        self._locks: NamedLock = NamedLock()
-        self.retention_time = cfg.executor_venv_retention_time.get()
+        super().__init__(
+            retention_time=cfg.executor_venv_retention_time.get(),
+            _locks=NamedLock(),
+        )
+        self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
+        self.envs_dir: str = envs_dir
 
     async def start(self) -> None:
         # We know that the .inmanta venv status file is touched every minute, so `60` seconds is the lowest default we can use

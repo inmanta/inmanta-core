@@ -335,9 +335,7 @@ def test():
     assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
 
 
-async def test_executor_creation_and_venv_usage(
-    pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, iteration
-) -> None:
+async def test_executor_creation_and_venv_usage(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.

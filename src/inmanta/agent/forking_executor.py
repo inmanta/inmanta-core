@@ -45,7 +45,7 @@ import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
-from inmanta import const, util, tracing
+from inmanta import const, tracing, util
 from inmanta.agent import executor
 from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import (
@@ -629,7 +629,10 @@ class MPManager(executor.ExecutorManager[MPExecutor], executor.PoolManager):
         :param cli_log: do we also want to echo the log to std_err
 
         """
-        executor.PoolManager.__init__(self)
+        super().__init__(
+            retention_time=inmanta.agent.config.agent_executor_retention_time.get(),
+            _locks=inmanta.util.NamedLock(),
+        )
         self.init_once()
         self.environment = environment
         self.thread_pool = thread_pool
@@ -648,9 +651,6 @@ class MPManager(executor.ExecutorManager[MPExecutor], executor.PoolManager):
         self.executor_map: dict[executor.ExecutorId, MPExecutor] = {}
         self.agent_map: dict[str, set[executor.ExecutorId]] = collections.defaultdict(set)
 
-        self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
-
-        self.retention_time = inmanta.agent.config.agent_executor_retention_time.get()
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
 
     def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
@@ -833,14 +833,14 @@ class MPManager(executor.ExecutorManager[MPExecutor], executor.PoolManager):
         return p, parent_conn
 
     async def start(self) -> None:
-        await executor.PoolManager.start(self)
+        await super().start()
 
     async def stop(self) -> None:
-        await executor.PoolManager.stop(self)
+        await super().stop()
         await asyncio.gather(*(child.stop() for child in self.children))
 
     async def force_stop(self, grace_time: float) -> None:
-        await executor.PoolManager.stop(self)
+        await super().stop()
         await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
