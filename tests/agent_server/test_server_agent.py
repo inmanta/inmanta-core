@@ -18,7 +18,6 @@
 
 import asyncio
 import dataclasses
-import datetime
 import logging
 import os
 import time
@@ -32,7 +31,6 @@ from uuid import UUID
 
 import psutil
 import pytest
-import time_machine
 from psutil import NoSuchProcess, Process
 
 import utils
@@ -2516,6 +2514,7 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
 
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Terminating run 'Deploy 1' for 'Deploy 2'")
 
+
 def mock_cleanup(cache):
     """
     Utility function to speed up some tests waiting for some cached versions to expire:
@@ -2531,6 +2530,7 @@ def mock_cleanup(cache):
     # Explicit call to cleanup job to speed up the test. A slower alternative would
     # be to sleep for 1s to wait for the periodic cleanup job to fire
     cache.clean_stale_entries()
+
 
 async def test_s_full_deploy_waits_for_incremental_deploy(
     resource_container, agent, client, clienthelper, environment, no_agent_backoff, caplog
@@ -2601,7 +2601,6 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
     )
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
-
 
     mock_cleanup(executor_instance._cache)
 

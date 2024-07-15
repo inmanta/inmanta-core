@@ -59,6 +59,7 @@ def test_base():
 def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpec]:
     return [executor.ResourceInstallSpec("test::Test", 5, bp)]
 
+
 @pytest.fixture(scope="function")
 async def agent_cache(agent):
     pip_config = PipConfig()
@@ -67,6 +68,7 @@ async def agent_cache(agent):
 
     myagent_instance = await agent.executor_manager.get_executor("agent1", "local:", code_for(blueprint1))
     yield myagent_instance._cache
+
 
 async def test_timeout_automatic_cleanup(agent_cache):
     """
@@ -247,7 +249,6 @@ async def test_multi_threaded():
     assert alpha.deleted == alpha.created
 
 
-
 def test_get_or_else(my_resource):
     called = []
 
@@ -335,7 +336,6 @@ async def test_decorator(agent_cache):
     my_closable_2 = Closeable()
 
     xcache = agent_cache
-
 
     class DT:
         def __init__(self, cache: AgentCache):

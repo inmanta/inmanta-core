@@ -18,9 +18,9 @@
 
 import heapq
 import logging
+import pprint
 import sys
 import time
-import pprint
 from threading import Lock
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
@@ -145,7 +145,7 @@ class AgentCache:
 
                 del self.timer_for_version[version]
                 del self.keys_for_version[version]
-        LOGGER.error("="*20)
+        LOGGER.error("=" * 20)
 
     def _get(self, key: str) -> CacheItem:
         """
@@ -287,4 +287,4 @@ class AgentCache:
             return value
 
     def __repr__(self):
-        return pprint.saferepr({"CACHE":self.cache,"QUEUE": self.timer_queue})
+        return pprint.saferepr({"CACHE": self.cache, "QUEUE": self.timer_queue})
