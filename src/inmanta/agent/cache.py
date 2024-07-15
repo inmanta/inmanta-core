@@ -136,14 +136,13 @@ class AgentCache:
             else:
                 self.next_action = sys.maxsize
 
-        copy = dict(self.timer_for_version.items())
-        for version, timer in copy.items():
-            if now > timer:
-                for key in self.keys_for_version[version]:
-                    self._evict_item(key)
+        expired_versions = [version for version, timer in self.timer_for_version.items() if now > timer]
+        for version in expired_versions:
+            for key in self.keys_for_version[version]:
+                self._evict_item(key)
 
-                del self.timer_for_version[version]
-                del self.keys_for_version[version]
+            del self.timer_for_version[version]
+            del self.keys_for_version[version]
 
     def _get(self, key: str) -> CacheItem:
         """

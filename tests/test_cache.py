@@ -81,10 +81,8 @@ async def test_timeout_automatic_cleanup(agent_cache):
 
     assert value == cache.find("test")
     # Cache cleanup job is periodically triggered with a 1s delay
-    print(cache)
 
     await asyncio.sleep(2)
-    print(cache)
     with pytest.raises(KeyError):
         assert value == cache.find("test")
 

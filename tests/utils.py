@@ -827,6 +827,4 @@ def mock_cleanup(cache, versions: Optional[Sequence[int]] = None):
     for _version in versions_to_clean_up:
         cache.timer_for_version[_version] -= cache.version_expiry_time
 
-    # Explicit call to cleanup job to speed up the test. A slower alternative would
-    # be to sleep for 1s to wait for the periodic cleanup job to fire
     cache.clean_stale_entries()
