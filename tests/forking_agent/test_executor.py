@@ -187,7 +187,7 @@ def test():
     )
     with caplog.at_level(logging.DEBUG):
         _ = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
-        assert oldest_executor.executor_id not in manager.agent_map["agent2"]
+        await retry_limited(lambda: oldest_executor.executor_id not in manager.agent_map["agent2"], 10)
         log_contains(
             caplog,
             "inmanta.agent.forking_executor",
