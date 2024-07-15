@@ -53,10 +53,6 @@ def test_base():
     assert value == cache.find("test")
 
 
-def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpec]:
-    return [executor.ResourceInstallSpec("test::Test", 5, bp)]
-
-
 async def test_timeout_automatic_cleanup(agent):
     """
     Test timeout parameter: test that expired entry is removed from the cache
@@ -65,7 +61,9 @@ async def test_timeout_automatic_cleanup(agent):
 
     blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=(), sources=[])
 
-    myagent_instance = await agent.executor_manager.get_executor("agent1", "local:", code_for(blueprint1))
+    myagent_instance = await agent.executor_manager.get_executor(
+        "agent1", "local:", [executor.ResourceInstallSpec("test::Test", 5, blueprint1)]
+    )
 
     cache = myagent_instance._cache
     value = "test too"
@@ -193,7 +191,6 @@ def test_context_manager():
 
 
 def test_multi_threaded():
-    import traceback
 
     class Spy:
         def __init__(self):
@@ -207,13 +204,7 @@ def test_multi_threaded():
             return self
 
         def delete(self):
-            print(f"before {self.deleted}")
-            with self.lock:
-                self.deleted += 1
-            # breakpoint()
-            print(f"after {self.deleted}")
-            for line in traceback.format_stack():
-                print(line.strip())
+            self.deleted += 1
 
     cache = AgentCache()
     version = 200
