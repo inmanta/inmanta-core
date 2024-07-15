@@ -34,7 +34,14 @@ LOGGER = logging.getLogger()
 
 
 class Scope:
-    def __init__(self, timeout: int = 24 * 3600, version: int = 0) -> None:
+    """
+    Scope of the lifetime of CacheItem.
+    """
+    def __init__(self, timeout: float = 24 * 3600, version: int = 0) -> None:
+        """
+        :param timeout: How long (in seconds) before the associated cache item is considered expired.
+        :param version: The version to which this cache item belongs.
+        """
         self.timeout = timeout
         self.version = version
 
@@ -48,7 +55,10 @@ class CacheItem:
         call_on_delete: Optional[Callable[[Any], None]],
     ) -> None:
         """
-        TODO docstring
+        :param key: The full key identifying this item in the cache.
+        :param scope: Information about the lifetime of the item.
+        :param value: The value being cached associated to the key.
+        :param call_on_delete: Optional finalizer to call when the cache item is deleted.
         """
         self.key = key
         self.scope = scope
@@ -65,9 +75,6 @@ class CacheItem:
 
     def __del__(self) -> None:
         self.delete()
-
-    def __repr__(self) -> str:
-        return f"{self.key=} {self.value=}"
 
 
 class CacheVersionContext(contextlib.AbstractContextManager):
