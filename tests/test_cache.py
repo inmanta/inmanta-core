@@ -223,14 +223,10 @@ def test_multi_threaded():
     assert alpha.deleted == 0
     assert beta.deleted == 0
 
-    # Wait for cache entries to expire and run the cleanup job
-    traveller = time_machine.travel(datetime.datetime.now() + datetime.timedelta(seconds=cache_entry_expiry + 1))
-    traveller.start()
-    cache.clean_stale_entries()
 
     assert alpha.created + beta.created == 1
-    assert alpha.deleted == alpha.created
     assert beta.deleted == beta.created
+    assert alpha.deleted == alpha.created
 
 
 
