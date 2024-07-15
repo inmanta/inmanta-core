@@ -174,7 +174,7 @@ def test_default_timeout(my_resource):
         assert value == cache.find("testx")
 
 
-def test_multi_threaded():
+async def test_multi_threaded():
 
     class Spy:
         def __init__(self):
@@ -193,8 +193,8 @@ def test_multi_threaded():
 
     cache = AgentCache()
 
-    # Cache entry will be considered stale after 10s
-    cache_entry_expiry = 10
+    # Cache entry will be considered stale after 4s
+    cache_entry_expiry = 4
 
     alpha = Spy()
     beta = Spy()
@@ -223,6 +223,24 @@ def test_multi_threaded():
     assert alpha.deleted == 0
     assert beta.deleted == 0
 
+    # def mock_cleanup(cache):
+    #     for item in cache.timer_queue:
+    #         item.expiry_time -= cache_entry_expiry
+    #     cache.next_action -= cache_entry_expiry
+    #     cache.clean_stale_entries()
+    #
+    # mock_cleanup(cache)
+    print(alpha.deleted)
+    await asyncio.sleep(1)
+    print(alpha.deleted)
+    await asyncio.sleep(1)
+    print(alpha.deleted)
+    await asyncio.sleep(1)
+    print(alpha.deleted)
+    await asyncio.sleep(1)
+    print(alpha.deleted)
+    cache.clean_stale_entries()
+    print(alpha.deleted)
 
     assert alpha.created + beta.created == 1
     assert beta.deleted == beta.created
