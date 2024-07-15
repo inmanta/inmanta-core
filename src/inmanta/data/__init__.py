@@ -50,7 +50,6 @@ import inmanta.const as const
 import inmanta.db.versions
 import inmanta.resources as resources
 import inmanta.util as util
-import logfire
 from crontab import CronTab
 from inmanta.const import DATETIME_MIN_UTC, DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
@@ -3345,7 +3344,6 @@ class Agent(BaseDocument):
         return super().get_valid_field_names() + ["process_name", "status"]
 
     @classmethod
-    @logfire.instrument("data.Agent.get_statuses")
     async def get_statuses(
         cls, env_id: uuid.UUID, agent_names: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> dict[str, Optional[AgentStatus]]:
@@ -3468,7 +3466,6 @@ class Agent(BaseDocument):
         await cls._execute_query(query, *values, connection=connection)
 
     @classmethod
-    @logfire.instrument("Agent.update_primary", extract_args=True)
     async def update_primary(
         cls,
         env: uuid.UUID,
