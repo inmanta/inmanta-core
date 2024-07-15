@@ -17,6 +17,7 @@
 """
 
 import logging
+import os
 
 import logfire
 import logfire.integrations
@@ -37,14 +38,17 @@ def configure_logfire(service: str) -> None:
       traces from different instances, developers, ci runs, ...
     - OTEL_EXPORTER_OTLP_PROTOCOL and OTEL_EXPORTER_OTLP_ENDPOINT: These variables can be used to send the traces to different
       collectors. Either to aggregate before shipping them to logfire or to sent them to entirely different systems.
+    - OTEL_DETAILED_REPORTING: When set detailed parameters are logged such as asyncpg parameters and pydantic objects
     """
     LOGGER.info("Setting up telemetry")
 
-    AsyncPGInstrumentor(capture_parameters=True).instrument()
+    detailed_reporting = bool(os.environ.get("OTEL_DETAILED_REPORTING"))
+
+    AsyncPGInstrumentor(capture_parameters=detailed_reporting).instrument()
 
     logfire.configure(
         service_name=service,
         send_to_logfire="if-token-present",
         console=False,
-        pydantic_plugin=logfire.integrations.pydantic.PydanticPlugin(record="all"),
+        pydantic_plugin=logfire.integrations.pydantic.PydanticPlugin(record="all") if detailed_reporting else None,
     )
