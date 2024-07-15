@@ -66,9 +66,10 @@ from utils import (
     assert_equal_ish,
     log_contains,
     log_index,
+    mock_cleanup,
     resource_action_consistency_check,
     retry_limited,
-    wait_until_logs_are_available, mock_cleanup,
+    wait_until_logs_are_available,
 )
 
 logger = logging.getLogger("inmanta.test.server_agent")
@@ -2513,8 +2514,6 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
     assert resource_container.Provider.get("agent1", "key3") == "value3"
 
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Terminating run 'Deploy 1' for 'Deploy 2'")
-
-
 
 
 async def test_s_full_deploy_waits_for_incremental_deploy(

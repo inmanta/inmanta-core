@@ -125,8 +125,6 @@ class AgentCache:
             pass
 
     def clean_stale_entries(self) -> None:
-        LOGGER.error("clean_stale_entries")
-        LOGGER.error(f"{self.timer_queue=}")
         now = time.time()
         while now > self.next_action and len(self.timer_queue) > 0:
             item = heapq.heappop(self.timer_queue)
@@ -137,7 +135,6 @@ class AgentCache:
                 self.next_action = sys.maxsize
 
         copy = dict(self.timer_for_version.items())
-        LOGGER.error(f"{copy=}")
         for version, timer in copy.items():
             if now > timer:
                 for key in self.keys_for_version[version]:
@@ -145,7 +142,6 @@ class AgentCache:
 
                 del self.timer_for_version[version]
                 del self.keys_for_version[version]
-        LOGGER.error("=" * 20)
 
     def _get(self, key: str) -> CacheItem:
         """

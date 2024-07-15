@@ -18,7 +18,6 @@
 
 import asyncio
 import datetime
-import time
 from threading import Lock, Thread
 from time import sleep
 
@@ -397,7 +396,6 @@ async def test_decorator(agent_cache):
     assert "x" == test.test_method()
     assert "x" == test.test_method()
     assert 1 == test.count
-
 
     # 1 cache miss and 1 hit:
     assert "x2" == test.test_method_2(version=1)
