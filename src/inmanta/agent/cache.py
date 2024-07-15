@@ -293,6 +293,3 @@ class AgentCache:
             with self.addLock:
                 del self.addLocks[key]
             return value
-
-    def __repr__(self):
-        return pprint.saferepr({"CACHE": self.cache, "QUEUE": self.timer_queue})
