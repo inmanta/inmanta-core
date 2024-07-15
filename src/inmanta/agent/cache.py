@@ -37,6 +37,7 @@ class Scope:
     """
     Scope of the lifetime of CacheItem.
     """
+
     def __init__(self, timeout: float = 24 * 3600, version: int = 0) -> None:
         """
         :param timeout: How long (in seconds) before the associated cache item is considered expired.
@@ -126,7 +127,6 @@ class AgentCache:
     def _evict_item(self, key: str) -> None:
         try:
             item = self.cache[key]
-            LOGGER.info(f"ITEM....{item}")
             item.delete()
             del self.cache[key]
         except KeyError:

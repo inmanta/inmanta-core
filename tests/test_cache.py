@@ -56,17 +56,15 @@ def test_base():
     assert value == cache.find("test")
 
 
-def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpec]:
-    return [executor.ResourceInstallSpec("test::Test", 5, bp)]
-
-
 @pytest.fixture(scope="function")
 async def agent_cache(agent):
     pip_config = PipConfig()
 
     blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=(), sources=[])
 
-    myagent_instance = await agent.executor_manager.get_executor("agent1", "local:", code_for(blueprint1))
+    myagent_instance = await agent.executor_manager.get_executor(
+        "agent1", "local:", [executor.ResourceInstallSpec("test::Test", 5, blueprint1)]
+    )
     yield myagent_instance._cache
 
 
@@ -188,8 +186,7 @@ async def test_multi_threaded(agent_cache):
             return self
 
         def delete(self):
-            with self.lock:
-                self.deleted += 1
+            self.deleted += 1
 
     cache = agent_cache
 
