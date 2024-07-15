@@ -329,7 +329,7 @@ async def test_decorator(agent_cache):
             return "x"
 
         @cache
-        def test_method_2(self, version, timeout=1):
+        def test_method_2(self, version, timeout=100):
             self.count += 1
             return "x2"
 
