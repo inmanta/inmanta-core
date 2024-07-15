@@ -28,6 +28,7 @@ import multiprocessing
 import os
 import pathlib
 import socket
+import threading
 import typing
 import uuid
 from asyncio import Future, transports
@@ -44,7 +45,7 @@ import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.util
-from inmanta import const, util
+from inmanta import const, util, tracing
 from inmanta.agent import executor
 from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import (
@@ -78,10 +79,10 @@ class ExecutorContext:
         """Request the executor to stop"""
         if self.executor:
             self.executor.stop()
-        await self.server.stop()
         if self.executor:
             # threadpool finalizer is not used, we expect threadpools to be terminated with the process
             self.executor.join([])
+        await self.server.stop()
 
 
 class ExecutorServer(IPCServer[ExecutorContext]):
@@ -415,6 +416,9 @@ def mp_worker_entrypoint(
     # Load config
     inmanta.config.Config.load_config_from_dict(config)
 
+    # Make sure logfire is configured correctly
+    tracing.configure_logfire("agent.executor")
+
     async def serve() -> None:
         loop = asyncio.get_running_loop()
         # Start serving
@@ -450,6 +454,7 @@ class MPExecutor(executor.Executor, executor.PoolMember):
         self.closed = False
         self.running = False
         self.owner = owner
+        self.termination_lock = threading.Lock()
         # Pure for debugging purpose
         self.executor_id = executor_id
         self.executor_virtual_env = venv
@@ -496,25 +501,66 @@ class MPExecutor(executor.Executor, executor.PoolMember):
     def last_used(self) -> datetime.datetime:
         return self.connection.last_used_at
 
-    async def force_stop(self, grace_time: float = inmanta.const.SHUTDOWN_GRACE_HARD) -> None:
-        """Stop by process close"""
+    async def force_stop(self, grace_time: float = inmanta.const.EXECUTOR_GRACE_HARD) -> None:
+        """
+        Stop by process close
+
+        This method will never raise an exeption, but log it instead.
+        """
         self.closing = True
         await asyncio.get_running_loop().run_in_executor(
             self.owner.thread_pool, functools.partial(self._force_stop, grace_time)
         )
 
     def _force_stop(self, grace_time: float) -> None:
+        """This method will never raise an exeption, but log it instead, as it is used as a finalizer"""
         if self.closed:
             return
-        try:
-            self.process.terminate()
-            self.process.join(grace_time)
-            self.process.kill()
-            self.process.join()
-        except ValueError:
-            # Process already gone:
-            pass
-        self._set_closed()
+        with self.termination_lock:
+            # This code doesn't work when two threads go through it
+            # Multiprocessing it too brittle for that
+            if self.closed:
+                return
+            try:
+
+                if self.process.exitcode is None:
+                    # Running
+                    self.process.join(grace_time)
+
+                if self.process.exitcode is None:
+                    LOGGER.warning(
+                        "Executor for agent %s with id %s didn't stop after timeout of %d seconds. Killing it.",
+                        self.executor_id.agent_name,
+                        self.executor_id.identity(),
+                        grace_time,
+                    )
+                    # still running! Be a bit more firm
+                    self.process.kill()
+                    self.process.join()
+                self.process.close()
+            except ValueError as e:
+                if "process object is closed" in str(e):
+                    # process already closed
+                    # raises a value error, so we also check the message
+                    pass
+                else:
+                    LOGGER.warning(
+                        "Executor for agent %s with id %s and pid %s failed to shutdown.",
+                        self.executor_id.agent_name,
+                        self.executor_id.identity(),
+                        self.process.pid,
+                        exc_info=True,
+                    )
+            except Exception:
+                LOGGER.warning(
+                    "Executor for agent %s with id %s and pid %s failed to shutdown.",
+                    self.executor_id.agent_name,
+                    self.executor_id.identity(),
+                    self.process.pid,
+                    exc_info=True,
+                )
+            # Discard this executor, even if we could not close it
+            self._set_closed()
 
     def _set_closed(self) -> None:
         # this code can be raced from the join call and the disconnect handler
@@ -522,35 +568,13 @@ class MPExecutor(executor.Executor, executor.PoolMember):
         if not self.closed:
             self.closing = True
             self.closed = True
-            self.process.close()
             self.owner._child_closed(self)
 
-    async def join(self, timeout: float) -> None:
+    async def join(self, timeout: float = inmanta.const.EXECUTOR_GRACE_HARD) -> None:
         if self.closed:
             return
-        try:
-            await asyncio.get_running_loop().run_in_executor(
-                self.owner.thread_pool, functools.partial(self.process.join, timeout)
-            )
-            if self.process.exitcode is None:
-                LOGGER.warning(
-                    "Executor for agent %s with id %s didn't stop after timeout of %d seconds. Killing it.",
-                    self.executor_id.agent_name,
-                    self.executor_id.identity(),
-                    timeout,
-                )
-                self.process.kill()
-                await asyncio.get_running_loop().run_in_executor(
-                    self.owner.thread_pool, functools.partial(self.process.join, timeout)
-                )
-            self._set_closed()
-        except ValueError as e:
-            if "process object is closed" in str(e):
-                # process already closed
-                # raises a value error, so we also check the message
-                pass
-            else:
-                raise
+        assert self.closing
+        await asyncio.get_running_loop().run_in_executor(self.owner.thread_pool, functools.partial(self._force_stop, timeout))
 
     async def close_version(self, version: int) -> None:
         await self.connection.call(CloseVersionCommand(version))
@@ -696,7 +720,7 @@ class MPManager(executor.ExecutorManager[MPExecutor], executor.PoolManager):
                     LOGGER.debug(
                         "Found stale executor for agent %s with id %s, waiting for close", agent_name, executor_id.identity()
                     )
-                    await it.join(2.0)
+                    await it.join(inmanta.const.EXECUTOR_GRACE_HARD)
             n_executors_for_agent = len(self.agent_map[executor_id.agent_name])
             if n_executors_for_agent >= self.max_executors_per_agent:
                 # Close oldest executor:

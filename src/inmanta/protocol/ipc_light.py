@@ -288,11 +288,15 @@ class FinalizingIPCClient(IPCClient[ServerContext]):
     def __init__(self, name: str):
         super().__init__(name)
         self.finalizers: list[typing.Callable[[], typing.Coroutine[typing.Any, typing.Any, None]]] = []
+        # Collection to avoid task getting garbage collected
+        self.finalizer_anti_gc: set[asyncio.Task[None]] = set()
 
     def connection_lost(self, exc: Exception | None) -> None:
         super().connection_lost(exc)
         for fin in self.finalizers:
-            asyncio.get_running_loop().create_task(fin())
+            task = asyncio.get_running_loop().create_task(fin())
+            self.finalizer_anti_gc.add(task)
+            task.add_done_callback(self.finalizer_anti_gc.discard)
 
 
 class LogReceiver(IPCFrameProtocol):

@@ -1,5 +1,0 @@
-description: Make the server work as a child reaper
-change-type: patch
-destination-branches: [master]
-sections:
-  minor-improvement: The server now also cleans up zombie processes, which is convenient when running in a container
