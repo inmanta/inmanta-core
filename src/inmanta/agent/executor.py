@@ -387,18 +387,15 @@ def initialize_envs_directory() -> str:
 
 
 class PoolManager:
-    retention_time: int
-    _locks: inmanta.util.NamedLock
-
     def __init__(self, retention_time: int, _locks: inmanta.util.NamedLock) -> None:
         self.running = False
-
-        self.retention_time: int = retention_time
-        self._locks: inmanta.util.NamedLock = _locks
 
         # We keep a reference to the periodic cleanup task to prevent it
         # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
         self.cleanup_job: typing.Optional[asyncio.Task[None]] = None
+
+        self.retention_time: int = retention_time
+        self._locks: inmanta.util.NamedLock = _locks
 
     async def start(self) -> None:
         self.running = True
@@ -422,26 +419,29 @@ class PoolManager:
         This task periodically cleans up idle pool member
         """
         while self.running:
-            cleanup_start = datetime.datetime.now().astimezone()
-            reschedule_interval: float = self.retention_time
-            pool_members = await self.get_pool_members()
-            for pool_member in pool_members:
-                if pool_member.can_be_cleaned_up(self.retention_time):
-                    async with self._locks.get(pool_member.get_lock_id()):
-                        # Check that the executor can still be cleaned up by the time we have acquired the lock
-                        if pool_member.can_be_cleaned_up(self.retention_time):
-                            await pool_member.clean()
-                            self.clean_pool_member_from_manager(pool_member)
-                else:
-                    reschedule_interval = min(
-                        reschedule_interval,
-                        (
-                            datetime.timedelta(seconds=self.retention_time) - (cleanup_start - pool_member.last_used())
-                        ).total_seconds(),
-                    )
-
-            cleanup_end = datetime.datetime.now().astimezone()
-            await asyncio.sleep(max(0.0, reschedule_interval - (cleanup_end - cleanup_start).total_seconds()))
+            # cleanup_start = datetime.datetime.now().astimezone()
+            # reschedule_interval: float = self.retention_time
+            # pool_members = await self.get_pool_members()
+            # for pool_member in pool_members:
+            #     if pool_member.can_be_cleaned_up(self.retention_time):
+            #         async with self._locks.get(pool_member.get_lock_id()):
+            #             # Check that the executor can still be cleaned up by the time we have acquired the lock
+            #             if pool_member.can_be_cleaned_up(self.retention_time):
+            #                 await pool_member.clean()
+            #                 self.clean_pool_member_from_manager(pool_member)
+            #     else:
+            #         reschedule_interval = min(
+            #             reschedule_interval,
+            #             (
+            #                 datetime.timedelta(seconds=self.retention_time) - (cleanup_start - pool_member.last_used())
+            #             ).total_seconds(),
+            #         )
+            #
+            # cleanup_end = datetime.datetime.now().astimezone()
+            # await asyncio.sleep(max(0.0, reschedule_interval - (cleanup_end - cleanup_start).total_seconds()))
+            LOGGER.warning("A")
+            await asyncio.sleep(100)
+            LOGGER.warning("B")
 
 
 class VirtualEnvironmentManager(PoolManager):

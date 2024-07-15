@@ -601,7 +601,8 @@ class MPExecutor(executor.Executor, executor.PoolMember):
         return await self.connection.call(FactsCommand(resource))
 
 
-class MPManager(executor.ExecutorManager[MPExecutor], executor.PoolManager):
+# `executor.PoolManager` needs to be before `executor.ExecutorManager` as it defines the start and stop methods (MRO order)
+class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
     """
     This is the executor that provides the new behavior (ISO8+),
     where the agent forks executors in specific venvs to prevent code reloading.
