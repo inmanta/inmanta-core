@@ -31,6 +31,7 @@ from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import cache
 from inmanta.data import PipConfig
 from inmanta.resources import Id, Resource, resource
+from utils import mock_cleanup
 
 
 @fixture()
@@ -391,22 +392,25 @@ async def test_decorator(agent_cache):
     test.count = 0
     my_closable.closed = False
 
+    # 1 cache miss and 2 hits:
     assert "x" == test.test_method()
     assert "x" == test.test_method()
     assert "x" == test.test_method()
     assert 1 == test.count
 
+
+    # 1 cache miss and 1 hit:
     assert "x2" == test.test_method_2(version=1)
     assert "x2" == test.test_method_2(version=1)
     assert 2 == test.count
+    # 1 cache miss :
     assert "x2" == test.test_method_2(version=2)
     assert 3 == test.count
-    print(xcache)
-    print(time.time())
-    await asyncio.sleep(2)
-    print(xcache)
-    print(time.time())
 
+    # Wait for version 1 to become stale and get cleaned up
+    mock_cleanup(xcache, versions=[1])
+
+    # 1 cache miss and 1 hit:
     assert "x2" == test.test_method_2(version=1)
     assert "x2" == test.test_method_2(version=1)
     assert 4 == test.count
@@ -431,4 +435,8 @@ async def test_decorator(agent_cache):
     test.test_close(version=3)
     assert test.count == 1
     assert not my_closable.closed
+
+    # Wait for version 3 to become stale and get cleaned up
+    mock_cleanup(xcache, versions=[3])
+
     assert my_closable.closed

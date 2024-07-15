@@ -807,3 +807,26 @@ def make_random_file(size: int = 0) -> tuple[str, bytes, str]:
     body = base64.b64encode(content).decode("ascii")
 
     return hash, content, body
+
+
+def mock_cleanup(cache, versions: Optional[Sequence[int]] = None):
+    """
+    Utility function to speed up some tests waiting for some cached versions to expire:
+        - monkey patch the timers to make the versions expire sooner
+        - explicit call to clean_stale_entries() to clean them up.
+
+    The slower alternative would be to wait for the periodic cleanup job to fire (every 1s by default)
+
+    :param cache: The cache for which to clean up some versions
+    :param versions: Optional sequence of versions to clean up. By default, if no version is passed, all
+        versions in the cache will be cleaned up.
+
+    """
+    versions_to_clean_up = versions if versions else cache.timer_for_version.keys()
+
+    for version in versions_to_clean_up:
+        cache.timer_for_version[version] -= cache.version_expiry_time
+
+    # Explicit call to cleanup job to speed up the test. A slower alternative would
+    # be to sleep for 1s to wait for the periodic cleanup job to fire
+    cache.clean_stale_entries()

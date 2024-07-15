@@ -68,7 +68,7 @@ from utils import (
     log_index,
     resource_action_consistency_check,
     retry_limited,
-    wait_until_logs_are_available,
+    wait_until_logs_are_available, mock_cleanup,
 )
 
 logger = logging.getLogger("inmanta.test.server_agent")
@@ -2515,21 +2515,6 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Terminating run 'Deploy 1' for 'Deploy 2'")
 
 
-def mock_cleanup(cache):
-    """
-    Utility function to speed up some tests waiting for some cached versions to expire:
-        - monkey patch the timers to make the versions expire sooner
-        - explicit call to clean_stale_entries() to clean them up.
-
-    The slower alternative would be to wait for the periodic cleanup job to fire (every 1s by default)
-
-    """
-    for version in cache.timer_for_version.keys():
-        cache.timer_for_version[version] -= cache.version_expiry_time
-
-    # Explicit call to cleanup job to speed up the test. A slower alternative would
-    # be to sleep for 1s to wait for the periodic cleanup job to fire
-    cache.clean_stale_entries()
 
 
 async def test_s_full_deploy_waits_for_incremental_deploy(
