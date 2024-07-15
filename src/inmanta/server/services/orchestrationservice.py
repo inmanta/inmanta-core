@@ -1084,7 +1084,6 @@ class OrchestrationService(protocol.ServerSlice):
         return returnvalue
 
     @handle(methods.release_version, version_id="id", env="tid")
-    @logfire.instrument("OrchestrationService.release_version", extract_args=True)
     async def release_version(
         self,
         env: data.Environment,
