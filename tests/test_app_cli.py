@@ -597,6 +597,6 @@ async def test_logger_name_in_compiler_exporter_output(
         assert "inmanta_plugins.mymod    INFO    test" in stdout
         assert re.search("inmanta.export[ ]+INFO[ ]+Committed resources with version 1", stdout)
     else:
-        assert re.search("^compiler[ ]*DEBUG[ ]+Starting compile", stdout)
+        assert re.search("^compiler[ ]*DEBUG[ ]+Starting compile", stdout, re.MULTILINE)
         assert "mymod          INFO    test" in stdout
         assert re.search("\nexporter[ ]+INFO[ ]+Committed resources with version 1", stdout)

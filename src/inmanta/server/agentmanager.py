@@ -33,6 +33,8 @@ from uuid import UUID
 import asyncpg.connection
 
 import inmanta.config
+import logfire
+import logfire.propagate
 from inmanta import config as global_config
 from inmanta import const, data
 from inmanta.agent import config as agent_cfg
@@ -385,6 +387,7 @@ class AgentManager(ServerSlice, SessionListener):
         await self._session_listener_actions.put(session_action)
 
     # Seen
+    @logfire.instrument("AgentManager.seen_session", extract_args=True)
     async def _seen_session(self, session: protocol.Session, endpoint_names_snapshot: set[str]) -> None:
         endpoints_with_new_primary: list[tuple[str, Optional[uuid.UUID]]] = []
         async with self.session_lock:
@@ -669,6 +672,7 @@ class AgentManager(ServerSlice, SessionListener):
             await asyncio.gather(*[s.expire_and_abort(timeout=0) for s in self.sessions.values()])
 
     # Agent Management
+    @logfire.instrument("AgentManager.ensure_agent_registered")
     async def ensure_agent_registered(
         self, env: data.Environment, nodename: str, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> data.Agent:
@@ -1230,6 +1234,8 @@ agent-get-resource-backoff=%(agent_get_resource_backoff)f
 
 [agent]
 executor-mode={agent_cfg.agent_executor_mode.get().name}
+executor-cap={agent_cfg.agent_executor_cap.get()}
+executor-retention-time={agent_cfg.agent_executor_retention_time.get()}
 
 [agent_rest_transport]
 port=%(port)s
@@ -1289,8 +1295,10 @@ ssl=True
             if errfile is not None:
                 errhandle = open(errfile, "wb+")
 
+            env = os.environ.copy()
+            env.update(logfire.propagate.get_context())
             return await asyncio.create_subprocess_exec(
-                sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle
+                sys.executable, *full_args, cwd=cwd, env=env, stdout=outhandle, stderr=errhandle
             )
         finally:
             if outhandle is not None:

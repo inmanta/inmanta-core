@@ -32,8 +32,11 @@ import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
 from inmanta.agent import executor
+from inmanta.agent.executor import ExecutorBlueprint
 from inmanta.agent.forking_executor import MPManager
+from inmanta.data import PipConfig
 from inmanta.protocol.ipc_light import ConnectionLost
+from utils import NOISY_LOGGERS, log_contains, retry_limited
 
 
 class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
@@ -74,7 +77,27 @@ class TestLoader(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
         return [inmanta_plugins.test.testA.test(), inmanta_plugins.test.testB.test()]
 
 
-async def test_executor_server(mpmanager: MPManager, client):
+@pytest.fixture
+def set_custom_executor_policy(server_config):
+    """
+    Fixture to temporarily set the policy for executor management.
+    """
+    old_cap_value = inmanta.agent.config.agent_executor_cap.get()
+
+    # Keep only 2 executors per agent
+    inmanta.agent.config.agent_executor_cap.set("2")
+
+    old_retention_value = inmanta.agent.config.agent_executor_retention_time.get()
+    # Clean up executors after 3s of inactivity
+    inmanta.agent.config.agent_executor_retention_time.set("3")
+
+    yield
+
+    inmanta.agent.config.agent_executor_cap.set(str(old_cap_value))
+    inmanta.agent.config.agent_executor_retention_time.set(str(old_retention_value))
+
+
+async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, caplog):
     """
     Test the MPManager, this includes
 
@@ -83,12 +106,19 @@ async def test_executor_server(mpmanager: MPManager, client):
     3. communicate with it
     4. build up venv with requirements, source files, ...
     5. check that code is loaded correctly
+
+    Also test that an executor policy can be set:
+        - the agent_executor_cap option correctly stops the oldest executor.
+        - the agent_executor_retention_time option is used to clean up old executors.
     """
+
     with pytest.raises(ImportError):
         # make sure lorem isn't installed at the start of the test.
         import lorem  # noqa: F401
 
     manager = mpmanager
+    await manager.start()
+
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
     # Simple empty venv
@@ -126,12 +156,22 @@ def test():
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
     assert res.code == 200
 
+    # Dummy executor to test executor cap:
+    # Create this one first to make sure this is the one being stopped
+    # when the cap is reached
+    dummy = executor.ExecutorBlueprint(
+        pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct]
+    )
     # Full config: 2 source files, one python dependency
     full = executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct, via_server]
     )
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
 
+    # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
+    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
+
+    assert oldest_executor.executor_id in manager.agent_map["agent2"]
     # assert loaded
     result2 = await full_runner.connection.call(TestLoader())
     assert ["DIRECT", "server"] == result2
@@ -140,9 +180,31 @@ def test():
     assert await simplest.connection.call(GetName()) == "agent1"
     assert await full_runner.connection.call(GetName()) == "agent2"
 
+    # Request a third executor:
+    # The executor cap is reached -> check that the oldest executor got correctly stopped
+    dummy = executor.ExecutorBlueprint(
+        pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[via_server]
+    )
+    with caplog.at_level(logging.DEBUG):
+        _ = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
+        assert oldest_executor.executor_id not in manager.agent_map["agent2"]
+        log_contains(
+            caplog,
+            "inmanta.agent.forking_executor",
+            logging.DEBUG,
+            (
+                f"Reached executor cap for agent agent2. Stopping oldest executor "
+                f"{oldest_executor.executor_id.identity()} to make room for a new one."
+            ),
+        )
+
     # Assert shutdown and back up
     await mpmanager.stop_for_agent("agent2")
+    await retry_limited(lambda: len(manager.agent_map["agent2"]) == 0, 10)
+
     full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
+
+    await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)
 
     await simplest.stop()
     await simplest.join(2)
@@ -152,6 +214,23 @@ def test():
     with pytest.raises(ImportError):
         # we aren't leaking into this venv
         import lorem  # noqa: F401, F811
+
+    async def check_automatic_clean_up() -> bool:
+        return len(manager.agent_map["agent2"]) == 0
+
+    with caplog.at_level(logging.DEBUG):
+        await retry_limited(check_automatic_clean_up, 10)
+        log_contains(
+            caplog,
+            "inmanta.agent.forking_executor",
+            logging.DEBUG,
+            (f"Stopping executor {full_runner.executor_id.identity()} because it was inactive for"),
+        )
+
+    # We can get `Caught subprocess termination from unknown pid: %d -> %d`
+    # When we capture signals from the pip installs
+    # Can't happen in real deployment as these things happen in different processes
+    utils.assert_no_warning(caplog, NOISY_LOGGERS + ["asyncio"])
 
 
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
@@ -179,3 +258,12 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
         await child1.connection.call("echo", ["aaaa"])
 
     utils.assert_no_warning(caplog)
+
+
+def test_hash_with_duplicates():
+    source = inmanta.loader.ModuleSource("test", "aaaaa", False, None, None)
+    requirement = "setuptools"
+    simple = ExecutorBlueprint(pip_config=PipConfig(), requirements=[requirement], sources=[source])
+    duplicated = ExecutorBlueprint(pip_config=PipConfig(), requirements=[requirement, requirement], sources=[source, source])
+    assert duplicated == simple
+    assert duplicated.blueprint_hash() == simple.blueprint_hash()

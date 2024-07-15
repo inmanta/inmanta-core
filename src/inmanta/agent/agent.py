@@ -639,15 +639,26 @@ class AgentInstance:
             action: Callable[[], Coroutine[object, None, object]],
             interval: Union[int, str],
             splay_value: int,
-            initial_time: datetime.datetime,
         ) -> bool:
+            """
+            Schedule a periodic task
+
+            :param kind: Name of the task (value to display in logs)
+            :param action: The action to schedule periodically
+            :param interval: The interval at which to schedule the task. Can be specified as either a number of
+                seconds, or a cron string.
+            :param splay_value: When specifying the interval as a number of seconds, this parameter specifies
+                the number of seconds by which to delay the initial execution of this action.
+            """
+            now = datetime.datetime.now().astimezone()
+
             if isinstance(interval, int) and interval > 0:
                 self.logger.info(
                     "Scheduling periodic %s with interval %d and splay %d (first run at %s)",
                     kind,
                     interval,
                     splay_value,
-                    (initial_time + datetime.timedelta(seconds=splay_value)).strftime(const.TIME_LOGFMT),
+                    (now + datetime.timedelta(seconds=splay_value)).strftime(const.TIME_LOGFMT),
                 )
                 interval_schedule: IntervalSchedule = IntervalSchedule(
                     interval=float(interval), initial_delay=float(splay_value)
@@ -674,8 +685,9 @@ class AgentInstance:
                 )
             )
             self.ensure_deploy_on_start = False
-        periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
-        periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value, now)
+
+        periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value)
+        periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value)
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self.process._sched.add_action(action, schedule)
@@ -998,7 +1010,7 @@ class Agent(SessionEndpoint):
 
         self.agent_map: Optional[dict[str, str]] = agent_map
 
-        remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExcutorMode.forking
+        remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExecutorMode.forking
         can_have_remote_executor = code_loader
 
         self.executor_manager: executor.ExecutorManager[executor.Executor]
@@ -1087,6 +1099,7 @@ class Agent(SessionEndpoint):
         # cache reference to THIS ioloop for handlers to push requests on it
         self._io_loop = asyncio.get_running_loop()
         await super().start()
+        await self.executor_manager.start()
 
     async def add_end_point_name(self, name: str) -> None:
         async with self._instances_lock:
