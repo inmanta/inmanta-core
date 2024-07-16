@@ -398,9 +398,8 @@ class PoolManager:
         self._locks: inmanta.util.NamedLock = _locks
 
     async def start(self) -> None:
-        if not self.running:
-            self.running = True
-            self.cleanup_job = asyncio.create_task(self.cleanup_inactive_pool_members())
+        self.running = True
+        self.cleanup_job = asyncio.create_task(self.cleanup_inactive_pool_members())
 
     async def stop(self) -> None:
         self.running = False
