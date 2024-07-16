@@ -27,6 +27,7 @@ import pydantic
 import typing_inspect
 from tornado import escape
 
+import logfire
 from inmanta import const, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol import auth, common, exceptions
@@ -60,6 +61,7 @@ class CallArguments:
         :param config: The method configuration that contains the metadata and functions to call
         :param message: The message received by the RPC call
         :param request_headers: The headers received by the RPC call
+        :param handler: The handler for the call
         """
         self._config = config
         self._properties = self._config.properties
@@ -611,8 +613,7 @@ class RESTBase(util.TaskHandler[None]):
                 if "sid" not in message or not isinstance(message["sid"], str):
                     raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
 
-                sid = uuid.UUID(str(message["sid"]))
-                if not isinstance(sid, uuid.UUID) or not self.validate_sid(sid):
+                if not self.validate_sid(uuid.UUID(str(message["sid"]))):
                     raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
             # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
@@ -630,7 +631,9 @@ class RESTBase(util.TaskHandler[None]):
                 arguments.auth_username if arguments.auth_username else "<>",
             )
 
-            result = await config.handler(**arguments.call_args)
+            with logfire.span("Calling method " + config.method_name, **arguments.call_args):
+                result = await config.handler(**arguments.call_args)
+
             return await arguments.process_return(result)
         except pydantic.ValidationError:
             LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
