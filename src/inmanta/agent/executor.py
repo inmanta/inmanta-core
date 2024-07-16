@@ -398,11 +398,21 @@ class PoolManager:
         self._locks: inmanta.util.NamedLock = _locks
 
     async def start(self) -> None:
-        self.running = True
-        self.cleanup_job = asyncio.create_task(self.cleanup_inactive_pool_members())
+        if not self.running:
+            self.running = True
+            self.cleanup_job = asyncio.create_task(self.cleanup_inactive_pool_members())
 
     async def stop(self) -> None:
         self.running = False
+        if self.cleanup_job is not None:
+            self.cleanup_job.cancel()
+            try:
+                await self.cleanup_job
+            except asyncio.CancelledError:
+                LOGGER.debug("%s's cleanup job has been cancelled!", self.__class__.__name__)
+            finally:
+                await asyncio.wait([self.cleanup_job])
+                self.cleanup_job = None
 
     @abc.abstractmethod
     async def get_pool_members(self) -> Sequence[PoolMember]:
@@ -419,29 +429,26 @@ class PoolManager:
         This task periodically cleans up idle pool member
         """
         while self.running:
-            # cleanup_start = datetime.datetime.now().astimezone()
-            # reschedule_interval: float = self.retention_time
-            # pool_members = await self.get_pool_members()
-            # for pool_member in pool_members:
-            #     if pool_member.can_be_cleaned_up(self.retention_time):
-            #         async with self._locks.get(pool_member.get_lock_id()):
-            #             # Check that the executor can still be cleaned up by the time we have acquired the lock
-            #             if pool_member.can_be_cleaned_up(self.retention_time):
-            #                 await pool_member.clean()
-            #                 self.clean_pool_member_from_manager(pool_member)
-            #     else:
-            #         reschedule_interval = min(
-            #             reschedule_interval,
-            #             (
-            #                 datetime.timedelta(seconds=self.retention_time) - (cleanup_start - pool_member.last_used())
-            #             ).total_seconds(),
-            #         )
-            #
-            # cleanup_end = datetime.datetime.now().astimezone()
-            # await asyncio.sleep(max(0.0, reschedule_interval - (cleanup_end - cleanup_start).total_seconds()))
-            LOGGER.warning("A")
-            await asyncio.sleep(100)
-            LOGGER.warning("B")
+            cleanup_start = datetime.datetime.now().astimezone()
+            reschedule_interval: float = self.retention_time
+            pool_members = await self.get_pool_members()
+            for pool_member in pool_members:
+                if pool_member.can_be_cleaned_up(self.retention_time):
+                    async with self._locks.get(pool_member.get_lock_id()):
+                        # Check that the executor can still be cleaned up by the time we have acquired the lock
+                        if pool_member.can_be_cleaned_up(self.retention_time):
+                            await pool_member.clean()
+                            self.clean_pool_member_from_manager(pool_member)
+                else:
+                    reschedule_interval = min(
+                        reschedule_interval,
+                        (
+                            datetime.timedelta(seconds=self.retention_time) - (cleanup_start - pool_member.last_used())
+                        ).total_seconds(),
+                    )
+
+            cleanup_end = datetime.datetime.now().astimezone()
+            await asyncio.sleep(max(0.0, reschedule_interval - (cleanup_end - cleanup_start).total_seconds()))
 
 
 class VirtualEnvironmentManager(PoolManager):
@@ -470,10 +477,6 @@ class VirtualEnvironmentManager(PoolManager):
         ), "The `executor-venv-retention-time` must be longer than the cleanup check interval!"
 
         await super().start()
-
-    async def join(self) -> None:
-        if self.cleanup_job:
-            await self.cleanup_job
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
         """

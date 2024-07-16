@@ -845,10 +845,9 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
+        await super().stop()
         thread_pool_finalizer.append(self.thread_pool)
         await asyncio.gather(*(child.join(timeout) for child in self.children))
-        if self.cleanup_job:
-            await self.cleanup_job
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children_ids = self.agent_map[agent_name]
