@@ -895,10 +895,10 @@ class AgentInstance:
         executor, invalid_resources = await self.setup_executor(model_version, resource_types)
 
         loaded_resources: list[ResourceDetails] = []
-        failed_resource_ids: list[ResourceVersionIdStr] = []
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
-        logs = []
+        logs: dict[str, set] = defaultdict(set)
+        failed_resource_ids: dict[str, set] = defaultdict(set)
         logged_resource_types = set()
         for res in resource_batch:
             res_id = res["id"]
@@ -913,37 +913,31 @@ class AgentInstance:
             else:
                 if res_type not in logged_resource_types:
                     logged_resource_types.add(res_type)
-                    logs.append(
+                    logs[res_type].add(
                         data.LogLine.log(
                             logging.ERROR,
-                            "All resources of `%(res_type)s` failed due to `%(error)s`.",
+                            "All resources `%(res_type)s` failed to load handler code or install handler code "
+                            "dependencies: `%(error)s`.",
                             res_type=res_type,
                             error=str(invalid_resources[res_type]),
                         )
                     )
-                failed_resource_ids.append(res_id)
+                    failed_resource_ids[res_type].add(res_id)
                 undeployable[res_id] = const.ResourceState.unavailable
                 loaded_resources.append(ResourceDetails(res))
 
         if len(failed_resource_ids) > 0:
-            logs.append(
-                data.LogLine.log(
-                    logging.ERROR,
-                    "Failed to load handler code or install handler code dependencies. Check the agent log for additional "
-                    "details.",
+            for resource_type, error_messages in logs.items():
+                await self.get_client().resource_action_update(
+                    tid=self._env_id,
+                    resource_ids=list(failed_resource_ids[resource_type]),
+                    action_id=uuid.uuid4(),
+                    action=action,
+                    started=started,
+                    finished=datetime.datetime.now().astimezone(),
+                    messages=list(error_messages),
+                    status=const.ResourceState.unavailable,
                 )
-            )
-
-            await self.get_client().resource_action_update(
-                tid=self._env_id,
-                resource_ids=failed_resource_ids,
-                action_id=uuid.uuid4(),
-                action=action,
-                started=started,
-                finished=datetime.datetime.now().astimezone(),
-                messages=logs,
-                status=const.ResourceState.unavailable,
-            )
         return undeployable, loaded_resources, executor
 
 

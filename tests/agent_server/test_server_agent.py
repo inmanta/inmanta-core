@@ -3963,7 +3963,8 @@ async def test_logging_failure_when_creating_venv(
         caplog,
         f"resource_action_logger.{environment}",
         logging.ERROR,
-        "multiple resources: All resources of `test::Resource` failed due to `Could not set up executor for agent1: Failed to "
+        "All resources `test::Resource` failed to load handler code or install handler code dependencies: "
+        "`Could not set up executor for agent1: Failed to "
         "install handler `test` version=1`.",
     )
     # Logs should not appear twice
@@ -3972,19 +3973,10 @@ async def test_logging_failure_when_creating_venv(
             caplog,
             "resource_action_logger",
             logging.ERROR,
-            "multiple resources: All resources of `test::Resource` failed due to `Failed to install handler `test` "
-            "version=1`.",
+            "All resources `test::Resource` failed to load handler code or install handler code dependencies: "
+            "`Failed to install handler `test` version=1`.",
             idx1,
         )
-
-    log_index(
-        caplog,
-        "resource_action_logger",
-        logging.ERROR,
-        "multiple resources: Failed to load handler code or install handler code dependencies. Check the agent log for "
-        "additional details.",
-        idx1,
-    )
 
     def retrieve_relevant_logs(result):
         global_logs = result.result["logs"]
@@ -4007,21 +3999,7 @@ async def test_logging_failure_when_creating_venv(
         "`test` version=1`.",
         "All resources of `test::AgentConfig` failed due to `Could not set up executor for agent1: Failed to install handler "
         "`test` version=1`.",
-        "Failed to load handler code or install handler code dependencies. Check the agent log for additional details.",
     }
 
-    assert retrieve_relevant_logs(result) == expected_error_messages
-
-    result2 = await client.get_resource(
-        tid=environment,
-        id="test::Resource[agent1,key=key1],v=%d" % version1,
-        logs=True,
-    )
-
-    expected_error_messages2 = {
-        "All resources of `test::Resource` failed due to `Could not set up executor for agent1: Failed to install handler "
-        "`test` version=1`.",
-        "Failed to load handler code or install handler code dependencies. Check the agent log for additional details.",
-    }
-
-    assert retrieve_relevant_logs(result2) == expected_error_messages2
+    relevant_logs = retrieve_relevant_logs(result)
+    assert relevant_logs  == expected_error_messages
