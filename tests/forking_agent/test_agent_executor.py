@@ -23,7 +23,6 @@ import subprocess
 
 from inmanta import const
 from inmanta.agent import executor, forking_executor
-from inmanta.agent.forking_executor import MPManager
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
 from utils import PipIndex, log_contains, log_doesnt_contain
