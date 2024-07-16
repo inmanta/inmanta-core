@@ -24,6 +24,7 @@ import py_compile
 import tempfile
 import uuid
 from logging import DEBUG, INFO
+from typing import Coroutine, Any
 
 import pytest
 
@@ -329,7 +330,7 @@ def test():
 async def test_agent_code_loading_with_failure(
     caplog,
     server: Server,
-    agent_factory: Agent,
+    agent_factory: Coroutine[Any, Any, Agent],
     client: Client,
     environment: uuid.UUID,
     monkeypatch,

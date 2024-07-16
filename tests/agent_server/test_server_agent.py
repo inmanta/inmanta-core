@@ -3894,7 +3894,7 @@ def test_deploy_response_matrix_invariants():
             assert not condition[1][1], "Invariant violation, regression on #6202"
 
 
-async def test_failing_deploy(
+async def test_logging_failure_when_creating_venv(
     resource_container,
     agent: Agent,
     client: Client,
@@ -3910,13 +3910,9 @@ async def test_failing_deploy(
 
     caplog.set_level(logging.INFO)
     resource_container.Provider.reset()
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
     agent_name = "agent1"
     myagent_instance = agent._instances[agent_name]
 
-    resource_container.Provider.set("agent1", "key1", "value1")
-    resource_container.Provider.set("agent1", "key1", "value1")
     resource_container.Provider.set("agent1", "key1", "value1")
 
     def get_resources(version, value_resource_three):
@@ -3932,7 +3928,7 @@ async def test_failing_deploy(
             {
                 "key": "key2",
                 "value": "value2",
-                "id": "test::Wait[agent1,key=key2],v=%d" % version,
+                "id": "test::AgentConfig[agent1,key=key2],v=%d" % version,
                 "send_event": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
@@ -3943,15 +3939,14 @@ async def test_failing_deploy(
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
                 "purged": False,
-                "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
+                "requires": ["test::AgentConfig[agent1,key=key2],v=%d" % version],
             },
         ]
 
     version1 = await clienthelper.get_version()
-    resources_version_1 = get_resources(version1, "value2")
 
     # Initial deploy
-    await _deploy_resources(client, environment, resources_version_1, version1, False)
+    await _deploy_resources(client, environment, get_resources(version1, "value2"), version1, push=False)
 
     async def ensure_code(code: Collection[ResourceInstallSpec]) -> executor.FailedResources:
         raise RuntimeError(f"Failed to install handler `test` version={version1}")
@@ -3966,18 +3961,10 @@ async def test_failing_deploy(
 
     idx1 = log_index(
         caplog,
-        "resource_action_logger",
+        f"resource_action_logger.{environment}",
         logging.ERROR,
-        "multiple resources: All resources of `test::Resource` failed due to `Failed to install handler `test` " "version=1`.",
+        "multiple resources: All resources of `test::Resource` failed due to `Could not set up executor for agent1: Failed to install handler `test` version=1`.",
     )
-    idx2 = log_index(
-        caplog,
-        "resource_action_logger",
-        logging.ERROR,
-        "multiple resources: All resources of `test::Wait` failed due to `Failed to install handler `test` version=1`.",
-        idx1,
-    )
-
     # Logs should not appear twice
     with pytest.raises(AssertionError):
         log_index(
@@ -3986,7 +3973,7 @@ async def test_failing_deploy(
             logging.ERROR,
             "multiple resources: All resources of `test::Resource` failed due to `Failed to install handler `test` "
             "version=1`.",
-            idx2,
+            idx1,
         )
 
     log_index(
@@ -3995,8 +3982,15 @@ async def test_failing_deploy(
         logging.ERROR,
         "multiple resources: Failed to load handler code or install handler code dependencies. Check the agent log for "
         "additional details.",
-        idx2,
+        idx1,
     )
+
+    def retrieve_relevant_logs(result):
+        global_logs = result.result["logs"]
+        assert len(global_logs) > 1
+        relevant_logs = [e for e in global_logs if e["action"] == "deploy"]
+        assert len(relevant_logs) == 1
+        return {log["msg"] for log in relevant_logs[0]["messages"]}
 
     # Now let's check that everything is in the DB as well
     # Given that everything is linked together, we can only fetch one resource and see what's present in the DB
@@ -4008,15 +4002,22 @@ async def test_failing_deploy(
 
     # Possible error messages that should be in the DB
     expected_error_messages = {
-        "All resources of `test::Resource` failed due to `Failed to install handler `test` version=1`.",
-        "All resources of `test::Wait` failed due to `Failed to install handler `test` version=1`.",
+        "All resources of `test::Resource` failed due to `Could not set up executor for agent1: Failed to install handler `test` version=1`.",
+        "All resources of `test::AgentConfig` failed due to `Could not set up executor for agent1: Failed to install handler `test` version=1`.",
         "Failed to load handler code or install handler code dependencies. Check the agent log for additional details.",
     }
 
-    global_logs = result.result["logs"]
-    assert len(global_logs) > 1
-    relevant_logs = [e for e in global_logs if e["action"] == "deploy"]
-    assert len(relevant_logs) == 1
+    assert retrieve_relevant_logs(result) == expected_error_messages
 
-    actual_resource_action_logs = {log["msg"] for log in relevant_logs[0]["messages"]}
-    assert actual_resource_action_logs == expected_error_messages
+    result2 = await client.get_resource(
+        tid=environment,
+        id="test::Resource[agent1,key=key1],v=%d" % version1,
+        logs=True,
+    )
+
+    expected_error_messages2 = {
+        "All resources of `test::Resource` failed due to `Could not set up executor for agent1: Failed to install handler `test` version=1`.",
+        "Failed to load handler code or install handler code dependencies. Check the agent log for additional details.",
+    }
+
+    assert retrieve_relevant_logs(result2) == expected_error_messages2

@@ -91,7 +91,7 @@ import venv
 from collections import abc
 from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, Optional, Union, Coroutine, Any
 
 import asyncpg
 import pkg_resources
@@ -698,7 +698,7 @@ async def agent(server, environment):
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server) -> Agent:
+async def agent_factory(server) -> Coroutine[Any, Any, Agent]:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     config.Config.set("config", "agent-deploy-interval", "0")
