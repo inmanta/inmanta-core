@@ -3963,7 +3963,8 @@ async def test_logging_failure_when_creating_venv(
         caplog,
         f"resource_action_logger.{environment}",
         logging.ERROR,
-        "multiple resources: All resources of `test::Resource` failed due to `Could not set up executor for agent1: Failed to install handler `test` version=1`.",
+        "multiple resources: All resources of `test::Resource` failed due to `Could not set up executor for agent1: Failed to "
+        "install handler `test` version=1`.",
     )
     # Logs should not appear twice
     with pytest.raises(AssertionError):
@@ -4002,8 +4003,10 @@ async def test_logging_failure_when_creating_venv(
 
     # Possible error messages that should be in the DB
     expected_error_messages = {
-        "All resources of `test::Resource` failed due to `Could not set up executor for agent1: Failed to install handler `test` version=1`.",
-        "All resources of `test::AgentConfig` failed due to `Could not set up executor for agent1: Failed to install handler `test` version=1`.",
+        "All resources of `test::Resource` failed due to `Could not set up executor for agent1: Failed to install handler "
+        "`test` version=1`.",
+        "All resources of `test::AgentConfig` failed due to `Could not set up executor for agent1: Failed to install handler "
+        "`test` version=1`.",
         "Failed to load handler code or install handler code dependencies. Check the agent log for additional details.",
     }
 
@@ -4016,7 +4019,8 @@ async def test_logging_failure_when_creating_venv(
     )
 
     expected_error_messages2 = {
-        "All resources of `test::Resource` failed due to `Could not set up executor for agent1: Failed to install handler `test` version=1`.",
+        "All resources of `test::Resource` failed due to `Could not set up executor for agent1: Failed to install handler "
+        "`test` version=1`.",
         "Failed to load handler code or install handler code dependencies. Check the agent log for additional details.",
     }
 

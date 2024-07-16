@@ -91,7 +91,7 @@ import venv
 from collections import abc
 from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
-from typing import Callable, Dict, Optional, Union, Coroutine, Any
+from typing import Any, Callable, Coroutine, Dict, Optional, Union
 
 import asyncpg
 import pkg_resources

@@ -24,7 +24,7 @@ import py_compile
 import tempfile
 import uuid
 from logging import DEBUG, INFO
-from typing import Coroutine, Any
+from typing import Any, Coroutine
 
 import pytest
 
