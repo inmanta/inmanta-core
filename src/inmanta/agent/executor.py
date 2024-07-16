@@ -249,21 +249,39 @@ class ResourceInstallSpec:
 
 class PoolMember(abc.ABC):
     def can_be_cleaned_up(self, retention_time: int) -> bool:
+        """
+        Return `True` if this pool member has been exceeding its retention time, `False` otherwise
+
+        :param retention_time: The retention time of this pool member
+        """
         return self.get_idle_time() > datetime.timedelta(seconds=retention_time)
 
     def get_idle_time(self) -> datetime.timedelta:
+        """
+        Retrieve the idle time of this pool member
+        """
         return datetime.datetime.now().astimezone() - self.last_used()
 
     @abc.abstractmethod
     def last_used(self) -> datetime.datetime:
+        """
+        Returns the last datetime this pool member was active (doing something)
+        """
         pass
 
     @abc.abstractmethod
-    def get_lock_id(self) -> str:
+    def get_id(self) -> str:
+        """
+        Returns the ID of the pool member that will be used to lock the pool member. This ensures that no operations will
+        overlap while this pool member is being created, modified, or cleaned.
+        """
         pass
 
     @abc.abstractmethod
     async def clean(self) -> None:
+        """
+        Clean the pool member. This method assumes to be in a lock to prevent other operations to overlap with the cleanup
+        """
         pass
 
 
@@ -361,7 +379,9 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
 
     def can_be_cleaned_up(self, retention_time: int) -> bool:
         """
-        Remove the venv of the executor and recreate the directory of the venv
+        Return `True` if this pool member has been exceeding its retention time, `False` otherwise
+
+        :param retention_time: The retention time of this pool member
         """
         # If the venv is not correctly initialized, it can be cleaned up
         if not self.is_correctly_initialized():
@@ -369,7 +389,10 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
 
         return super().can_be_cleaned_up(retention_time)
 
-    def get_lock_id(self) -> str:
+    def get_id(self) -> str:
+        """
+        The id of an Executor Virtual Environment is the folder name of the venv
+        """
         return self.folder_name
 
 
@@ -398,10 +421,17 @@ class PoolManager:
         self._locks: inmanta.util.NamedLock = _locks
 
     async def start(self) -> None:
+        """
+        Start the cleaning job of the Pool Manager
+        """
         self.running = True
         self.cleanup_job = asyncio.create_task(self.cleanup_inactive_pool_members())
 
     async def stop(self) -> None:
+        """
+        Cancel the cleaning job of the Pool Manager -> We don't want to wait for the cleaning to finish because it could take a
+        long time.
+        """
         self.running = False
         if self.cleanup_job is not None:
             self.cleanup_job.cancel()
@@ -415,11 +445,15 @@ class PoolManager:
 
     @abc.abstractmethod
     async def get_pool_members(self) -> Sequence[PoolMember]:
+        """
+        Retrieve the members of the pool: those that need to be checked for the cleanup.
+        """
         pass
 
     def clean_pool_member_from_manager(self, pool_member: PoolMember) -> None:
         """
-        Additional operation(s) that need to be performed by the Manager regarding the pool member
+        Additional cleanup operation(s) that need to be performed by the Manager regarding the pool member being cleaned.
+        This method assumes to be in a lock to prevent other operations to overlap with the cleanup.
         """
         pass
 
@@ -433,7 +467,7 @@ class PoolManager:
             pool_members = await self.get_pool_members()
             for pool_member in pool_members:
                 if pool_member.can_be_cleaned_up(self.retention_time):
-                    async with self._locks.get(pool_member.get_lock_id()):
+                    async with self._locks.get(pool_member.get_id()):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up(self.retention_time):
                             await pool_member.clean()
@@ -570,6 +604,9 @@ class VirtualEnvironmentManager(PoolManager):
             return await self.create_environment(blueprint, threadpool)
 
     async def get_pool_members(self) -> Sequence[ExecutorVirtualEnvironment]:
+        """
+        Retrieve the members of the pool: those that need to be checked for the cleanup.
+        """
         # We should walk once for the first-level of folders!
         envs_dir = pathlib.Path(self.envs_dir)
         _, root_folders, _ = next(os.walk(self.envs_dir))
@@ -593,10 +630,11 @@ class VirtualEnvironmentManager(PoolManager):
 
     def clean_pool_member_from_manager(self, pool_member: PoolMember) -> None:
         """
-        Additional operation(s) that need to be performed by the Manager regarding the pool member
+        Additional cleanup operation(s) that need to be performed by the Manager regarding the pool member being cleaned.
+        This method assumes to be in a lock to prevent other operations to overlap with the cleanup.
         """
         venv_path_to_blueprint = {pathlib.Path(v.env_path).name: k for k, v in self._environment_map.items()}
-        entry_to_remove = venv_path_to_blueprint[pool_member.get_lock_id()]
+        entry_to_remove = venv_path_to_blueprint[pool_member.get_id()]
 
         del self._environment_map[entry_to_remove]
 

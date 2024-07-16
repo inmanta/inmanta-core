@@ -495,7 +495,7 @@ class MPExecutor(executor.Executor, executor.PoolMember):
 
         return self.connection.get_idle_time() > datetime.timedelta(seconds=retention_time)
 
-    def get_lock_id(self) -> str:
+    def get_id(self) -> str:
         return self.executor_id.identity()
 
     def last_used(self) -> datetime.datetime:
