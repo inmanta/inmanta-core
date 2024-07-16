@@ -922,7 +922,7 @@ class AgentInstance:
                             error=str(invalid_resources[res_type]),
                         )
                     )
-                    failed_resource_ids[res_type].add(res_id)
+                failed_resource_ids[res_type].add(res_id)
                 undeployable[res_id] = const.ResourceState.unavailable
                 loaded_resources.append(ResourceDetails(res))
 

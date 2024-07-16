@@ -3995,11 +3995,10 @@ async def test_logging_failure_when_creating_venv(
 
     # Possible error messages that should be in the DB
     expected_error_messages = {
-        "All resources of `test::Resource` failed due to `Could not set up executor for agent1: Failed to install handler "
-        "`test` version=1`.",
-        "All resources of `test::AgentConfig` failed due to `Could not set up executor for agent1: Failed to install handler "
-        "`test` version=1`.",
+        "All resources `test::Resource` failed to load handler code or install handler code dependencies: "
+        "`Could not set up executor for agent1: Failed to install handler "
+        "`test` version=1`."
     }
 
     relevant_logs = retrieve_relevant_logs(result)
-    assert relevant_logs  == expected_error_messages
+    assert relevant_logs == expected_error_messages
