@@ -66,7 +66,7 @@ from utils import (
     assert_equal_ish,
     log_contains,
     log_index,
-    mock_cleanup,
+    expire_versions_and_cleanup_cache,
     resource_action_consistency_check,
     retry_limited,
     wait_until_logs_are_available,
@@ -2586,7 +2586,7 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
-    mock_cleanup(executor_instance._cache)
+    expire_versions_and_cleanup_cache(executor_instance._cache)
 
     # cache has no versions in flight
     # for issue #1883
@@ -2840,7 +2840,7 @@ async def test_s_periodic_Vs_full(
     # cache has no versions in flight
     # for issue #1883
 
-    mock_cleanup(executor_instance._cache)
+    expire_versions_and_cleanup_cache(executor_instance._cache)
 
     assert not executor_instance._cache.keys_for_version
 

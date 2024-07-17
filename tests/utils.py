@@ -809,7 +809,7 @@ def make_random_file(size: int = 0) -> tuple[str, bytes, str]:
     return hash, content, body
 
 
-def mock_cleanup(cache, versions: Optional[Sequence[int]] = None):
+def expire_versions_and_cleanup_cache(cache, versions: Optional[Sequence[int]] = None):
     """
     Utility function to speed up some tests waiting for some cached versions to expire:
         - monkey patch the timers to make the versions expire sooner

@@ -171,7 +171,7 @@ class AgentCache:
         item = self.cache[key]
         return item
 
-    def _set_version_expiry(self, version: int) -> None:
+    def _refresh_version_expiry_timestamp(self, version: int) -> None:
         """
         Update the expiry time for the given version
         """
@@ -190,9 +190,9 @@ class AgentCache:
             try:
                 self.keys_for_version[scope.version].add(item.key)
             except KeyError:
-                self.keys_for_version[scope.version] = set([item.key])
+                self.keys_for_version[scope.version] = {item.key}
 
-            self._set_version_expiry(scope.version)
+            self._refresh_version_expiry_timestamp(scope.version)
 
         if item.expiry_time < self.next_action:
             self.next_action = item.expiry_time
@@ -243,7 +243,7 @@ class AgentCache:
         item = self._get(self._get_key(key, resource, version)).value
 
         if version != 0:
-            self._set_version_expiry(version)
+            self._refresh_version_expiry_timestamp(version)
 
         return item
 

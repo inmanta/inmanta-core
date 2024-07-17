@@ -22,19 +22,16 @@ from threading import Lock, Thread
 from time import sleep
 
 import pytest
+import time_machine
 from pytest import fixture
 
-<<<<<<< HEAD
-import time_machine
-=======
-import inmanta
->>>>>>> issue/7696-fix-agent-cache
 from inmanta.agent import executor
+from inmanta.agent import config as agent_config
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import cache
 from inmanta.data import PipConfig
 from inmanta.resources import Id, Resource, resource
-from utils import mock_cleanup
+from utils import expire_versions_and_cleanup_cache
 
 
 @fixture()
@@ -65,14 +62,14 @@ def set_custom_cache_cleanup_policy(monkeypatch, server_config):
     """
     Fixture to temporarily set the policy for cache cleanup.
     """
-    old_value = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()
+    old_value = agent_config.agent_cache_cleanup_tick_rate.get()
 
-    monkeypatch.setattr(inmanta.agent.config.agent_cache_cleanup_tick_rate, "validator", inmanta.config.is_float)
-    inmanta.agent.config.agent_cache_cleanup_tick_rate.set("0.1")
+    monkeypatch.setattr(agent_config.agent_cache_cleanup_tick_rate, "validator", inmanta.config.is_float)
+    agent_config.agent_cache_cleanup_tick_rate.set("0.1")
 
     yield
 
-    inmanta.agent.config.agent_cache_cleanup_tick_rate.set(str(old_value))
+    agent_config.agent_cache_cleanup_tick_rate.set(str(old_value))
 
 @pytest.fixture(scope="function")
 async def agent_cache(agent):
@@ -150,7 +147,7 @@ def test_resource_fail(my_resource):
     cache.cache_value("test", value, resource=resource)
 
     with pytest.raises(KeyError):
-        assert value == cache.find("test")
+        cache.find("test")
 
 
 def test_default_timeout(my_resource):
@@ -320,7 +317,7 @@ def test_get_or_else_none(my_resource):
     assert seq.count == 3
 
 
-async def test_decorator(agent_cache):
+async def test_decorator():
     class Closeable:
         def __init__(self):
             self.closed = False
@@ -331,7 +328,7 @@ async def test_decorator(agent_cache):
     my_closable = Closeable()
     my_closable_2 = Closeable()
 
-    xcache = agent_cache
+    xcache = AgentCache()
 
     class DT:
         def __init__(self, cache: AgentCache):
@@ -402,7 +399,7 @@ async def test_decorator(agent_cache):
     assert 3 == test.count
 
     # Wait for version 1 to become stale and get cleaned up
-    mock_cleanup(xcache, versions=[1])
+    expire_versions_and_cleanup_cache(xcache, versions=[1])
 
     # 1 cache miss and 1 hit:
     assert "x2" == test.test_method_2(version=1)
@@ -431,6 +428,6 @@ async def test_decorator(agent_cache):
     assert not my_closable.closed
 
     # Wait for version 3 to become stale and get cleaned up
-    mock_cleanup(xcache, versions=[3])
+    expire_versions_and_cleanup_cache(xcache, versions=[3])
 
     assert my_closable.closed
