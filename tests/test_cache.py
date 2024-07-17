@@ -24,7 +24,11 @@ from time import sleep
 import pytest
 from pytest import fixture
 
+<<<<<<< HEAD
 import time_machine
+=======
+import inmanta
+>>>>>>> issue/7696-fix-agent-cache
 from inmanta.agent import executor
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import cache
@@ -56,6 +60,20 @@ def test_base():
     assert value == cache.find("test")
 
 
+@pytest.fixture
+def set_custom_cache_cleanup_policy(monkeypatch, server_config):
+    """
+    Fixture to temporarily set the policy for cache cleanup.
+    """
+    old_value = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()
+
+    monkeypatch.setattr(inmanta.agent.config.agent_cache_cleanup_tick_rate, "validator", inmanta.config.is_float)
+    inmanta.agent.config.agent_cache_cleanup_tick_rate.set("0.1")
+
+    yield
+
+    inmanta.agent.config.agent_cache_cleanup_tick_rate.set(str(old_value))
+
 @pytest.fixture(scope="function")
 async def agent_cache(agent):
     pip_config = PipConfig()
@@ -68,7 +86,7 @@ async def agent_cache(agent):
     yield myagent_instance._cache
 
 
-async def test_timeout_automatic_cleanup(agent_cache):
+async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent_cache):
     """
     Test timeout parameter: test that expired entry is removed from the cache
     """
@@ -78,16 +96,15 @@ async def test_timeout_automatic_cleanup(agent_cache):
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
-    # Cache cleanup job is periodically triggered with a 1s delay
-
-    await asyncio.sleep(2)
+    # Cache cleanup job is periodically triggered with a 0.1s delay
+    await asyncio.sleep(0.3)
     with pytest.raises(KeyError):
-        assert value == cache.find("test")
+        cache.find("test")
 
     assert value == cache.find("test2")
 
 
-def test_timout_manual_cleanup():
+def test_timeout_manual_cleanup():
     cache = AgentCache()
     value = "test too"
     cache.cache_value("test", value, timeout=0.1)

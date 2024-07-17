@@ -68,15 +68,17 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="Pool_%s" % self.name)
 
         self._cache = inmanta.agent.cache.AgentCache(self)
-        # This lock ensures cache entry can not be cleaned up when
+        # This lock ensures cache entries can not be cleaned up when
         # the executor is actively working and vice versa
-        self.wip_lock = asyncio.Lock()
+        self.activity_lock = asyncio.Lock()
 
         self.logger: logging.Logger = parent_logger.getChild(self.name)
 
         self._stopped = False
 
         self.failed_resource_types: FailedResourcesSet = set()
+
+        self.cache_cleanup_tick_rate = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()
         self.periodic_cache_cleanup_job: Optional[asyncio.Task[None]] = None
 
     async def start(self) -> None:
@@ -87,10 +89,11 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         Periodically cleans up stale entries in the cache. The clean_stale_entries
         has to be called on the thread pool because it might call finalizers.
         """
-
+        reschedule_interval: int = self.cache_cleanup_tick_rate
         while not self._stopped:
-            reschedule_interval: float = 1.0
-            async with self.wip_lock:
+            async with self.activity_lock:
+                if self._stopped:
+                    return
                 await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.clean_stale_entries)
             await asyncio.sleep(reschedule_interval)
 
@@ -98,7 +101,13 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         if self._stopped:
             return
         self._stopped = True
-        async with self.wip_lock:
+        if self.periodic_cache_cleanup_job:
+            try:
+                self.periodic_cache_cleanup_job.cancel()
+                await self.periodic_cache_cleanup_job
+            except asyncio.CancelledError:
+                pass
+        async with self.activity_lock:
             await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.close)
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
@@ -113,7 +122,10 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         thread_pool_finalizer.append(self.provider_thread_pool)
         thread_pool_finalizer.append(self.thread_pool)
         if self.periodic_cache_cleanup_job:
-            await self.periodic_cache_cleanup_job
+            try:
+                await self.periodic_cache_cleanup_job
+            except asyncio.CancelledError:
+                self.periodic_cache_cleanup_job = None
 
     def is_stopped(self) -> bool:
         return self._stopped
@@ -275,7 +287,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             ctx.exception("Failed to report the start of the deployment to the server")
             return
 
-        async with self.wip_lock:
+        async with self.activity_lock:
             await self._execute(resource, gid=gid, ctx=ctx, requires=requires)
 
         ctx.debug(
@@ -306,7 +318,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         env_id: uuid.UUID = resources[0].env_id
 
-        async with self.wip_lock:
+        async with self.activity_lock:
             for resource in resources:
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
@@ -397,7 +409,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 return 500
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
-            async with self.wip_lock:
+            async with self.activity_lock:
                 try:
                     started = datetime.datetime.now().astimezone()
                     provider = await self.get_provider(resource_obj)

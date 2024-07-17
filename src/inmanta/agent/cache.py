@@ -58,7 +58,8 @@ class CacheItem:
         :param key: The full key identifying this item in the cache.
         :param scope: Information about the lifetime of the item.
         :param value: The value being cached associated to the key.
-        :param call_on_delete: Optional finalizer to call when the cache item is deleted.
+        :param call_on_delete: Optional finalizer to call when the cache item is deleted. This is
+            a callable expecting the cached value as an argument.
         """
         self.key = key
         self.scope: Scope = scope
@@ -107,7 +108,10 @@ class AgentCache:
         self.keys_for_version: dict[int, set[str]] = {}
 
         # Time-based eviction mechanism
+        # Keep track of when is the next earliest cache item expiry time.
         self.next_action: float = sys.maxsize
+        # Heap queue of cache items, used for efficient retrieval of the cache
+        # item that expires the soonest. should only be mutated via the heapq API.
         self.timer_queue: list[CacheItem] = []
 
         self.addLock = Lock()
