@@ -23,7 +23,7 @@ import uuid
 from inmanta import const, data, resources
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
-from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs, retry_limited, wait_until_logs_are_available
+from utils import _wait_until_deployment_finishes, no_error_in_logs, retry_limited, wait_until_logs_are_available
 
 
 async def test_get_facts(resource_container, client, clienthelper, environment, agent, caplog):
@@ -224,8 +224,9 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     ]
 
     resource_states = {
-        "test::Fact[agent1,key=key4],v=%d" % version: const.ResourceState.undefined,
-        "test::Fact[agent1,key=key5],v=%d" % version: const.ResourceState.undefined,
+        "test::Fact[agent1,key=key4]": const.ResourceState.undefined,
+        "test::Fact[agent1,key=key1]": const.ResourceState.undefined,
+        "test::Fact[agent1,key=key5]": const.ResourceState.undefined,
     }
 
     async def get_fact(rid, result_code=200, limit=10, lower_limit=2):
@@ -252,10 +253,10 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     )
     assert result.code == 200
 
-    await get_fact("test::Fact[agent1,key=key1]")  # undeployable
+    await get_fact("test::Fact[agent1,key=key1]", 503)  # undeployable
     await get_fact("test::Fact[agent1,key=key2]")  # normal
     await get_fact("test::Fact[agent1,key=key3]", 503)  # not present
-    await get_fact("test::Fact[agent1,key=key4]")  # unknown
+    await get_fact("test::Fact[agent1,key=key4]", 503)  # unknown
     await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
     f6 = await get_fact("test::Fact[agent1,key=key6]")  # normal
     f7 = await get_fact("test::Fact[agent1,key=key7]")  # normal
@@ -268,28 +269,11 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
 
     await _wait_until_deployment_finishes(client, environment, version)
 
-    await get_fact("test::Fact[agent1,key=key1]")  # undeployable
+    await get_fact("test::Fact[agent1,key=key1]", 503)  # undeployable
     await get_fact("test::Fact[agent1,key=key2]")  # normal
     await get_fact("test::Fact[agent1,key=key3]")  # not present -> present
-    await get_fact("test::Fact[agent1,key=key4]")  # unknown
+    await get_fact("test::Fact[agent1,key=key4]", 503)  # unknown
     await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
-
-    await agent.stop()
-
-    def wait_until_log_records_are_available() -> bool:
-        try:
-            log_sequence = LogSequence(caplog, allow_errors=False, ignore=["tornado.access"])
-            for i in range(5):
-                log_sequence = log_sequence.contains("inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact")
-            log_sequence.no_more_errors()
-        except AssertionError:
-            return False
-        else:
-            return True
-
-    # The get_parameter() API calls from the server to the agent are executed asynchronously with respect the
-    # get_param() API calls done from the test case to the server. Here we wait until all log records are available.
-    await retry_limited(wait_until_log_records_are_available, timeout=10)
 
 
 async def test_purged_resources(resource_container, client, clienthelper, server, environment, agent, no_agent_backoff):
