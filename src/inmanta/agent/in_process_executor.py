@@ -97,6 +97,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 try:
                     await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.clean_stale_entries)
                 except Exception:
+                    # Make sure we don't drop out of the while loop if an exception occurs.
                     pass
             await asyncio.sleep(reschedule_interval)
 
