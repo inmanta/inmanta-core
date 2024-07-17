@@ -3365,7 +3365,12 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     assert result["logs"][0]["status"] == "unavailable"
     # We now have additional logs -> exception that occurred during the loading / installation of handler code
     # But we know that this message will be the last one
-    assert "Failed to load handler code " in result["logs"][0]["messages"][-1]["msg"]
+    expected_error_message = (
+        "All resources `test::Resource` failed to load handler code or install handler code dependencies: "
+        "`Failed to get source code for test::Resource version=1, result={'message': 'Request or referenced "
+        "resource does not exist: The version of the code does not exist. test::Resource, 1'}`."
+    )
+    assert expected_error_message == result["logs"][0]["messages"][-1]["msg"]
 
 
 async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, async_finalizer):
