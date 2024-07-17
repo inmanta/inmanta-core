@@ -22,13 +22,14 @@ from threading import Lock, Thread
 from time import sleep
 
 import pytest
-import time_machine
 from pytest import fixture
 
-from inmanta.agent import executor
+import time_machine
 from inmanta.agent import config as agent_config
+from inmanta.agent import executor
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import cache
+from inmanta.config import is_float
 from inmanta.data import PipConfig
 from inmanta.resources import Id, Resource, resource
 from utils import expire_versions_and_cleanup_cache
@@ -64,12 +65,13 @@ def set_custom_cache_cleanup_policy(monkeypatch, server_config):
     """
     old_value = agent_config.agent_cache_cleanup_tick_rate.get()
 
-    monkeypatch.setattr(agent_config.agent_cache_cleanup_tick_rate, "validator", inmanta.config.is_float)
+    monkeypatch.setattr(agent_config.agent_cache_cleanup_tick_rate, "validator", is_float)
     agent_config.agent_cache_cleanup_tick_rate.set("0.1")
 
     yield
 
     agent_config.agent_cache_cleanup_tick_rate.set(str(old_value))
+
 
 @pytest.fixture(scope="function")
 async def agent_cache(agent):
@@ -204,8 +206,8 @@ async def test_multi_threaded(agent_cache: AgentCache):
 
     cache = agent_cache
 
-    # Cache entry will be considered stale after 1s
-    cache_entry_expiry = 1
+    # Cache entry will be considered stale after 0.1s
+    cache_entry_expiry = 0.1
 
     alpha = Spy()
     beta = Spy()
@@ -234,7 +236,7 @@ async def test_multi_threaded(agent_cache: AgentCache):
     assert alpha.deleted == 0
     assert beta.deleted == 0
 
-    await asyncio.sleep(2)
+    await asyncio.sleep(0.3)
     cache.clean_stale_entries()
 
     assert alpha.created + beta.created == 1
