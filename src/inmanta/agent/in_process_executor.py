@@ -68,7 +68,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="Pool_%s" % self.name)
 
         self._cache = inmanta.agent.cache.AgentCache(self)
-        # This lock ensures cache entry can not be cleaned up when
+        # This lock ensures cache entries can not be cleaned up when
         # the executor is actively working and vice versa
         self.wip_lock = asyncio.Lock()
 
