@@ -186,7 +186,7 @@ class AgentCache:
             try:
                 self.keys_for_version[scope.version].add(item.key)
             except KeyError:
-                self.keys_for_version[scope.version] = set([item.key])
+                self.keys_for_version[scope.version] = {item.key}
 
             self._set_version_expiry(scope.version)
 
