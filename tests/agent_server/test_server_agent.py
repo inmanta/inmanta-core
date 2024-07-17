@@ -3966,31 +3966,37 @@ async def test_logging_failure_when_creating_venv(
 
     monkeypatch.undo()
 
+    expected_error_message_without_tb = (
+        "multiple resources: All resources `test::Resource` failed to load handler code or "
+        "install handler code dependencies: `Could not set up executor for agent1: Failed to"
+        " install handler `test` version=1`"
+    )
+
     idx1 = log_index(
         caplog,
         f"resource_action_logger.{environment}",
         logging.ERROR,
-        "All resources `test::Resource` failed to load handler code or install handler code dependencies: "
-        "`Could not set up executor for agent1: Failed to "
-        "install handler `test` version=1`.",
+        expected_error_message_without_tb,
     )
+    # A traceback should be present in the logs, so the lengths of these logs should be longer
+    assert len(caplog.record_tuples[idx1][2]) > len(expected_error_message_without_tb)
+
     # Logs should not appear twice
     with pytest.raises(AssertionError):
         log_index(
             caplog,
-            "resource_action_logger",
+            f"resource_action_logger.{environment}",
             logging.ERROR,
-            "All resources `test::Resource` failed to load handler code or install handler code dependencies: "
-            "`Failed to install handler `test` version=1`.",
-            idx1,
+            expected_error_message_without_tb,
+            idx1 + 1,
         )
 
-    def retrieve_relevant_logs(result):
+    def retrieve_relevant_logs(result) -> str:
         global_logs = result.result["logs"]
         assert len(global_logs) > 1
         relevant_logs = [e for e in global_logs if e["action"] == "deploy"]
         assert len(relevant_logs) == 1
-        return {log["msg"] for log in relevant_logs[0]["messages"]}
+        return "".join([log["msg"] for log in relevant_logs[0]["messages"]])
 
     # Now let's check that everything is in the DB as well
     # Given that everything is linked together, we can only fetch one resource and see what's present in the DB
@@ -4001,14 +4007,16 @@ async def test_logging_failure_when_creating_venv(
     )
 
     # Possible error messages that should be in the DB
-    expected_error_messages = {
+    expected_error_messages = (
         "All resources `test::Resource` failed to load handler code or install handler code dependencies: "
         "`Could not set up executor for agent1: Failed to install handler "
-        "`test` version=1`."
-    }
+        "`test` version=1`"
+    )
 
     relevant_logs = retrieve_relevant_logs(result)
-    assert relevant_logs == expected_error_messages
+    assert expected_error_messages in relevant_logs
+    # A traceback should be present in the logs, so the lengths of these logs should be longer
+    assert len(relevant_logs) > len(expected_error_messages)
 
 
 async def test_agent_code_loading_with_failure(

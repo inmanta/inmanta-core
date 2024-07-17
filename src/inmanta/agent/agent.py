@@ -25,6 +25,7 @@ import logging
 import os
 import random
 import time
+import traceback
 import uuid
 from asyncio import Lock
 from collections import defaultdict
@@ -858,7 +859,7 @@ class AgentInstance:
             # If the failed resource type is not present in `failed_resources`, then we add it with the current exception
             # If it was already present, we only keep the old error
             failed_resources = {
-                resource_type: Exception(f"Could not set up executor for {self.name}: {e}")
+                resource_type: Exception(f"Could not set up executor for {self.name}: {e}").with_traceback(e.__traceback__)
                 for resource_type in resource_types.difference(set(invalid_resources.keys()))
             }
 
@@ -897,8 +898,8 @@ class AgentInstance:
         loaded_resources: list[ResourceDetails] = []
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
-        logs: dict[str, set] = defaultdict(set)
-        failed_resource_ids: dict[str, set] = defaultdict(set)
+        logs: dict[str, set[data.LogLine]] = defaultdict(set)
+        failed_resource_ids: dict[str, set[str]] = defaultdict(set)
         logged_resource_types = set()
         for res in resource_batch:
             res_id = res["id"]
@@ -917,9 +918,10 @@ class AgentInstance:
                         data.LogLine.log(
                             logging.ERROR,
                             "All resources `%(res_type)s` failed to load handler code or install handler code "
-                            "dependencies: `%(error)s`.",
+                            "dependencies: `%(error)s`\n%(traceback)s",
                             res_type=res_type,
                             error=str(invalid_resources[res_type]),
+                            traceback="".join(traceback.format_tb(invalid_resources[res_type].__traceback__)),
                         )
                     )
                 failed_resource_ids[res_type].add(res_id)
@@ -1282,7 +1284,7 @@ class Agent(SessionEndpoint):
                         LOGGER.exception("Failed to load resources due to missing pip config for type %s", resource_type)
                         invalid_resources[resource_type] = Exception(
                             f"Failed to load resources due to missing pip config for type {resource_type}: {e}"
-                        )
+                        ).with_traceback(e.__traceback__)
                         continue
 
                 resource_install_spec = ResourceInstallSpec(
@@ -1352,7 +1354,7 @@ class Agent(SessionEndpoint):
                         failed_to_load[resource_install_spec.resource_type] = Exception(
                             f"Failed to install handler {resource_install_spec.resource_type} "
                             f"version={resource_install_spec.model_version}: {e}"
-                        )
+                        ).with_traceback(e.__traceback__)
                     self._last_loaded_version[resource_install_spec.resource_type] = None
 
         return failed_to_load
