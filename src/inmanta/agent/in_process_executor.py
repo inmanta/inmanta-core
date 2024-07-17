@@ -77,6 +77,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self._stopped = False
 
         self.failed_resource_types: FailedResourcesSet = set()
+
+        self.cache_cleanup_tick_rate = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()
         self.periodic_cache_cleanup_job: Optional[asyncio.Task[None]] = None
 
     async def start(self) -> None:
@@ -87,7 +89,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         Periodically cleans up stale entries in the cache. The clean_stale_entries
         has to be called on the thread pool because it might call finalizers.
         """
-        reschedule_interval: int = 1
+        reschedule_interval: int = self.cache_cleanup_tick_rate
         while not self._stopped:
             async with self.wip_lock:
                 await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.clean_stale_entries)

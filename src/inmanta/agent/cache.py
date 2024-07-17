@@ -59,7 +59,8 @@ class CacheItem:
         :param key: The full key identifying this item in the cache.
         :param scope: Information about the lifetime of the item.
         :param value: The value being cached associated to the key.
-        :param call_on_delete: Optional finalizer to call when the cache item is deleted.
+        :param call_on_delete: Optional finalizer to call when the cache item is deleted. This is
+            a callable expecting the cached value as an argument.
         """
         self.key = key
         self.scope = scope
