@@ -4017,6 +4017,8 @@ async def test_logging_failure_when_creating_venv(
     assert expected_error_messages in relevant_logs
     # A traceback should be present in the logs, so the lengths of these logs should be longer
     assert len(relevant_logs) > len(expected_error_messages)
+    # Make sure we don't find the same record multiple times in the resource logs
+    assert relevant_logs.count(expected_error_messages) == 1
 
 
 async def test_agent_code_loading_with_failure(
