@@ -94,7 +94,10 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             async with self.activity_lock:
                 if self._stopped:
                     return
-                await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.clean_stale_entries)
+                try:
+                    await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.clean_stale_entries)
+                except Exception:
+                    pass
             await asyncio.sleep(reschedule_interval)
 
     async def stop(self) -> None:
