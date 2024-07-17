@@ -473,7 +473,14 @@ class PoolManager:
                     async with self._locks.get(pool_member.get_id()):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up(self.retention_time):
-                            await pool_member.clean()
+                            try:
+                                await pool_member.clean()
+                            except Exception as e:
+                                LOGGER.exception(
+                                    "An error occurred while cleaning the pool member %s: %s",
+                                    pool_member.get_id(),
+                                    str(e),
+                                )
                             self.clean_pool_member_from_manager(pool_member)
                 else:
                     reschedule_interval = min(
