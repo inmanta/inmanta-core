@@ -115,6 +115,8 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.ctx = ExecutorContext(self)
         self.log_transport: typing.Optional[LogShipper] = None
         self.take_over_logging = take_over_logging
+        # This timer will be initialized when the InitCommand is received, see usage of `start_timer_venv_checkup`.
+        # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
         self.timer_venv_checkup: typing.Optional[util.Scheduler] = None
         self.logger = logger
 
@@ -253,11 +255,11 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         sources: list[inmanta.loader.ModuleSource],
         environment: uuid.UUID,
         uri: str,
-        venv_touch_interval: int = 60,
+        venv_touch_interval: float = 60.0,
     ):
         """
         :param venv_touch_interval: The time interval after which the virtual environment must be touched. Only used for
-            testing. The default value is set to 60. It should not be used except for testing purposes. It can be
+            testing. The default value is set to 60.0. It should not be used except for testing purposes. It can be
             overridden to speed up the tests
         """
         self.venv_path = venv_path
@@ -753,7 +755,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
     async def create_executor(self, executor_id: executor.ExecutorId, venv_checkup_interval: float = 60.0) -> MPExecutor:
         """
         :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
-            testing. The default value is set to 60. It should not be used except for testing purposes. It can be
+            testing. The default value is set to 60.0. It should not be used except for testing purposes. It can be
             overridden to speed up the tests
         """
         LOGGER.info("Creating executor for agent %s with id %s", executor_id.agent_name, executor_id.identity())

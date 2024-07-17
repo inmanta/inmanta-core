@@ -426,7 +426,7 @@ class PoolManager:
         Start the cleaning job of the Pool Manager
         """
         if self.running:
-            raise RuntimeError("This manager is already running!")
+            raise RuntimeError(f"This manager `{self.__class__.__name__}` is already running!")
         self.running = True
         self.cleanup_job = asyncio.create_task(self.cleanup_inactive_pool_members())
 
@@ -438,7 +438,7 @@ class PoolManager:
         self.running = False
         if self.cleanup_job is not None:
             try:
-                # Wait for will cancel the job, if the timeout is exceeded
+                # `wait_for` will cancel the job, if the timeout is exceeded
                 # see https://docs.python.org/3/library/asyncio-task.html#asyncio.wait_for
                 await asyncio.wait_for(self.cleanup_job, timeout=10)
             except asyncio.TimeoutError:
@@ -477,7 +477,8 @@ class PoolManager:
                                 await pool_member.clean()
                             except Exception as e:
                                 LOGGER.exception(
-                                    "An error occurred while cleaning the pool member %s: %s",
+                                    "An error occurred while cleaning the %s pool member `%s`: %s",
+                                    self.__class__.__name__,
                                     pool_member.get_id(),
                                     str(e),
                                 )
@@ -502,9 +503,9 @@ class VirtualEnvironmentManager(PoolManager):
     """
 
     def __init__(self, envs_dir: str) -> None:
-        # We rely on a Named lock (`self._locks`) to be able to lock specific entries of the `_environment_map` dict. This
-        # allows us to prevent creating and deleting the same venv at a given time. The keys of this named lock are the hash of
-        # venv
+        # We rely on a Named lock (`self._locks`, inherited from PoolManager) to be able to lock specific entries of the
+        # `_environment_map` dict. This allows us to prevent creating and deleting the same venv at a given time. The keys of
+        # this named lock are the hash of venv
         super().__init__(
             retention_time=cfg.executor_venv_retention_time.get(),
         )
