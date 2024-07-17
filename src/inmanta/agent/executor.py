@@ -44,7 +44,6 @@ from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
 from inmanta.types import JsonType
-from inmanta.util import NamedLock
 
 LOGGER = logging.getLogger(__name__)
 
@@ -299,8 +298,8 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
     def __init__(self, env_path: str, threadpool: Optional[ThreadPoolExecutor]):
         super().__init__(env_path=env_path)
         self.thread_pool = threadpool
-        self.inmanta_venv_status_file = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
-        self.folder_name = pathlib.Path(self.env_path).name
+        self.inmanta_venv_status_file: pathlib.Path = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        self.folder_name: str = pathlib.Path(self.env_path).name
 
     def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
@@ -316,6 +315,8 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
                 requirements=list(pkg_resources.parse_requirements(req)),
                 config=blueprint.pip_config,
             )
+
+        self.touch_status_file()
 
     def is_correctly_initialized(self) -> bool:
         """
@@ -345,14 +346,14 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
 
         if self.is_correctly_initialized():
             LOGGER.debug(
-                "Removing venv %s because it was inactive for %d s, which is longer then the retention " "time of %d s.",
+                "Removing venv %s because it was inactive for %d s, which is longer then the retention time of %d s.",
                 self.env_path,
                 self.get_idle_time().total_seconds(),
                 cfg.executor_venv_retention_time.get(),
             )
         else:
             LOGGER.debug(
-                "Removing venv %s because it is incomplete (broken venv),.",
+                "Removing venv %s because it is incomplete (broken venv).",
                 self.env_path,
             )
         await loop.run_in_executor(self.thread_pool, self.remove_venv)
@@ -364,7 +365,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
         try:
             shutil.rmtree(self.env_path)
         except Exception as e:
-            LOGGER.error(
+            LOGGER.exception(
                 "An error occurred while removing the venv located %s: %s",
                 self.env_path,
                 str(e),
@@ -410,20 +411,22 @@ def initialize_envs_directory() -> str:
 
 
 class PoolManager:
-    def __init__(self, retention_time: int, _locks: inmanta.util.NamedLock) -> None:
+    def __init__(self, retention_time: int) -> None:
         self.running = False
+        self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
         # We keep a reference to the periodic cleanup task to prevent it
         # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
         self.cleanup_job: typing.Optional[asyncio.Task[None]] = None
 
         self.retention_time: int = retention_time
-        self._locks: inmanta.util.NamedLock = _locks
 
     async def start(self) -> None:
         """
         Start the cleaning job of the Pool Manager
         """
+        if self.running:
+            raise RuntimeError("This manager is already running!")
         self.running = True
         self.cleanup_job = asyncio.create_task(self.cleanup_inactive_pool_members())
 
@@ -434,13 +437,13 @@ class PoolManager:
         """
         self.running = False
         if self.cleanup_job is not None:
-            self.cleanup_job.cancel()
             try:
-                await self.cleanup_job
-            except asyncio.CancelledError:
-                LOGGER.debug("%s's cleanup job has been cancelled!", self.__class__.__name__)
+                # Wait for will cancel the job, if the timeout is exceeded
+                # see https://docs.python.org/3/library/asyncio-task.html#asyncio.wait_for
+                await asyncio.wait_for(self.cleanup_job, timeout=10)
+            except asyncio.TimeoutError:
+                LOGGER.debug("%s's cleanup job has Timed out!", self.__class__.__name__)
             finally:
-                await asyncio.wait([self.cleanup_job])
                 self.cleanup_job = None
 
     @abc.abstractmethod
@@ -463,7 +466,7 @@ class PoolManager:
         """
         while self.running:
             cleanup_start = datetime.datetime.now().astimezone()
-            reschedule_interval: float = self.retention_time
+            reschedule_interval: float = float(self.retention_time)
             pool_members = await self.get_pool_members()
             for pool_member in pool_members:
                 if pool_member.can_be_cleaned_up(self.retention_time):
@@ -497,19 +500,9 @@ class VirtualEnvironmentManager(PoolManager):
         # venv
         super().__init__(
             retention_time=cfg.executor_venv_retention_time.get(),
-            _locks=NamedLock(),
         )
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
         self.envs_dir: str = envs_dir
-
-    async def start(self) -> None:
-        # We know that the .inmanta venv status file is touched every minute, so `60` seconds is the lowest default we can use
-        interval_cleanup_check = 60
-        assert (
-            self.retention_time > interval_cleanup_check
-        ), "The `executor-venv-retention-time` must be longer than the cleanup check interval!"
-
-        await super().start()
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
         """
@@ -571,8 +564,6 @@ class VirtualEnvironmentManager(PoolManager):
             LOGGER.info("Creating venv for content %s, content hash: %s", str(blueprint), blueprint.blueprint_hash())
             await loop.run_in_executor(threadpool, process_environment.create_and_install_environment, blueprint)
         self._environment_map[blueprint] = process_environment
-
-        process_environment.touch_status_file()
 
         return process_environment
 

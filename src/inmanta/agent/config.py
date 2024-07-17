@@ -169,7 +169,8 @@ executor_venv_retention_time: Option[int] = Option(
     "This is the number of seconds to wait before unused Python virtual environments of an executor are removed from "
     "the inmanta server. Setting this option too low may result in a high load on the Inmanta server. Setting it too high"
     " may result in increased disk usage.",
-    is_time,
+    # We know that the .inmanta venv status file is touched every minute, so `60` seconds is the lowest default we can use
+    is_lower_bounded_int(60),
 )
 
 

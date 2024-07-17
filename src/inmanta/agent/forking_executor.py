@@ -253,10 +253,10 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         sources: list[inmanta.loader.ModuleSource],
         environment: uuid.UUID,
         uri: str,
-        venv_checkup_interval: int = 60,
+        venv_touch_interval: int = 60,
     ):
         """
-        :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
+        :param venv_touch_interval: The time interval after which the virtual environment must be touched. Only used for
             testing. The default value is set to 60. It should not be used except for testing purposes. It can be
             overridden to speed up the tests
         """
@@ -266,7 +266,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         self.sources = sources
         self.environment = environment
         self.uri = uri
-        self._venv_checkup_interval = venv_checkup_interval
+        self._venv_touch_interval = venv_touch_interval
 
     async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.ModuleSource]:
         assert context.server.timer_venv_checkup is None, "InitCommand should be only called once!"
@@ -292,7 +292,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
 
-        context.server.start_timer_venv_checkup(self._venv_checkup_interval)
+        context.server.start_timer_venv_checkup(self._venv_touch_interval)
 
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
@@ -452,7 +452,6 @@ class MPExecutor(executor.Executor, executor.PoolMember):
         self.connection.finalizers.append(self.force_stop)
         self.closing = False
         self.closed = False
-        self.running = False
         self.owner = owner
         self.termination_lock = threading.Lock()
         # Pure for debugging purpose
@@ -476,14 +475,14 @@ class MPExecutor(executor.Executor, executor.PoolMember):
         """Stop by shutdown and catch any error that may occur"""
         try:
             LOGGER.debug(
-                "Stopping executor %s because it " "was inactive for %d s, which is longer then the retention time of %d s.",
+                "Stopping executor %s because it was inactive for %d s, which is longer then the retention time of %d s.",
                 self.executor_id.identity(),
                 self.connection.get_idle_time().total_seconds(),
                 inmanta.agent.config.agent_executor_retention_time.get(),
             )
             await self.stop()
         except Exception:
-            LOGGER.debug(
+            LOGGER.exception(
                 "Unexpected error during executor %s cleanup:",
                 self.executor_id.identity(),
                 exc_info=True,
@@ -632,7 +631,6 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         """
         super().__init__(
             retention_time=inmanta.agent.config.agent_executor_retention_time.get(),
-            _locks=inmanta.util.NamedLock(),
         )
         self.init_once()
         self.environment = environment
@@ -687,7 +685,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         agent_name: str,
         agent_uri: str,
         code: typing.Collection[executor.ResourceInstallSpec],
-        venv_checkup_interval: int = 60,
+        venv_checkup_interval: float = 60.0,
     ) -> MPExecutor:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
@@ -699,7 +697,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv.
         :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
-            testing. The default value is set to 60. It should not be used except for testing purposes. It can be
+            testing. The default value is set to 60.0. It should not be used except for testing purposes. It can be
             It can be overridden to speed up the tests
         :return: An Executor instance
         """
@@ -752,7 +750,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
             # https://github.com/inmanta/inmanta-core/issues/7281
             return my_executor
 
-    async def create_executor(self, executor_id: executor.ExecutorId, venv_checkup_interval: int = 60) -> MPExecutor:
+    async def create_executor(self, executor_id: executor.ExecutorId, venv_checkup_interval: float = 60.0) -> MPExecutor:
         """
         :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
             testing. The default value is set to 60. It should not be used except for testing purposes. It can be
@@ -845,7 +843,6 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
-        await super().stop()
         thread_pool_finalizer.append(self.thread_pool)
         await asyncio.gather(*(child.join(timeout) for child in self.children))
 
