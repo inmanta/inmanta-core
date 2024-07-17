@@ -98,7 +98,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.clean_stale_entries)
                 except Exception:
                     # Make sure we don't drop out of the while loop if an exception occurs.
-                    pass
+                    LOGGER.exception("An unexpected exception occurred while cleaning up the cache of agent %s.", self.name)
             await asyncio.sleep(reschedule_interval)
 
     async def stop(self) -> None:
