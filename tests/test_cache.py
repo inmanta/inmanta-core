@@ -153,7 +153,7 @@ def test_default_timeout(my_resource):
     assert value, cache.find("testx", resource=resource)
 
     with pytest.raises(KeyError):
-        assert value == cache.find("testx")
+        cache.find("testx")
 
     # default timeout is 5000s
     traveller = time_machine.travel(datetime.datetime.now() + datetime.timedelta(seconds=5001))
@@ -166,13 +166,13 @@ def test_default_timeout(my_resource):
     # Run the cleanup job and check removal
     cache.clean_stale_entries()
     with pytest.raises(KeyError):
-        assert value == cache.find("test")
+        cache.find("test")
 
     with pytest.raises(KeyError):
-        assert value == cache.find("testx")
+        cache.find("testx")
 
 
-async def test_multi_threaded(agent_cache):
+async def test_multi_threaded(agent_cache: AgentCache):
 
     class Spy:
         def __init__(self):
