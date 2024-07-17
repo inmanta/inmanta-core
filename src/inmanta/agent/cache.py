@@ -122,8 +122,11 @@ class AgentCache:
         self.keysforVersion: dict[int, set[str]] = {}
 
         # Time-based eviction mechanism
-        self.nextAction: float = sys.maxsize
-        self.timerqueue: list[CacheItem] = []
+        # Keep track of when is the next earliest cache item expiry time.
+        self.next_action: float = sys.maxsize
+        # Heap queue of cache items, used for efficient retrieval of the cache
+        # item that expires the soonest. should only be mutated via the heapq API.
+        self.timer_queue: list[CacheItem] = []
 
         self.addLock = Lock()
         self.addLocks: dict[str, Lock] = {}
@@ -136,10 +139,10 @@ class AgentCache:
         for version in list(self.counterforVersion.keys()):
             while self.is_open(version):
                 self.close_version(version)
-        self.nextAction = sys.maxsize
+        self.next_action = sys.maxsize
         for key in list(self.cache.keys()):
             self._evict_item(key)
-        self.timerqueue.clear()
+        self.timer_queue.clear()
 
     def is_open(self, version: int) -> bool:
         """
@@ -203,13 +206,13 @@ class AgentCache:
 
     def clean_stale_entries(self) -> None:
         now = time.time()
-        while now > self.nextAction and len(self.timerqueue) > 0:
-            item = heapq.heappop(self.timerqueue)
+        while now > self.next_action and len(self.timer_queue) > 0:
+            item = heapq.heappop(self.timer_queue)
             self._evict_item(item.key)
-            if len(self.timerqueue) > 0:
-                self.nextAction = self.timerqueue[0].time
+            if len(self.timer_queue) > 0:
+                self.next_action = self.timer_queue[0].time
             else:
-                self.nextAction = sys.maxsize
+                self.next_action = sys.maxsize
 
     def _get(self, key: str) -> CacheItem:
         """
@@ -236,10 +239,10 @@ class AgentCache:
                 self.keysforVersion[scope.version].add(item.key)
             except KeyError:
                 raise Exception("Added data to version that is not open")
-        heapq.heappush(self.timerqueue, item)
+        heapq.heappush(self.timer_queue, item)
 
-        if item.time < self.nextAction:
-            self.nextAction = item.time
+        if item.time < self.next_action:
+            self.next_action = item.time
 
     def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
         key_parts = [key]

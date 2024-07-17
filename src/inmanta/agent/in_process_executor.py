@@ -70,7 +70,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self._cache = inmanta.agent.cache.AgentCache(self)
         # This lock ensures cache entries can not be cleaned up when
         # the executor is actively working and vice versa
-        self.wip_lock = asyncio.Lock()
+        self.activity_lock = asyncio.Lock()
 
         self.logger: logging.Logger = parent_logger.getChild(self.name)
 
@@ -91,7 +91,9 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         """
         reschedule_interval: int = self.cache_cleanup_tick_rate
         while not self._stopped:
-            async with self.wip_lock:
+            async with self.activity_lock:
+                if self._stopped:
+                    return
                 await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.clean_stale_entries)
             await asyncio.sleep(reschedule_interval)
 
@@ -99,7 +101,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         if self._stopped:
             return
         self._stopped = True
-        async with self.wip_lock:
+        self.periodic_cache_cleanup_job.cancel()
+        async with self.activity_lock:
             await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.close)
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
@@ -276,7 +279,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             ctx.exception("Failed to report the start of the deployment to the server")
             return
 
-        async with self.wip_lock:
+        async with self.activity_lock:
             await self._execute(resource, gid=gid, ctx=ctx, requires=requires)
 
         ctx.debug(
@@ -309,7 +312,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         env_id: uuid.UUID = resources[0].env_id
 
         # TODO remove versioned cache:
-        async with self.wip_lock, self.cache(model_version):
+        async with self.activity_lock, self.cache(model_version):
             for resource in resources:
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
@@ -402,7 +405,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
             # TODO remove versioned cache:
-            async with self.wip_lock, self.cache(model_version):
+            async with self.activity_lock, self.cache(model_version):
                 try:
                     started = datetime.datetime.now().astimezone()
                     provider = await self.get_provider(resource_obj)

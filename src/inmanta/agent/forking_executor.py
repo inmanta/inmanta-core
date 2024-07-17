@@ -255,7 +255,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
             eventloop=loop,
             parent_logger=parent_logger,
         )
-        await context.executor.start()
         # activate venv
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
@@ -288,6 +287,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
                 failed.append(module_source)
 
+        await context.executor.start()
         return failed
 
 

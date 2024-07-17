@@ -67,6 +67,8 @@ def set_custom_cache_cleanup_policy(monkeypatch, server_config):
     yield
 
     inmanta.agent.config.agent_cache_cleanup_tick_rate.set(str(old_value))
+
+
 async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent):
     """
     Test timeout parameter: test that expired entry is removed from the cache
@@ -86,7 +88,7 @@ async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent)
 
     assert value == cache.find("test")
     # Cache cleanup job is periodically triggered with a 1s delay
-    await asyncio.sleep(.3)
+    await asyncio.sleep(0.3)
     with pytest.raises(KeyError):
         cache.find("test")
 
