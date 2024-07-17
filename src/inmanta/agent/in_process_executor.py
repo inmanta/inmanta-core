@@ -101,7 +101,12 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         if self._stopped:
             return
         self._stopped = True
-        self.periodic_cache_cleanup_job.cancel()
+        if self.periodic_cache_cleanup_job:
+            try:
+                self.periodic_cache_cleanup_job.cancel()
+                await self.periodic_cache_cleanup_job
+            except asyncio.CancelledError:
+                pass
         async with self.activity_lock:
             await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.close)
         self.provider_thread_pool.shutdown(wait=False)
@@ -117,7 +122,10 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         thread_pool_finalizer.append(self.provider_thread_pool)
         thread_pool_finalizer.append(self.thread_pool)
         if self.periodic_cache_cleanup_job:
-            await self.periodic_cache_cleanup_job
+            try:
+                await self.periodic_cache_cleanup_job
+            except asyncio.CancelledError:
+                self.periodic_cache_cleanup_job = None
 
     def is_stopped(self) -> bool:
         return self._stopped
