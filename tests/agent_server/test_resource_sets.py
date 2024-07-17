@@ -1547,7 +1547,7 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
 
     def assert_unknown(uk: data.UnknownParameter, expected_name: str, expected_resource_id: ResourceIdStr) -> None:
         """
-        Verify that the given UnknownParameter matches has the expected content.
+        Verify that the given UnknownParameter matches the expected content.
         """
         assert uk.name == expected_name
         assert uk.environment == uuid.UUID(environment)
