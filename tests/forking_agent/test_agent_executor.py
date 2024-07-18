@@ -405,11 +405,9 @@ def test():
     # We remove the old VirtualEnvironment
     logger.debug("Calling cleanup_virtual_environments")
     mpmanager_light.environment_manager.running = True
-    try:
-        await asyncio.wait_for(mpmanager_light.environment_manager.cleanup_inactive_pool_members(), 0.5)
-    except TimeoutError:
-        pass
+    await mpmanager_light.environment_manager.cleanup_inactive_pool_members()
     logger.debug("cleanup_virtual_environments ended")
+
     venvs = [str(e) for e in venv_dir.iterdir()]
     assert len(venvs) == 1, "Only one Virtual Environment should exist!"
     assert [executor_2.executor_virtual_env.env_path] == venvs
@@ -418,9 +416,7 @@ def test():
     await executor_manager.stop_for_agent("agent2")
     await asyncio.sleep(0.2)
     executor_2_venv_status_file.unlink()
-    try:
-        await asyncio.wait_for(mpmanager_light.environment_manager.cleanup_inactive_pool_members(), 0.5)
-    except TimeoutError:
-        pass
+
+    await mpmanager_light.environment_manager.cleanup_inactive_pool_members()
     venvs = [str(e) for e in venv_dir.iterdir()]
     assert len(venvs) == 0, "No Virtual Environment should exist!"
