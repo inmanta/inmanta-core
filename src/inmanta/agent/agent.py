@@ -1274,7 +1274,7 @@ class Agent(SessionEndpoint):
 
         return resource_install_specs, invalid_resource_types
 
-    def initialize_loader(self):
+    def initialize_loader(self) -> None:
         """
         Set up the agent for code loading
         """
@@ -1284,19 +1284,24 @@ class Agent(SessionEndpoint):
         # Lock to ensure only one actual install runs at a time
         self._loader_lock = Lock()
         # Keep track for each resource type of the last loaded version
-        self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] = defaultdict(lambda: None)
+        self._last_loaded_version = defaultdict(lambda: None)
         # Per-resource lock to serialize all actions per resource
         self._resource_loader_lock = NamedLock()
 
     async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> executor.FailedResourcesSet:
         """
-        Ensure that the code for the given environment and version is loaded.
+        Ensure that the code for the given environment and version is loaded. This method assumes the
+        initialize_loader method was called.
         """
 
         failed_to_load: executor.FailedResourcesSet = set()
 
         if self._loader is None:
             return failed_to_load
+
+        assert self._resource_loader_lock is not None
+        assert self._last_loaded_version is not None
+        assert self._resource_loader_lock is not None
 
         for resource_install_spec in code:
             # only one logical thread can load a particular resource type at any time
@@ -1338,7 +1343,7 @@ class Agent(SessionEndpoint):
         return failed_to_load
 
     async def _install(self, blueprint: executor.ExecutorBlueprint) -> None:
-        if self._env is None or self._loader is None:
+        if self._env is None or self._loader is None or self._loader_lock is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
         async with self._loader_lock:
