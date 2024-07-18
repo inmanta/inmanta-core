@@ -800,16 +800,16 @@ class ActiveEnv(PythonEnvironment):
             try:
                 # this will fail if an url is supplied
                 parsed_req = packaging.Requirement(req_spec)
-                    if hasattr(parsed_req, "name"):
-                        name = parsed_req.name
-                    elif hasattr(parsed_req, "unsafe_name"):
-                        name = parsed_req.unsafe_name
-                    version = parsed_req.specs
-                    marker = parsed_req.marker
-                    if hasattr(parsed_req, "url"):
-                        url = parsed_req.url
-                    if hasattr(parsed_req, "extras") and len(parsed_req.extras) > 0:
-                        extras = sorted(parsed_req.extras)
+                if hasattr(parsed_req, "name"):
+                    name = parsed_req.name
+                elif hasattr(parsed_req, "unsafe_name"):
+                    name = parsed_req.unsafe_name
+                version = parsed_req.specs
+                marker = parsed_req.marker
+                if hasattr(parsed_req, "url"):
+                    url = parsed_req.url
+                if hasattr(parsed_req, "extras") and len(parsed_req.extras) > 0:
+                    extras = sorted(parsed_req.extras)
             except InvalidRequirement:
                 url = req_spec
 
