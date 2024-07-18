@@ -38,7 +38,7 @@ from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import IO, TYPE_CHECKING, Any, Optional
+from typing import IO, Any, Optional
 
 import click
 import more_itertools
@@ -78,7 +78,6 @@ from inmanta.module import (
 from inmanta.stable_api import stable_api
 from packaging.requirements import InvalidRequirement
 from packaging.version import Version
-
 
 LOGGER = logging.getLogger(__name__)
 
