@@ -453,6 +453,8 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self.logger = parent_logger
         self.process = process
 
+        self.process.initialize_loader()
+
         self.executors: dict[str, InProcessExecutor] = {}
         self._creation_locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 

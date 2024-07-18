@@ -970,21 +970,14 @@ class Agent(SessionEndpoint):
         self._instances: dict[str, AgentInstance] = {}
         self._instances_lock = asyncio.Lock()
 
-        self._loader: Optional[CodeLoader] = None
-        self._env: Optional[env.VirtualEnv] = None
-        if code_loader:
-            # all of this should go into the executor manager https://github.com/inmanta/inmanta-core/issues/7589
-            self._env = env.VirtualEnv(self._storage["env"])
-            self._env.use_virtual_env()
-            self._loader = CodeLoader(self._storage["code"], clean=True)
-            # Lock to ensure only one actual install runs at a time
-            self._loader_lock = Lock()
-            # Keep track for each resource type of the last loaded version
-            self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] = defaultdict(lambda: None)
-            # Cache to prevent re-fetching the same resource-version
-            self._previously_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
-            # Per-resource lock to serialize all actions per resource
-            self._resource_loader_lock = NamedLock()
+        self._loader: CodeLoader | None = None
+        self._env: env.VirtualEnv | None = None
+        self._loader_lock: asyncio.Lock | None = None
+        self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] | None = None
+        self._resource_loader_lock: NamedLock | None = NamedLock()
+
+        # Cache to prevent re-fetching the same resource-version
+        self._previously_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
 
         self.agent_map: Optional[dict[str, str]] = agent_map
 
@@ -1223,8 +1216,6 @@ class Agent(SessionEndpoint):
             - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
-        if self._loader is None:
-            return [], set()
 
         # store it outside the loop, but only load when required
         pip_config: Optional[PipConfig] = None
@@ -1283,8 +1274,24 @@ class Agent(SessionEndpoint):
 
         return resource_install_specs, invalid_resource_types
 
+    def initialize_loader(self):
+        """
+        Set up the agent for code loading
+        """
+        self._env = env.VirtualEnv(self._storage["env"])
+        self._env.use_virtual_env()
+        self._loader = CodeLoader(self._storage["code"], clean=True)
+        # Lock to ensure only one actual install runs at a time
+        self._loader_lock = Lock()
+        # Keep track for each resource type of the last loaded version
+        self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] = defaultdict(lambda: None)
+        # Per-resource lock to serialize all actions per resource
+        self._resource_loader_lock = NamedLock()
+
     async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> executor.FailedResourcesSet:
-        """Ensure that the code for the given environment and version is loaded"""
+        """
+        Ensure that the code for the given environment and version is loaded.
+        """
 
         failed_to_load: executor.FailedResourcesSet = set()
 
