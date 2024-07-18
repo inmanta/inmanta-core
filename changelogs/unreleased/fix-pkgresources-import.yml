@@ -2,7 +2,7 @@ description: Fixed dropped import from pkg_resources
 change-type: patch
 sections:
   bugfix: "Addressed breaking change in setuptools (core Python library)"
-  upgrade-note: "If you had previously constrained `setuptools<71` in your `project.yml`, you may now drop the constraint"
+  upgrade-note: "If you had previously constrained `setuptools<71` in your project's `requirements.txt`, you may now drop the constraint"
 destination-branches:
   - master
   - iso7
