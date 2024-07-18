@@ -39,6 +39,7 @@ from subprocess import CalledProcessError
 from textwrap import indent
 from typing import Any, NamedTuple, Optional, TypeVar
 
+import packaging.requirements
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
 
@@ -53,6 +54,7 @@ from packaging import version
 
 InvalidRequirement: tuple[Exception]
 try:
+    # older versions of pkg_resources raise this exception, newer versions don't have extern and raise the native one
     import pkg_resources.extern.packaging.requirements
     InvalidRequirement = (
         packaging.requirements.InvalidRequirement,
