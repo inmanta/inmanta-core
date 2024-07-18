@@ -50,6 +50,7 @@ from pkg_resources import Requirement
 import build
 import inmanta
 import inmanta.warnings
+import packaging.requirements
 import toml
 from build.env import DefaultIsolatedEnv
 from inmanta import const, env
@@ -76,8 +77,20 @@ from inmanta.module import (
     gitprovider,
 )
 from inmanta.stable_api import stable_api
-from packaging.requirements import InvalidRequirement
 from packaging.version import Version
+
+
+InvalidRequirement: tuple[Exception]
+try:
+    # older versions of pkg_resources raise this exception, newer versions don't have extern and raise the native one
+    import pkg_resources.extern.packaging.requirements
+    InvalidRequirement = (
+        packaging.requirements.InvalidRequirement,
+        pkg_resources.extern.packaging.requirements.InvalidRequirement,
+    )
+except ImportError:
+    InvalidRequirement = (packaging.requirements.InvalidRequirement,)
+
 
 LOGGER = logging.getLogger(__name__)
 
