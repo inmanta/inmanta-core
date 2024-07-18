@@ -799,19 +799,17 @@ class ActiveEnv(PythonEnvironment):
             extras = None
             try:
                 # this will fail if an url is supplied
-                parsed_req = list(pkg_resources.parse_requirements(req_spec))
-                if len(parsed_req) > 0:
-                    item = parsed_req[0]
-                    if hasattr(item, "name"):
-                        name = item.name
-                    elif hasattr(item, "unsafe_name"):
-                        name = item.unsafe_name
-                    version = item.specs
-                    marker = item.marker
-                    if hasattr(item, "url"):
-                        url = item.url
-                    if hasattr(item, "extras") and len(item.extras) > 0:
-                        extras = sorted(item.extras)
+                parsed_req = packaging.Requirement(req_spec)
+                    if hasattr(parsed_req, "name"):
+                        name = parsed_req.name
+                    elif hasattr(parsed_req, "unsafe_name"):
+                        name = parsed_req.unsafe_name
+                    version = parsed_req.specs
+                    marker = parsed_req.marker
+                    if hasattr(parsed_req, "url"):
+                        url = parsed_req.url
+                    if hasattr(parsed_req, "extras") and len(parsed_req.extras) > 0:
+                        extras = sorted(parsed_req.extras)
             except InvalidRequirement:
                 url = req_spec
 
