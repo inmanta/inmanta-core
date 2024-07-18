@@ -39,7 +39,6 @@ from subprocess import CalledProcessError
 from textwrap import indent
 from typing import Any, NamedTuple, Optional, TypeVar
 
-import packaging.requirements
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
 
@@ -800,7 +799,7 @@ class ActiveEnv(PythonEnvironment):
             extras = None
             try:
                 # this will fail if an url is supplied
-                parsed_req = packaging.requirements.Requirement(req_spec)
+                parsed_req = Requirement(req_spec)
                 if hasattr(parsed_req, "name"):
                     name = parsed_req.name
                 elif hasattr(parsed_req, "unsafe_name"):
