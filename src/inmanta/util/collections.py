@@ -128,15 +128,17 @@ class ScalingTest:
     nb_updates: int
 
     @staticmethod
-    def generate_mapping(*, size: int, nb_targets: int) -> Mapping[int, int]:
+    def generate_mapping(*, size: int, nb_targets: int, target_range: int = None) -> Mapping[int, int]:
         return {
-            i: {random.randint(1, size) for _ in range(nb_targets)}
+            i: {random.randint(1, target_range if target_range is not None else size) for _ in range(nb_targets)}
             for i in range(size)
         }
 
     def test(self) -> None:
         init_mapping: Mapping[int, int] = self.generate_mapping(size=self.size, nb_targets=self.nb_targets)
-        updates: Mapping[int, int] = self.generate_mapping(size=self.nb_updates, nb_targets=self.nb_targets)
+        updates: Mapping[int, int] = self.generate_mapping(
+            size=self.nb_updates, nb_targets=self.nb_targets, target_range=self.size
+        )
 
         m = BidirectionalManyToManyMapping()
         time_start: float = time.process_time()
@@ -153,9 +155,11 @@ class ScalingTest:
         )
 
 
-ScalingTest(size=int(math.pow(10, 2)), nb_targets=10, nb_updates=int(math.pow(10, 1))).test()
-ScalingTest(size=int(math.pow(10, 5)), nb_targets=20, nb_updates=int(math.pow(10, 2))).test()
-ScalingTest(size=int(math.pow(10, 5)), nb_targets=20, nb_updates=int(math.pow(10, 3))).test()
-ScalingTest(size=int(math.pow(10, 5)), nb_targets=20, nb_updates=int(math.pow(10, 4))).test()
-ScalingTest(size=int(math.pow(10, 5)), nb_targets=20, nb_updates=int(math.pow(10, 5))).test()
-ScalingTest(size=int(math.pow(10, 6)), nb_targets=100, nb_updates=int(math.pow(10, 3))).test()
+ScalingTest(size=100, nb_targets=10, nb_updates=10).test()
+ScalingTest(size=100_000, nb_targets=10, nb_updates=100).test()
+ScalingTest(size=100_000, nb_targets=10, nb_updates=1_000).test()
+ScalingTest(size=100_000, nb_targets=10, nb_updates=10_000).test()
+ScalingTest(size=100_000, nb_targets=10, nb_updates=100_000).test()
+ScalingTest(size=1_000_000, nb_targets=5, nb_updates=1_000).test()
+ScalingTest(size=1_000_000, nb_targets=10, nb_updates=1_000).test()
+ScalingTest(size=10_000, nb_targets=10_000, nb_updates=10).test()
