@@ -74,7 +74,6 @@ from inmanta.module import (
     gitprovider,
 )
 from inmanta.stable_api import stable_api
-from packaging.requirements import InvalidRequirement
 from packaging.version import Version
 
 
@@ -809,7 +808,7 @@ When a development release is done using the \--dev option, this command:
             raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
         try:
             module_requirement = InmantaModuleRequirement.parse(module_req)
-        except InvalidRequirement:
+        except env.InvalidRequirement:
             raise CLIException(f"'{module_req}' is not a valid requirement", exitcode=1)
         if not override and module_like.has_module_requirement(module_requirement.key):
             raise CLIException(
