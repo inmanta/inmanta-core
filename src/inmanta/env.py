@@ -932,8 +932,6 @@ class ActiveEnv(PythonEnvironment):
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
             OwnedRequirement(requirement, dist_info.key)
             for dist_info in pkg_resources.working_set
-            # pypa/setuptools#4482. May be removed when we migrate away from pkg_resources
-            if not dist_info.location.endswith("setuptools/_vendor")
             for requirement in dist_info.requires()
         )
         inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
@@ -1029,8 +1027,6 @@ class ActiveEnv(PythonEnvironment):
             requirement
             for dist_info in working_set
             if in_scope.fullmatch(dist_info.key)
-            # pypa/setuptools#4482. May be removed when we migrate away from pkg_resources
-            if not dist_info.location.endswith("setuptools/_vendor")
             for requirement in dist_info.requires()
         )
 
