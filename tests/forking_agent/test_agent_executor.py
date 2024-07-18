@@ -20,6 +20,7 @@ import os
 import subprocess
 
 from inmanta.agent import executor, forking_executor
+from inmanta.agent.forking_executor import MPManager
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
 from utils import PipIndex, log_contains, log_doesnt_contain
@@ -281,11 +282,13 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     assert env_same_1 is not env_diff_1, "Expected different instances for different blueprints"
 
 
-async def test_executor_creation_and_reuse(pip_index, mpmanager_light) -> None:
+async def test_executor_creation_and_reuse(pip_index, mpmanager_light: MPManager, caplog) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
     """
+    # Force log level down, this causes more output on the CI when this fails
+    caplog.set_level("DEBUG")
 
     requirements1 = ()
     requirements2 = ("pkg1",)
@@ -313,11 +316,14 @@ def test():
     blueprint3 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
 
     executor_manager = mpmanager_light
-    executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.gather(
-        executor_manager.get_executor("agent1", "local:", code_for(blueprint1)),
-        executor_manager.get_executor("agent1", "local:", code_for(blueprint1)),
-        executor_manager.get_executor("agent1", "local:", code_for(blueprint2)),
-        executor_manager.get_executor("agent1", "local:", code_for(blueprint3)),
+    executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.wait_for(
+        asyncio.gather(
+            executor_manager.get_executor("agent1", "local:", code_for(blueprint1)),
+            executor_manager.get_executor("agent1", "local:", code_for(blueprint1)),
+            executor_manager.get_executor("agent1", "local:", code_for(blueprint2)),
+            executor_manager.get_executor("agent1", "local:", code_for(blueprint3)),
+        ),
+        10,
     )
 
     assert executor_1 is executor_1_reuse, "Expected the same executor instance for identical blueprint"
