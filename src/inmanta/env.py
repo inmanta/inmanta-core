@@ -48,8 +48,18 @@ from inmanta.ast import CompilerException
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from inmanta.util import strtobool
-from packaging.requirements import InvalidRequirement
 from packaging import version
+
+
+InvalidRequirement: tuple[Exception]
+try:
+    import pkg_resources.extern.packaging.requirements
+    InvalidRequirement = (
+        packaging.requirements.InvalidRequirement,
+        pkg_resources.extern.packaging.requirements.InvalidRequirement,
+    )
+except ImportError:
+    InvalidRequirement = (packaging.requirements.InvalidRequirement,)
 
 
 LOGGER = logging.getLogger(__name__)
