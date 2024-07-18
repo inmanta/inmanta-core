@@ -811,7 +811,7 @@ class ActiveEnv(PythonEnvironment):
             extras = None
             try:
                 # this will fail if an url is supplied
-                parsed_req = Requirement(req_spec)
+                parsed_req = Requirement.parse(req_spec)
                 if hasattr(parsed_req, "name"):
                     name = parsed_req.name
                 elif hasattr(parsed_req, "unsafe_name"):
