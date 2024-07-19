@@ -76,7 +76,6 @@ from inmanta.module import (
 from inmanta.stable_api import stable_api
 from packaging.version import Version
 
-
 LOGGER = logging.getLogger(__name__)
 
 
