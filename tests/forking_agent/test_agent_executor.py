@@ -21,6 +21,8 @@ import os
 import pathlib
 import subprocess
 
+import psutil
+
 from inmanta import const
 from inmanta.agent import executor, forking_executor
 from inmanta.data.model import PipConfig
@@ -284,7 +286,9 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     assert env_same_1 is not env_diff_1, "Expected different instances for different blueprints"
 
 
-async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog) -> None:
+async def test_executor_creation_and_reuse(
+    pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, iteration, caplog
+) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
@@ -369,6 +373,16 @@ def test():
         executor_manager.get_executor("agent1", "local:", code_for(blueprint1), venv_checkup_interval=0.1),
         executor_manager.get_executor("agent2", "local:", code_for(blueprint2), venv_checkup_interval=0.1),
     )
+
+    def retrieve_pid_agent(agent_name: str) -> int:
+        for proc in psutil.process_iter(["pid", "name"]):
+            if f"inmanta: executor {agent_name}" in proc.name():
+                return proc.pid
+
+        raise LookupError(f"Could not find process with the following name: `{agent_name}`!")
+
+    pid_agent_1 = retrieve_pid_agent("agent1")
+    pid_agent_2 = retrieve_pid_agent("agent2")
     executor_1_venv_status_file = pathlib.Path(executor_1.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
     executor_2_venv_status_file = pathlib.Path(executor_2.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
 
@@ -392,9 +406,18 @@ def test():
     assert new_check_executor2 > old_check_executor2
     assert (datetime.datetime.now().astimezone() - new_check_executor2).seconds <= 2
 
+    async def wait_for_agent(pid_agent: int) -> None:
+        for i in range(10):
+            if psutil.pid_exists(pid_agent):
+                return
+            else:
+                await asyncio.sleep(0.2)
+
+        raise RuntimeError("The agent was still running after 2 seconds")
+
     # Now we want to check if the cleanup is working correctly
     await executor_manager.stop_for_agent("agent1")
-    await asyncio.sleep(0.2)
+    await wait_for_agent(pid_agent_1)
     # First we want to override the modification date of the `inmanta_venv_status` file
     os.utime(
         executor_1_venv_status_file, (datetime.datetime.now().astimezone().timestamp(), old_datetime.astimezone().timestamp())
@@ -414,7 +437,7 @@ def test():
 
     # Let's stop the other agent and pretend that the venv is broken
     await executor_manager.stop_for_agent("agent2")
-    await asyncio.sleep(0.2)
+    await wait_for_agent(pid_agent_2)
     executor_2_venv_status_file.unlink()
 
     await mpmanager_light.environment_manager.cleanup_inactive_pool_members()
