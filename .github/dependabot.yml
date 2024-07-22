@@ -10,6 +10,9 @@ updates:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
   ignore:
+    # #6668
+    - dependency-name: "setuptools"
+      update-types: ["version-update:semver-major"]
     - dependency-name: "pytest-inmanta-extensions"
       # pytest-inmanta-extensions version is tied to inmanta-core's version with an f-string
       # dependabot crashes on trying to bump it
