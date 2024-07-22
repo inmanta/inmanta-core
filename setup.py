@@ -29,7 +29,7 @@ requires = [
     "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
-    "setuptools",
+    "setuptools<71",
     "texttable~=1.0",
     "tornado~=6.0",
     # lower bound because of ilevkivskyi/typing_inspect#100
@@ -47,7 +47,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "13.0.0"
+version = "13.0.1"
 
 setup(
     version=version,
