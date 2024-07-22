@@ -92,6 +92,7 @@ class EnvBlueprint:
     pip_config: PipConfig
     requirements: Sequence[str]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
+    python_version: str
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
