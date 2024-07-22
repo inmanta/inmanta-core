@@ -30,7 +30,7 @@ requires = [
     "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
-    "setuptools<71",
+    "setuptools<72",
     "texttable~=1.0",
     "tornado~=6.0",
     # lower bound because of ilevkivskyi/typing_inspect#100
