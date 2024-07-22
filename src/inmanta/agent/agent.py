@@ -1150,7 +1150,7 @@ class Agent(SessionEndpoint):
                         raise RuntimeError(f"Unknown location `{possible_path}`: was not a relative path!")
 
                 # We are cycling
-                if current_path in known_paths:
+                if str(current_path) in known_paths:
                     raise RuntimeError(f"Cycle detected: want to resolve `{current_path}` but it has been resolved before!")
             except OSError as e:
                 # If we try to use the `readlink` function on the actual executable, we will get an OSError invalid argument
