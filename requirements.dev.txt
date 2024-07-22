@@ -14,7 +14,7 @@ time-machine==2.14.2
 furo==2024.7.18
 inmanta-sphinx==1.10.0
 myst-parser==3.0.1
-sphinx==7.4.6
+sphinx==7.4.7
 sphinxcontrib-contentui==0.2.5
 sphinxcontrib-redoc==1.6.0
 sphinxcontrib-serializinghtml==1.1.10
