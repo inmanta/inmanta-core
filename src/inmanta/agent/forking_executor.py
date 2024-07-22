@@ -146,7 +146,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             logging.getLogger().removeHandler(self.log_transport)
             self.log_transport = None
 
-    def start_timer_venv_checkup(self, interval: int) -> None:
+    def start_timer_venv_checkup(self, interval: float) -> None:
         self.timer_venv_checkup = util.Scheduler("venv_checkup_scheduler")
         self.timer_venv_checkup.add_action(
             action=self.touch_inmanta_venv_status,
