@@ -25,6 +25,7 @@ import logging
 import os
 import pathlib
 import random
+import sys
 import time
 import uuid
 from asyncio import Lock
@@ -987,6 +988,7 @@ class Agent(SessionEndpoint):
             # Per-resource lock to serialize all actions per resource
             self._resource_loader_lock = NamedLock()
 
+        self.actual_python_version: str = f"python{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
         self.agent_map: Optional[dict[str, str]] = agent_map
 
         remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExecutorMode.forking
@@ -996,7 +998,10 @@ class Agent(SessionEndpoint):
         self.environment_manager: Optional[executor.VirtualEnvironmentManager] = None
         if remote_executor and can_have_remote_executor:
             LOGGER.info("Selected forking agent executor mode")
-            self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(self._storage["executor"])
+            self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(
+                self._storage["executor"],
+                self.actual_python_version,
+            )
             assert self.environment is not None  # Mypy
             self.executor_manager = forking_executor.MPManager(
                 self.thread_pool,
@@ -1307,7 +1312,10 @@ class Agent(SessionEndpoint):
                         continue
 
                 resource_install_spec = ResourceInstallSpec(
-                    resource_type, version, executor.ExecutorBlueprint(pip_config, list(requirements), sources)
+                    resource_type, version, executor.ExecutorBlueprint(
+                        pip_config=pip_config,
+                        requirements=list(requirements),
+                        sources=sources)
                 )
                 resource_install_specs.append(resource_install_spec)
                 # Update the ``_previously_loaded`` cache to indicate that the given resource type's ResourceInstallSpec

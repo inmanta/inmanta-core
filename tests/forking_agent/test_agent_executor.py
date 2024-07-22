@@ -287,7 +287,7 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
 
 
 async def test_executor_creation_and_reuse(
-    pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, iteration, caplog
+    pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog
 ) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
