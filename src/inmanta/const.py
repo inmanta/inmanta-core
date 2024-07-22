@@ -356,7 +356,3 @@ INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"
 # It's used to determine whether a venv is only partially created (due to a server crash for example) or to determine when the
 # venv was last used.
 INMANTA_VENV_STATUS_FILENAME = ".inmanta_venv_status"
-
-
-# Path of the venv of the Inmanta server.
-INMANTA_VENV_SERVER_PATH = "/opt/inmanta/bin/python3"
