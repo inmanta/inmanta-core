@@ -31,7 +31,7 @@ requires = [
     "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
-    "setuptools",
+    "setuptools<70",
     "texttable~=1.0",
     "tornado~=6.0",
     "typing-extensions>=4.8,<4.10",
