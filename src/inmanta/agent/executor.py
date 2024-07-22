@@ -297,26 +297,29 @@ def retrieve_python_version(path_python_venv: pathlib.Path) -> str:
         known_paths.add(str(current_path))
         try:
             # Let's check if the current path contains a link to the executable file
-            read_data = os.readlink(current_path)
-            # The thing we read, could be the executable or a link that we need to resolve
-            possible_path = pathlib.Path(read_data)
-            # We could read two things:
-            #  - Either a relative path -> probably another link
-            #  - Either an absolute path -> probably the executable
-            if not possible_path.exists():
-                current_path = possible_path
-            else:
-                current_path = current_path.parent / possible_path
-                # We assume that it was a relative path but if it doesn't exist then we should stop
-                if not current_path.exists():
-                    raise RuntimeError(f"Unknown location `{possible_path}`: was not a relative path!")
+            if current_path.is_symlink():
+                read_data = os.readlink(current_path)
+                # The thing we read, could be the executable or a link that we need to resolve
+                possible_path = pathlib.Path(read_data)
+                # We could read two things:
+                #  - Either a relative path -> probably another link
+                #  - Either an absolute path -> probably the executable
+                if not possible_path.exists():
+                    current_path = possible_path
+                else:
+                    current_path = current_path.parent / possible_path
+                    # We assume that it was a relative path but if it doesn't exist then we should stop
+                    if not current_path.exists():
+                        raise RuntimeError(f"Unknown location `{possible_path}`: was not a relative path!")
 
-            # We are cycling
-            if str(current_path) in known_paths:
-                raise RuntimeError(f"Cycle detected: want to resolve `{current_path}` but it has been resolved before!")
+                # We are cycling
+                if str(current_path) in known_paths:
+                    raise RuntimeError(f"Cycle detected: want to resolve `{current_path}` but it has been resolved before!")
+            break
         except OSError as e:
             # If we try to use the `readlink` function on the actual executable, we will get an OSError invalid argument
-            return current_path.name
+            break
+    return current_path.name
 
 
 class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
@@ -330,12 +333,12 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
         cleanup
     """
 
-    def __init__(self, env_path: str, threadpool: Optional[ThreadPoolExecutor], python_version: str):
+    def __init__(self, env_path: str, threadpool: Optional[ThreadPoolExecutor]):
         super().__init__(env_path=env_path)
         self.thread_pool = threadpool
         self.inmanta_venv_status_file: pathlib.Path = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
         self.folder_name: str = pathlib.Path(self.env_path).name
-        self.python_version: str = python_version
+        self.desired_python_version: Optional[str] = None
 
     def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
@@ -353,6 +356,8 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
             )
 
         self.touch_status_file()
+        if self._parent_python is not None:
+            self.desired_python_version = retrieve_python_version(pathlib.Path(self._parent_python))
 
     def is_correctly_initialized(self) -> bool:
         """
@@ -423,7 +428,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
         if not self.is_correctly_initialized():
             return True
 
-        if retrieve_python_version(pathlib.Path(self.env_path)) not in self.python_version:
+        if not (pathlib.Path(self.python_path).parent / self.desired_python_version).exists():
             return True
 
         return super().can_be_cleaned_up(retention_time)
@@ -550,7 +555,7 @@ class VirtualEnvironmentManager(PoolManager):
     for storing these environments.
     """
 
-    def __init__(self, envs_dir: str, actual_python_version: str) -> None:
+    def __init__(self, envs_dir: str) -> None:
         # We rely on a Named lock (`self._locks`, inherited from PoolManager) to be able to lock specific entries of the
         # `_environment_map` dict. This allows us to prevent creating and deleting the same venv at a given time. The keys of
         # this named lock are the hash of venv
@@ -559,7 +564,6 @@ class VirtualEnvironmentManager(PoolManager):
         )
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
         self.envs_dir: str = envs_dir
-        self.actual_python_version: str = actual_python_version
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
         """
@@ -602,7 +606,7 @@ class VirtualEnvironmentManager(PoolManager):
 
         """
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
-        process_environment = ExecutorVirtualEnvironment(env_storage, threadpool, self.actual_python_version)
+        process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
 
         loop = asyncio.get_running_loop()
 
@@ -672,7 +676,6 @@ class VirtualEnvironmentManager(PoolManager):
                     current_executor_environment = ExecutorVirtualEnvironment(
                         env_path=str(current_folder.absolute()),
                         threadpool=None,
-                        python_version=self.actual_python_version,
                     )
 
                 pool_members.append(current_executor_environment)

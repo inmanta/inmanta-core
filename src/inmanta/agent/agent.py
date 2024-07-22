@@ -988,7 +988,6 @@ class Agent(SessionEndpoint):
             # Per-resource lock to serialize all actions per resource
             self._resource_loader_lock = NamedLock()
 
-        self.actual_python_version: str = f"python{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
         self.agent_map: Optional[dict[str, str]] = agent_map
 
         remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExecutorMode.forking
@@ -1000,7 +999,6 @@ class Agent(SessionEndpoint):
             LOGGER.info("Selected forking agent executor mode")
             self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(
                 self._storage["executor"],
-                self.actual_python_version,
             )
             assert self.environment is not None  # Mypy
             self.executor_manager = forking_executor.MPManager(
@@ -1126,40 +1124,6 @@ class Agent(SessionEndpoint):
         agent_instance = self._instances[name]
         del self._instances[name]
         await agent_instance.stop()
-
-    async def retrieve_python_version(self, path_python_venv: pathlib.Path) -> str:
-        """
-        Retrieve the python version of a given path
-
-        :param path_python_venv: The path of the python environment to retrieve
-        """
-        python_version = None
-        current_path = path_python_venv.absolute()
-        known_paths: set[str] = set()
-        while python_version is None:
-            known_paths.add(str(current_path))
-            try:
-                # Let's check if the current path contains a link to the executable file
-                read_data = os.readlink(current_path)
-                # The thing we read, could be the executable or a link that we need to resolve
-                possible_path = pathlib.Path(read_data)
-                # We could read two things:
-                #  - Either a relative path -> probably another link
-                #  - Either an absolute path -> probably the executable
-                if not possible_path.exists():
-                    current_path = possible_path
-                else:
-                    current_path = current_path.parent / possible_path
-                    # We assume that it was a relative path but if it doesn't exist then we should stop
-                    if not current_path.exists():
-                        raise RuntimeError(f"Unknown location `{possible_path}`: was not a relative path!")
-
-                # We are cycling
-                if str(current_path) in known_paths:
-                    raise RuntimeError(f"Cycle detected: want to resolve `{current_path}` but it has been resolved before!")
-            except OSError as e:
-                # If we try to use the `readlink` function on the actual executable, we will get an OSError invalid argument
-                return current_path.name
 
     @protocol.handle(methods_v2.update_agent_map)
     async def update_agent_map(self, agent_map: dict[str, str]) -> None:

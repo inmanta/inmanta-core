@@ -346,6 +346,7 @@ async def test_executor_creation_and_venv_usage(pip_index: PipIndex, mpmanager_l
 
     requirements1 = ()
     requirements2 = ("pkg1",)
+    requirements3 = ("pkg2",)
     pip_config = PipConfig(index_url=pip_index.url)
 
     # Prepare a source module and its hash
@@ -364,14 +365,17 @@ def test():
     )
     sources1 = ()
     sources2 = (module_source1,)
+    sources3 = (module_source1,)
 
     blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
     blueprint2 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
+    blueprint3 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements3, sources=sources3)
 
     executor_manager = mpmanager_light
-    executor_1, executor_2 = await asyncio.gather(
+    executor_1, executor_2, executor_3 = await asyncio.gather(
         executor_manager.get_executor("agent1", "local:", code_for(blueprint1), venv_checkup_interval=0.1),
         executor_manager.get_executor("agent2", "local:", code_for(blueprint2), venv_checkup_interval=0.1),
+        executor_manager.get_executor("agent3", "local:", code_for(blueprint3)),
     )
 
     def retrieve_pid_agent(agent_name: str) -> int:
@@ -381,10 +385,10 @@ def test():
 
         raise LookupError(f"Could not find process with the following name: `{agent_name}`!")
 
-    pid_agent_1 = retrieve_pid_agent("agent1")
-    pid_agent_2 = retrieve_pid_agent("agent2")
+    pid_agent_1, pid_agent_2, pid_agent_3 = retrieve_pid_agent("agent1"), retrieve_pid_agent("agent2"), retrieve_pid_agent("agent3")
     executor_1_venv_status_file = pathlib.Path(executor_1.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
     executor_2_venv_status_file = pathlib.Path(executor_2.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+    executor_3_venv_status_file = pathlib.Path(executor_3.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
 
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
     # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
@@ -424,7 +428,7 @@ def test():
     )
 
     venv_dir = pathlib.Path(mpmanager_light.environment_manager.envs_dir)
-    assert len([e for e in venv_dir.iterdir()]) == 2, "We should have two Virtual Environments for our 2 executors!"
+    assert len([e for e in venv_dir.iterdir()]) == 3, "We should have three Virtual Environments for our 3 executors!"
     # We remove the old VirtualEnvironment
     logger.debug("Calling cleanup_virtual_environments")
     mpmanager_light.environment_manager.running = True
@@ -432,13 +436,23 @@ def test():
     logger.debug("cleanup_virtual_environments ended")
 
     venvs = [str(e) for e in venv_dir.iterdir()]
-    assert len(venvs) == 1, "Only one Virtual Environment should exist!"
-    assert [executor_2.executor_virtual_env.env_path] == venvs
+    assert len(venvs) == 2, "Only two Virtual Environments should exist!"
+    assert [executor_2.executor_virtual_env.env_path, executor_3.executor_virtual_env.env_path] == venvs
 
     # Let's stop the other agent and pretend that the venv is broken
     await executor_manager.stop_for_agent("agent2")
     await wait_for_agent(pid_agent_2)
     executor_2_venv_status_file.unlink()
+
+    await mpmanager_light.environment_manager.cleanup_inactive_pool_members()
+    venvs = [str(e) for e in venv_dir.iterdir()]
+    assert len(venvs) == 1, "Only one Virtual Environment should exist!"
+
+    # Let's stop the other agent and pretend that the venv is outdated
+    await executor_manager.stop_for_agent("agent3")
+    await wait_for_agent(pid_agent_3)
+    ((pathlib.Path(executor_3.executor_virtual_env.python_path).parent / "python3.11")
+     .rename(pathlib.Path(executor_3.executor_virtual_env.python_path).parent /"python3.10"))
 
     await mpmanager_light.environment_manager.cleanup_inactive_pool_members()
     venvs = [str(e) for e in venv_dir.iterdir()]
