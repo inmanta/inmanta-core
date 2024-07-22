@@ -28,6 +28,8 @@ updates:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
   ignore:
+    - dependency-name: "setuptools"
+      update-types: ["version-update:semver-major"]
     - dependency-name: "pytest-inmanta-extensions"
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
