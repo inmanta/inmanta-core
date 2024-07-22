@@ -286,9 +286,7 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     assert env_same_1 is not env_diff_1, "Expected different instances for different blueprints"
 
 
-async def test_executor_creation_and_reuse(
-    pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog
-) -> None:
+async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
@@ -385,10 +383,13 @@ def test():
 
         raise LookupError(f"Could not find process with the following name: `{agent_name}`!")
 
-    pid_agent_1, pid_agent_2, pid_agent_3 = retrieve_pid_agent("agent1"), retrieve_pid_agent("agent2"), retrieve_pid_agent("agent3")
+    pid_agent_1, pid_agent_2, pid_agent_3 = (
+        retrieve_pid_agent("agent1"),
+        retrieve_pid_agent("agent2"),
+        retrieve_pid_agent("agent3"),
+    )
     executor_1_venv_status_file = pathlib.Path(executor_1.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
     executor_2_venv_status_file = pathlib.Path(executor_2.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
-    executor_3_venv_status_file = pathlib.Path(executor_3.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
 
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
     # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
@@ -451,8 +452,7 @@ def test():
     # Let's stop the other agent and pretend that the venv is outdated
     await executor_manager.stop_for_agent("agent3")
     await wait_for_agent(pid_agent_3)
-    ((pathlib.Path(executor_3.executor_virtual_env.python_path).parent / "python3.11")
-     .rename(pathlib.Path(executor_3.executor_virtual_env.python_path).parent /"python3.10"))
+    executor_3.executor_virtual_env.running_process_python_version = (3, 12)
 
     await mpmanager_light.environment_manager.cleanup_inactive_pool_members()
     venvs = [str(e) for e in venv_dir.iterdir()]
