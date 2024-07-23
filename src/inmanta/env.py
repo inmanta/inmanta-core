@@ -43,6 +43,7 @@ import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
 
 import inmanta.module
+import packaging.requirements
 from inmanta import const
 from inmanta.ast import CompilerException
 from inmanta.server.bootloader import InmantaBootloader
@@ -55,10 +56,7 @@ try:
 except ImportError:
     TYPE_CHECKING = False
 
-if TYPE_CHECKING:
-    from packaging.requirements import InvalidRequirement
-else:
-    from pkg_resources.extern.packaging.requirements import InvalidRequirement
+from packaging.requirements import InvalidRequirement
 
 LOGGER = logging.getLogger(__name__)
 LOGGER_PIP = logging.getLogger("inmanta.pip")  # Use this logger to log pip commands or data related to pip commands.
@@ -797,30 +795,19 @@ class ActiveEnv(PythonEnvironment):
         """
         modules: dict[str, Any] = {}
         for req in requirements_list:
-            parsed_name, req_spec = cls._parse_line(req)
-
-            name = req if parsed_name is None else parsed_name
-
-            url = None
-            version = None
-            marker = None
-            extras = None
             try:
-                # this will fail if an url is supplied
-                parsed_req = list(pkg_resources.parse_requirements(req_spec))
-                if len(parsed_req) > 0:
-                    item = parsed_req[0]
-                    if hasattr(item, "name"):
-                        name = item.name
-                    elif hasattr(item, "unsafe_name"):
-                        name = item.unsafe_name
-                    version = item.specs
-                    marker = item.marker
-                    if hasattr(item, "url"):
-                        url = item.url
-                    if hasattr(item, "extras") and len(item.extras) > 0:
-                        extras = sorted(item.extras)
+                req_spec = packaging.requirements.Requirement(req)
+                url = req_spec.url
+                version = req_spec.specifier
+                marker = req_spec.marker
+                extras = req_spec.extras
+                name = req_spec.name
             except InvalidRequirement:
+                parsed_name, req_spec = cls._parse_line(req)
+                name = req if parsed_name is None else parsed_name
+                version = None
+                marker = None
+                extras = None
                 url = req_spec
 
             requirement_id: str = name + "_" + str(marker) if marker else name

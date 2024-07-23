@@ -124,7 +124,7 @@ async def do_user_setup() -> None:
     try:
         click.echo(
             f"{'Trying to connect to DB:': <50}"
-            f"{('%s (%s:%s)' % ( server_config.db_name.get(), server_config.db_host.get(), server_config.db_port.get()))}"
+            f"{('%s (%s:%s)' % (server_config.db_name.get(), server_config.db_host.get(), server_config.db_port.get()))}"
         )
         connection = await get_connection_pool()
         click.echo(f"{'Connection to database' : <50}{click.style('success', fg='green')}")
@@ -151,7 +151,7 @@ async def do_user_setup() -> None:
         )
         await user.insert()
 
-        click.echo(f"{'User %s: ' %username : <50}{click.style('created', fg='green')}")
+        click.echo(f"{'User %s: ' % username: <50}{click.style('created', fg='green')}")
     except ConnectionPoolException as e:
         click.echo(f"{f'Connection to database {server_config.db_host.get()}' : <50}" f"{click.style('failed', fg='red')}")
         raise e

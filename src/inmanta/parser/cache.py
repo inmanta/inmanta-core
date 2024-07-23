@@ -68,7 +68,7 @@ class CacheManager:
         # get file name without extension
         filepart = os.path.basename(filename).rsplit(".", maxsplit=1)[0]
         # make filename with compiler version specific extension
-        filename = f"{filepart}.{get_compiler_version().replace('.','_')}.cfc"
+        filename = f"{filepart}.{get_compiler_version().replace('.', '_')}.cfc"
 
         # construct final path
         return os.path.join(cache_folder, filename)

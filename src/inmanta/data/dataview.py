@@ -779,7 +779,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
         return {}
 
     def get_base_url(self) -> str:
-        return f"/api/v2/resource/{quote(self.rid,safe='')}/history"
+        return f"/api/v2/resource/{quote(self.rid, safe='')}/history"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
