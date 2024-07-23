@@ -10,7 +10,7 @@ requires = [
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
-    "cryptography>=36,<43",
+    "cryptography>=36,<44",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.17",
     "email-validator>=1,<3",
@@ -30,7 +30,7 @@ requires = [
     "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
-    "setuptools",
+    "setuptools<71",
     "texttable~=1.0",
     "tornado~=6.0",
     # lower bound because of ilevkivskyi/typing_inspect#100
