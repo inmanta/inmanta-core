@@ -1216,6 +1216,8 @@ class Agent(SessionEndpoint):
             - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
+        if self._loader is None:
+            return [], set()
 
         # store it outside the loop, but only load when required
         pip_config: Optional[PipConfig] = None
