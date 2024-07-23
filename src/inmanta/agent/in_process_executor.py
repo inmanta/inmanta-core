@@ -446,6 +446,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         eventloop: asyncio.AbstractEventLoop,
         parent_logger: logging.Logger,
         process: "agent.Agent",
+        code_loader: bool,
     ) -> None:
         self.environment = environment
         self.client = client
@@ -453,7 +454,8 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self.logger = parent_logger
         self.process = process
 
-        self.process.initialize_loader()
+        if code_loader:
+            self.process.initialize_loader()
 
         self.executors: dict[str, InProcessExecutor] = {}
         self._creation_locks: inmanta.util.NamedLock = inmanta.util.NamedLock()

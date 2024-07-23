@@ -1007,6 +1007,7 @@ class Agent(SessionEndpoint):
                 asyncio.get_event_loop(),
                 LOGGER,
                 self,
+                code_loader,
             )
 
     async def _init_agent_map(self) -> None:
