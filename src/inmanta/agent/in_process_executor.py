@@ -446,7 +446,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         eventloop: asyncio.AbstractEventLoop,
         parent_logger: logging.Logger,
         process: "agent.Agent",
-        code_loader: bool,
+        code_loader: bool = True,
     ) -> None:
         self.environment = environment
         self.client = client
