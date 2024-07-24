@@ -78,10 +78,10 @@ class ExecutorContext:
     async def stop(self) -> None:
         """Request the executor to stop"""
         if self.executor:
-            self.executor.stop()
+            await self.executor.stop()
         if self.executor:
             # threadpool finalizer is not used, we expect threadpools to be terminated with the process
-            self.executor.join([])
+            await self.executor.join([])
         await self.server.stop()
 
 
@@ -255,7 +255,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
             eventloop=loop,
             parent_logger=parent_logger,
         )
-
         # activate venv
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
@@ -288,6 +287,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
                 failed.append(module_source)
 
+        await context.executor.start()
         return failed
 
 

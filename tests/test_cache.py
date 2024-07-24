@@ -16,14 +16,18 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
 from threading import Lock, Thread
 from time import sleep
 
 import pytest
 from pytest import fixture
 
+import inmanta
+from inmanta.agent import executor
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import cache
+from inmanta.data import PipConfig
 from inmanta.resources import Id, Resource, resource
 
 
@@ -39,13 +43,59 @@ def my_resource():
 
 
 def test_base():
+    """
+    Basic test:
+        - cache write
+        - cache read
+    """
     cache = AgentCache()
     value = "test too"
     cache.cache_value("test", value)
     assert value == cache.find("test")
 
 
-def test_timout():
+@pytest.fixture
+def set_custom_cache_cleanup_policy(monkeypatch, server_config):
+    """
+    Fixture to temporarily set the policy for cache cleanup.
+    """
+    old_value = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()
+
+    monkeypatch.setattr(inmanta.agent.config.agent_cache_cleanup_tick_rate, "validator", inmanta.config.is_float)
+    inmanta.agent.config.agent_cache_cleanup_tick_rate.set("0.1")
+
+    yield
+
+    inmanta.agent.config.agent_cache_cleanup_tick_rate.set(str(old_value))
+
+
+async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent):
+    """
+    Test timeout parameter: test that expired entry is removed from the cache
+    """
+    pip_config = PipConfig()
+
+    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=(), sources=[])
+
+    myagent_instance = await agent.executor_manager.get_executor(
+        "agent1", "local:", [executor.ResourceInstallSpec("test::Test", 5, blueprint1)]
+    )
+
+    cache = myagent_instance._cache
+    value = "test too"
+    cache.cache_value("test", value, timeout=0.1)
+    cache.cache_value("test2", value)
+
+    assert value == cache.find("test")
+    # Cache cleanup job is periodically triggered with a 1s delay
+    await asyncio.sleep(0.3)
+    with pytest.raises(KeyError):
+        cache.find("test")
+
+    assert value == cache.find("test2")
+
+
+def test_timeout_manual_cleanup():
     cache = AgentCache()
     value = "test too"
     cache.cache_value("test", value, timeout=0.1)
@@ -53,23 +103,27 @@ def test_timout():
 
     assert value == cache.find("test")
     sleep(0.2)
-    try:
+    cache.clean_stale_entries()
+    with pytest.raises(KeyError):
         assert value == cache.find("test")
-        raise AssertionError("Should get exception")
-    except KeyError:
-        pass
 
     assert value == cache.find("test2")
 
 
 def test_base_fail():
+    """
+    Test cache read on non-existing entry
+    """
     cache = AgentCache()
     value = "test too"
     with pytest.raises(KeyError):
         assert value == cache.find("test")
 
 
-def test_resource():
+def test_resource(my_resource):
+    """
+    Test writing and reading a resource from the agent cache
+    """
     cache = AgentCache()
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
@@ -78,6 +132,9 @@ def test_resource():
 
 
 def test_resource_fail(my_resource):
+    """
+    Test that caching a resource correctly creates a single entry in the cache for the full key (args+resource_id)
+    """
     cache = AgentCache()
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
@@ -88,15 +145,22 @@ def test_resource_fail(my_resource):
 
 
 def test_version_closed():
+    """
+    Test caching a value for a version that is not opened is not allowed
+    """
     cache = AgentCache()
     value = "test too"
     version = 200
-    with pytest.raises(Exception):
+    with pytest.raises(Exception) as e:
         cache.cache_value("test", value, version=version)
-        assert value == cache.find("test", version=version)
+
+    assert "Added data to version that is not open" in str(e.value)
 
 
 def test_version():
+    """
+    Test cache write then read using version
+    """
     cache = AgentCache()
     value = "test too"
     version = 200
@@ -143,6 +207,7 @@ def test_context_manager():
 
 
 def test_multi_threaded():
+
     class Spy:
         def __init__(self):
             self.created = 0
@@ -196,7 +261,7 @@ def test_multi_threaded():
     assert beta.deleted == beta.created
 
 
-def test_timout_and_version():
+def test_timeout_and_version():
     cache = AgentCache()
     version = 200
 
@@ -219,7 +284,7 @@ def test_timout_and_version():
     assert value == cache.find("testx")
 
 
-def test_version_and_timout():
+def test_version_and_timeout():
     cache = AgentCache()
     version = 200
 
@@ -342,7 +407,7 @@ def test_decorator():
     xcache = AgentCache()
 
     class DT:
-        def __init__(self, cache):
+        def __init__(self, cache: AgentCache):
             self.cache = cache
             self.count = 0
             self.c2 = 0

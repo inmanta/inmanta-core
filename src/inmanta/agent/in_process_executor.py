@@ -68,6 +68,9 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="Pool_%s" % self.name)
 
         self._cache = inmanta.agent.cache.AgentCache(self)
+        # This lock ensures cache entries can not be cleaned up when
+        # the executor is actively working and vice versa
+        self.activity_lock = asyncio.Lock()
 
         self.logger: logging.Logger = parent_logger.getChild(self.name)
 
@@ -75,13 +78,47 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self.failed_resource_types: FailedResourcesSet = set()
 
-    def stop(self) -> None:
+        self.cache_cleanup_tick_rate = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()
+        self.periodic_cache_cleanup_job: Optional[asyncio.Task[None]] = None
+
+    async def start(self) -> None:
+        self.periodic_cache_cleanup_job = asyncio.create_task(self.cleanup_stale_cache_entries())
+
+    async def cleanup_stale_cache_entries(self) -> None:
+        """
+        Periodically cleans up stale entries in the cache. The clean_stale_entries
+        has to be called on the thread pool because it might call finalizers.
+        """
+        reschedule_interval: int = self.cache_cleanup_tick_rate
+        while not self._stopped:
+            async with self.activity_lock:
+                if self._stopped:
+                    return
+                try:
+                    await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.clean_stale_entries)
+                except Exception:
+                    # Make sure we don't drop out of the while loop if an exception occurs.
+                    self.logger.exception(
+                        "An unexpected exception occurred while cleaning up the cache of agent %s.", self.name
+                    )
+            await asyncio.sleep(reschedule_interval)
+
+    async def stop(self) -> None:
+        if self._stopped:
+            return
         self._stopped = True
-        self._cache.close()
+        if self.periodic_cache_cleanup_job:
+            try:
+                self.periodic_cache_cleanup_job.cancel()
+                await self.periodic_cache_cleanup_job
+            except asyncio.CancelledError:
+                pass
+        async with self.activity_lock:
+            await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.close)
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
 
-    def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
+    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
         """
         Called after stop to ensure complete shutdown
 
@@ -90,6 +127,11 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         assert self._stopped
         thread_pool_finalizer.append(self.provider_thread_pool)
         thread_pool_finalizer.append(self.thread_pool)
+        if self.periodic_cache_cleanup_job:
+            try:
+                await self.periodic_cache_cleanup_job
+            except asyncio.CancelledError:
+                self.periodic_cache_cleanup_job = None
 
     def is_stopped(self) -> bool:
         return self._stopped
@@ -251,7 +293,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             ctx.exception("Failed to report the start of the deployment to the server")
             return
 
-        await self._execute(resource, gid=gid, ctx=ctx, requires=requires)
+        async with self.activity_lock:
+            await self._execute(resource, gid=gid, ctx=ctx, requires=requires)
 
         ctx.debug(
             "End run for resource %(r_id)s in deploy %(deploy_id)s",
@@ -279,9 +322,11 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param dry_run_id: id for this dryrun
         """
         model_version: int = resources[0].model_version
+
         env_id: uuid.UUID = resources[0].env_id
 
-        async with self.cache(model_version):
+        # TODO remove versioned cache:
+        async with self.activity_lock, self.cache(model_version):
             for resource in resources:
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
@@ -373,8 +418,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 return 500
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
-
-            async with self.cache(model_version):
+            # TODO remove versioned cache:
+            async with self.activity_lock, self.cache(model_version):
                 try:
                     started = datetime.datetime.now().astimezone()
                     provider = await self.get_provider(resource_obj)
@@ -458,7 +503,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
     async def stop(self) -> None:
         for child in self.executors.values():
-            child.stop()
+            await child.stop()
 
     async def start(self) -> None:
         pass
@@ -467,13 +512,13 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         if agent_name in self.executors:
             out = self.executors[agent_name]
             del self.executors[agent_name]
-            out.stop()
+            await out.stop()
             return [out]
         return []
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
         for child in self.executors.values():
-            child.join(thread_pool_finalizer)
+            await child.join(thread_pool_finalizer)
 
     async def get_executor(
         self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
@@ -497,6 +542,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     out = self.executors[agent_name]
                 else:
                     out = InProcessExecutor(agent_name, agent_uri, self.environment, self.client, self.eventloop, self.logger)
+                    await out.start()
                     self.executors[agent_name] = out
         assert out.uri == agent_uri
         failed_resource_types: FailedResourcesSet = await self.process.ensure_code(code)

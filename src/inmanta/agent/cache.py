@@ -16,8 +16,8 @@
     Contact: code@inmanta.com
 """
 
-import bisect
 import contextlib
+import heapq
 import logging
 import sys
 import time
@@ -34,13 +34,34 @@ LOGGER = logging.getLogger()
 
 
 class Scope:
-    def __init__(self, timeout: int = 24 * 3600, version: int = 0) -> None:
+    """
+    Scope of the lifetime of CacheItem.
+    """
+
+    def __init__(self, timeout: float = 24 * 3600, version: int = 0) -> None:
+        """
+        :param timeout: How long (in seconds) before the associated cache item is considered expired.
+        :param version: The version to which this cache item belongs.
+        """
         self.timeout = timeout
         self.version = version
 
 
 class CacheItem:
-    def __init__(self, key: str, scope: Scope, value: Any, call_on_delete: Optional[Callable[[Any], None]]) -> None:
+    def __init__(
+        self,
+        key: str,
+        scope: Scope,
+        value: Any,
+        call_on_delete: Optional[Callable[[Any], None]],
+    ) -> None:
+        """
+        :param key: The full key identifying this item in the cache.
+        :param scope: Information about the lifetime of the item.
+        :param value: The value being cached associated to the key.
+        :param call_on_delete: Optional finalizer to call when the cache item is deleted. This is
+            a callable expecting the cached value as an argument.
+        """
         self.key = key
         self.scope = scope
         self.value = value
@@ -94,11 +115,19 @@ class AgentCache:
         :param agent_instance: The AgentInstance that is using the cache. The value is None when the cache
                                is used from pytest-inmanta.
         """
-        self.cache: dict[str, Any] = {}
+        # The cache itself
+        self.cache: dict[str, CacheItem] = {}
+
         self.counterforVersion: dict[int, int] = {}
         self.keysforVersion: dict[int, set[str]] = {}
-        self.timerqueue: list[CacheItem] = []
-        self.nextAction: float = sys.maxsize
+
+        # Time-based eviction mechanism
+        # Keep track of when is the next earliest cache item expiry time.
+        self.next_action: float = sys.maxsize
+        # Heap queue of cache items, used for efficient retrieval of the cache
+        # item that expires the soonest. should only be mutated via the heapq API.
+        self.timer_queue: list[CacheItem] = []
+
         self.addLock = Lock()
         self.addLocks: dict[str, Lock] = {}
         self._agent_instance = agent_instance
@@ -110,10 +139,10 @@ class AgentCache:
         for version in list(self.counterforVersion.keys()):
             while self.is_open(version):
                 self.close_version(version)
-        self.nextAction = sys.maxsize
-        self.timerqueue.clear()
+        self.next_action = sys.maxsize
         for key in list(self.cache.keys()):
             self._evict_item(key)
+        self.timer_queue.clear()
 
     def is_open(self, version: int) -> bool:
         """
@@ -175,19 +204,27 @@ class AgentCache:
             # already gone
             pass
 
-    def _advance_time(self) -> None:
+    def clean_stale_entries(self) -> None:
         now = time.time()
-        while now > self.nextAction and len(self.timerqueue) > 0:
-            item = self.timerqueue.pop(0)
+        while now > self.next_action and len(self.timer_queue) > 0:
+            item = heapq.heappop(self.timer_queue)
             self._evict_item(item.key)
-            if len(self.timerqueue) > 0:
-                self.nextAction = self.timerqueue[0].time
+            if len(self.timer_queue) > 0:
+                self.next_action = self.timer_queue[0].time
             else:
-                self.nextAction = sys.maxsize
+                self.next_action = sys.maxsize
 
-    def _get(self, key: str) -> Any:
-        self._advance_time()
-        return self.cache[key]
+    def _get(self, key: str) -> CacheItem:
+        """
+        Retrieve cache item with the given key
+
+        :param key: Key of the item being retrieved from the cache
+        :return: The cached item
+
+        :raises KeyError: If the key is not present in the cache
+        """
+        item = self.cache[key]
+        return item
 
     def _cache(self, item: CacheItem) -> None:
         scope = item.scope
@@ -202,11 +239,10 @@ class AgentCache:
                 self.keysforVersion[scope.version].add(item.key)
             except KeyError:
                 raise Exception("Added data to version that is not open")
+        heapq.heappush(self.timer_queue, item)
 
-        bisect.insort_right(self.timerqueue, item)
-        if item.time < self.nextAction:
-            self.nextAction = item.time
-        self._advance_time()
+        if item.time < self.next_action:
+            self.next_action = item.time
 
     def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
         key_parts = [key]
@@ -228,18 +264,25 @@ class AgentCache:
         """
         add a value to the cache with the given key
 
-        if a resource or version is given, these are prepended to the key and expiry is adapted accordingly
+        if a resource or version is given, these are appended to the key and expiry is adapted accordingly
 
         :param timeout: nr of second before this value is expired
         :param call_on_delete: A callback function that is called when the value is removed from the cache.
         """
-        self._cache(CacheItem(self._get_key(key, resource, version), Scope(timeout, version), value, call_on_delete))
+        self._cache(
+            CacheItem(
+                self._get_key(key, resource, version),
+                Scope(timeout, version),
+                value,
+                call_on_delete,
+            )
+        )
 
     def find(self, key: str, resource: Optional[Resource] = None, version: int = 0) -> Any:
         """
         find a value in the cache with the given key
 
-        if a resource or version is given, these are prepended to the key
+        if a resource or version is given, these are appended to the key
 
         :raise KeyError: if the value is not found
         """
