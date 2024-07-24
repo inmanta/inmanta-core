@@ -799,13 +799,12 @@ class AgentInstance:
                             resource.rvid,
                             undeployable[resource.rvid],
                         )
-                        r = await self.get_client().dryrun_update(
+                        await self.get_client().dryrun_update(
                             tid=resource.env_id,
                             id=dry_run_id,
                             resource=resource.rvid,
                             changes={"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}},
                         )
-                        assert r
                     else:
                         deployable_resources.append(resource)
                 if deployable_resources:
