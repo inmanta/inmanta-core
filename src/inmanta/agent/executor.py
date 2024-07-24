@@ -27,8 +27,6 @@ import logging
 import os
 import pathlib
 import shutil
-import subprocess
-import sys
 import types
 import typing
 import uuid
@@ -94,6 +92,7 @@ class EnvBlueprint:
     pip_config: PipConfig
     requirements: Sequence[str]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
+    python_version: tuple[int, int]
 
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
@@ -110,6 +109,7 @@ class EnvBlueprint:
             blueprint_dict: Dict[str, Any] = {
                 "pip_config": self.pip_config.dict(),
                 "requirements": self.requirements,
+                "python_version": self.python_version,
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -123,14 +123,18 @@ class EnvBlueprint:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EnvBlueprint):
             return False
-        return (self.pip_config, set(self.requirements)) == (other.pip_config, set(other.requirements))
+        return (self.pip_config, set(self.requirements), self.python_version) == (
+            other.pip_config,
+            set(other.requirements),
+            other.python_version,
+        )
 
     def __hash__(self) -> int:
         return int(self.blueprint_hash(), 16)
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
-        return f"EnvBlueprint(requirements=[{str(req)}], pip={self.pip_config}]"
+        return f"EnvBlueprint(requirements=[{str(req)}], pip={self.pip_config}, python_version={self.python_version}]"
 
 
 @dataclasses.dataclass
@@ -156,15 +160,18 @@ class ExecutorBlueprint(EnvBlueprint):
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
         pip_configs = [cd.blueprint.pip_config for cd in code]
+        python_versions = [cd.blueprint.python_version for cd in code]
         if not pip_configs:
             raise Exception("No Pip config available, aborting")
         base_pip = pip_configs[0]
+        python_version = python_versions[0]
         for pip_config in pip_configs:
             assert pip_config == base_pip, f"One agent is using multiple pip configs: {base_pip} {pip_config}"
         return ExecutorBlueprint(
             pip_config=base_pip,
             sources=sources,
             requirements=requirements,
+            python_version=python_version,
         )
 
     def blueprint_hash(self) -> str:
@@ -180,6 +187,7 @@ class ExecutorBlueprint(EnvBlueprint):
                 "requirements": self.requirements,
                 # Use the hash values and name to create a stable identity
                 "sources": [[source.hash_value, source.name, source.is_byte_code] for source in self.sources],
+                "python_version": self.python_version,
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -194,15 +202,16 @@ class ExecutorBlueprint(EnvBlueprint):
         """
         Converts this ExecutorBlueprint instance into an EnvBlueprint instance.
         """
-        return EnvBlueprint(pip_config=self.pip_config, requirements=self.requirements)
+        return EnvBlueprint(pip_config=self.pip_config, requirements=self.requirements, python_version=self.python_version)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return (self.pip_config, self.requirements, self.sources) == (
+        return (self.pip_config, self.requirements, self.sources, self.python_version) == (
             other.pip_config,
             other.requirements,
             other.sources,
+            other.python_version,
         )
 
 
@@ -302,7 +311,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
         self.thread_pool = threadpool
         self.inmanta_venv_status_file: pathlib.Path = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
         self.folder_name: str = pathlib.Path(self.env_path).name
-        self.running_process_python_version: str = sys.version_info[:2]
 
     def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
@@ -388,12 +396,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
         """
         # If the venv is not correctly initialized, it can be cleaned up
         if not self.is_correctly_initialized():
-            return True
-
-        venv_python_version = subprocess.check_output([self.python_path, "--version"]).decode("utf-8").strip().split()[1]
-        venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
-
-        if venv_python_version != self.running_process_python_version:
             return True
 
         return super().can_be_cleaned_up(retention_time)

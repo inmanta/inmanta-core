@@ -365,15 +365,25 @@ def test():
     sources2 = (module_source1,)
     sources3 = (module_source1,)
 
-    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
-    blueprint2 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
-    blueprint3 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements3, sources=sources3)
+    initial_version: tuple[int, int] = (3, 11)
+    blueprint1 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements1, sources=sources1, python_version=initial_version
+    )
+    blueprint2 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements2, sources=sources2, python_version=initial_version
+    )
+    blueprint3 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements3, sources=sources3, python_version=initial_version
+    )
+    blueprint3_updated = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements3, sources=sources3, python_version=initial_version
+    )
 
     executor_manager = mpmanager_light
     executor_1, executor_2, executor_3 = await asyncio.gather(
         executor_manager.get_executor("agent1", "local:", code_for(blueprint1), venv_checkup_interval=0.1),
         executor_manager.get_executor("agent2", "local:", code_for(blueprint2), venv_checkup_interval=0.1),
-        executor_manager.get_executor("agent3", "local:", code_for(blueprint3)),
+        executor_manager.get_executor("agent3", "local:", code_for(blueprint3), venv_checkup_interval=0.1),
     )
 
     def retrieve_pid_agent(agent_name: str) -> int:
@@ -390,6 +400,7 @@ def test():
     )
     executor_1_venv_status_file = pathlib.Path(executor_1.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
     executor_2_venv_status_file = pathlib.Path(executor_2.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+    executor_3_venv_status_file = pathlib.Path(executor_3.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
 
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
     # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
@@ -413,7 +424,7 @@ def test():
 
     async def wait_for_agent(pid_agent: int) -> None:
         for i in range(10):
-            if psutil.pid_exists(pid_agent):
+            if not psutil.pid_exists(pid_agent):
                 return
             else:
                 await asyncio.sleep(0.2)
@@ -452,8 +463,19 @@ def test():
     # Let's stop the other agent and pretend that the venv is outdated
     await executor_manager.stop_for_agent("agent3")
     await wait_for_agent(pid_agent_3)
-    executor_3.executor_virtual_env.running_process_python_version = (3, 12)
+    # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
+    # modification override of the inmanta file and the retrieval of the last modification of the file
+    os.utime(
+        executor_3_venv_status_file,
+        (datetime.datetime.now().timestamp(), old_datetime.timestamp()),
+    )
+    # A new version would run
+    blueprint3_updated.python_version = (3, 12)
+    await executor_manager.get_executor("agent3", "local:", code_for(blueprint3_updated), venv_checkup_interval=0.1)
+    venvs = [str(e) for e in venv_dir.iterdir()]
+    assert len(venvs) == 2, "Only one Virtual Environment should exist!"
 
+    await asyncio.sleep(2)
     await mpmanager_light.environment_manager.cleanup_inactive_pool_members()
     venvs = [str(e) for e in venv_dir.iterdir()]
-    assert len(venvs) == 0, "No Virtual Environment should exist!"
+    assert len(venvs) == 1, "No Virtual Environment should exist!"
