@@ -20,6 +20,7 @@ import logging
 import os
 import pathlib
 import subprocess
+import sys
 
 import psutil
 
@@ -79,11 +80,21 @@ assert inmanta_plugins.sub.a == 1""",
     sources2 = [module_source1, module_source2]
 
     # Define blueprints for executors and environments
-    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
-    env_blueprint1 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements1)
-    blueprint2 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources2)
-    blueprint3 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
-    env_blueprint2 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements2)
+    blueprint1 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements1, sources=sources1, python_version=sys.version_info[:2]
+    )
+    env_blueprint1 = executor.EnvBlueprint(
+        pip_config=pip_config, requirements=requirements1, python_version=sys.version_info[:2]
+    )
+    blueprint2 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements1, sources=sources2, python_version=sys.version_info[:2]
+    )
+    blueprint3 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements2, sources=sources2, python_version=sys.version_info[:2]
+    )
+    env_blueprint2 = executor.EnvBlueprint(
+        pip_config=pip_config, requirements=requirements2, python_version=sys.version_info[:2]
+    )
 
     executor_manager = mpmanager_light
     venv_manager = mpmanager_light.environment_manager
@@ -160,7 +171,9 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     sources = ()
 
     # Create a blueprint with no requirements and no sources
-    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements, sources=sources)
+    blueprint1 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements, sources=sources, python_version=sys.version_info[:2]
+    )
     env_bp_hash1 = blueprint1.to_env_blueprint().blueprint_hash()
 
     with caplog.at_level(logging.DEBUG):
@@ -201,8 +214,8 @@ async def test_blueprint_hash_consistency(tmpdir):
     requirements1 = ("pkg1", "pkg2")
     requirements2 = ("pkg2", "pkg1")
 
-    blueprint1 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements1)
-    blueprint2 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements2)
+    blueprint1 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements1, python_version=sys.version_info[:2])
+    blueprint2 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements2, python_version=sys.version_info[:2])
 
     hash1 = blueprint1.blueprint_hash()
     hash2 = blueprint2.blueprint_hash()
@@ -234,13 +247,14 @@ def test_hash_consistency_across_sessions():
     # Python code to execute in subprocess
     python_code = f"""
 import json
+import sys
 from inmanta.agent.executor import EnvBlueprint, PipConfig
 
 config_str = '''{config_str}'''
 config = json.loads(config_str)
 
 pip_config = PipConfig(**config["pip_config"])
-blueprint = EnvBlueprint(pip_config=pip_config, requirements=config["requirements"])
+blueprint = EnvBlueprint(pip_config=pip_config, requirements=config["requirements"], python_version=sys.version_info[:2])
 
 # Generate and print the hash
 print(blueprint.blueprint_hash())
@@ -248,7 +262,9 @@ print(blueprint.blueprint_hash())
 
     # Generate hash in the current session for comparison
     pip_config = PipConfig(**pip_config_dict)
-    current_session_blueprint = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements)
+    current_session_blueprint = executor.EnvBlueprint(
+        pip_config=pip_config, requirements=requirements, python_version=sys.version_info[:2]
+    )
     current_hash = current_session_blueprint.blueprint_hash()
 
     # Generate hash in a new interpreter session
@@ -272,8 +288,12 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     """
     manager = executor.VirtualEnvironmentManager(tmpdir)
 
-    blueprint1 = executor.EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=("pkg1",))
-    blueprint2 = executor.EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=())
+    blueprint1 = executor.EnvBlueprint(
+        pip_config=PipConfig(index_url=pip_index.url), requirements=("pkg1",), python_version=sys.version_info[:2]
+    )
+    blueprint2 = executor.EnvBlueprint(
+        pip_config=PipConfig(index_url=pip_index.url), requirements=(), python_version=sys.version_info[:2]
+    )
 
     # Wait for all tasks to complete
     env_same_1, env_same_2, env_diff_1 = await asyncio.gather(
@@ -315,9 +335,15 @@ def test():
     sources1 = ()
     sources2 = (module_source1,)
 
-    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
-    blueprint2 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources2)
-    blueprint3 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
+    blueprint1 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements1, sources=sources1, python_version=sys.version_info[:2]
+    )
+    blueprint2 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements1, sources=sources2, python_version=sys.version_info[:2]
+    )
+    blueprint3 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements2, sources=sources2, python_version=sys.version_info[:2]
+    )
 
     executor_manager = mpmanager_light
     executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.wait_for(
