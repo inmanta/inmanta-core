@@ -64,6 +64,7 @@ from utils import (
     LogSequence,
     _wait_until_deployment_finishes,
     assert_equal_ish,
+    expire_versions_and_cleanup_cache,
     log_contains,
     log_index,
     resource_action_consistency_check,
@@ -2574,7 +2575,7 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
 
     # cache has 1 version in flight
     executor_instance = agent.executor_manager.executors["agent1"]
-    assert len(executor_instance._cache.counterforVersion) == 1
+    assert len(executor_instance._cache.keys_for_version) == 1
 
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
@@ -2585,9 +2586,11 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
+    expire_versions_and_cleanup_cache(executor_instance._cache)
+
     # cache has no versions in flight
     # for issue #1883
-    assert not executor_instance._cache.counterforVersion
+    assert not executor_instance._cache.keys_for_version
 
     # Incremental deploy
     #   * All resources are deployed successfully:
@@ -2823,7 +2826,7 @@ async def test_s_periodic_Vs_full(
 
     # cache has 1 version in flight
     executor_instance = agent.executor_manager.executors["agent1"]
-    assert len(executor_instance._cache.counterforVersion) == 1
+    assert len(executor_instance._cache.keys_for_version) == 1
 
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
@@ -2837,7 +2840,9 @@ async def test_s_periodic_Vs_full(
     # cache has no versions in flight
     # for issue #1883
 
-    assert not executor_instance._cache.counterforVersion
+    expire_versions_and_cleanup_cache(executor_instance._cache)
+
+    assert not executor_instance._cache.keys_for_version
 
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, action.msg)
 

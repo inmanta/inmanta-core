@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import contextlib
 import heapq
 import logging
 import sys
@@ -63,38 +62,24 @@ class CacheItem:
             a callable expecting the cached value as an argument.
         """
         self.key = key
-        self.scope = scope
+        self.scope: Scope = scope
         self.value = value
-        self.time: float = time.time() + scope.timeout
         self.call_on_delete = call_on_delete
+        self.expiry_time = time.time() + scope.timeout
+        self.finalizer_lock = Lock()
+        self.called_finalizer = False
 
     def __lt__(self, other: "CacheItem") -> bool:
-        return self.time < other.time
+        return self.expiry_time < other.expiry_time
 
     def delete(self) -> None:
-        if callable(self.call_on_delete):
-            self.call_on_delete(self.value)
+        with self.finalizer_lock:
+            if callable(self.call_on_delete) and not self.called_finalizer:
+                self.called_finalizer = True
+                self.call_on_delete(self.value)
 
     def __del__(self) -> None:
         self.delete()
-
-
-class CacheVersionContext(contextlib.AbstractContextManager):
-    """
-    A context manager to ensure the cache version is properly closed
-    """
-
-    def __init__(self, cache: "AgentCache", version: int) -> None:
-        self.version = version
-        self.cache = cache
-
-    def __enter__(self):
-        self.cache.open_version(self.version)
-        return self.cache
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.cache.close_version(self.version)
-        return None
 
 
 @stable_api
@@ -102,12 +87,10 @@ class AgentCache:
     """
     Caching system for the agent:
 
-    cache items can expire based on:
-    1. time
-    2. version
+    cache items are removed from the cache either:
+    1. individually when their expiry_time is up
+    2. as a group when their version is not being used for a while (default 1 min)
 
-    versions are opened and closed
-    when a version is closed as many times as it was opened, all cache items linked to this version are dropped
     """
 
     def __init__(self, agent_instance: Optional["AgentInstance"] = None) -> None:
@@ -118,8 +101,13 @@ class AgentCache:
         # The cache itself
         self.cache: dict[str, CacheItem] = {}
 
-        self.counterforVersion: dict[int, int] = {}
-        self.keysforVersion: dict[int, set[str]] = {}
+        # Version-based caching:
+        # How long we keep each version after it was last used
+        self.version_expiry_time: float = 60
+        # Keep track of when each version can be deleted
+        self.timer_for_version: dict[int, float] = {}
+        # Keep track of which cache keys belong to which version
+        self.keys_for_version: dict[int, set[str]] = {}
 
         # Time-based eviction mechanism
         # Keep track of when is the next earliest cache item expiry time.
@@ -136,64 +124,10 @@ class AgentCache:
         """
         Cleanly terminate the cache
         """
-        for version in list(self.counterforVersion.keys()):
-            while self.is_open(version):
-                self.close_version(version)
         self.next_action = sys.maxsize
         for key in list(self.cache.keys()):
             self._evict_item(key)
         self.timer_queue.clear()
-
-    def is_open(self, version: int) -> bool:
-        """
-        Is the given version open in the cache?
-        """
-        return version in self.counterforVersion
-
-    def manager(self, version: int) -> CacheVersionContext:
-        return CacheVersionContext(self, version)
-
-    def open_version(self, version: int) -> None:
-        """
-        Open the cache for the specific version
-
-        :param version: the version id to open the cache for
-        """
-        if version in self.counterforVersion:
-            self.counterforVersion[version] += 1
-        else:
-            LOGGER.debug("Cache open version %d", version)
-            self.counterforVersion[version] = 1
-            self.keysforVersion[version] = set()
-
-    def close_version(self, version: int) -> None:
-        """
-        Close the cache for the specific version
-
-        when a version is closed as many times as it was opened, all cache items linked to this version are dropped
-
-        :param version: the version id to close the cache for
-        """
-        if version not in self.counterforVersion:
-            if self._agent_instance and self._agent_instance.is_stopped():
-                # When a AgentInstance is stopped, all cache entries are cleared and all ResourceActions are cancelled.
-                # However, all ResourceActions that are in-flight keep executing. As such, close_version() might get called
-                # on an already closed cache.
-                return
-            else:
-                raise Exception("Closed version that does not exist")
-
-        self.counterforVersion[version] -= 1
-
-        if self.counterforVersion[version] != 0:
-            return
-
-        LOGGER.debug("Cache close version %d", version)
-        for x in self.keysforVersion[version]:
-            self._evict_item(x)
-
-        del self.counterforVersion[version]
-        del self.keysforVersion[version]
 
     def _evict_item(self, key: str) -> None:
         try:
@@ -205,14 +139,27 @@ class AgentCache:
             pass
 
     def clean_stale_entries(self) -> None:
+        """
+        Clean up stale entries from the cache:
+            - individually for time-scoped entries
+            - version-wide for version-scoped entries belonging to a stale version
+        """
         now = time.time()
         while now > self.next_action and len(self.timer_queue) > 0:
             item = heapq.heappop(self.timer_queue)
             self._evict_item(item.key)
             if len(self.timer_queue) > 0:
-                self.next_action = self.timer_queue[0].time
+                self.next_action = self.timer_queue[0].expiry_time
             else:
                 self.next_action = sys.maxsize
+
+        expired_versions = [version for version, timer in self.timer_for_version.items() if now > timer]
+        for version in expired_versions:
+            for key in self.keys_for_version[version]:
+                self._evict_item(key)
+
+            del self.timer_for_version[version]
+            del self.keys_for_version[version]
 
     def _get(self, key: str) -> CacheItem:
         """
@@ -226,23 +173,31 @@ class AgentCache:
         item = self.cache[key]
         return item
 
+    def _refresh_version_expiry_timestamp(self, version: int) -> None:
+        """
+        Update the expiry time for the given version
+        """
+        self.timer_for_version[version] = time.time() + self.version_expiry_time
+
     def _cache(self, item: CacheItem) -> None:
         scope = item.scope
-
         if item.key in self.cache:
             raise Exception("Added same item twice")
 
         self.cache[item.key] = item
 
-        if scope.version != 0:
-            try:
-                self.keysforVersion[scope.version].add(item.key)
-            except KeyError:
-                raise Exception("Added data to version that is not open")
         heapq.heappush(self.timer_queue, item)
 
-        if item.time < self.next_action:
-            self.next_action = item.time
+        if scope.version != 0:
+            try:
+                self.keys_for_version[scope.version].add(item.key)
+            except KeyError:
+                self.keys_for_version[scope.version] = {item.key}
+
+            self._refresh_version_expiry_timestamp(scope.version)
+
+        if item.expiry_time < self.next_action:
+            self.next_action = item.expiry_time
 
     def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
         key_parts = [key]
@@ -267,6 +222,7 @@ class AgentCache:
         if a resource or version is given, these are appended to the key and expiry is adapted accordingly
 
         :param timeout: nr of second before this value is expired
+        :param version: The model version this cache entry belongs to
         :param call_on_delete: A callback function that is called when the value is removed from the cache.
         """
         self._cache(
@@ -286,7 +242,12 @@ class AgentCache:
 
         :raise KeyError: if the value is not found
         """
-        return self._get(self._get_key(key, resource, version)).value
+        item = self._get(self._get_key(key, resource, version)).value
+
+        if version != 0:
+            self._refresh_version_expiry_timestamp(version)
+
+        return item
 
     def get_or_else(
         self,
@@ -308,7 +269,6 @@ class AgentCache:
         all kwargs are prepended to the key
 
         if a kwarg named version is found and forVersion is true, the value is cached only for that particular version
-
 
         :param forVersion: whether to use the version attribute to attach this value to the resource
 
@@ -339,6 +299,3 @@ class AgentCache:
             with self.addLock:
                 del self.addLocks[key]
             return value
-
-    def report(self) -> str:
-        return "\n".join([str(k) + " " + str(v) for k, v in self.counterforVersion.items()])

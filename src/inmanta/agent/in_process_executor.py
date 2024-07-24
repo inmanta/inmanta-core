@@ -321,12 +321,10 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param resources: Sequence of resources for which to perform a dryrun.
         :param dry_run_id: id for this dryrun
         """
-        model_version: int = resources[0].model_version
 
         env_id: uuid.UUID = resources[0].env_id
 
-        # TODO remove versioned cache:
-        async with self.activity_lock, self.cache(model_version):
+        async with self.activity_lock:
             for resource in resources:
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
@@ -407,7 +405,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         Get facts for a given resource
         :param resource: The resource for which to get facts.
         """
-        model_version: int = resource.model_version
         env_id: uuid.UUID = resource.env_id
 
         provider = None
@@ -418,8 +415,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 return 500
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
-            # TODO remove versioned cache:
-            async with self.activity_lock, self.cache(model_version):
+            async with self.activity_lock:
                 try:
                     started = datetime.datetime.now().astimezone()
                     provider = await self.get_provider(resource_obj)
@@ -461,20 +457,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             if provider is not None:
                 provider.close()
         return 200
-
-    async def open_version(self, version: int) -> None:
-        """
-        Open a version on the cache
-        """
-        self._cache.open_version(version)
-
-    async def close_version(self, version: int) -> None:
-        """
-        Close a version on the cache
-        """
-        # Needs to run on threadpool due to finalizers?
-        # https://github.com/inmanta/inmanta-core/issues/833
-        self._cache.close_version(version)
 
 
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):

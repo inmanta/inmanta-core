@@ -17,18 +17,22 @@
 """
 
 import asyncio
+import datetime
 from threading import Lock, Thread
 from time import sleep
 
 import pytest
 from pytest import fixture
 
-import inmanta
+import time_machine
+from inmanta.agent import config as agent_config
 from inmanta.agent import executor
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import cache
+from inmanta.config import is_float
 from inmanta.data import PipConfig
 from inmanta.resources import Id, Resource, resource
+from utils import expire_versions_and_cleanup_cache
 
 
 @fixture()
@@ -59,20 +63,18 @@ def set_custom_cache_cleanup_policy(monkeypatch, server_config):
     """
     Fixture to temporarily set the policy for cache cleanup.
     """
-    old_value = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()
+    old_value = agent_config.agent_cache_cleanup_tick_rate.get()
 
-    monkeypatch.setattr(inmanta.agent.config.agent_cache_cleanup_tick_rate, "validator", inmanta.config.is_float)
-    inmanta.agent.config.agent_cache_cleanup_tick_rate.set("0.1")
+    monkeypatch.setattr(agent_config.agent_cache_cleanup_tick_rate, "validator", is_float)
+    agent_config.agent_cache_cleanup_tick_rate.set("0.1")
 
     yield
 
-    inmanta.agent.config.agent_cache_cleanup_tick_rate.set(str(old_value))
+    agent_config.agent_cache_cleanup_tick_rate.set(str(old_value))
 
 
-async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent):
-    """
-    Test timeout parameter: test that expired entry is removed from the cache
-    """
+@pytest.fixture(scope="function")
+async def agent_cache(agent):
     pip_config = PipConfig()
 
     blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=(), sources=[])
@@ -80,14 +82,20 @@ async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent)
     myagent_instance = await agent.executor_manager.get_executor(
         "agent1", "local:", [executor.ResourceInstallSpec("test::Test", 5, blueprint1)]
     )
+    yield myagent_instance._cache
 
-    cache = myagent_instance._cache
+
+async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent_cache):
+    """
+    Test timeout parameter: test that expired entry is removed from the cache
+    """
+    cache = agent_cache
     value = "test too"
     cache.cache_value("test", value, timeout=0.1)
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
-    # Cache cleanup job is periodically triggered with a 1s delay
+    # Cache cleanup job is periodically triggered with a 0.1s delay
     await asyncio.sleep(0.3)
     with pytest.raises(KeyError):
         cache.find("test")
@@ -141,72 +149,46 @@ def test_resource_fail(my_resource):
     cache.cache_value("test", value, resource=resource)
 
     with pytest.raises(KeyError):
-        assert value == cache.find("test")
+        cache.find("test")
 
 
-def test_version_closed():
+def test_default_timeout(my_resource):
     """
-    Test caching a value for a version that is not opened is not allowed
-    """
-    cache = AgentCache()
-    value = "test too"
-    version = 200
-    with pytest.raises(Exception) as e:
-        cache.cache_value("test", value, version=version)
-
-    assert "Added data to version that is not open" in str(e.value)
-
-
-def test_version():
-    """
-    Test cache write then read using version
+    Test default timeout of cache entries for a regular entry (key='test') and
+    for an entry associated with a resource (key=('testx', resource))
     """
     cache = AgentCache()
     value = "test too"
-    version = 200
-    cache.open_version(version)
-    cache.cache_value("test", value, version=version)
-    assert value == cache.find("test", version=version)
 
+    cache.cache_value("test", value)
+    assert value == cache.find("test")
 
-def test_version_close():
-    cache = AgentCache()
-    value = "test too"
-    version = 200
-    cache.open_version(version)
-    cache.cache_value("test", value, version=version)
-    cache.cache_value("test0", value, version=version)
-    cache.cache_value("test4", value, version=version)
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     cache.cache_value("testx", value, resource=resource)
-    assert value == cache.find("test", version=version)
     assert value == cache.find("testx", resource=resource)
-    cache.close_version(version)
     assert value, cache.find("testx", resource=resource)
+
     with pytest.raises(KeyError):
-        assert value == cache.find("test", version=version)
-        raise AssertionError("Should get exception")
+        cache.find("testx")
 
+    # default timeout is 5000s
+    traveller = time_machine.travel(datetime.datetime.now() + datetime.timedelta(seconds=5001))
+    traveller.start()
 
-def test_context_manager():
-    cache = AgentCache()
-    value = "test too"
-    version = 200
-    with cache.manager(version):
-        cache.cache_value("test", value, version=version)
-        cache.cache_value("test0", value, version=version)
-        cache.cache_value("test4", value, version=version)
-        resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-        cache.cache_value("testx", value, resource=resource)
-        assert value == cache.find("test", version=version)
-        assert value == cache.find("testx", resource=resource)
+    # Check that values are still in the cache before running the cleanup job:
+    assert value == cache.find("test")
+    assert value == cache.find("testx", resource=resource)
 
-    assert value, cache.find("testx", resource=resource)
+    # Run the cleanup job and check removal
+    cache.clean_stale_entries()
     with pytest.raises(KeyError):
-        assert value == cache.find("test", version=version)
+        cache.find("test")
+
+    with pytest.raises(KeyError):
+        cache.find("testx")
 
 
-def test_multi_threaded():
+async def test_multi_threaded(agent_cache: AgentCache):
 
     class Spy:
         def __init__(self):
@@ -222,10 +204,10 @@ def test_multi_threaded():
         def delete(self):
             self.deleted += 1
 
-    cache = AgentCache()
-    version = 200
+    cache = agent_cache
 
-    cache.open_version(version)
+    # Cache entry will be considered stale after 0.1s
+    cache_entry_expiry = 0.1
 
     alpha = Spy()
     beta = Spy()
@@ -233,12 +215,12 @@ def test_multi_threaded():
 
     t1 = Thread(
         target=lambda: cache.get_or_else(
-            "test", lambda version: alpha.create(), version=version, call_on_delete=lambda x: x.delete()
+            "test", lambda: alpha.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete()
         )
     )
     t2 = Thread(
         target=lambda: cache.get_or_else(
-            "test", lambda version: beta.create(), version=version, call_on_delete=lambda x: x.delete()
+            "test", lambda: beta.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete()
         )
     )
 
@@ -254,83 +236,18 @@ def test_multi_threaded():
     assert alpha.deleted == 0
     assert beta.deleted == 0
 
-    cache.close_version(version)
+    await asyncio.sleep(0.3)
+    cache.clean_stale_entries()
 
     assert alpha.created + beta.created == 1
-    assert alpha.deleted == alpha.created
     assert beta.deleted == beta.created
-
-
-def test_timeout_and_version():
-    cache = AgentCache()
-    version = 200
-
-    cache.open_version(version)
-    value = "test too"
-    cache.cache_value("test", value, version=version, timeout=0.1)
-    cache.cache_value("testx", value)
-
-    assert value == cache.find("test", version=version)
-    assert value == cache.find("testx")
-
-    sleep(0.2)
-    assert value == cache.find("testx")
-
-    cache.close_version(version)
-    assert value == cache.find("testx")
-
-    with pytest.raises(KeyError):
-        cache.find("test", version=version)
-    assert value == cache.find("testx")
-
-
-def test_version_and_timeout():
-    cache = AgentCache()
-    version = 200
-
-    cache.open_version(version)
-    value = "test too"
-    cache.cache_value("test", value, version=version, timeout=0.1)
-    cache.cache_value("testx", value)
-
-    assert value == cache.find("test", version=version)
-    assert value == cache.find("testx")
-
-    cache.close_version(version)
-    assert value == cache.find("testx")
-
-    sleep(0.2)
-    assert value == cache.find("testx")
-
-    with pytest.raises(KeyError):
-        cache.find("test", version=version)
-
-
-def test_version_fail():
-    cache = AgentCache()
-    value = "test too"
-    version = 200
-    cache.open_version(version)
-    cache.cache_value("test", value, version=version)
-
-    with pytest.raises(KeyError):
-        assert value == cache.find("test")
-
-
-def test_resource_and_version():
-    cache = AgentCache()
-    value = "test too"
-    resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-    version = 200
-    cache.open_version(version)
-    cache.cache_value("test", value, resource=resource, version=version)
-    assert value == cache.find("test", resource=resource, version=version)
+    assert alpha.deleted == alpha.created
 
 
 def test_get_or_else(my_resource):
     called = []
 
-    def creator(param, resource, version):
+    def creator(param, resource):
         called.append("x")
         return param
 
@@ -340,20 +257,24 @@ def test_get_or_else(my_resource):
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     resourcev2 = Id("test::Resource", "test", "key", "test", 200).get_instance()
     assert 200 == resourcev2.id.version
-    version = 200
-    cache.open_version(version)
-    assert value == cache.get_or_else("test", creator, resource=resource, version=version, param=value)
-    assert value == cache.get_or_else("test", creator, resource=resource, version=version, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resource, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resource, param=value)
     assert len(called) == 1
-    assert value == cache.get_or_else("test", creator, resource=resourcev2, version=version, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resourcev2, param=value)
     assert len(called) == 1
-    assert value2 == cache.get_or_else("test", creator, resource=resource, version=version, param=value2)
+    assert value2 == cache.get_or_else("test", creator, resource=resource, param=value2)
 
 
-def test_get_or_else_none():
+def test_get_or_else_none(my_resource):
+    """
+    Test the get_or_else cache_none parameter. This parameter controls
+    whether None values are valid cache entries.
+    """
+
+    # This list is extended for each cache miss on the "creator" function
     called = []
 
-    def creator(param, resource, version):
+    def creator(param, resource):
         called.append("x")
         return param
 
@@ -370,30 +291,35 @@ def test_get_or_else_none():
     cache = AgentCache()
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-    version = 100
-    cache.open_version(version)
-    assert None is cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=None)
+
+    # Check for 2 successive cache miss since caching None is disabled
+    assert None is cache.get_or_else("test", creator, resource=resource, cache_none=False, param=None)
     assert len(called) == 1
-    assert None is cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=None)
+    assert None is cache.get_or_else("test", creator, resource=resource, cache_none=False, param=None)
     assert len(called) == 2
-    assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
-    assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
+
+    # Check for 1 cache miss and then a hit.
+    assert value == cache.get_or_else("test", creator, resource=resource, cache_none=False, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resource, cache_none=False, param=value)
     assert len(called) == 3
 
+    # The Sequencer will return the next item in the sequence on each cache miss
     seq = Sequencer([None, None, "A"])
-    assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+
+    # Check that we have cache misses until the sequencer returns a non-None value.
+    assert None is cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 1
-    assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert None is cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 2
-    assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert "A" == cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 3
-    assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert "A" == cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 3
-    assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert "A" == cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 3
 
 
-def test_decorator():
+async def test_decorator():
     class Closeable:
         def __init__(self):
             self.closed = False
@@ -419,7 +345,7 @@ def test_decorator():
             return "x"
 
         @cache
-        def test_method_2(self, version):
+        def test_method_2(self, version, timeout=100):
             self.count += 1
             return "x2"
 
@@ -451,7 +377,6 @@ def test_decorator():
 
     test = DT(xcache)
 
-    xcache.open_version(3)
     test.test_close(version=3)
     test.test_close_2()
     xcache.close()
@@ -461,20 +386,24 @@ def test_decorator():
     test.count = 0
     my_closable.closed = False
 
+    # 1 cache miss and 2 hits:
     assert "x" == test.test_method()
     assert "x" == test.test_method()
     assert "x" == test.test_method()
     assert 1 == test.count
 
-    xcache.open_version(1)
-    xcache.open_version(2)
+    # 1 cache miss and 1 hit:
     assert "x2" == test.test_method_2(version=1)
     assert "x2" == test.test_method_2(version=1)
     assert 2 == test.count
+    # 1 cache miss :
     assert "x2" == test.test_method_2(version=2)
     assert 3 == test.count
-    xcache.close_version(1)
-    xcache.open_version(1)
+
+    # Wait for version 1 to become stale and get cleaned up
+    expire_versions_and_cleanup_cache(xcache, versions=[1])
+
+    # 1 cache miss and 1 hit:
     assert "x2" == test.test_method_2(version=1)
     assert "x2" == test.test_method_2(version=1)
     assert 4 == test.count
@@ -494,11 +423,13 @@ def test_decorator():
     assert 2 == test.c3
 
     test.count = 0
-    xcache.open_version(3)
     test.test_close(version=3)
     assert test.count == 1
     test.test_close(version=3)
     assert test.count == 1
     assert not my_closable.closed
-    xcache.close_version(3)
+
+    # Wait for version 3 to become stale and get cleaned up
+    expire_versions_and_cleanup_cache(xcache, versions=[3])
+
     assert my_closable.closed
