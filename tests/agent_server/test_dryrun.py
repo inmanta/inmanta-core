@@ -77,6 +77,13 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
             "send_event": False,
             "requires": [],
             "purged": True,
+        },{
+            "key": "key4",
+            "value": None,
+            "id": "test::Fail[agent1,key=key4],v=%d" % version,
+            "send_event": False,
+            "requires": [],
+            "purged": True,
         },
         {
             "key": "key4",
@@ -104,7 +111,10 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
         },
     ]
 
-    status = {"test::Resource[agent2,key=key4]": const.ResourceState.undefined}
+    status = {
+        "test::Resource[agent2,key=key4]": const.ResourceState.undefined,
+        "test::Resource[agent1,key=key4]": const.ResourceState.undefined,
+    }
     result = await client.put_version(
         tid=environment,
         version=version,
@@ -157,12 +167,15 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     assert not changes[resources[2]["id"]]["changes"]["purged"]["current"]
     assert changes[resources[2]["id"]]["changes"]["purged"]["desired"]
 
+    # assert changes[resources[3]["id"]]["changes"]["handler"]["current"] == "FAILED"
+    # assert changes[resources[3]["id"]]["changes"]["handler"]["desired"] == "Handler loading failed"
+
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 6
+    assert result.result["model"]["total"] == 7
     assert result.result["model"]["result"] == "deploying"
 
     result = await client.get_version(environment, version)
@@ -254,6 +267,7 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
 
     assert_handler_failed("test::Noprov[agent1,key=key1],v=%d" % version, "Unable to find a handler")
     assert_handler_failed("test::FailFast[agent1,key=key2],v=%d" % version, "Handler failed")
+    assert_handler_failed("test::DoesNotExist[agent1,key=key2],v=%d" % version, "Handler failed")
 
     # check if this resource was marked as unavailable
     response = await client.get_resource(environment, "test::DoesNotExist[agent1,key=key2],v=%d" % version, logs=True)

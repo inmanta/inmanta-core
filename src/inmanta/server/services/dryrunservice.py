@@ -42,7 +42,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class DyrunService(protocol.ServerSlice):
-    """Slice for dryun support"""
+    """Slice for dryrun support"""
 
     agent_manager: AgentManager
     autostarted_agent_manager: AutostartedAgentManager
@@ -67,7 +67,9 @@ class DyrunService(protocol.ServerSlice):
         model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
         if model is None:
             return 404, {"message": "The request version does not exist."}
+        # skipped_for_undeployable: ['test::Resource[agent2,key=key5]', 'test::Resource[agent2,key=key6]']
 
+        # undeployable: ['test::Resource[agent1,key=key4]', 'test::Resource[agent2,key=key4]']
         dryrun = await self.create_dryrun(env, version_id, model)
 
         return 200, {"dryrun": dryrun}
@@ -244,6 +246,7 @@ class DyrunService(protocol.ServerSlice):
     async def dryrun_update(
         self, env: data.Environment, dryrun_id: uuid.UUID, resource: ResourceVersionIdStr, changes: JsonType
     ) -> Apireturn:
+        # 'test::Fail[agent1,key=key4],v=1'
         async with self.dryrun_lock:
             payload = {"changes": changes, "id_fields": Id.parse_id(resource).to_dict(), "id": resource}
             await data.DryRun.update_resource(dryrun_id, resource, payload)
