@@ -286,9 +286,7 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     assert env_same_1 is not env_diff_1, "Expected different instances for different blueprints"
 
 
-async def test_executor_creation_and_reuse(
-    pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, iteration, caplog
-) -> None:
+async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
