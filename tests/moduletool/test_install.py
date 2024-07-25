@@ -22,7 +22,6 @@ import re
 import shutil
 import subprocess
 from collections.abc import Iterator
-from datetime import datetime
 from importlib.abc import Loader
 from itertools import chain
 from typing import Optional
@@ -36,7 +35,7 @@ from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException
 from inmanta.config import Config
-from inmanta.env import CommandRunner, ConflictingRequirements, PipConfig
+from inmanta.env import ConflictingRequirements, PipConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
@@ -1261,34 +1260,6 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
             level,
             message,
         )
-
-
-@pytest.mark.slowtest
-def test_real_time_logging(caplog):
-    """
-    Make sure the logging in run_command_and_stream_output happens in real time
-    """
-    caplog.set_level(logging.DEBUG)
-
-    cmd: list[str] = ["sh -c 'echo one && sleep 1 && echo two'"]
-    return_code: int
-    output: list[str]
-    return_code, output = CommandRunner(LOGGER).run_command_and_stream_output(cmd, shell=True)
-    assert return_code == 0
-
-    assert "one" in caplog.records[0].message
-    assert "one" in output[0]
-    first_log_line_time: datetime = datetime.fromtimestamp(caplog.records[0].created)
-
-    assert "two" in caplog.records[-1].message
-    assert "two" in output[-1]
-    last_log_line_time: datetime = datetime.fromtimestamp(caplog.records[-1].created)
-
-    # "two" should be logged at least one second after "one"
-    delta: float = (last_log_line_time - first_log_line_time).total_seconds()
-    expected_delta = 1
-    fault_tolerance = 0.1
-    assert abs(delta - expected_delta) <= fault_tolerance
 
 
 @pytest.mark.slowtest

@@ -3079,7 +3079,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
     def execute_command(self, cmd: str) -> None:
         print(f"executing {cmd} on {self.name} in {self._path}")
         print("=" * 10)
-        subprocess.call(cmd, shell=True, cwd=self._path)
+        subprocess.call(cmd, cwd=self._path)
         print("=" * 10)
 
     def unload(self) -> None:

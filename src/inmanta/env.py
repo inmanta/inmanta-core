@@ -899,7 +899,6 @@ class CommandRunner:
     def run_command_and_stream_output(
         self,
         cmd: list[str],
-        shell: bool = False,
         timeout: float = 10,
         env_vars: Optional[Mapping[str, str]] = None,
     ) -> tuple[int, list[str]]:
@@ -912,7 +911,6 @@ class CommandRunner:
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            shell=shell,
             env=env_vars,
         )
         assert process.stdout is not None  # Make mypy happy
