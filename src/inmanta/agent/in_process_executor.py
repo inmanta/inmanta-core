@@ -465,9 +465,6 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         self._loader: CodeLoader | None = None
         self._env: env.VirtualEnv | None = None
-        self._loader_lock: asyncio.Lock | None = None
-        self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] | None = None
-        self._resource_loader_lock: NamedLock | None = NamedLock()
 
         if code_loader:
             # all of this should go into the executor manager https://github.com/inmanta/inmanta-core/issues/7589
@@ -475,15 +472,18 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             self._env.use_virtual_env()
             self._loader = CodeLoader(process._storage["code"], clean=True)
             # Lock to ensure only one actual install runs at a time
-            self._loader_lock = Lock()
+            self._loader_lock: asyncio.Lock = Lock()
             # Keep track for each resource type of the last loaded version
             self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] = defaultdict(lambda: None)
             # Per-resource lock to serialize all actions per resource
-            self._resource_loader_lock = NamedLock()
+            self._resource_loader_lock: NamedLock = NamedLock()
 
     async def stop(self) -> None:
         for child in self.executors.values():
             child.stop()
+
+    def can_load_code(self) -> bool:
+        return self._loader is not None
 
     async def start(self) -> None:
         pass

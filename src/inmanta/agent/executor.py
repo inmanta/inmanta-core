@@ -527,3 +527,11 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         Any threadpools that need to be closed can be handed of to the parent via thread_pool_finalizer
         """
         pass
+
+    @abc.abstractmethod
+    def can_load_code(self) -> bool:
+        """
+        Mechanism to speed up tests using the old (<= iso7) agent mechanism
+        by avoiding spawning a virtual environment.
+        """
+        pass
