@@ -968,12 +968,6 @@ class Agent(SessionEndpoint):
         self._instances: dict[str, AgentInstance] = {}
         self._instances_lock = asyncio.Lock()
 
-        self._loader: CodeLoader | None = None
-        self._env: env.VirtualEnv | None = None
-        self._loader_lock: asyncio.Lock | None = None
-        self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] | None = None
-        self._resource_loader_lock: NamedLock | None = NamedLock()
-
         # Cache to prevent re-fetching the same resource-version
         self._previously_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
 
@@ -1215,7 +1209,7 @@ class Agent(SessionEndpoint):
             - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
-        if self._loader is None:
+        if self.executor_manager._loader is None:
             return [], set()
 
         # store it outside the loop, but only load when required
@@ -1274,63 +1268,6 @@ class Agent(SessionEndpoint):
                 invalid_resource_types.add(resource_type)
 
         return resource_install_specs, invalid_resource_types
-
-
-
-    async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> executor.FailedResourcesSet:
-        """
-        Ensure that the code for the given environment and version is loaded. This method assumes the
-        initialize_loader method was called.
-        """
-
-        failed_to_load: executor.FailedResourcesSet = set()
-
-        if self._loader is None:
-            return failed_to_load
-
-        assert self._resource_loader_lock is not None
-        assert self._last_loaded_version is not None
-        assert self._resource_loader_lock is not None
-
-        for resource_install_spec in code:
-            # only one logical thread can load a particular resource type at any time
-            async with self._resource_loader_lock.get(resource_install_spec.resource_type):
-                # stop if the last successful load was this one
-                # The combination of the lock and this check causes the reloads to naturally 'batch up'
-                if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.blueprint:
-                    LOGGER.debug(
-                        "Handler code already installed for %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-                    continue
-
-                try:
-                    # Install required python packages and the list of ``ModuleSource`` with the provided pip config
-                    LOGGER.debug(
-                        "Installing handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-                    await self._install(resource_install_spec.blueprint)
-                    LOGGER.debug(
-                        "Installed handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-
-                    self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
-                except Exception:
-                    LOGGER.exception(
-                        "Failed to install handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-                    failed_to_load.add(resource_install_spec.resource_type)
-                    self._last_loaded_version[resource_install_spec.resource_type] = None
-
-        return failed_to_load
-
 
 
     async def _get_pip_config(self, environment: uuid.UUID, version: int) -> PipConfig:

@@ -23,6 +23,7 @@ import py_compile
 import tempfile
 import uuid
 from logging import DEBUG, INFO
+from typing import Sequence
 
 import pytest
 
@@ -318,7 +319,22 @@ def test():
         version=version,
         resource_types=["test::Test"],
     )
-    await agent.ensure_code(install_spec)
+    executor = await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
 
-    assert agent._env.are_installed(["pkg", "dep-a"])
-    assert not agent._env.are_installed(["dep-b", "dep-c"])
+    installed_packages = executor.executor_virtual_env.get_installed_packages()
+
+    def check_packages(package_list: Sequence[str], must_contain: Sequence[str] | None, must_not_contain: Sequence[str] | None) -> None:
+        """
+        Iterate over <package_list> and check:
+         - all elements from <must_contain> are present
+         - no element from <must_not_contain> are present
+        """
+        must_contain = list(must_contain) if must_contain else []
+        for package in package_list:
+            assert package not in must_not_contain
+            if package in must_contain:
+                must_contain.remove(package)
+
+        assert not must_contain
+
+    check_packages(package_list=installed_packages, must_contain=["pkg", "dep-a"], must_not_contain=["dep-b", "dep-c"])
