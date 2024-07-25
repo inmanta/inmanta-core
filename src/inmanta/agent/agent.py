@@ -26,8 +26,6 @@ import os
 import random
 import time
 import uuid
-from asyncio import Lock
-from collections import defaultdict
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
@@ -36,7 +34,7 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 import pkg_resources
 
 import inmanta.agent.executor
-from inmanta import config, const, data, env, protocol
+from inmanta import config, const, data, protocol, env
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
@@ -49,19 +47,18 @@ from inmanta.data.model import (
     ResourceType,
     ResourceVersionIdStr,
 )
-from inmanta.loader import CodeLoader, ModuleSource
+from inmanta.loader import ModuleSource, CodeLoader
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import (
     CronSchedule,
     IntervalSchedule,
-    NamedLock,
     ScheduledTask,
     TaskMethod,
     TaskSchedule,
     add_future,
-    join_threadpools,
+    join_threadpools, NamedLock,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -843,6 +840,7 @@ class AgentInstance:
         """
         code: Collection[ResourceInstallSpec]
 
+
         # Resource types for which no handler code exist for the given model_version
         # or for which the pip config couldn't be retrieved
         code, invalid_resource_types = await self.process.get_code(self._env_id, model_version, resource_types)
@@ -1277,19 +1275,7 @@ class Agent(SessionEndpoint):
 
         return resource_install_specs, invalid_resource_types
 
-    def initialize_loader(self) -> None:
-        """
-        Set up the agent for code loading
-        """
-        self._env = env.VirtualEnv(self._storage["env"])
-        self._env.use_virtual_env()
-        self._loader = CodeLoader(self._storage["code"], clean=True)
-        # Lock to ensure only one actual install runs at a time
-        self._loader_lock = Lock()
-        # Keep track for each resource type of the last loaded version
-        self._last_loaded_version = defaultdict(lambda: None)
-        # Per-resource lock to serialize all actions per resource
-        self._resource_loader_lock = NamedLock()
+
 
     async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> executor.FailedResourcesSet:
         """
@@ -1345,19 +1331,7 @@ class Agent(SessionEndpoint):
 
         return failed_to_load
 
-    async def _install(self, blueprint: executor.ExecutorBlueprint) -> None:
-        if self._env is None or self._loader is None or self._loader_lock is None:
-            raise Exception("Unable to load code when agent is started with code loading disabled.")
 
-        async with self._loader_lock:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                self.thread_pool,
-                self._env.install_for_config,
-                list(pkg_resources.parse_requirements(blueprint.requirements)),
-                blueprint.pip_config,
-            )
-            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
 
     async def _get_pip_config(self, environment: uuid.UUID, version: int) -> PipConfig:
         response = await self._client.get_pip_config(tid=environment, version=version)
@@ -1368,6 +1342,20 @@ class Agent(SessionEndpoint):
         if pip_config is None:
             return LEGACY_PIP_DEFAULT
         return PipConfig(**pip_config)
+
+    async def _install(self, blueprint: executor.ExecutorBlueprint) -> None:
+        if self._env is None or self._loader is None or self._loader_lock is None:
+            raise Exception("Unable to load code when agent is started with code loading disabled.")
+
+        async with self._loader_lock:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                    self.thread_pool,
+                    self._env.install_for_config,
+                    list(pkg_resources.parse_requirements(blueprint.requirements)),
+                    blueprint.pip_config,
+            )
+            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:

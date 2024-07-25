@@ -17,6 +17,8 @@ import datetime
 import logging
 import typing
 import uuid
+from asyncio import Lock
+from collections import defaultdict
 from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Optional
@@ -25,15 +27,17 @@ import inmanta.agent.cache
 import inmanta.protocol
 import inmanta.util
 import logfire
-from inmanta import const, data
+from inmanta import const, data, env
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import FailedResourcesSet, ResourceDetails
+from inmanta.agent.executor import FailedResourcesSet, ResourceDetails, ResourceInstallSpec
 from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.const import ParameterSource
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
+from inmanta.loader import CodeLoader
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn
+from inmanta.util import NamedLock
 
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent as agent
@@ -454,8 +458,26 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self.logger = parent_logger
         self.process = process
 
-        if code_loader:
-            self.process.initialize_loader()
+        # self._loader: CodeLoader | None = None
+        # self._env: env.VirtualEnv | None = None
+        # self._loader_lock: asyncio.Lock | None = None
+        # self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] | None = None
+        # self._resource_loader_lock: NamedLock | None = NamedLock()
+        #
+        # # Cache to prevent re-fetching the same resource-version
+        #
+        # self._previously_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
+        #
+        # if code_loader:
+        #     self._env = env.VirtualEnv(self.process._storage["env"])
+        #     self._env.use_virtual_env()
+        #     self._loader = CodeLoader(self.process._storage["code"], clean=True)
+        #     # Lock to ensure only one actual install runs at a time
+        #     self._loader_lock = Lock()
+        #     # Keep track for each resource type of the last loaded version
+        #     self._last_loaded_version = defaultdict(lambda: None)
+        #     # Per-resource lock to serialize all actions per resource
+        #     self._resource_loader_lock = NamedLock()
 
         self.executors: dict[str, InProcessExecutor] = {}
         self._creation_locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
