@@ -28,6 +28,7 @@ from typing import Sequence
 import pytest
 
 import inmanta
+from inmanta import config
 from inmanta.agent import Agent
 from inmanta.agent.executor import ResourceInstallSpec
 from inmanta.data import PipConfig
@@ -72,8 +73,14 @@ async def make_source_structure(
         return hv
 
 
+@pytest.fixture(scope="function")
+def server_pre_start(server_config):
+    config.Config.set("agent", "executor-mode", "threaded")
+    yield config
+
+
 async def test_agent_code_loading(
-    caplog, server, agent_factory, client, environment: uuid.UUID, monkeypatch, clienthelper
+    server_pre_start, caplog, server, agent_factory, client, environment: uuid.UUID, monkeypatch, clienthelper
 ) -> None:
     """
     Test goals:
@@ -182,19 +189,19 @@ inmanta.test_agent_code_loading = 15
     resource_install_specs_1, _ = await agent.get_code(
         environment=environment, version=version_1, resource_types=["test::Test", "test::Test2", "test::Test3"]
     )
-    await agent.ensure_code(
+    await agent.executor_manager.ensure_code(
         code=resource_install_specs_1,
     )
     resource_install_specs_2, _ = await agent.get_code(
         environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"]
     )
-    await agent.ensure_code(
+    await agent.executor_manager.ensure_code(
         code=resource_install_specs_2,
     )
     resource_install_specs_3, _ = await agent.get_code(
         environment=environment, version=version_2, resource_types=["test::Test2"]
     )
-    await agent.ensure_code(
+    await agent.executor_manager.ensure_code(
         code=resource_install_specs_3,
     )
 
@@ -229,7 +236,7 @@ inmanta.test_agent_code_loading = 15
         environment=environment, version=version_2, resource_types=["test::Test3"]
     )
     # Install sources2
-    await agent.ensure_code(code=resource_install_specs_4)
+    await agent.executor_manager.ensure_code(code=resource_install_specs_4)
     # Test 3 is deployed twice, as seen by the agent and the loader
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test3 version={version_1}")
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test3 version={version_2}")
@@ -245,7 +252,7 @@ inmanta.test_agent_code_loading = 15
         environment=environment, version=version_3, resource_types=["test::Test4"]
     )
     # Loader loads byte code file
-    await agent.ensure_code(code=resource_install_specs_5)
+    await agent.executor_manager.ensure_code(code=resource_install_specs_5)
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test4 version={version_3}")
     LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)").assert_not(
         "inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)"
@@ -257,16 +264,16 @@ inmanta.test_agent_code_loading = 15
         environment=environment, version=version_4, resource_types=["test::Test4"]
     )
     # Now load the python only version again
-    await agent.ensure_code(code=resource_install_specs_6)
+    await agent.executor_manager.ensure_code(code=resource_install_specs_6)
     assert getattr(inmanta, "test_agent_code_loading") == 10
 
     # ensure we clean up on restart
-    assert os.path.exists(os.path.join(agent._loader.mod_dir, "tests/plugins/__init__.py"))
+    assert os.path.exists(os.path.join(agent.executor_manager._loader.mod_dir, "tests/plugins/__init__.py"))
     await agent.stop()
     await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
     )
-    assert not os.path.exists(os.path.join(agent._loader.mod_dir, "tests"))
+    assert not os.path.exists(os.path.join(agent.executor_manager._loader.mod_dir, "tests"))
 
 
 @pytest.mark.slowtest
