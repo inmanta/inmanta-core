@@ -885,7 +885,6 @@ class AgentInstance:
                 undeployable, resources = await self.load_resources(
                     version, const.ResourceAction.dryrun, response.result["resources"]
                 )
-
                 self._cache.open_version(version)
                 for resource in resources:
                     ctx = handler.HandlerContext(resource, True)
@@ -899,7 +898,10 @@ class AgentInstance:
                             resource_id=resource_id,
                             status=undeployable[resource_id],
                         )
-                        await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_id, changes={})
+                        changes = {"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}}
+                        await self.get_client().dryrun_update(
+                            tid=self._env_id, id=dry_run_id, resource=resource_id, changes=changes
+                        )
                         continue
 
                     try:
