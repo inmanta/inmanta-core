@@ -31,8 +31,6 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Collection, Dict, Optional, Union, cast
 
-import pkg_resources
-
 import inmanta.agent.executor
 from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg
@@ -1269,20 +1267,6 @@ class Agent(SessionEndpoint):
         if pip_config is None:
             return LEGACY_PIP_DEFAULT
         return PipConfig(**pip_config)
-
-    async def _install(self, blueprint: executor.ExecutorBlueprint) -> None:
-        if self._env is None or self._loader is None or self._loader_lock is None:
-            raise Exception("Unable to load code when agent is started with code loading disabled.")
-
-        async with self._loader_lock:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                self.thread_pool,
-                self._env.install_for_config,
-                list(pkg_resources.parse_requirements(blueprint.requirements)),
-                blueprint.pip_config,
-            )
-            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
