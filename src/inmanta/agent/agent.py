@@ -970,8 +970,7 @@ class Agent(SessionEndpoint):
         self._instances: dict[str, AgentInstance] = {}
         self._instances_lock = asyncio.Lock()
 
-        self._loader: Optional[CodeLoader] = None
-        self._env: Optional[env.VirtualEnv] = None
+
         if code_loader:
             # all of this should go into the executor manager https://github.com/inmanta/inmanta-core/issues/7589
             self._env = env.VirtualEnv(self._storage["env"])
@@ -1014,6 +1013,7 @@ class Agent(SessionEndpoint):
                 asyncio.get_event_loop(),
                 LOGGER,
                 self,
+                code_loader
             )
 
     async def _init_agent_map(self) -> None:
@@ -1223,7 +1223,7 @@ class Agent(SessionEndpoint):
             - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
-        if self._loader is None:
+        if self.executor_manager._loader is None:
             return [], set()
 
         # store it outside the loop, but only load when required
@@ -1283,66 +1283,6 @@ class Agent(SessionEndpoint):
 
         return resource_install_specs, invalid_resource_types
 
-    async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> executor.FailedResourcesSet:
-        """Ensure that the code for the given environment and version is loaded"""
-
-        failed_to_load: executor.FailedResourcesSet = set()
-
-        if self._loader is None:
-            return failed_to_load
-
-        for resource_install_spec in code:
-            # only one logical thread can load a particular resource type at any time
-            async with self._resource_loader_lock.get(resource_install_spec.resource_type):
-                # stop if the last successful load was this one
-                # The combination of the lock and this check causes the reloads to naturally 'batch up'
-                if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.blueprint:
-                    LOGGER.debug(
-                        "Handler code already installed for %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-                    continue
-
-                try:
-                    # Install required python packages and the list of ``ModuleSource`` with the provided pip config
-                    LOGGER.debug(
-                        "Installing handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-                    await self._install(resource_install_spec.blueprint)
-                    LOGGER.debug(
-                        "Installed handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-
-                    self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
-                except Exception:
-                    LOGGER.exception(
-                        "Failed to install handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-                    failed_to_load.add(resource_install_spec.resource_type)
-                    self._last_loaded_version[resource_install_spec.resource_type] = None
-
-        return failed_to_load
-
-    async def _install(self, blueprint: executor.ExecutorBlueprint) -> None:
-        if self._env is None or self._loader is None:
-            raise Exception("Unable to load code when agent is started with code loading disabled.")
-
-        async with self._loader_lock:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                self.thread_pool,
-                self._env.install_for_config,
-                list(pkg_resources.parse_requirements(blueprint.requirements)),
-                blueprint.pip_config,
-            )
-            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
 
     async def _get_pip_config(self, environment: uuid.UUID, version: int) -> PipConfig:
         response = await self._client.get_pip_config(tid=environment, version=version)
