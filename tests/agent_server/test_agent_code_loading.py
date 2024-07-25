@@ -323,7 +323,9 @@ def test():
 
     installed_packages = executor.executor_virtual_env.get_installed_packages()
 
-    def check_packages(package_list: Sequence[str], must_contain: Sequence[str] | None, must_not_contain: Sequence[str] | None) -> None:
+    def check_packages(
+        package_list: Sequence[str], must_contain: Sequence[str] | None, must_not_contain: Sequence[str] | None
+    ) -> None:
         """
         Iterate over <package_list> and check:
          - all elements from <must_contain> are present

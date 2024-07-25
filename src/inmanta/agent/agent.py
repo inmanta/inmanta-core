@@ -34,7 +34,7 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 import pkg_resources
 
 import inmanta.agent.executor
-from inmanta import config, const, data, protocol, env
+from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
@@ -47,19 +47,11 @@ from inmanta.data.model import (
     ResourceType,
     ResourceVersionIdStr,
 )
-from inmanta.loader import ModuleSource, CodeLoader
+from inmanta.loader import ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import (
-    CronSchedule,
-    IntervalSchedule,
-    ScheduledTask,
-    TaskMethod,
-    TaskSchedule,
-    add_future,
-    join_threadpools, NamedLock,
-)
+from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, TaskMethod, TaskSchedule, add_future, join_threadpools
 
 LOGGER = logging.getLogger(__name__)
 
@@ -840,7 +832,6 @@ class AgentInstance:
         """
         code: Collection[ResourceInstallSpec]
 
-
         # Resource types for which no handler code exist for the given model_version
         # or for which the pip config couldn't be retrieved
         code, invalid_resource_types = await self.process.get_code(self._env_id, model_version, resource_types)
@@ -1269,7 +1260,6 @@ class Agent(SessionEndpoint):
 
         return resource_install_specs, invalid_resource_types
 
-
     async def _get_pip_config(self, environment: uuid.UUID, version: int) -> PipConfig:
         response = await self._client.get_pip_config(tid=environment, version=version)
         if response.code != 200:
@@ -1287,10 +1277,10 @@ class Agent(SessionEndpoint):
         async with self._loader_lock:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
-                    self.thread_pool,
-                    self._env.install_for_config,
-                    list(pkg_resources.parse_requirements(blueprint.requirements)),
-                    blueprint.pip_config,
+                self.thread_pool,
+                self._env.install_for_config,
+                list(pkg_resources.parse_requirements(blueprint.requirements)),
+                blueprint.pip_config,
             )
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
 
