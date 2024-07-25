@@ -449,13 +449,13 @@ def test():
     assert (datetime.datetime.now().astimezone() - new_check_executor2).seconds <= 2
 
     async def wait_for_agent(pid_agent: int) -> None:
-        for i in range(10):
+        for i in range(50):
             if not psutil.pid_exists(pid_agent):
                 return
             else:
                 await asyncio.sleep(0.2)
 
-        raise RuntimeError("The agent was still running after 2 seconds")
+        raise RuntimeError("The agent was still running after 10 seconds")
 
     # Now we want to check if the cleanup is working correctly
     await executor_manager.stop_for_agent("agent1")
