@@ -79,7 +79,7 @@ def server_pre_start(server_config, request):
     yield config
 
 
-@pytest.mark.parametrize('server_pre_start', ["threaded"], indirect=True)
+@pytest.mark.parametrize("server_pre_start", ["threaded"], indirect=True)
 async def test_agent_code_loading(
     server_pre_start, caplog, server, agent_factory, client, environment: uuid.UUID, monkeypatch, clienthelper
 ) -> None:
@@ -278,7 +278,7 @@ inmanta.test_agent_code_loading = 15
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize('server_pre_start', ["forking"], indirect=True)
+@pytest.mark.parametrize("server_pre_start", ["forking"], indirect=True)
 async def test_agent_installs_dependency_containing_extras(
     server_pre_start,
     server,
