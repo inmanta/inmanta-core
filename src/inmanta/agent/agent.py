@@ -849,7 +849,6 @@ class AgentInstance:
         # Resource types for which no handler code exist for the given model_version
         # or for which the pip config couldn't be retrieved
         code, invalid_resources = await self.process.get_code(self._env_id, model_version, resource_types)
-        failed_resources: executor.FailedResources = dict()
 
         try:
             current_executor = await self.executor_manager.get_executor(self.name, self.uri, code)
@@ -900,9 +899,8 @@ class AgentInstance:
         loaded_resources: list[ResourceDetails] = []
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
-        logs: dict[str, set[data.LogLine]] = defaultdict(set)
-        failed_resource_ids: dict[str, set[str]] = defaultdict(set)
-        logged_resource_types = set()
+        # {resource_type -> (set{resource_ids}, LogLine)}
+        failed_resources: dict[str, tuple[set[str], data.LogLine]] = dict()
         for res in resource_batch:
             res_id = res["id"]
             res_type = res["resource_type"]
@@ -914,32 +912,33 @@ class AgentInstance:
                 if state in const.UNDEPLOYABLE_STATES:
                     undeployable[res_id] = state
             else:
-                if res_type not in logged_resource_types:
-                    logged_resource_types.add(res_type)
-                    logs[res_type].add(
+                if res_type not in failed_resources:
+                    failed_resources[res_type] = (
+                        {res_id},
                         data.LogLine.log(
                             logging.ERROR,
-                            "All resources `%(res_type)s` failed to load handler code or install handler code "
+                            "All resources of type `%(res_type)s` failed to load handler code or install handler code "
                             "dependencies: `%(error)s`\n%(traceback)s",
                             res_type=res_type,
                             error=str(invalid_resources[res_type]),
                             traceback="".join(traceback.format_tb(invalid_resources[res_type].__traceback__)),
-                        )
+                        ),
                     )
-                failed_resource_ids[res_type].add(res_id)
+                else:
+                    failed_resources[res_type][0].add(res_id)
                 undeployable[res_id] = const.ResourceState.unavailable
                 loaded_resources.append(ResourceDetails(res))
 
-        if len(failed_resource_ids) > 0:
-            for resource_type, error_messages in logs.items():
+        if len(failed_resources) > 0:
+            for resource_type, (failed_resource_ids, log_line) in failed_resources.items():
                 await self.get_client().resource_action_update(
                     tid=self._env_id,
-                    resource_ids=list(failed_resource_ids[resource_type]),
+                    resource_ids=list(failed_resource_ids),
                     action_id=uuid.uuid4(),
                     action=action,
                     started=started,
                     finished=datetime.datetime.now().astimezone(),
-                    messages=list(error_messages),
+                    messages=[log_line],
                     status=const.ResourceState.unavailable,
                 )
         return undeployable, loaded_resources, executor

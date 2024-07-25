@@ -3960,7 +3960,7 @@ async def test_logging_failure_when_creating_venv(
     monkeypatch.undo()
 
     expected_error_message_without_tb = (
-        "multiple resources: All resources `test::Resource` failed to load handler code or "
+        "multiple resources: All resources of type `test::Resource` failed to load handler code or "
         "install handler code dependencies: `Could not set up executor for agent1: Failed to"
         " install handler `test` version=1`"
     )
@@ -4001,7 +4001,7 @@ async def test_logging_failure_when_creating_venv(
 
     # Possible error messages that should be in the DB
     expected_error_messages = (
-        "All resources `test::Resource` failed to load handler code or install handler code dependencies: "
+        "All resources of type `test::Resource` failed to load handler code or install handler code dependencies: "
         "`Could not set up executor for agent1: Failed to install handler "
         "`test` version=1`"
     )
