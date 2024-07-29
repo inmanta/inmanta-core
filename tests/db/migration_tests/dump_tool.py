@@ -138,7 +138,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     check_result(await client.notify_change(id=env_id_1))
 
-    versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=60)
+    versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=40)
     v1 = versions["versions"][0]["version"]
 
     check_result(
@@ -187,7 +187,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
     await wait_for_version(client, env_id_1, env_1_version)
     check_result(await client.notify_change(id=env_id_1))
     env_1_version += 1
-    await wait_for_version(client, env_id_1, env_1_version, compile_timeout=50)
+    await wait_for_version(client, env_id_1, env_1_version)
 
     # Partial compile
     rid2 = "test::Resource[agent2,key=key2]"

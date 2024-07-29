@@ -1546,13 +1546,17 @@ def set_password(username: str, password: str) -> None:
     varkw=True,
 )
 def discovered_resource_create(
-    tid: uuid.UUID, discovered_resource_id: str, **kwargs: object  # bypass the type checking for the values
+    tid: uuid.UUID,
+    discovered_resource_id: str,
+    discovery_resource_id: str,
+    **kwargs: object,  # bypass the type checking for the values
 ) -> None:
     """
     create a discovered resource.
 
     :param tid: The id of the environment this resource belongs to
     :param discovered_resource_id: The id of the discovered_resource
+    :param discovery_resource_id: The id of the discovery resource responsible for discovering this resource
     :param **kwargs: The following arguments are supported:
            values: The values associated with the discovered_resource
     """
