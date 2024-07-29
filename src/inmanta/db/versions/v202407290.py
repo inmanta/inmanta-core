@@ -19,7 +19,6 @@
 from asyncpg import Connection
 
 
-
 async def update(connection: Connection) -> None:
     schema = """
     -- add column to reference the discovery resource id

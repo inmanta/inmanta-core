@@ -34,4 +34,3 @@ async def test_add_column(
 ) -> None:
     # This migration script adds a column.
     await migrate_db_from()
-

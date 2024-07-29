@@ -25,9 +25,8 @@ from enum import Enum
 from itertools import chain
 from typing import ClassVar, NewType, Optional, Self, Union
 
-import pydantic
 import pydantic.schema
-from pydantic import ConfigDict, Field, field_validator, model_validator, field_serializer, computed_field
+from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -760,9 +759,9 @@ class DiscoveredResource(BaseModel):
     discovered_resource_id: ResourceIdStr
     values: dict[str, object]
     managed_resource_uri: Optional[str] = None
-    discovery_resource_id: ResourceIdStr
+    discovery_resource_id: Optional[ResourceIdStr] = None
 
-    @computed_field
+    @computed_field  # type: ignore[misc]
     @property
     def discovery_resource_uri(self) -> str:
         return f"/api/v2/resource/{self.discovery_resource_id}"

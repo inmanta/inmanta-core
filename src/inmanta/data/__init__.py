@@ -6404,7 +6404,11 @@ class DiscoveredResource(BaseDocument):
     __primary_key__ = ("environment", "discovered_resource_id")
 
     def to_dto(self) -> m.DiscoveredResource:
-        return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values, discovery_resource_id=self.discovery_resource_id)
+        return m.DiscoveredResource(
+            discovered_resource_id=self.discovered_resource_id,
+            values=self.values,
+            discovery_resource_id=self.discovery_resource_id,
+        )
 
 
 class File(BaseDocument):

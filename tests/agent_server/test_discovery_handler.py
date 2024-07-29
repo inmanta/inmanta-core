@@ -151,7 +151,7 @@ async def test_discovery_resource_handler_basic_test(
             "discovered_resource_id": f"test::MyUnmanagedResource[discovery_agent,val={val}]",
             "values": {"val": val},
             "managed_resource_uri": None,
-            "discovery_resource_uri": f'/api/v2/resource/{resource_id}',
+            "discovery_resource_uri": f"/api/v2/resource/{resource_id}",
         }
         for val in all_values
     ]

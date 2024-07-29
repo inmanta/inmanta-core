@@ -1023,12 +1023,17 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                 discovered_resources: abc.Sequence[DiscoveredResource],
             ) -> typing.Awaitable[Result]:
                 return self.get_client().discovered_resource_create_batch(
-                    tid=self._agent.environment, discovered_resources=discovered_resources,
+                    tid=self._agent.environment,
+                    discovered_resources=discovered_resources,
                 )
 
             discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
             discovered_resources: abc.Sequence[DiscoveredResource] = [
-                DiscoveredResource(discovered_resource_id=resource_id, values=values.model_dump(), discovery_resource_id=resource.id.resource_str())
+                DiscoveredResource(
+                    discovered_resource_id=resource_id,
+                    values=values.model_dump(),
+                    discovery_resource_id=resource.id.resource_str(),
+                )
                 for resource_id, values in discovered_resources_raw.items()
             ]
             result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))

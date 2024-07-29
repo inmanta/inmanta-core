@@ -1321,7 +1321,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
                 managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
-                discovery_resource_id=res['discovery_resource_id'],
+                discovery_resource_id=res["discovery_resource_id"],
             ).model_dump(exclude={"discovery_resource_id"})
             for res in records
         ]
