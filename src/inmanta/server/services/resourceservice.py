@@ -1334,6 +1334,8 @@ class ResourceService(protocol.ServerSlice):
     async def discovered_resources_create_batch(
         self, env: data.Environment, discovered_resources: list[DiscoveredResource]
     ) -> None:
+        # Do we persist discovery_resource_id in db for all resources ?
+        # See how links to managed resource id are done when retrieving these resources
         dao_list = [res.to_dao(env.id) for res in discovered_resources]
         await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
 

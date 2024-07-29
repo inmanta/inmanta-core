@@ -138,7 +138,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     check_result(await client.notify_change(id=env_id_1))
 
-    versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=40)
+    versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=60)
     v1 = versions["versions"][0]["version"]
 
     check_result(

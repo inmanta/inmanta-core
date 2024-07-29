@@ -6397,12 +6397,13 @@ class DiscoveredResource(BaseDocument):
     environment: uuid.UUID
     discovered_at: datetime.datetime
     discovered_resource_id: m.ResourceIdStr
+    discovery_resource_id: str
     values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")
 
     def to_dto(self) -> m.DiscoveredResource:
-        return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values)
+        return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values, discovery_resource_id=self.discovery_resource_id)
 
 
 class File(BaseDocument):

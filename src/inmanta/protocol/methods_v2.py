@@ -1608,6 +1608,7 @@ def discovered_resources_get_batch(
     """
     Get a list of discovered resources.
 
+    The discovery resource responsible for discovering each resource is included.
     For resources that the orchestrator is already managing, a link to the corresponding resource is provided. The full list of
     supported links can be found :ref:`here <api_self_referencing_links>`.
 

@@ -1294,11 +1294,19 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
                     dr.environment,
                     dr.discovered_resource_id,
                     dr.values,
-                    (rps.resource_id IS NOT NULL)  AS managed
+                    (rps_1.resource_id IS NOT NULL)  AS managed,
+                    rps_2.resource_id as discovery_resource_id
 
                 FROM {data.DiscoveredResource.table_name()} as dr
-                LEFT JOIN {data.ResourcePersistentState.table_name()} rps
-                ON dr.environment=rps.environment AND dr.discovered_resource_id = rps.resource_id
+
+                -- Retrieve the corresponding managed resource id (if any)
+                LEFT JOIN {data.ResourcePersistentState.table_name()} rps_1
+                ON dr.environment=rps_1.environment AND dr.discovered_resource_id = rps_1.resource_id
+
+                -- Retrieve the id of the resource responsible for discovering this resource
+                LEFT JOIN {data.ResourcePersistentState.table_name()} rps_2
+                ON dr.environment=rps_2.environment AND dr.discovery_resource_id = rps_2.resource_id
+
                 WHERE dr.environment = $1
             )
             """,
@@ -1313,6 +1321,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
                 managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
+                discovery_resource_uri=f"/api/v2/resource/{res['discovery_resource_id']}",
             ).model_dump()
             for res in records
         ]

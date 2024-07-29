@@ -753,15 +753,18 @@ class DiscoveredResource(BaseModel):
     :param values: The actual resource
     :param managed_resource_uri: URI of the resource with the same ID that is already
         managed by the orchestrator e.g. "/api/v2/resource/<rid>". Or None if the resource is not managed.
+    :param discovery_resource_id: Resource id of the (managed) discovery resource that reported this
+        discovered resource.
     """
 
     discovered_resource_id: ResourceIdStr
     values: dict[str, object]
     managed_resource_uri: Optional[str] = None
+    discovery_resource_id: ResourceIdStr
 
-    @field_validator("discovered_resource_id")
+    @field_validator("discovered_resource_id", "discovery_resource_id")
     @classmethod
-    def discovered_resource_id_is_resource_id(cls, v: str) -> str:
+    def is_resource_id(cls, v: str) -> str:
         if resources.Id.is_resource_id(v):
             return v
         raise ValueError(f"id {v} is not of type ResourceIdStr")
@@ -772,6 +775,7 @@ class DiscoveredResource(BaseModel):
             values=self.values,
             discovered_at=datetime.datetime.now(),
             environment=env,
+            discovery_resource_id=self.discovery_resource_id,
         )
 
 
