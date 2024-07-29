@@ -22,6 +22,7 @@ import re
 import shutil
 import subprocess
 from collections.abc import Iterator
+from datetime import datetime
 from importlib.abc import Loader
 from itertools import chain
 from typing import Optional
@@ -1262,16 +1263,37 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
         )
 
 
-def test_block_shell(caplog):
+@pytest.mark.slowtest
+def test_real_time_logging(caplog):
     """
-    Make sure the run_command_and_stream_output avoids executing shell commands
+    Make sure the run_command_and_stream_output avoids executing shell commands but also that the logging in
+    run_command_and_stream_output happens in real time
     """
     caplog.set_level(logging.DEBUG)
 
-    cmd: list[str] = ["sh -c 'echo one && sleep 1 && echo two'"]
     with pytest.raises(FileNotFoundError) as e:
-        CommandRunner(LOGGER).run_command_and_stream_output(cmd)
+        CommandRunner(LOGGER).run_command_and_stream_output(["sh -c 'echo one && sleep 1 && echo two'"])
     assert str(e.value) == "[Errno 2] No such file or directory: \"sh -c 'echo one && sleep 1 && echo two'\""
+
+    return_code: int
+    output: list[str]
+    cmd: list[str] = ["sh", "-c", "echo one && sleep 1 && echo two"]
+    return_code, output = CommandRunner(LOGGER).run_command_and_stream_output(cmd)
+    assert return_code == 0
+
+    assert "one" in caplog.records[0].message
+    assert "one" in output[0]
+    first_log_line_time: datetime = datetime.fromtimestamp(caplog.records[0].created)
+
+    assert "two" in caplog.records[-1].message
+    assert "two" in output[-1]
+    last_log_line_time: datetime = datetime.fromtimestamp(caplog.records[-1].created)
+
+    # "two" should be logged at least one second after "one"
+    delta: float = (last_log_line_time - first_log_line_time).total_seconds()
+    expected_delta = 1
+    fault_tolerance = 0.1
+    assert abs(delta - expected_delta) <= fault_tolerance
 
 
 @pytest.mark.slowtest
