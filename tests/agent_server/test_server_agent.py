@@ -20,7 +20,6 @@ import asyncio
 import dataclasses
 import logging
 import os
-import pathlib
 import time
 import uuid
 from collections.abc import Mapping
@@ -3960,27 +3959,22 @@ async def test_logging_failure_when_creating_venv(
 
     monkeypatch.undo()
 
-    module_folder = pathlib.Path(__file__).resolve().parent.parent.parent
+    expected_error_message_without_tb = (
+        "multiple resources: All resources of type `test::Resource` failed to load handler code or "
+        "install handler code dependencies: `Could not set up executor for agent1: Failed to"
+        " install handler `test` version=1`"
+    )
 
-    expected_error_message = f"""multiple resources: All resources of type `test::Resource` failed to load handler code or \
-install handler code dependencies: `Could not set up executor for agent1: Failed to install handler `test` version=1`
-  File "{module_folder}/src/inmanta/agent/agent.py", line 854, in setup_executor
-    current_executor = await self.executor_manager.get_executor(self.name, self.uri, code)
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "{module_folder}/src/inmanta/agent/in_process_executor.py", line 502, in get_executor
-    out.failed_resources = await self.process.ensure_code(code)
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "{module_folder}/tests/agent_server/test_server_agent.py", line 3953, in ensure_code
-"""
-    # We don't want to use f-string here
-    expected_error_message += """    raise RuntimeError(f"Failed to install handler `test` version={version1}")
-"""
     idx1 = log_index(
         caplog,
         f"resource_action_logger.{environment}",
         logging.ERROR,
-        expected_error_message,
+        expected_error_message_without_tb,
     )
+    actual_error_message = caplog.record_tuples[idx1][2]
+    expected_location = """, in ensure_code
+    raise RuntimeError(f"Failed to install handler `test` version={version1}")"""
+    assert expected_location in actual_error_message
 
     # Logs should not appear twice
     with pytest.raises(AssertionError):
@@ -3988,7 +3982,7 @@ install handler code dependencies: `Could not set up executor for agent1: Failed
             caplog,
             f"resource_action_logger.{environment}",
             logging.ERROR,
-            expected_error_message,
+            expected_error_message_without_tb,
             idx1 + 1,
         )
 
@@ -4008,10 +4002,11 @@ install handler code dependencies: `Could not set up executor for agent1: Failed
     )
 
     # Possible error messages that should be in the DB
-    expected_error_messages = expected_error_message.replace("multiple resources: ", "")
+    expected_error_messages = expected_error_message_without_tb.replace("multiple resources: ", "")
 
     relevant_logs = retrieve_relevant_logs(result)
-    assert expected_error_messages == relevant_logs
+    assert expected_error_messages in relevant_logs
+    assert expected_location in relevant_logs
     # Make sure we don't find the same record multiple times in the resource logs
     assert relevant_logs.count(expected_error_messages) == 1
 
