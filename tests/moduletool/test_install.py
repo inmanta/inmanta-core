@@ -35,7 +35,7 @@ from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException
 from inmanta.config import Config
-from inmanta.env import ConflictingRequirements, PipConfig
+from inmanta.env import CommandRunner, ConflictingRequirements, PipConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
@@ -1260,6 +1260,18 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
             level,
             message,
         )
+
+
+def test_block_shell(caplog):
+    """
+    Make sure the run_command_and_stream_output avoids executing shell commands
+    """
+    caplog.set_level(logging.DEBUG)
+
+    cmd: list[str] = ["sh -c 'echo one && sleep 1 && echo two'"]
+    with pytest.raises(FileNotFoundError) as e:
+        CommandRunner(LOGGER).run_command_and_stream_output(cmd)
+    assert str(e.value) == "[Errno 2] No such file or directory: \"sh -c 'echo one && sleep 1 && echo two'\""
 
 
 @pytest.mark.slowtest
