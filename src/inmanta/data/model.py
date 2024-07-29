@@ -27,7 +27,7 @@ from typing import ClassVar, NewType, Optional, Self, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator, field_serializer, computed_field
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -761,6 +761,11 @@ class DiscoveredResource(BaseModel):
     values: dict[str, object]
     managed_resource_uri: Optional[str] = None
     discovery_resource_id: ResourceIdStr
+
+    @computed_field
+    @property
+    def discovery_resource_uri(self) -> str:
+        return f"/api/v2/resource/{self.discovery_resource_id}"
 
     @field_validator("discovered_resource_id", "discovery_resource_id")
     @classmethod

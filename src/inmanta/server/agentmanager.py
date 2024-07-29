@@ -1190,8 +1190,8 @@ class AutostartedAgentManager(ServerSlice):
                 config_path,
                 "--config-dir",
                 Config._config_dir if Config._config_dir is not None else "",
-                "--log-file",
-                agent_log,
+                # "--log-file",
+                # agent_log,
                 "agent",
             ],
             out,
@@ -1305,7 +1305,7 @@ ssl=True
             env = os.environ.copy()
             env.update(logfire.propagate.get_context())
             return await asyncio.create_subprocess_exec(
-                sys.executable, *full_args, cwd=cwd, env=env, stdout=outhandle, stderr=errhandle
+                sys.executable, *full_args, cwd=cwd, env=env, stdout=sys.stdout, stderr=sys.stdout
             )
         finally:
             if outhandle is not None:

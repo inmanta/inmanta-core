@@ -6391,13 +6391,14 @@ class DiscoveredResource(BaseDocument):
     """
     :param environment: the environment of the resource
     :param discovered_resource_id: The id of the resource
+    :param discovery_resource_id: The id of the discovery resource responsible for discovering this resource
     :param values: The values associated with the discovered_resource
     """
 
     environment: uuid.UUID
     discovered_at: datetime.datetime
     discovered_resource_id: m.ResourceIdStr
-    discovery_resource_id: str
+    discovery_resource_id: m.ResourceIdStr
     values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")
