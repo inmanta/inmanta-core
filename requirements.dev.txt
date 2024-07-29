@@ -17,7 +17,7 @@ myst-parser==3.0.1
 sphinx==7.4.7
 sphinxcontrib-contentui==0.2.5
 sphinxcontrib-redoc==1.6.0
-sphinxcontrib-serializinghtml==1.1.10
+sphinxcontrib-serializinghtml==2.0.0
 sphinx-argparse==0.5.2
 sphinx-autodoc-annotation==1.0-1
 sphinx-click==6.0.0
