@@ -1,0 +1,6 @@
+description: Add link to the resource responsible for the discovery to the discovered resource view.
+issue-nr: 7528
+change-type: patch
+destination-branches: [master, iso7]
+sections:
+  minor-improvement: "{{description}}"
