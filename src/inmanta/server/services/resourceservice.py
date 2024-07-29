@@ -1318,9 +1318,17 @@ class ResourceService(protocol.ServerSlice):
         return resource
 
     @handle(methods_v2.discovered_resource_create, env="tid")
-    async def discovered_resource_create(self, env: data.Environment, discovered_resource_id: str, discovery_resource_id: str, values: JsonType) -> None:
+    async def discovered_resource_create(
+        self,
+        env: data.Environment,
+        discovered_resource_id: str,
+        values: JsonType,
+        discovery_resource_id: ResourceIdStr | None = None,
+    ) -> None:
         try:
-            discovered_resource = DiscoveredResource(discovered_resource_id=discovered_resource_id, values=values, discovery_resource_id=discovery_resource_id)
+            discovered_resource = DiscoveredResource(
+                discovered_resource_id=discovered_resource_id, values=values, discovery_resource_id=discovery_resource_id
+            )
         except ValidationError as e:
             # this part was copy/pasted from protocol.common.MethodProperties.validate_arguments.
             error_msg = f"Failed to validate argument\n{str(e)}"

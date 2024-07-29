@@ -73,9 +73,21 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
     discovery_resource_id = "test::DiscoveryResource[agent1,key=key]"
 
     resources = [
-        {"discovery_resource_id": discovery_resource_id, "discovered_resource_id": "test::Resource[agent1,key1=key1]", "values": {"value1": "test1", "value2": "test2"}},
-        {"discovery_resource_id": discovery_resource_id, "discovered_resource_id": "test::Resource[agent1,key2=key2]", "values": {"value1": "test3", "value2": "test4"}},
-        {"discovery_resource_id": discovery_resource_id, "discovered_resource_id": "test::Resource[agent1,key3=key3]", "values": {"value1": "test5", "value2": "test6"}},
+        {
+            "discovery_resource_id": discovery_resource_id,
+            "discovered_resource_id": "test::Resource[agent1,key1=key1]",
+            "values": {"value1": "test1", "value2": "test2"},
+        },
+        {
+            "discovery_resource_id": discovery_resource_id,
+            "discovered_resource_id": "test::Resource[agent1,key2=key2]",
+            "values": {"value1": "test3", "value2": "test4"},
+        },
+        {
+            "discovery_resource_id": discovery_resource_id,
+            "discovered_resource_id": "test::Resource[agent1,key3=key3]",
+            "values": {"value1": "test5", "value2": "test6"},
+        },
     ]
     result = await agent._client.discovered_resource_create_batch(environment, resources)
     assert result.code == 200
@@ -89,9 +101,21 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
 
     # try to store the same resources a second time
     resources = [
-        {"discovery_resource_id": discovery_resource_id, "discovered_resource_id": "test::Resource[agent1,key1=key1]", "values": {"value1": "test7", "value2": "test8"}},
-        {"discovery_resource_id": discovery_resource_id, "discovered_resource_id": "test::Resource[agent1,key2=key2]", "values": {"value1": "test9", "value2": "test10"}},
-        {"discovery_resource_id": discovery_resource_id, "discovered_resource_id": "test::Resource[agent1,key6=key6]", "values": {"value1": "test11", "value2": "test12"}},
+        {
+            "discovery_resource_id": discovery_resource_id,
+            "discovered_resource_id": "test::Resource[agent1,key1=key1]",
+            "values": {"value1": "test7", "value2": "test8"},
+        },
+        {
+            "discovery_resource_id": discovery_resource_id,
+            "discovered_resource_id": "test::Resource[agent1,key2=key2]",
+            "values": {"value1": "test9", "value2": "test10"},
+        },
+        {
+            "discovery_resource_id": discovery_resource_id,
+            "discovered_resource_id": "test::Resource[agent1,key6=key6]",
+            "values": {"value1": "test11", "value2": "test12"},
+        },
     ]
     result = await agent._client.discovered_resource_create_batch(environment, resources)
     assert result.code == 200
@@ -158,13 +182,15 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         }
         for res in discovered_resources[2:-2]
     ]
-    resources = orphaned_resources + [{
+    resources = orphaned_resources + [
+        {
             "id": ResourceVersionIdStr(f"{discovery_resource_id},v={version1}"),
             "values": {},
             "requires": [],
             "purged": False,
             "send_event": False,
-        }]
+        }
+    ]
     await clienthelper.put_version_simple(resources=resources, version=version1)
 
     # Create some Resources that are already managed:
@@ -181,17 +207,8 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     ]
     await clienthelper.put_version_simple(resources=managed_resources, version=version2)
 
-    filter_values = [
-        None,
-        {"managed": True},
-        {"managed": False}
-    ]
-    expected_results = [
-        discovered_resources,
-        discovered_resources[:-2],
-        discovered_resources[-2:]
-    ]
-
+    filter_values = [None, {"managed": True}, {"managed": False}]
+    expected_results = [discovered_resources, discovered_resources[:-2], discovered_resources[-2:]]
 
     def check_expected_result(expected_result: Sequence[dict[str, object]], result: Sequence[dict[str, object]]) -> None:
         """
@@ -208,7 +225,6 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
             item_copy["discovery_resource_uri"] = uri
             expected_copy.append(item_copy)
         assert expected_copy == result
-
 
     for filter, expected_result in zip(filter_values, expected_results):
         result = await client.discovered_resources_get_batch(

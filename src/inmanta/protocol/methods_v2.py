@@ -1548,7 +1548,7 @@ def set_password(username: str, password: str) -> None:
 def discovered_resource_create(
     tid: uuid.UUID,
     discovered_resource_id: str,
-    discovery_resource_id: str,
+    discovery_resource_id: str | None = None,
     **kwargs: object,  # bypass the type checking for the values
 ) -> None:
     """
