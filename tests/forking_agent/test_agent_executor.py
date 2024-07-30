@@ -373,6 +373,11 @@ def test():
     )
 
     def retrieve_pid_agent(agent_name: str) -> int:
+        """
+        Retrieve the PID of the agent
+
+        :param agent_name: The name of the agent from which we want to retrieve the PID
+        """
         for proc in psutil.process_iter(["pid", "name"]):
             if f"inmanta: executor {agent_name}" in proc.name():
                 return proc.pid
@@ -395,6 +400,7 @@ def test():
     old_check_executor1 = executor_1.executor_virtual_env.last_used()
     old_check_executor2 = executor_2.executor_virtual_env.last_used()
 
+    # We wait for the refresh of the venv status files
     await asyncio.sleep(0.2)
 
     new_check_executor1 = executor_1.executor_virtual_env.last_used()
@@ -404,7 +410,12 @@ def test():
     assert new_check_executor2 > old_check_executor2
     assert (datetime.datetime.now().astimezone() - new_check_executor2).seconds <= 2
 
-    async def wait_for_agent(pid_agent: int) -> None:
+    async def wait_for_agent_stop_running(pid_agent: int) -> None:
+        """
+        Wait for the agent to stop running
+
+        :param pid_agent: The PID of the agent
+        """
         for i in range(10):
             if psutil.pid_exists(pid_agent):
                 return
@@ -415,7 +426,7 @@ def test():
 
     # Now we want to check if the cleanup is working correctly
     await executor_manager.stop_for_agent("agent1")
-    await wait_for_agent(pid_agent_1)
+    await wait_for_agent_stop_running(pid_agent_1)
     # First we want to override the modification date of the `inmanta_venv_status` file
     os.utime(
         executor_1_venv_status_file, (datetime.datetime.now().astimezone().timestamp(), old_datetime.astimezone().timestamp())
@@ -435,7 +446,7 @@ def test():
 
     # Let's stop the other agent and pretend that the venv is broken
     await executor_manager.stop_for_agent("agent2")
-    await wait_for_agent(pid_agent_2)
+    await wait_for_agent_stop_running(pid_agent_2)
     executor_2_venv_status_file.unlink()
 
     await mpmanager_light.environment_manager.cleanup_inactive_pool_members()

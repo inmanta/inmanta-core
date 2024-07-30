@@ -485,6 +485,7 @@ class PoolManager:
                             )
                         self.clean_pool_member_from_manager(pool_member)
             else:
+                # If this pool member expires sooner than the cleanup interval, schedule the next cleanup on that timestamp.
                 reschedule_interval = min(
                     reschedule_interval,
                     (
@@ -579,7 +580,9 @@ class VirtualEnvironmentManager(PoolManager):
 
         if is_new:
             LOGGER.info("Creating venv for content %s, content hash: %s", str(blueprint), blueprint.blueprint_hash())
-            await loop.run_in_executor(threadpool, process_environment.create_and_install_environment, blueprint)
+            await loop.run_in_executor(
+                process_environment.thread_pool, process_environment.create_and_install_environment, blueprint
+            )
         self._environment_map[blueprint] = process_environment
 
         return process_environment
