@@ -285,28 +285,50 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     Test that exceptions are raised when creating discovered resources with invalid IDs.
     """
     result = await agent._client.discovered_resource_create(
-        tid=environment, discovered_resource_id="invalid_rid", values={"value1": "test1", "value2": "test2"}, discovery_resource_id="test::DiscoveryResource[agent1,key=key]"
+        tid=environment,
+        discovered_resource_id="invalid_rid",
+        values={"value1": "test1", "value2": "test2"},
+        discovery_resource_id="test::DiscoveryResource[agent1,key=key]",
     )
     assert result.code == 400
     assert "Failed to validate argument" in result.result["message"]
 
     result = await agent._client.discovered_resource_create(
-        tid=environment, discovered_resource_id="test::Resource[agent1,key=key]", values={"value1": "test1", "value2": "test2"}, discovery_resource_id="invalid_rid"
+        tid=environment,
+        discovered_resource_id="test::Resource[agent1,key=key]",
+        values={"value1": "test1", "value2": "test2"},
+        discovery_resource_id="invalid_rid",
     )
     assert result.code == 400
     assert "Failed to validate argument" in result.result["message"]
 
     resources = [
-        {"discovery_resource_id":"test::DiscoveryResource[agent1,key1=key1]", "discovered_resource_id": "test::Resource[agent1,key1=key1]", "values": {"value1": "test1", "value2": "test2"}},
-        {"discovery_resource_id":"test::DiscoveryResource[agent1,key1=key1]", "discovered_resource_id": "invalid_rid", "values": {"value1": "test5", "value2": "test6"}},
+        {
+            "discovery_resource_id": "test::DiscoveryResource[agent1,key1=key1]",
+            "discovered_resource_id": "test::Resource[agent1,key1=key1]",
+            "values": {"value1": "test1", "value2": "test2"},
+        },
+        {
+            "discovery_resource_id": "test::DiscoveryResource[agent1,key1=key1]",
+            "discovered_resource_id": "invalid_rid",
+            "values": {"value1": "test5", "value2": "test6"},
+        },
     ]
     result = await agent._client.discovered_resource_create_batch(environment, resources)
     assert result.code == 400
     assert "Failed to validate argument" in result.result["message"]
 
     resources = [
-        {"discovery_resource_id":"test::DiscoveryResource[agent1,key1=key1]", "discovered_resource_id": "test::Resource[agent1,key1=key1]", "values": {"value1": "test1", "value2": "test2"}},
-        {"discovery_resource_id":"invalid_rid", "discovered_resource_id": "test::Resource[agent1,key1=key2]", "values": {"value1": "test5", "value2": "test6"}},
+        {
+            "discovery_resource_id": "test::DiscoveryResource[agent1,key1=key1]",
+            "discovered_resource_id": "test::Resource[agent1,key1=key1]",
+            "values": {"value1": "test1", "value2": "test2"},
+        },
+        {
+            "discovery_resource_id": "invalid_rid",
+            "discovered_resource_id": "test::Resource[agent1,key1=key2]",
+            "values": {"value1": "test5", "value2": "test6"},
+        },
     ]
     result = await agent._client.discovered_resource_create_batch(environment, resources)
     assert result.code == 400

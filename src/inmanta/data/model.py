@@ -746,6 +746,18 @@ class LoginReturn(BaseModel):
     user: User
 
 
+def is_resource_id(v: str) -> str:
+    if resources.Id.is_resource_id(v):
+        return v
+    raise ValueError(f"id {v} is not of type ResourceIdStr")
+
+
+def is_none_or_resource_id(v: str | None) -> str | None:
+    if v is None:
+        return v
+    return is_resource_id(v)
+
+
 class DiscoveredResource(BaseModel):
     """
     :param discovered_resource_id: The name of the resource
@@ -761,17 +773,13 @@ class DiscoveredResource(BaseModel):
     managed_resource_uri: Optional[str] = None
     discovery_resource_id: Optional[ResourceIdStr] = None
 
+    _validate_discovered_rid = field_validator("discovered_resource_id")(is_resource_id)
+    _validate_discovery_rid = field_validator("discovery_resource_id")(is_none_or_resource_id)
+
     @computed_field  # type: ignore[misc]
     @property
     def discovery_resource_uri(self) -> str:
         return f"/api/v2/resource/{self.discovery_resource_id}"
-
-    @field_validator("discovered_resource_id", "discovery_resource_id")
-    @classmethod
-    def is_resource_id(cls, v: str) -> str:
-        if resources.Id.is_resource_id(v):
-            return v
-        raise ValueError(f"id {v} is not of type ResourceIdStr")
 
     def to_dao(self, env: uuid) -> "data.DiscoveredResource":
         return data.DiscoveredResource(
