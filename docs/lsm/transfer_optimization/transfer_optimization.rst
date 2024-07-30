@@ -5,9 +5,9 @@ Transfer optimization
 By default, the Inmanta server performs a new compile every time the state of a service instance changes.
 However, in practice it often happens that a transition between two states doesn't result in a new desired state for
 the service instance. To prevent unnecessary compiles, the LSM module has support to indicate which
-transfers preserve the desired state. The result is increased performance of the orchestrator. This page describes
-how to indicate in a service lifecycle which transfers preserve the desired state and how to enable the transfer
-optimization feature on the server.
+transfers in a lifecycle preserve the desired state. The Inmanta server can then use this information to improve the
+performance of state transitions. This page describes how to mark transfers in a lifecycle as state-preserving
+and how to enable the transfer optimization feature on the server.
 
 Annotating desired state-preserving transfers
 =============================================
@@ -21,10 +21,10 @@ The code snippet below models a lifecycle that contains state-preserving transfe
 
 .. literalinclude:: sources/basic_lifecycle.cf
     :language: inmanta
-    :lines: 1-66
+    :lines: 1-100
     :linenos:
 
-Let's discuss the transfer that are not marked as state-preserving and why:
+Let's discuss the transfers that are not marked as state-preserving and why:
 
 * start -> creating: Not a state-preserving transfer because it moves the instances from a non-exporting
   state to an exporting state.
@@ -52,9 +52,8 @@ Testing
 =======
 
 The Inmanta server validates every lifecycle that is exported to the server and it will reject any lifecycle with
-incorrect state-preserving transfers. The server will for example reject transfers that connect a state that exports
-resources with a state that doesn't export resources. However, the server cannot exhaustively detect all cases where
-transfers are incorrectly marked as state-preserving. Situations where the service model performs a conditional check
-on the state of the instance are not covered. As such, it's important to add tests that validate whether the service
-model behaves consistently, whether or not the :inmanta.environment-settings:setting:`enable_lsm_transfer_optimization`
-environment setting is enabled.
+incorrect state-preserving transfers. The server will for example reject lifecycles with state-preserving transfers
+that connect a state that exports resources with a state that doesn't export resources. However, the server cannot
+exhaustively detect all cases where transfers are incorrectly marked as state-preserving. As such, it's important to
+add tests that validate whether the service model behaves consistently, whether or not the
+:inmanta.environment-settings:setting:`enable_lsm_transfer_optimization` environment setting is enabled.
