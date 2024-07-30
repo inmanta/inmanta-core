@@ -98,7 +98,10 @@ class InmantaModuleRequirement:
 
     def __init__(self, requirement: Requirement) -> None:
         if requirement.project_name.startswith(ModuleV2.PKG_NAME_PREFIX):
-            raise ValueError("InmantaModuleRequirement instances work with inmanta module names, not python package names.")
+            raise ValueError(
+                f"InmantaModuleRequirement instances work with inmanta module names, not python package names. "
+                f"Problematic case: {str(requirement)}"
+            )
         self._requirement: Requirement = requirement
 
     @property
