@@ -117,7 +117,8 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.take_over_logging = take_over_logging
         # This timer will be initialized when the InitCommand is received, see usage of `start_timer_venv_checkup`.
         # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
-        self.timer_venv_checkup: typing.Optional[util.Scheduler] = None
+        self.timer_venv_scheduler: typing.Optional[util.Scheduler] = None
+        self.timer_venv_checkup: typing.Optional[util.ScheduledTask] = None
         self.logger = logger
 
     def set_status(self, status: str) -> None:
@@ -147,8 +148,8 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             self.log_transport = None
 
     def start_timer_venv_checkup(self, interval: float) -> None:
-        self.timer_venv_checkup = util.Scheduler("venv_checkup_scheduler")
-        self.timer_venv_checkup.add_action(
+        self.timer_venv_scheduler = util.Scheduler("venv_checkup_scheduler")
+        self.timer_venv_checkup = self.timer_venv_scheduler.add_action(
             action=self.touch_inmanta_venv_status,
             schedule=util.IntervalSchedule(
                 interval=interval,
@@ -156,8 +157,16 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         )
 
     def stop_timer_venv_checkup(self) -> None:
-        if self.timer_venv_checkup is not None:
-            asyncio.ensure_future(self.timer_venv_checkup.stop())
+        """
+        I am not sure what to do with this. Like this the stop() method will only get called .
+        This might never happen. The annoying thing is that the connection_lost() method is a sync method, so there is no easy
+        way to make sure that the self.timer_venv_checkup.stop() call gets awaited. @sanderr Do you see an easy way out here?
+        """
+        # Given that the stop method of the Scheduler is async, we have no way to make sure that the stop method will get called
+        # (only if the ioloop picks up the task -> might never happen). Therefore, we rely on the sync method that will cancel
+        # the checkup task
+        if self.timer_venv_scheduler is not None and self.timer_venv_checkup is not None:
+            self.timer_venv_scheduler.remove(self.timer_venv_checkup)
 
     def get_context(self) -> ExecutorContext:
         return self.ctx
@@ -271,7 +280,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         self._venv_touch_interval = venv_touch_interval
 
     async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.ModuleSource]:
-        assert context.server.timer_venv_checkup is None, "InitCommand should be only called once!"
+        assert context.server.timer_venv_scheduler is None, "InitCommand should be only called once!"
 
         loop = asyncio.get_running_loop()
         parent_logger = logging.getLogger("agent.executor")
