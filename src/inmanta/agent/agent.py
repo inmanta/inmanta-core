@@ -795,13 +795,15 @@ class AgentInstance:
                 for resource in resource_refs:
                     if resource.rvid in undeployable:
                         self.logger.error(
-                            "Skipping dryrun %s because in undeployable state %s",
+                            "Skipping dryrun for resource %s because it is in undeployable state %s",
                             resource.rvid,
                             undeployable[resource.rvid],
                         )
-                        # TODO: SKIP IS NO CHANGE???? https://github.com/inmanta/inmanta-core/issues/7588
                         await self.get_client().dryrun_update(
-                            tid=resource.env_id, id=dry_run_id, resource=resource.rvid, changes={}
+                            tid=resource.env_id,
+                            id=dry_run_id,
+                            resource=resource.rvid,
+                            changes={"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}},
                         )
                     else:
                         deployable_resources.append(resource)
