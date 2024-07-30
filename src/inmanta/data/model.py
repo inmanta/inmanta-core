@@ -17,6 +17,7 @@
 """
 
 import datetime
+import functools
 import typing
 import uuid
 from collections import abc
@@ -24,9 +25,10 @@ from collections.abc import Sequence
 from enum import Enum
 from itertools import chain
 from typing import ClassVar, NewType, Optional, Self, Union
+from urllib import parse
 
 import pydantic.schema
-from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
+from pydantic import ConfigDict, Field, ValidationError, computed_field, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -34,6 +36,7 @@ import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
+from pydantic_core.core_schema import ValidationInfo
 
 
 def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
@@ -746,16 +749,12 @@ class LoginReturn(BaseModel):
     user: User
 
 
-def is_resource_id(v: str) -> str:
-    if resources.Id.is_resource_id(v):
-        return v
-    raise ValueError(f"id {v} is not of type ResourceIdStr")
-
-
-def is_none_or_resource_id(v: str | None) -> str | None:
+def is_resource_id(v: Optional[str], info: ValidationInfo, allow_none: bool = False) -> str | None:
     if v is None:
-        return v
-    return is_resource_id(v)
+        if allow_none:
+            return v
+        raise ValidationError(f"{info.field_name} is None")
+    return resources.Id.parse_id(v).resource_str()
 
 
 class DiscoveredResource(BaseModel):
@@ -774,14 +773,14 @@ class DiscoveredResource(BaseModel):
     discovery_resource_id: Optional[ResourceIdStr] = None
 
     _validate_discovered_rid = field_validator("discovered_resource_id")(is_resource_id)
-    _validate_discovery_rid = field_validator("discovery_resource_id")(is_none_or_resource_id)
+    _validate_discovery_rid = field_validator("discovery_resource_id")(functools.partial(is_resource_id, allow_none=True))
 
     @computed_field  # type: ignore[misc]
     @property
     def discovery_resource_uri(self) -> str | None:
         if self.discovery_resource_id is None:
             return None
-        return f"/api/v2/resource/{self.discovery_resource_id}"
+        return f"/api/v2/resource/{parse.quote(self.discovery_resource_id)}"
 
     def to_dao(self, env: uuid) -> "data.DiscoveredResource":
         return data.DiscoveredResource(
