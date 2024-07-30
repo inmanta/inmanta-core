@@ -19,7 +19,7 @@ The ``lsm::StateTransfer`` entity has two attributes to indicate that a transfer
 
 The code snippet below models a lifecycle that contains state-preserving transfers:
 
-.. literalinclude:: transfer_optimization/basic_lifecycle.cf
+.. literalinclude:: sources/basic_lifecycle.cf
     :language: inmanta
     :lines: 1-66
     :linenos:
