@@ -157,11 +157,6 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         )
 
     def stop_timer_venv_checkup(self) -> None:
-        """
-        I am not sure what to do with this. Like this the stop() method will only get called .
-        This might never happen. The annoying thing is that the connection_lost() method is a sync method, so there is no easy
-        way to make sure that the self.timer_venv_checkup.stop() call gets awaited. @sanderr Do you see an easy way out here?
-        """
         # Given that the stop method of the Scheduler is async, we have no way to make sure that the stop method will get called
         # (only if the ioloop picks up the task -> might never happen). Therefore, we rely on the sync method that will cancel
         # the checkup task
