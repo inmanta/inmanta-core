@@ -118,6 +118,8 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         # This timer will be initialized when the InitCommand is received, see usage of `start_timer_venv_checkup`.
         # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
         self.timer_venv_scheduler: typing.Optional[util.Scheduler] = None
+        # We want to save the task in order to be able to cancel it in a synchronous manner. Refer to `stop_timer_venv_checkup`
+        # for more details
         self.timer_venv_checkup: typing.Optional[util.ScheduledTask] = None
         self.logger = logger
 
