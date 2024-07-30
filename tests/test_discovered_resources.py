@@ -157,16 +157,17 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
 
     for i in range(1, 7):
         rid = f"test::Resource[agent1,key{i}=key{i}]"
-        discovered_resources.append(
-            {
-                "discovered_resource_id": rid,
-                "values": {"value1": f"test{i}", "value2": f"test{i + 1}"},
-                "managed_resource_uri": (
-                    f"/api/v2/resource/{rid}" if i <= 4 else None
-                ),  # Last 2 resources are not known to the orchestrator
-                "discovery_resource_id": discovery_resource_id,
-            }
-        )
+        res = {
+            "discovered_resource_id": rid,
+            "values": {"value1": f"test{i}", "value2": f"test{i + 1}"},
+            "managed_resource_uri": (
+                f"/api/v2/resource/{rid}" if i <= 4 else None
+            ),  # Last 2 resources are not known to the orchestrator
+        }
+        if i % 2 == 0:
+            # Set the discovery rid for half of the resources:
+            res["discovery_resource_id"] = discovery_resource_id
+        discovered_resources.append(res)
 
     result = await agent._client.discovered_resource_create_batch(environment, discovered_resources)
     assert result.code == 200
@@ -220,9 +221,12 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         expected_copy = []
         for item in expected_result:
             item_copy = item.copy()
-            id = item_copy.pop("discovery_resource_id")
-            uri = f"/api/v2/resource/{id}"
-            item_copy["discovery_resource_uri"] = uri
+            if "discovery_resource_id" in item_copy:
+                id = item_copy.pop("discovery_resource_id")
+                uri = f"/api/v2/resource/{id}"
+                item_copy["discovery_resource_uri"] = uri
+            else:
+                item_copy["discovery_resource_uri"] = None
             expected_copy.append(item_copy)
         assert expected_copy == result
 
@@ -282,13 +286,22 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
 
 async def test_discovery_resource_bad_res_id(server, client, agent, environment):
     """
-    Test that exceptions are raised when creating discovered resources with invalid IDs.
+    Test that exceptions are raised when creating discovered resources with invalid resource IDs.
+    Tests both creation endpoints (`discovered_resource_create` and `discovered_resource_create_batch`)
     """
     result = await agent._client.discovered_resource_create(
         tid=environment,
         discovered_resource_id="invalid_rid",
         values={"value1": "test1", "value2": "test2"},
         discovery_resource_id="test::DiscoveryResource[agent1,key=key]",
+    )
+    assert result.code == 400
+    assert "Failed to validate argument" in result.result["message"]
+
+    result = await agent._client.discovered_resource_create(
+        tid=environment,
+        discovered_resource_id="invalid_rid",
+        values={"value1": "test1", "value2": "test2"},
     )
     assert result.code == 400
     assert "Failed to validate argument" in result.result["message"]
@@ -321,6 +334,21 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     resources = [
         {
             "discovery_resource_id": "test::DiscoveryResource[agent1,key1=key1]",
+            "discovered_resource_id": "test::Resource[agent1,key1=key1]",
+            "values": {"value1": "test1", "value2": "test2"},
+        },
+        {
+            "discovery_resource_id": "invalid_rid",
+            "discovered_resource_id": "test::Resource[agent1,key1=key2]",
+            "values": {"value1": "test5", "value2": "test6"},
+        },
+    ]
+    result = await agent._client.discovered_resource_create_batch(environment, resources)
+    assert result.code == 400
+    assert "Failed to validate argument" in result.result["message"]
+
+    resources = [
+        {
             "discovered_resource_id": "test::Resource[agent1,key1=key1]",
             "values": {"value1": "test1", "value2": "test2"},
         },

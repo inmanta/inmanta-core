@@ -6398,7 +6398,7 @@ class DiscoveredResource(BaseDocument):
     environment: uuid.UUID
     discovered_at: datetime.datetime
     discovered_resource_id: m.ResourceIdStr
-    discovery_resource_id: m.ResourceIdStr
+    discovery_resource_id: Optional[m.ResourceIdStr]
     values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")

@@ -778,7 +778,9 @@ class DiscoveredResource(BaseModel):
 
     @computed_field  # type: ignore[misc]
     @property
-    def discovery_resource_uri(self) -> str:
+    def discovery_resource_uri(self) -> str | None:
+        if self.discovery_resource_id is None:
+            return None
         return f"/api/v2/resource/{self.discovery_resource_id}"
 
     def to_dao(self, env: uuid) -> "data.DiscoveredResource":
