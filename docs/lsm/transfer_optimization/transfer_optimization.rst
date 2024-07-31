@@ -51,8 +51,8 @@ Validation compiles are not impacted by this setting. They are always executed.
 Testing
 =======
 
-The Inmanta server validates every lifecycle that is exported to the server and it will reject any lifecycle with
-incorrect state-preserving transfers. The server will for example reject lifecycles with state-preserving transfers
+The Inmanta server validates every lifecycle that is exported to the server and it will reject any lifecycle that is
+indisputably wrong. The server will for example reject lifecycles with state-preserving transfers
 that connect a state that exports resources with a state that doesn't export resources. However, the server cannot
 exhaustively detect all cases where transfers are incorrectly marked as state-preserving. As such, it's important to
 add tests that validate whether the service model behaves consistently, whether or not the
