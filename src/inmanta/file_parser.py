@@ -92,14 +92,14 @@ class RequirementsTxtParser:
                 if line_continuation_buffer:
                     line_continuation_buffer += line
                     if not line.endswith("\\"):
-                        if Requirement(requirement_string=line_continuation_buffer).key != remove_dep_on_pkg:
+                        if Requirement(requirement_string=line_continuation_buffer).name != remove_dep_on_pkg:
                             result += line_continuation_buffer
                         line_continuation_buffer = ""
                 elif not line.strip() or line.strip().startswith("#"):
                     result += line
                 elif line.endswith("\\"):
                     line_continuation_buffer = line
-                elif Requirement(requirement_string=line).key != remove_dep_on_pkg.lower():
+                elif Requirement(requirement_string=line).name != remove_dep_on_pkg.lower():
                     result += line
                 else:
                     # Dependency matches `remove_dep_on_pkg` => Remove line from result

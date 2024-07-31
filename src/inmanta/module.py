@@ -113,11 +113,11 @@ class InmantaModuleRequirement:
     @property
     def key(self) -> str:
         # Requirement converts all "_" to "-". Inmanta modules use "_"
-        return self._requirement.key.replace("-", "_")
+        return self._requirement.name.replace("-", "_")
 
     @property
     def specifier(self) -> str:
-        return self._requirement.specifier
+        return str(self._requirement.specifier)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, InmantaModuleRequirement):
@@ -125,7 +125,7 @@ class InmantaModuleRequirement:
         return self._requirement == other._requirement
 
     def __contains__(self, version: str) -> bool:
-        return version in self._requirement
+        return version in self._requirement.specifier
 
     def __str__(self) -> str:
         return str(self._requirement).replace("-", "_")
@@ -135,7 +135,7 @@ class InmantaModuleRequirement:
 
     @property
     def specs(self) -> Sequence[tuple[str, str]]:
-        return self._requirement.specs
+        return [(e.operator, e.version) for e in self._requirement.specifier]
 
     def version_spec_str(self) -> str:
         """
@@ -1177,14 +1177,16 @@ class RequirementsTxtFile:
         Returns True iff this requirements.txt file contains the given package name. The given `pkg_name` is matched
         case insensitive against the requirements in this RequirementsTxtFile.
         """
-        return any(r.key == pkg_name.lower() for r in self._requirements)
+        return any(r.name == pkg_name.lower() for r in self._requirements)
 
     def set_requirement_and_write(self, requirement: Requirement) -> None:
         """
         Add the given requirement to the requirements.txt file and update the file on disk, replacing any existing constraints
         on this package.
         """
-        new_content_file = RequirementsTxtParser.get_content_with_dep_removed(self._filename, remove_dep_on_pkg=requirement.key)
+        new_content_file = RequirementsTxtParser.get_content_with_dep_removed(
+            self._filename, remove_dep_on_pkg=requirement.name
+        )
         new_content_file = new_content_file.rstrip()
         if new_content_file:
             new_content_file = f"{new_content_file}\n{requirement}"
@@ -2665,7 +2667,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
         elif os.path.exists(requirements_txt_file_path):
             requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
-            requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().key)
+            requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().name)
 
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
@@ -3284,7 +3286,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             # Remove requirement from requirements.txt file
             if os.path.exists(requirements_txt_file_path):
                 requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
-                requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().key)
+                requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().name)
         else:
             # Add requirement to requirements.txt
             requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
@@ -3430,7 +3432,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
             new_install_requires = [
                 r
                 for r in config_parser.get("options", "install_requires").split("\n")
-                if r and Requirement(requirement_string=r).key != python_pkg_requirement.key
+                if r and Requirement(requirement_string=r).name != python_pkg_requirement.name
             ]
             new_install_requires.append(str(python_pkg_requirement))
         else:

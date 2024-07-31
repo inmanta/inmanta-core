@@ -127,7 +127,7 @@ class ConflictingRequirements(CompilerException):
         if not self.conflicts:
             return None
         msg = ""
-        for current_conflict in sorted(self.conflicts, key=lambda x: x.requirement.key):
+        for current_conflict in sorted(self.conflicts, key=lambda x: x.requirement.name):
             msg += f"\n\t* {current_conflict}"
         return msg
 
@@ -204,21 +204,22 @@ class PythonWorkingSet:
                 if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
                     # The marker of the requirement doesn't apply on this environment
                     continue
-                if r.name not in installed_packages or str(installed_packages[r.name]) not in r:
+                if r.name not in installed_packages or str(installed_packages[r.name]) not in r.specifier:
                     return False
                 if r.extras:
                     for extra in r.extras:
                         search_dist = [e for e in importlib.metadata.distributions() if e.name == extra]
                         assert len(search_dist) <= 1
                         distribution: Optional[Distribution] = None if len(search_dist) == 0 else search_dist[0]
+                        if distribution is None:
+                            return False
+
                         extra_packages = [
                             Requirement(requirement_string=e) for e in distribution.metadata.json["provides_extra"]
                         ]
 
-                        if distribution is None:
-                            return False
                         pkgs_required_by_extra: set[Requirement] = set(extra_packages) - set(
-                            [Requirement(requirement_string=e) for e in distribution.requires]
+                            [Requirement(requirement_string=e) for e in distribution.requires or []]
                         )
                         if not _are_installed_recursive(
                             reqs=list(pkgs_required_by_extra),
@@ -274,7 +275,7 @@ class PythonWorkingSet:
 
             # recurse on direct dependencies
             return _get_tree_recursive(
-                (requirement.key for requirement in installed_distributions[dist].requires()),
+                (requirement for requirement in installed_distributions[dist].requires or []),
                 acc=acc | {dist},
             )
 
@@ -1000,9 +1001,9 @@ class ActiveEnv(PythonEnvironment):
 
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(requirement, dist_info.name)
+            OwnedRequirement(Requirement(requirement_string=requirement), dist_info.name)
             for dist_info in importlib.metadata.distributions()
-            for requirement in dist_info.requires
+            for requirement in dist_info.requires or []
         )
         inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
             OwnedRequirement(r, owner="inmanta-core") for r in cls._get_requirements_on_inmanta_package()
@@ -1035,12 +1036,13 @@ class ActiveEnv(PythonEnvironment):
         constraint_violations_strict: set[VersionConflict] = set()
         for c in all_constraints:
             requirement = c.requirement
-            if (requirement.key not in installed_versions or str(installed_versions[requirement.key]) not in requirement) and (
-                not requirement.marker or (requirement.marker and requirement.marker.evaluate())
-            ):
+            if (
+                requirement.name not in installed_versions
+                or str(installed_versions[requirement.name]) not in requirement.specifier
+            ) and (not requirement.marker or (requirement.marker and requirement.marker.evaluate())):
                 version_conflict = VersionConflict(
                     requirement=requirement,
-                    installed_version=installed_versions.get(requirement.key, None),
+                    installed_version=installed_versions.get(requirement.name, None),
                     owner=c.owner,
                 )
                 if c.is_owned_by(full_strict_scope):
@@ -1101,14 +1103,14 @@ class ActiveEnv(PythonEnvironment):
             Requirement(requirement_string=requirement)
             for dist_info in working_set
             if in_scope.fullmatch(dist_info.name)
-            for requirement in dist_info.requires
+            for requirement in dist_info.requires or []
         )
 
         installed_versions: dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
         constraint_violations: set[VersionConflict] = {
-            VersionConflict(constraint, installed_versions.get(constraint.key, None))
+            VersionConflict(constraint, installed_versions.get(constraint.name, None))
             for constraint in all_constraints
-            if constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint
+            if constraint.name not in installed_versions or str(installed_versions[constraint.name]) not in constraint.specifier
         }
 
         all_violations = constraint_violations_non_strict | constraint_violations_strict | constraint_violations
