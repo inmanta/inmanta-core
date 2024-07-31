@@ -493,7 +493,6 @@ class MPExecutor(executor.Executor, executor.PoolMember):
             LOGGER.exception(
                 "Unexpected error during executor %s cleanup:",
                 self.executor_id.identity(),
-                exc_info=True,
             )
 
     def can_be_cleaned_up(self, retention_time: int) -> bool:

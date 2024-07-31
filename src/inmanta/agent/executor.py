@@ -440,7 +440,7 @@ class PoolManager:
                 self.cleanup_job.cancel()
                 await asyncio.wait_for(self.cleanup_job, timeout=10)
             except asyncio.TimeoutError:
-                LOGGER.warning("%s's cleanup job has timed out!", self.__class__.__name__)
+                LOGGER.warning("Stopping %s's cleanup job has timed out!", self.__class__.__name__)
             except asyncio.CancelledError:
                 LOGGER.debug("%s's cleanup job is already cancelled!", self.__class__.__name__)
             finally:
@@ -467,35 +467,35 @@ class PoolManager:
         :return: When to run the cleaning next time: default retention time or lowest expiration time of one of the pool members
         """
         cleanup_start = datetime.datetime.now().astimezone()
-        reschedule_interval: float = float(self.retention_time)
+        # Number of seconds relative to cleanup_start
+        run_next_cleanup_job_at: float = float(self.retention_time)
         pool_members = await self.get_pool_members()
         for pool_member in pool_members:
-            if pool_member.can_be_cleaned_up(self.retention_time):
-                async with self._locks.get(pool_member.get_id()):
-                    # Check that the executor can still be cleaned up by the time we have acquired the lock
-                    if pool_member.can_be_cleaned_up(self.retention_time):
-                        try:
+            try:
+                if pool_member.can_be_cleaned_up(self.retention_time):
+                    async with self._locks.get(pool_member.get_id()):
+                        # Check that the executor can still be cleaned up by the time we have acquired the lock
+                        if pool_member.can_be_cleaned_up(self.retention_time):
                             await pool_member.clean()
-                        except Exception as e:
-                            LOGGER.exception(
-                                "An error occurred while cleaning the %s pool member `%s`: %s",
-                                self.__class__.__name__,
-                                pool_member.get_id(),
-                                str(e),
-                            )
-                        self.clean_pool_member_from_manager(pool_member)
-            else:
-                # If this pool member expires sooner than the cleanup interval, schedule the next cleanup on that timestamp.
-                reschedule_interval = min(
-                    reschedule_interval,
-                    (
-                        datetime.timedelta(seconds=self.retention_time) - (cleanup_start - pool_member.last_used())
-                    ).total_seconds(),
+                            self.clean_pool_member_from_manager(pool_member)
+                else:
+                    # If this pool member expires sooner than the cleanup interval, schedule the next cleanup on that timestamp.
+                    run_next_cleanup_job_at = min(
+                        run_next_cleanup_job_at,
+                        (
+                            datetime.timedelta(seconds=self.retention_time) - (cleanup_start - pool_member.last_used())
+                        ).total_seconds(),
+                    )
+            except Exception:
+                LOGGER.exception(
+                    "An error occurred while cleaning the %s pool member `%s`",
+                    self.__class__.__name__,
+                    pool_member.get_id(),
                 )
 
         cleanup_end = datetime.datetime.now().astimezone()
 
-        return max(0.0, reschedule_interval - (cleanup_end - cleanup_start).total_seconds())
+        return max(0.0, run_next_cleanup_job_at - (cleanup_end - cleanup_start).total_seconds())
 
     async def cleanup_inactive_pool_members_task(self) -> None:
         """
