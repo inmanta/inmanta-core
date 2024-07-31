@@ -44,7 +44,7 @@ Enabling the transfer optimization feature
 ==========================================
 
 The environment setting :inmanta.environment-settings:setting:`enable_lsm_transfer_optimization` can be used to enable
-the transfer optimization feature. When enabled, the LSM extension will perform a compile when transitioning between
+the transfer optimization feature. When enabled, the LSM extension will perform a compile only when transitioning between
 two states that don't preserve the desired state. When disabled, a recompile will be done for each state transition.
 Validation compiles are not impacted by this setting. They are always executed.
 
