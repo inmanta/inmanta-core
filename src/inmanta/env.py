@@ -165,7 +165,7 @@ class PythonWorkingSet:
         Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
         """
         if isinstance(requirements[0], str):
-            return [Requirement(requirement_string=r) for r in requirements]
+            return [Requirement(requirement_string=r) for r in requirements if isinstance(r, str)]
         else:
             return requirements
 
