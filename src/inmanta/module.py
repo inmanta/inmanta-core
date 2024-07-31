@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import reduce
 from importlib.abc import Loader
+from importlib.metadata import Distribution, PackageNotFoundError
 from io import BytesIO, TextIOBase
 from itertools import chain
 from subprocess import CalledProcessError
@@ -47,10 +48,8 @@ from time import time
 from typing import Annotated, ClassVar, Dict, Generic, List, NewType, Optional, TextIO, TypeVar, Union, cast
 
 import more_itertools
-import pkg_resources
 import pydantic
 import yaml
-from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
 
 import inmanta.data.model
@@ -68,6 +67,8 @@ from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
 from packaging import version
+from packaging.requirements import Requirement
+from packaging.version import Version
 from ruamel.yaml.comments import CommentedMap
 
 try:
@@ -97,7 +98,7 @@ class InmantaModuleRequirement:
     """
 
     def __init__(self, requirement: Requirement) -> None:
-        if requirement.project_name.startswith(ModuleV2.PKG_NAME_PREFIX):
+        if requirement.name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError(
                 f"InmantaModuleRequirement instances work with inmanta module names, not python package names. "
                 f"Problematic case: {str(requirement)}"
@@ -107,7 +108,7 @@ class InmantaModuleRequirement:
     @property
     def project_name(self) -> str:
         # Requirement converts all "_" to "-". Inmanta modules use "_"
-        return self._requirement.project_name.replace("-", "_")
+        return self._requirement.name.replace("-", "_")
 
     @property
     def key(self) -> str:
@@ -150,7 +151,7 @@ class InmantaModuleRequirement:
             )
         if "-" in spec:
             raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
-        return cls(Requirement.parse(spec))
+        return cls(Requirement(requirement_string=spec))
 
     def get_python_package_requirement(self) -> Requirement:
         """
@@ -159,7 +160,7 @@ class InmantaModuleRequirement:
         module_name = self.project_name
         pkg_name = ModuleV2Source.get_package_name_for(module_name)
         pkg_req_str = str(self).replace(module_name, pkg_name, 1)  # Replace max 1 occurrence
-        return Requirement.parse(pkg_req_str)
+        return Requirement(requirement_string=pkg_req_str)
 
 
 class CompilerExceptionWithExtendedTrace(CompilerException):
@@ -690,12 +691,13 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         if module_name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError("PythonRepo instances work with inmanta module names, not Python package names.")
         try:
-            dist: Distribution = pkg_resources.get_distribution(ModuleV2Source.get_package_name_for(module_name))
-            return version.Version(dist.version)
-        except DistributionNotFound:
+            dist: Distribution = Distribution.from_name(ModuleV2Source.get_package_name_for(module_name))
+            try:
+                return version.Version(dist.version)
+            except version.InvalidVersion:
+                raise InvalidModuleException(f"Package {dist.name} was installed but it has no valid version.")
+        except PackageNotFoundError:
             return None
-        except version.InvalidVersion:
-            raise InvalidModuleException(f"Package {dist.project_name} was installed but it has no valid version.")
 
     @classmethod
     def get_inmanta_module_name(cls, python_package_name: str) -> str:
@@ -727,7 +729,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         # These could be constraints (-c) as well, but that requires additional sanitation
         # Because for pip not every valid -r is a valid -c
         current_requires = project.get_strict_python_requirements_as_list()
-        requirements += [Requirement.parse(r) for r in current_requires]
+        requirements += [Requirement(requirement_string=r) for r in current_requires]
 
         if preinstalled is not None:
             # log warning if preinstalled version does not match constraints
@@ -2124,7 +2126,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.verify_module_version_compatibility()
 
         # do python install
-        pyreq: list[Requirement] = [Requirement.parse(x) for x in self.collect_python_requirements()]
+        pyreq: list[Requirement] = [Requirement(requirement_string=x) for x in self.collect_python_requirements()]
 
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
@@ -2520,10 +2522,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 LOGGER.warning("Module %s is present in requires but it is not used by the model.", name)
                 continue
             module = self.modules[name]
-            version = parse_version(str(module.version))
+            current_version = Version(version=str(module.version))
             for r in spec:
-                if version not in r:
-                    exc_message += f"\n\t* requirement {r} on module {name} not fulfilled, now at version {version}."
+                if current_version not in r:
+                    exc_message += f"\n\t* requirement {r} on module {name} not fulfilled, now at version {current_version}."
 
         if exc_message:
             exc_message = f"The following requirements were not satisfied:{exc_message}"
@@ -2542,7 +2544,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
         if self.strict_deps_check:
-            constraints: list[Requirement] = [Requirement.parse(item) for item in self.collect_python_requirements()]
+            constraints: list[Requirement] = [
+                Requirement(requirement_string=item) for item in self.collect_python_requirements()
+            ]
             env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
             if not env.ActiveEnv.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
@@ -2673,7 +2677,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # filter on import stmt
         reqs = []
         for spec in self._metadata.requires:
-            req = [x for x in parse_requirements(spec)]
+            req = [Requirement(requirement_string=e) for e in spec]
             if len(req) > 1:
                 print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
@@ -2810,7 +2814,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         reqs = []
         for spec in self.get_module_requirements():
-            req = [x for x in parse_requirements(spec)]
+            req = [Requirement(requirement_string=e) for e in spec]
             if len(req) > 1:
                 print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
@@ -3202,7 +3206,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 
         def try_parse(x: str) -> Optional[version.Version]:
             try:
-                return parse_version(x)
+                return Version(version=x)
             except Exception:
                 return None
 
@@ -3213,7 +3217,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             versions = [x for x in r.specifier.filter(versions, not release_only)]
 
         comp_version_raw = get_compiler_version()
-        comp_version = parse_version(comp_version_raw)
+        comp_version = Version(version=comp_version_raw)
         return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
 
     @classmethod
@@ -3228,7 +3232,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             v = metadata.compiler_version
             if isinstance(v, (int, float)):
                 v = str(v)
-            return parse_version(v)
+            return Version(version=v)
 
         if not versions:
             return None
@@ -3296,7 +3300,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 
         def try_parse(x: str) -> Optional[version.Version]:
             try:
-                return parse_version(x)
+                return Version(version=x)
             except Exception:
                 return None
 
@@ -3426,7 +3430,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
             new_install_requires = [
                 r
                 for r in config_parser.get("options", "install_requires").split("\n")
-                if r and Requirement.parse(r).key != python_pkg_requirement.key
+                if r and Requirement(requirement_string=r).key != python_pkg_requirement.key
             ]
             new_install_requires.append(str(python_pkg_requirement))
         else:

@@ -33,9 +33,8 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Collection, Dict, Optional, Union, cast
 
-import pkg_resources
-
 import inmanta.agent.executor
+import packaging.requirements
 from inmanta import config, const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
@@ -1341,7 +1340,7 @@ class Agent(SessionEndpoint):
             await loop.run_in_executor(
                 self.thread_pool,
                 self._env.install_for_config,
-                list(pkg_resources.parse_requirements(blueprint.requirements)),
+                [packaging.requirements.Requirement(requirement_string=e) for e in blueprint.requirements],
                 blueprint.pip_config,
             )
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)

@@ -32,14 +32,12 @@ from dataclasses import dataclass
 from functools import reduce
 from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
+from importlib.metadata import Distribution
 from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
 from typing import NamedTuple, Optional, TypeVar
-
-import pkg_resources
-from pkg_resources import DistInfoDistribution, Distribution, Requirement
 
 from inmanta import const
 from inmanta.ast import CompilerException
@@ -48,6 +46,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from inmanta.util import strtobool
 from packaging import version
+from packaging.requirements import Requirement
 
 LOGGER = logging.getLogger(__name__)
 LOGGER_PIP = logging.getLogger("inmanta.pip")  # Use this logger to log pip commands or data related to pip commands.
@@ -166,7 +165,7 @@ class PythonWorkingSet:
         Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
         """
         if isinstance(requirements[0], str):
-            return [Requirement.parse(r) for r in requirements]
+            return [Requirement(requirement_string=r) for r in requirements]
         else:
             return requirements
 
@@ -205,15 +204,21 @@ class PythonWorkingSet:
                 if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
                     # The marker of the requirement doesn't apply on this environment
                     continue
-                if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
+                if r.name not in installed_packages or str(installed_packages[r.name]) not in r:
                     return False
                 if r.extras:
                     for extra in r.extras:
-                        distribution: Optional[Distribution] = pkg_resources.working_set.find(r)
+                        search_dist = [e for e in importlib.metadata.distributions() if e.name == extra]
+                        assert len(search_dist) <= 1
+                        distribution: Optional[Distribution] = None if len(search_dist) == 0 else search_dist[0]
+                        extra_packages = [
+                            Requirement(requirement_string=e) for e in distribution.metadata.json["provides_extra"]
+                        ]
+
                         if distribution is None:
                             return False
-                        pkgs_required_by_extra: set[Requirement] = set(distribution.requires(extras=(extra,))) - set(
-                            distribution.requires(extras=())
+                        pkgs_required_by_extra: set[Requirement] = set(extra_packages) - set(
+                            [Requirement(requirement_string=e) for e in distribution.requires]
                         )
                         if not _are_installed_recursive(
                             reqs=list(pkgs_required_by_extra),
@@ -229,19 +234,15 @@ class PythonWorkingSet:
     @classmethod
     def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> dict[str, version.Version]:
         """
-        Return all packages present in `pkg_resources.working_set` together with the version of the package.
+        Return all packages present in `importlib.metadata.distributions()` together with the version of the package.
 
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
         return {
-            dist_info.key: version.Version(dist_info.version)
-            for dist_info in pkg_resources.working_set
-            if not inmanta_modules_only or dist_info.key.startswith(const.MODULE_PKG_NAME_PREFIX)
+            dist_info.name: version.Version(dist_info.version)
+            for dist_info in importlib.metadata.distributions()
+            if not inmanta_modules_only or dist_info.name.startswith(const.MODULE_PKG_NAME_PREFIX)
         }
-
-    @classmethod
-    def rebuild_working_set(cls) -> None:
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
     @classmethod
     def get_dependency_tree(cls, dists: abc.Iterable[str]) -> abc.Set[str]:
@@ -255,7 +256,7 @@ class PythonWorkingSet:
         """
         # create dict for O(1) lookup
         installed_distributions: abc.Mapping[str, Distribution] = {
-            dist_info.key: dist_info for dist_info in pkg_resources.working_set
+            dist_info.name: dist_info for dist_info in importlib.metadata.distributions()
         }
 
         def _get_tree_recursive(dists: abc.Iterable[str], acc: abc.Set[str] = frozenset()) -> abc.Set[str]:
@@ -840,7 +841,7 @@ import sys
         use_pip_config was ignored on ISO6 and it still is
         """
         self.install_from_index(
-            requirements=[Requirement.parse(r) for r in requirements_list],
+            requirements=[Requirement(requirement_string=r) for r in requirements_list],
             upgrade=upgrade,
             upgrade_strategy=upgrade_strategy,
             use_pip_config=True,
@@ -867,7 +868,11 @@ import sys
         """
         protected_inmanta_packages: list[str] = cls.get_protected_inmanta_packages()
         workingset: dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        return [Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if pkg in protected_inmanta_packages]
+        return [
+            Requirement(requirement_string=f"{pkg}=={workingset[pkg]}")
+            for pkg in workingset
+            if pkg in protected_inmanta_packages
+        ]
 
 
 class CommandRunner:
@@ -995,9 +1000,9 @@ class ActiveEnv(PythonEnvironment):
 
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(requirement, dist_info.key)
-            for dist_info in pkg_resources.working_set
-            for requirement in dist_info.requires()
+            OwnedRequirement(requirement, dist_info.name)
+            for dist_info in importlib.metadata.distributions()
+            for requirement in dist_info.requires
         )
         inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
             OwnedRequirement(r, owner="inmanta-core") for r in cls._get_requirements_on_inmanta_package()
@@ -1013,10 +1018,14 @@ class ActiveEnv(PythonEnvironment):
                 (
                     []
                     if strict_scope is None
-                    else (dist_info.key for dist_info in pkg_resources.working_set if strict_scope.fullmatch(dist_info.key))
+                    else (
+                        dist_info.name
+                        for dist_info in importlib.metadata.distributions()
+                        if strict_scope.fullmatch(dist_info.name)
+                    )
                 ),
-                (requirement.requirement.key for requirement in inmanta_constraints),
-                (requirement.requirement.key for requirement in extra_constraints),
+                (requirement.requirement.name for requirement in inmanta_constraints),
+                (requirement.requirement.name for requirement in extra_constraints),
             )
         )
 
@@ -1086,13 +1095,13 @@ class ActiveEnv(PythonEnvironment):
             in_scope, constraints
         )
 
-        working_set: abc.Iterable[DistInfoDistribution] = pkg_resources.working_set
+        working_set: abc.Iterable[Distribution] = importlib.metadata.distributions()
         # add all requirements of all in scope packages installed in this environment
         all_constraints: set[Requirement] = set(constraints if constraints is not None else []).union(
-            requirement
+            Requirement(requirement_string=requirement)
             for dist_info in working_set
-            if in_scope.fullmatch(dist_info.key)
-            for requirement in dist_info.requires()
+            if in_scope.fullmatch(dist_info.name)
+            for requirement in dist_info.requires
         )
 
         installed_versions: dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
@@ -1167,7 +1176,6 @@ class ActiveEnv(PythonEnvironment):
                            are executed in a subprocess.
                     """
                     importlib.reload(mod)
-        PythonWorkingSet.rebuild_working_set()
 
 
 process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)

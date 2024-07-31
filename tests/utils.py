@@ -37,7 +37,6 @@ from typing import Any, Optional, TypeVar, Union
 
 import pytest
 import yaml
-from pkg_resources import Requirement, parse_version
 
 import build
 import build.env
@@ -52,6 +51,8 @@ from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
 from packaging import version
+from packaging.requirements import Requirement
+from packaging.version import Version
 
 T = TypeVar("T")
 
@@ -455,7 +456,7 @@ def get_product_meta_data() -> ProductMetadata:
 
 
 def product_version_lower_or_equal_than(version: str) -> bool:
-    return parse_version(get_product_meta_data().version) <= parse_version(version)
+    return Version(version=get_product_meta_data().version) <= Version(version=version)
 
 
 def mark_only_for_version_higher_than(version: str) -> "MarkDecorator":

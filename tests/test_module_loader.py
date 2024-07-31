@@ -28,7 +28,6 @@ from typing import Optional
 
 import py
 import pytest
-from pkg_resources import Requirement
 
 from inmanta import compiler, const, env, loader, plugins, resources
 from inmanta.ast import CompilerException
@@ -46,6 +45,7 @@ from inmanta.module import (
     Project,
 )
 from inmanta.moduletool import ModuleConverter, ModuleTool, ProjectTool
+from packaging.requirements import Requirement
 from packaging.version import Version
 from utils import PipIndex, create_python_package, log_contains, module_from_template, v1_module_from_template
 
@@ -346,7 +346,7 @@ def test_load_module_recursive_v2_module_depends_on_v1(
     project = snippetcompiler.setup_for_snippet(
         snippet="import v2_depends_on_v1",
         index_url=local_module_package_index,
-        python_requires=[Requirement.parse("inmanta-module-v2-depends-on-v1")],
+        python_requires=[Requirement(requirement_string="inmanta-module-v2-depends-on-v1")],
         install_project=False,
     )
     if preload_v1_module:
@@ -373,7 +373,7 @@ def test_load_module_recursive_complex_module_dependencies(local_module_package_
         snippet="import complex_module_dependencies_mod1",
         autostd=False,
         index_url=local_module_package_index,
-        python_requires=[Requirement.parse("inmanta-module-complex-module-dependencies-mod1")],
+        python_requires=[Requirement(requirement_string="inmanta-module-complex-module-dependencies-mod1")],
         install_project=False,
     )
     assert "complex_module_dependencies_mod1" not in project.modules
@@ -412,7 +412,7 @@ def test_load_import_based_v2_project(local_module_package_index: str, snippetco
     with pytest.raises(ModuleLoadingException, match=f"Failed to load module {module_name}"):
         load()
     # assert that it doesn't raise an error with explicit requirements set
-    load([Requirement.parse(ModuleV2Source.get_package_name_for(module_name))])
+    load([Requirement(requirement_string=ModuleV2Source.get_package_name_for(module_name))])
 
 
 @pytest.mark.parametrize("v1", [True, False])
@@ -469,7 +469,7 @@ def test_load_import_based_v2_module(
         extra_index_url=[index.url],
         # make sure that even listing the requirement in project.yml does not suffice
         project_requires=[InmantaModuleRequirement.parse(dependency_module_name)],
-        python_requires=[] if v1 else [Requirement.parse(ModuleV2Source.get_package_name_for(main_module_name))],
+        python_requires=[] if v1 else [Requirement(requirement_string=ModuleV2Source.get_package_name_for(main_module_name))],
     )
 
     if explicit_dependency:
@@ -609,7 +609,9 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     module_name: str = "minimalv2module"
     module_path: str = str(tmpdir.join(module_name))
     module_from_template(
-        os.path.join(modules_v2_dir, module_name), module_path, new_requirements=[Requirement.parse("Jinja2==2.11.3")]
+        os.path.join(modules_v2_dir, module_name),
+        module_path,
+        new_requirements=[Requirement(requirement_string="Jinja2==2.11.3")],
     )
 
     # Activate the snippetcompiler venv
@@ -653,7 +655,7 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     module_from_template(
         os.path.join(modules_v2_dir, module_name),
         module_path,
-        new_requirements=[Requirement.parse("Jinja2==2.11.3")],
+        new_requirements=[Requirement(requirement_string="Jinja2==2.11.3")],
         publish_index=index,
     )
 
@@ -704,7 +706,11 @@ def test_module_conflicting_dependencies_with_v2_modules(
 
     # Create a python package y with version 1.0.0 that depends on x~=1.0.0
     create_python_package(
-        "y", Version("1.0.0"), str(tmpdir.join("y-1.0.0")), requirements=[Requirement.parse("x~=1.0.0")], publish_index=index
+        "y",
+        Version("1.0.0"),
+        str(tmpdir.join("y-1.0.0")),
+        requirements=[Requirement(requirement_string="x~=1.0.0")],
+        publish_index=index,
     )
 
     # Create the first module
@@ -713,7 +719,7 @@ def test_module_conflicting_dependencies_with_v2_modules(
     module_from_template(
         os.path.join(modules_v2_dir, module_name1),
         module_path1,
-        new_requirements=[Requirement.parse("y~=1.0.0")],
+        new_requirements=[Requirement(requirement_string="y~=1.0.0")],
         publish_index=index,
     )
 
@@ -724,7 +730,7 @@ def test_module_conflicting_dependencies_with_v2_modules(
         os.path.join(modules_v2_dir, "minimalv2module"),
         module_path2,
         new_name="minimalv2module2",
-        new_requirements=[Requirement.parse("x~=2.0.0")],
+        new_requirements=[Requirement(requirement_string="x~=2.0.0")],
         publish_index=index,
     )
 
@@ -784,7 +790,7 @@ def test_module_conflicting_dependencies_with_v1_module(
         os.path.join(modules_dir, module_name1),
         module_path1,
         new_name="modulev1",
-        new_requirements=[Requirement.parse("y~=1.0.0")],
+        new_requirements=[Requirement(requirement_string="y~=1.0.0")],
     )
 
     # Create the second module
@@ -793,7 +799,7 @@ def test_module_conflicting_dependencies_with_v1_module(
     module_from_template(
         os.path.join(modules_v2_dir, module_name2),
         module_path2,
-        new_requirements=[Requirement.parse("y~=2.0.0")],
+        new_requirements=[Requirement(requirement_string="y~=2.0.0")],
         publish_index=index,
     )
 
@@ -841,7 +847,7 @@ def test_module_install_extra_on_project_level_v2_dep(
         new_name="mymod",
         new_requirements=[],
         new_extras={
-            "myfeature": [Requirement.parse(package_name_extra)],
+            "myfeature": [Requirement(requirement_string=package_name_extra)],
         },
         publish_index=index,
     )
@@ -890,7 +896,7 @@ def test_module_install_extra_on_dep_of_v2_module(
         new_name="depmod",
         new_requirements=[],
         new_extras={
-            "myfeature": [Requirement.parse(package_name_extra)],
+            "myfeature": [Requirement(requirement_string=package_name_extra)],
         },
         publish_index=index,
     )
@@ -910,7 +916,7 @@ def test_module_install_extra_on_dep_of_v2_module(
         install_project=True,
         index_url=index.url,
         extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
-        python_requires=[Requirement.parse("inmanta-module-myv2mod")],
+        python_requires=[Requirement(requirement_string="inmanta-module-myv2mod")],
         autostd=False,
     )
 
@@ -947,7 +953,7 @@ def test_module_install_extra_on_dep_of_v1_module(
         new_name="depmod",
         new_requirements=[],
         new_extras={
-            "myfeature": [Requirement.parse(package_name_extra)],
+            "myfeature": [Requirement(requirement_string=package_name_extra)],
         },
         publish_index=index,
     )
@@ -997,7 +1003,7 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
         new_name="mymod",
         new_requirements=[],
         new_extras={
-            "myfeature": [Requirement.parse(package_name_extra)],
+            "myfeature": [Requirement(requirement_string=package_name_extra)],
         },
         publish_index=index,
     )
@@ -1066,7 +1072,7 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
         new_name="depmod",
         new_requirements=[],
         new_extras={
-            "myfeature": [Requirement.parse(package_name_extra)],
+            "myfeature": [Requirement(requirement_string=package_name_extra)],
         },
         publish_index=index,
     )
@@ -1095,7 +1101,7 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
         install_project=True,
         index_url=index.url,
         extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
-        python_requires=[Requirement.parse("inmanta-module-myv2mod==1.0.0")],
+        python_requires=[Requirement(requirement_string="inmanta-module-myv2mod==1.0.0")],
         autostd=False,
     )
     assert_installed(extra_installed=False)
@@ -1117,7 +1123,7 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
         install_project=not do_project_update,
         index_url=index.url,
         extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
-        python_requires=[Requirement.parse("inmanta-module-myv2mod==2.0.0")],
+        python_requires=[Requirement(requirement_string="inmanta-module-myv2mod==2.0.0")],
         autostd=False,
     )
     if do_project_update:
@@ -1161,7 +1167,7 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
         new_name="depmod",
         new_requirements=[],
         new_extras={
-            "myfeature": [Requirement.parse(package_name_extra)],
+            "myfeature": [Requirement(requirement_string=package_name_extra)],
         },
         publish_index=index,
     )
@@ -1225,7 +1231,7 @@ async def test_v1_module_depends_on_third_party_dep_with_extra(
         os.path.join(tmpdir, "myv1mod"),
         new_name="myv1mod",
         new_content_init_cf="",
-        new_requirements=[Requirement.parse("pkg[optional-a]")],
+        new_requirements=[Requirement(requirement_string="pkg[optional-a]")],
     )
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "import myv1mod",
@@ -1245,7 +1251,7 @@ async def test_v1_module_depends_on_third_party_dep_with_extra(
         os.path.join(tmpdir, "myv1mod"),
         new_name="myv1mod",
         new_content_init_cf="",
-        new_requirements=[Requirement.parse("pkg[optional-a,optional-b]")],
+        new_requirements=[Requirement(requirement_string="pkg[optional-a,optional-b]")],
     )
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "import myv1mod",
@@ -1272,13 +1278,13 @@ async def test_v2_module_depends_on_third_party_dep_with_extra(
         str(tmpdir.join("myv2mod")),
         new_name="myv2mod",
         new_version=Version("1.0.0"),
-        new_requirements=[Requirement.parse("pkg[optional-a]")],
+        new_requirements=[Requirement(requirement_string="pkg[optional-a]")],
         publish_index=index,
     )
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "import myv2mod",
         install_project=True,
-        python_requires=[Requirement.parse("inmanta-module-myv2mod==1.0.0")],
+        python_requires=[Requirement(requirement_string="inmanta-module-myv2mod==1.0.0")],
         index_url=index.url,
         extra_index_url=[index_with_pkgs_containing_optional_deps],
         autostd=False,
@@ -1294,13 +1300,13 @@ async def test_v2_module_depends_on_third_party_dep_with_extra(
         str(tmpdir.join("myv2mod")),
         new_name="myv2mod",
         new_version=Version("2.0.0"),
-        new_requirements=[Requirement.parse("pkg[optional-a,optional-b]")],
+        new_requirements=[Requirement(requirement_string="pkg[optional-a,optional-b]")],
         publish_index=index,
     )
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "import myv2mod",
         install_project=True,
-        python_requires=[Requirement.parse("inmanta-module-myv2mod==2.0.0")],
+        python_requires=[Requirement(requirement_string="inmanta-module-myv2mod==2.0.0")],
         index_url=index.url,
         extra_index_url=[index_with_pkgs_containing_optional_deps],
         autostd=False,

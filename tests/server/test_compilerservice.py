@@ -30,7 +30,6 @@ from asyncio import Semaphore
 from collections import abc
 from typing import TYPE_CHECKING, Optional
 
-import pkg_resources
 import py.path
 import pytest
 from pytest import approx
@@ -51,6 +50,7 @@ from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.services.notificationservice import NotificationService
 from inmanta.util import ensure_directory_exist
+from packaging.requirements import Requirement
 from server.conftest import EnvironmentFactory
 from utils import LogSequence, report_db_index_usage, retry_limited, wait_for_version
 
@@ -1807,7 +1807,7 @@ async def test_uninstall_python_packages(
     venv = PythonEnvironment(env_path=venv_path)
     assert name_protected_pkg not in venv.get_installed_packages()
     venv.install_for_config(
-        requirements=[pkg_resources.Requirement.parse(name_protected_pkg)],
+        requirements=[Requirement(requirement_string=name_protected_pkg)],
         config=PipConfig(
             index_url=local_module_package_index,
         ),

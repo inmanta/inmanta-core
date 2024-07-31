@@ -38,14 +38,13 @@ from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import IO, TYPE_CHECKING, Any, Optional
+from typing import IO, Any, Optional
 
 import click
 import more_itertools
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
-from pkg_resources import Requirement
 
 import build
 import inmanta
@@ -76,12 +75,8 @@ from inmanta.module import (
     gitprovider,
 )
 from inmanta.stable_api import stable_api
+from packaging.requirements import InvalidRequirement, Requirement
 from packaging.version import Version
-
-if TYPE_CHECKING:
-    from packaging.requirements import InvalidRequirement
-else:
-    from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
 LOGGER = logging.getLogger(__name__)
 
@@ -489,7 +484,7 @@ compatible with the dependencies specified by the updated modules.
                 # Because for pip not every valid -r is a valid -c
                 current_requires = my_project.get_strict_python_requirements_as_list()
                 env.process_env.install_for_config(
-                    v2_python_specs + [Requirement.parse(r) for r in current_requires],
+                    v2_python_specs + [Requirement(requirement_string=r) for r in current_requires],
                     my_project.metadata.pip,
                     upgrade=True,
                 )

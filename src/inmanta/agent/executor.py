@@ -32,9 +32,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence
 
-import pkg_resources
-
 import inmanta.types
+import packaging.requirements
 from inmanta.agent import config as cfg
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
@@ -270,7 +269,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             install_for_config = functools.partial(
                 self.install_for_config,
-                requirements=list(pkg_resources.parse_requirements(req)),
+                requirements=[packaging.requirements.Requirement(requirement_string=e) for e in req],
                 config=blueprint.pip_config,
             )
             await loop.run_in_executor(self.thread_pool, install_for_config)
