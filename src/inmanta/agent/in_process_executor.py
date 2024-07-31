@@ -452,6 +452,8 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         eventloop: asyncio.AbstractEventLoop,
         parent_logger: logging.Logger,
         process: "agent.Agent",
+        code_dir: str,
+        env_dir: str,
         code_loader: bool = True,
     ) -> None:
         self.environment = environment
@@ -467,9 +469,9 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self._env: env.VirtualEnv | None = None
 
         if code_loader:
-            self._env = env.VirtualEnv(process._storage["env"])
+            self._env = env.VirtualEnv(env_dir)
             self._env.use_virtual_env()
-            self._loader = CodeLoader(process._storage["code"], clean=True)
+            self._loader = CodeLoader(code_dir, clean=True)
             # Lock to ensure only one actual install runs at a time
             self._loader_lock: asyncio.Lock = Lock()
             # Keep track for each resource type of the last loaded version
@@ -480,9 +482,6 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
     async def stop(self) -> None:
         for child in self.executors.values():
             child.stop()
-
-    def can_load_code(self) -> bool:
-        return self._loader is not None
 
     async def start(self) -> None:
         pass

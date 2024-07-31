@@ -22,8 +22,8 @@ import os
 import py_compile
 import tempfile
 import uuid
+from collections.abc import Sequence
 from logging import DEBUG, INFO
-from typing import Sequence
 
 import pytest
 
@@ -278,7 +278,7 @@ inmanta.test_agent_code_loading = 15
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("server_pre_start", ["forking"], indirect=True)
+@pytest.mark.parametrize("server_pre_start", ["forking", "threaded"], indirect=True)
 async def test_agent_installs_dependency_containing_extras(
     server_pre_start,
     server,

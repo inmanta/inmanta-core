@@ -784,9 +784,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         if self.cleanup_job:
             await self.cleanup_job
 
-    def can_load_code(self) -> bool:
-        return True
-
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children_ids = self.agent_map[agent_name]
         children = [self.executor_map[child_id] for child_id in children_ids]

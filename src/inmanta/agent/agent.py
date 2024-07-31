@@ -958,12 +958,16 @@ class Agent(SessionEndpoint):
         self._instances_lock = asyncio.Lock()
 
         # Cache to prevent re-fetching the same resource-version
-        self._previously_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
+        self._code_cache: dict[tuple[str, int], ResourceInstallSpec] = {}
 
         self.agent_map: Optional[dict[str, str]] = agent_map
 
         remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExecutorMode.forking
         can_have_remote_executor = code_loader
+
+        # Mechanism to speed up tests using the old (<= iso7) agent mechanism
+        # by avoiding spawning a virtual environment.
+        self._code_loader = code_loader
 
         self.executor_manager: executor.ExecutorManager[executor.Executor]
         if remote_executor and can_have_remote_executor:
@@ -988,6 +992,8 @@ class Agent(SessionEndpoint):
                 asyncio.get_event_loop(),
                 LOGGER,
                 self,
+                self._storage["code"],
+                self._storage["env"],
                 code_loader,
             )
 
@@ -1198,7 +1204,7 @@ class Agent(SessionEndpoint):
             - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
-        if not self.executor_manager.can_load_code():
+        if not self._code_loader:
             return [], set()
 
         # store it outside the loop, but only load when required
@@ -1207,7 +1213,7 @@ class Agent(SessionEndpoint):
         resource_install_specs: list[ResourceInstallSpec] = []
         invalid_resource_types: executor.FailedResourcesSet = set()
         for resource_type in set(resource_types):
-            cached_spec: Optional[ResourceInstallSpec] = self._previously_loaded.get((resource_type, version))
+            cached_spec: Optional[ResourceInstallSpec] = self._code_cache.get((resource_type, version))
             if cached_spec:
                 LOGGER.debug(
                     "Cache hit, using existing ResourceInstallSpec for resource_type=%s version=%d", resource_type, version
@@ -1243,10 +1249,10 @@ class Agent(SessionEndpoint):
                     resource_type, version, executor.ExecutorBlueprint(pip_config, list(requirements), sources)
                 )
                 resource_install_specs.append(resource_install_spec)
-                # Update the ``_previously_loaded`` cache to indicate that the given resource type's ResourceInstallSpec
+                # Update the ``_code_cache`` cache to indicate that the given resource type's ResourceInstallSpec
                 # was constructed successfully at the specified version.
                 # TODO: this cache is a slight memory leak
-                self._previously_loaded[(resource_type, version)] = resource_install_spec
+                self._code_cache[(resource_type, version)] = resource_install_spec
             else:
                 LOGGER.error(
                     "Failed to get source code for %s version=%d\n%s",
