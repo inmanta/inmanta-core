@@ -467,7 +467,6 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self._env: env.VirtualEnv | None = None
 
         if code_loader:
-            # all of this should go into the executor manager https://github.com/inmanta/inmanta-core/issues/7589
             self._env = env.VirtualEnv(process._storage["env"])
             self._env.use_virtual_env()
             self._loader = CodeLoader(process._storage["code"], clean=True)
