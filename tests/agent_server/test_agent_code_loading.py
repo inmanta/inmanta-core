@@ -349,4 +349,4 @@ def test():
 
         assert not must_contain
 
-    check_packages(package_list=installed_packages, must_contain=["pkg", "dep-a"], must_not_contain=["dep-b", "dep-c"])
+    check_packages(package_list=installed_packages, must_contain={"pkg", "dep-a"}, must_not_contain={"dep-b", "dep-c"})
