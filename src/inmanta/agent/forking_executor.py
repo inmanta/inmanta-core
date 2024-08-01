@@ -617,7 +617,6 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
     def __init__(
         self,
         thread_pool: concurrent.futures.thread.ThreadPoolExecutor,
-        environment_manager: executor.VirtualEnvironmentManager,
         session_gid: uuid.UUID,
         environment: uuid.UUID,
         log_folder: str,
@@ -642,7 +641,6 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         self.init_once()
         self.environment = environment
         self.thread_pool = thread_pool
-        self.environment_manager = environment_manager
         self.children: list[MPExecutor] = []
         self.log_folder = log_folder
         self.storage_folder = storage_folder
@@ -658,6 +656,8 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         self.agent_map: dict[str, set[executor.ExecutorId]] = collections.defaultdict(set)
 
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
+        venv_dir = str((pathlib.Path(self.storage_folder) / "venv").absolute())
+        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(venv_dir)
 
     def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
         self.executor_map[theid] = the_executor
@@ -840,10 +840,13 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
 
     async def start(self) -> None:
         await super().start()
+        # We need to do this here, otherwise, the scheduler would crash because no event loop would be running
+        await self.environment_manager.start()
 
     async def stop(self) -> None:
         await super().stop()
         await asyncio.gather(*(child.stop() for child in self.children))
+        await self.environment_manager.stop()
 
     async def force_stop(self, grace_time: float) -> None:
         await super().stop()

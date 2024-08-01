@@ -442,6 +442,8 @@ class PoolManager:
             except asyncio.TimeoutError:
                 LOGGER.warning("Stopping %s's cleanup job has timed out!", self.__class__.__name__)
             except asyncio.CancelledError:
+                # This case can happen because wait_for explicitly awaits the task when a timeout is provided (at least in
+                # Python 3.12)
                 LOGGER.debug("%s's cleanup job is already cancelled!", self.__class__.__name__)
             finally:
                 self.cleanup_job = None

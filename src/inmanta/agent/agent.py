@@ -35,7 +35,6 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 
 import pkg_resources
 
-import inmanta.agent.executor
 from inmanta import config, const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
@@ -994,14 +993,11 @@ class Agent(SessionEndpoint):
         can_have_remote_executor = code_loader
 
         self.executor_manager: executor.ExecutorManager[executor.Executor]
-        self.environment_manager: Optional[executor.VirtualEnvironmentManager] = None
         if remote_executor and can_have_remote_executor:
             LOGGER.info("Selected forking agent executor mode")
-            self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(self._storage["executor"])
             assert self.environment is not None  # Mypy
             self.executor_manager = forking_executor.MPManager(
                 self.thread_pool,
-                self.environment_manager,
                 self.sessionid,
                 self.environment,
                 config.log_dir.get(),
@@ -1050,8 +1046,6 @@ class Agent(SessionEndpoint):
     async def stop(self) -> None:
         await super().stop()
         await self.executor_manager.stop()
-        if self.environment_manager is not None:
-            await self.environment_manager.stop()
 
         threadpools_to_join = [self.thread_pool]
 
@@ -1084,9 +1078,6 @@ class Agent(SessionEndpoint):
         self._io_loop = asyncio.get_running_loop()
         await super().start()
         await self.executor_manager.start()
-        if self.environment_manager is not None:
-            # We need to do this here, otherwise, the scheduler would crash because no event loop would be running
-            await self.environment_manager.start()
 
     async def add_end_point_name(self, name: str) -> None:
         async with self._instances_lock:
