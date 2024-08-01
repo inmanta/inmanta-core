@@ -34,6 +34,7 @@ import uuid
 from asyncio import Future, transports
 
 import inmanta.agent.cache
+import inmanta.agent.config
 import inmanta.agent.executor
 import inmanta.agent.in_process_executor
 import inmanta.config
@@ -44,6 +45,7 @@ import inmanta.logging
 import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
+import inmanta.types
 import inmanta.util
 from inmanta import const, tracing, util
 from inmanta.agent import executor
@@ -470,7 +472,7 @@ class MPExecutor(executor.Executor, executor.PoolMember):
         self.failed_resource_sources: typing.Sequence[inmanta.loader.ModuleSource] = list()
         self.failed_resource_types: set[ResourceType] = set()
 
-    async def stop(self) -> None:
+    def stop(self) -> None:
         """Stop by shutdown"""
         self.closing = True
         try:
@@ -479,7 +481,7 @@ class MPExecutor(executor.Executor, executor.PoolMember):
             # Already gone
             pass
 
-    async def clean(self) -> None:
+    def clean(self) -> None:
         """Stop by shutdown and catch any error that may occur"""
         try:
             LOGGER.debug(
@@ -488,7 +490,7 @@ class MPExecutor(executor.Executor, executor.PoolMember):
                 self.connection.get_idle_time().total_seconds(),
                 inmanta.agent.config.agent_executor_retention_time.get(),
             )
-            await self.stop()
+            self.stop()
         except Exception:
             LOGGER.exception(
                 "Unexpected error during executor %s cleanup:",
@@ -626,7 +628,6 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
     ) -> None:
         """
         :param thread_pool:  threadpool to perform work on
-        :param environment_manager: The VirtualEnvironmentManager responsible for managing the virtual environments
         :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
@@ -637,10 +638,10 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         """
         super().__init__(
             retention_time=inmanta.agent.config.agent_executor_retention_time.get(),
+            thread_pool=thread_pool,
         )
         self.init_once()
         self.environment = environment
-        self.thread_pool = thread_pool
         self.children: list[MPExecutor] = []
         self.log_folder = log_folder
         self.storage_folder = storage_folder
@@ -657,7 +658,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
 
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
         venv_dir = str((pathlib.Path(self.storage_folder) / "venv").absolute())
-        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(venv_dir)
+        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(venv_dir, self.thread_pool)
 
     def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
         self.executor_map[theid] = the_executor
@@ -708,6 +709,8 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
             It can be overridden to speed up the tests
         :return: An Executor instance
         """
+        loop = asyncio.get_running_loop()
+
         blueprint = executor.ExecutorBlueprint.from_specs(code)
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
         if executor_id in self.executor_map:
@@ -737,7 +740,8 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
                     f"{oldest_executor.executor_id.identity()} to make room for a new one."
                 )
 
-                await oldest_executor.stop()
+                # The stop command is synchronous, so let's use the thread_pool
+                loop.run_in_executor(self.thread_pool, oldest_executor.stop)
 
             my_executor = await self.create_executor(executor_id, venv_checkup_interval)
             self.__add_executor(executor_id, my_executor)
@@ -765,7 +769,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         """
         LOGGER.info("Creating executor for agent %s with id %s", executor_id.agent_name, executor_id.identity())
         env_blueprint = executor_id.blueprint.to_env_blueprint()
-        venv = await self.environment_manager.get_environment(env_blueprint, self.thread_pool)
+        venv = await self.environment_manager.get_environment(env_blueprint)
         executor = await self.make_child_and_connect(executor_id, venv)
         LOGGER.debug(
             "Child forked (pid: %s) for executor for agent %s with id %s",
@@ -844,8 +848,9 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         await self.environment_manager.start()
 
     async def stop(self) -> None:
+        loop = asyncio.get_running_loop()
         await super().stop()
-        await asyncio.gather(*(child.stop() for child in self.children))
+        await asyncio.gather(*(loop.run_in_executor(self.thread_pool, child.stop) for child in self.children))
         await self.environment_manager.stop()
 
     async def force_stop(self, grace_time: float) -> None:
@@ -857,9 +862,10 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         await asyncio.gather(*(child.join(timeout) for child in self.children))
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
+        loop = asyncio.get_running_loop()
         children_ids = self.agent_map[agent_name]
         children = [self.executor_map[child_id] for child_id in children_ids]
-        await asyncio.gather(*(child.stop() for child in children))
+        await asyncio.gather(*(loop.run_in_executor(self.thread_pool, child.stop) for child in children))
         return children
 
     async def get_pool_members(self) -> typing.Sequence[MPExecutor]:

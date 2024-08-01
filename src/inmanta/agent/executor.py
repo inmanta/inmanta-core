@@ -18,6 +18,7 @@
 
 import abc
 import asyncio
+import concurrent.futures
 import contextlib
 import dataclasses
 import datetime
@@ -30,13 +31,13 @@ import shutil
 import types
 import typing
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence
 
 import pkg_resources
 
 import inmanta.types
+import inmanta.util
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
@@ -277,7 +278,7 @@ class PoolMember(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def clean(self) -> None:
+    def clean(self) -> None:
         """
         Clean the pool member. This method assumes to be in a lock to prevent other operations to overlap with the cleanup
         """
@@ -290,14 +291,10 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
     including the creation and installation of packages based on a blueprint.
 
     :param env_path: The file system path where the virtual environment should be created or exists.
-    :param threadpool: A ThreadPoolExecutor instance. Can only be optional if the ExecutorVirtualEnvironment wasn't present
-        in the dict of the VirtualEnvironmentManager instance: a new ExecutorVirtualEnvironment will be created only for the
-        cleanup
     """
 
-    def __init__(self, env_path: str, threadpool: Optional[ThreadPoolExecutor]):
+    def __init__(self, env_path: str):
         super().__init__(env_path=env_path)
-        self.thread_pool = threadpool
         self.inmanta_venv_status_file: pathlib.Path = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
         self.folder_name: str = pathlib.Path(self.env_path).name
 
@@ -337,13 +334,11 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
         assert self.is_correctly_initialized()
         return datetime.datetime.fromtimestamp(self.inmanta_venv_status_file.stat().st_mtime).astimezone()
 
-    async def clean(self) -> None:
+    def clean(self) -> None:
         """
         Remove the venv of the executor through the thread pool.
         This method is supposed to be used by the VirtualEnvironmentManager with the lock associated to this executor!
         """
-        loop = asyncio.get_running_loop()
-
         if self.is_correctly_initialized():
             LOGGER.debug(
                 "Removing venv %s because it was inactive for %d s, which is longer then the retention time of %d s.",
@@ -356,7 +351,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
                 "Removing venv %s because it is incomplete (broken venv).",
                 self.env_path,
             )
-        await loop.run_in_executor(self.thread_pool, self.remove_venv)
+        self.remove_venv()
 
     def remove_venv(self) -> None:
         """
@@ -410,7 +405,7 @@ def initialize_envs_directory() -> str:
 
 
 class PoolManager:
-    def __init__(self, retention_time: int) -> None:
+    def __init__(self, retention_time: int, thread_pool: concurrent.futures.thread.ThreadPoolExecutor) -> None:
         self.running = False
         self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
@@ -419,6 +414,7 @@ class PoolManager:
         self.cleanup_job: typing.Optional[asyncio.Task[None]] = None
 
         self.retention_time: int = retention_time
+        self.thread_pool = thread_pool
 
     async def start(self) -> None:
         """
@@ -468,6 +464,8 @@ class PoolManager:
 
         :return: When to run the cleaning next time: default retention time or lowest expiration time of one of the pool members
         """
+        loop = asyncio.get_running_loop()
+
         cleanup_start = datetime.datetime.now().astimezone()
         # Number of seconds relative to cleanup_start
         run_next_cleanup_job_at: float = float(self.retention_time)
@@ -478,7 +476,7 @@ class PoolManager:
                     async with self._locks.get(pool_member.get_id()):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up(self.retention_time):
-                            await pool_member.clean()
+                            await loop.run_in_executor(self.thread_pool, pool_member.clean)
                             self.clean_pool_member_from_manager(pool_member)
                 else:
                     # If this pool member expires sooner than the cleanup interval, schedule the next cleanup on that timestamp.
@@ -514,12 +512,13 @@ class VirtualEnvironmentManager(PoolManager):
     for storing these environments.
     """
 
-    def __init__(self, envs_dir: str) -> None:
+    def __init__(self, envs_dir: str, thread_pool: concurrent.futures.thread.ThreadPoolExecutor) -> None:
         # We rely on a Named lock (`self._locks`, inherited from PoolManager) to be able to lock specific entries of the
         # `_environment_map` dict. This allows us to prevent creating and deleting the same venv at a given time. The keys of
         # this named lock are the hash of venv
         super().__init__(
             retention_time=cfg.executor_venv_retention_time.get(),
+            thread_pool=thread_pool,
         )
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
         self.envs_dir: str = envs_dir
@@ -552,7 +551,7 @@ class VirtualEnvironmentManager(PoolManager):
             )
             return env_dir, False  # Returning the path and False for existing directory
 
-    async def create_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
+    async def create_environment(self, blueprint: EnvBlueprint) -> ExecutorVirtualEnvironment:
         """
         Creates a new virtual environment based on the provided blueprint or reuses an existing one if suitable.
         This involves setting up the virtual environment and installing any required packages as specified in the blueprint.
@@ -560,12 +559,11 @@ class VirtualEnvironmentManager(PoolManager):
         unique blueprint.
 
         :param blueprint: The blueprint specifying the configuration for the new virtual environment.
-        :param threadpool: A ThreadPoolExecutor
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
 
         """
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
-        process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
+        process_environment = ExecutorVirtualEnvironment(env_storage)
 
         loop = asyncio.get_running_loop()
 
@@ -577,19 +575,17 @@ class VirtualEnvironmentManager(PoolManager):
                 blueprint.blueprint_hash(),
                 env_storage,
             )
-            await loop.run_in_executor(process_environment.thread_pool, process_environment.reset)
+            await loop.run_in_executor(self.thread_pool, process_environment.reset)
             is_new = True
 
         if is_new:
             LOGGER.info("Creating venv for content %s, content hash: %s", str(blueprint), blueprint.blueprint_hash())
-            await loop.run_in_executor(
-                process_environment.thread_pool, process_environment.create_and_install_environment, blueprint
-            )
+            await loop.run_in_executor(self.thread_pool, process_environment.create_and_install_environment, blueprint)
         self._environment_map[blueprint] = process_environment
 
         return process_environment
 
-    async def get_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
+    async def get_environment(self, blueprint: EnvBlueprint) -> ExecutorVirtualEnvironment:
         """
         Retrieves an existing virtual environment that matches the given blueprint or creates a new one if no match is found.
         Utilizes NamedLock to ensure thread-safe operations for each unique blueprint.
@@ -614,7 +610,7 @@ class VirtualEnvironmentManager(PoolManager):
                 return self._environment_map[blueprint]
             # The whole creation of the virtual environment is under lock. Therefore, we know that it will not race with the
             # cleanup as the `INMANTA_ENV_STATUS_FILENAME` will be touched at the end of the creation.
-            return await self.create_environment(blueprint, threadpool)
+            return await self.create_environment(blueprint)
 
     async def get_pool_members(self) -> Sequence[ExecutorVirtualEnvironment]:
         """
@@ -634,9 +630,7 @@ class VirtualEnvironmentManager(PoolManager):
                 if blueprint is not None and blueprint in self._environment_map:
                     current_executor_environment = self._environment_map[blueprint]
                 else:
-                    current_executor_environment = ExecutorVirtualEnvironment(
-                        env_path=str(current_folder.absolute()), threadpool=None
-                    )
+                    current_executor_environment = ExecutorVirtualEnvironment(env_path=str(current_folder.absolute()))
 
                 pool_members.append(current_executor_environment)
         return pool_members
@@ -800,7 +794,7 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         pass
 
     @abc.abstractmethod
-    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
+    async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
         """
         Wait for all executors to terminate.
 
