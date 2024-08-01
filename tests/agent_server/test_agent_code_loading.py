@@ -339,7 +339,6 @@ def test():
          - all elements from <must_contain> are present
          - no element from <must_not_contain> are present
         """
-        must_contain = list(must_contain) if must_contain else []
         for package in package_list:
             assert package not in must_not_contain
             if package in must_contain:
