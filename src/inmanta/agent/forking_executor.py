@@ -657,8 +657,9 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         self.agent_map: dict[str, set[executor.ExecutorId]] = collections.defaultdict(set)
 
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
-        venv_dir = str((pathlib.Path(self.storage_folder) / "venv").absolute())
-        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(venv_dir, self.thread_pool)
+        venv_dir = pathlib.Path(self.storage_folder) / "venv"
+        venv_dir.mkdir(exist_ok=True)
+        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venv_dir.absolute()), self.thread_pool)
 
     def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
         self.executor_map[theid] = the_executor

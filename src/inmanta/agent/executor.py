@@ -618,7 +618,11 @@ class VirtualEnvironmentManager(PoolManager):
         """
         # We should walk once for the first-level of folders!
         envs_dir = pathlib.Path(self.envs_dir)
-        _, root_folders, _ = next(os.walk(self.envs_dir))
+        try:
+            _, root_folders, _ = next(os.walk(self.envs_dir))
+        except StopIteration as e:
+            raise RuntimeError(f"An error occurred while checking following directory: `{envs_dir.absolute()}`!") from e
+
         venv_path_to_blueprint = {pathlib.Path(v.env_path): k for k, v in self._environment_map.items()}
 
         pool_members = []

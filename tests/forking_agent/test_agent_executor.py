@@ -13,6 +13,7 @@
 """
 
 import asyncio
+import concurrent.futures
 import datetime
 import hashlib
 import json
@@ -270,16 +271,23 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     only one environment is created for the same blueprint when requested concurrently,
     preventing race conditions and duplicate environment creation.
     """
-    manager = executor.VirtualEnvironmentManager(tmpdir)
+    manager = executor.VirtualEnvironmentManager(
+        envs_dir=tmpdir,
+        thread_pool=concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+        ),
+    )
 
     blueprint1 = executor.EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=("pkg1",))
     blueprint2 = executor.EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=())
 
     # Wait for all tasks to complete
     env_same_1, env_same_2, env_diff_1 = await asyncio.gather(
-        manager.get_environment(blueprint1, None),
-        manager.get_environment(blueprint1, None),
-        manager.get_environment(blueprint2, None),
+        manager.get_environment(blueprint1),
+        manager.get_environment(
+            blueprint1,
+        ),
+        manager.get_environment(blueprint2),
     )
 
     assert env_same_1 is env_same_2, "Expected the same instance for the same blueprint"
