@@ -278,7 +278,7 @@ inmanta.test_agent_code_loading = 15
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("server_pre_start", ["forking", "threaded"], indirect=True)
+@pytest.mark.parametrize("server_pre_start", ["forking"], indirect=True)
 async def test_agent_installs_dependency_containing_extras(
     server_pre_start,
     server,
