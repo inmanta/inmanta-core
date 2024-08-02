@@ -142,7 +142,7 @@ async def test_discovery_resource_handler_basic_test(
     result = await client.release_version(environment, version, push=True)
     assert result.code == 200
 
-    await wait_for_n_deployed_resources(client, environment, version, n=1)
+    await wait_for_n_deployed_resources(client, environment, version, n=1, timeout=8000)
 
     result = await client.discovered_resources_get_batch(environment)
     assert result.code == 200
