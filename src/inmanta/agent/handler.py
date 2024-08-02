@@ -1022,47 +1022,20 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
             def _call_discovered_resource_create_batch(
                 discovered_resources: abc.Sequence[DiscoveredResource],
             ) -> typing.Awaitable[Result]:
-                LOGGER.error(f"HANDLER {discovered_resources=}")
-                LOGGER.error(f"HANDLER DUMP{[res.model_dump() for res in discovered_resources]=}")
                 return self.get_client().discovered_resource_create_batch(
                     tid=self._agent.environment,
                     discovered_resources=discovered_resources,
                 )
 
             discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
-            # discovered_resources: abc.Sequence[DiscoveredResource] = [
-            #     DiscoveredResource(
-            #         discovered_resource_id=resource_id,
-            #         values=values.model_dump(),
-            #         discovery_resource_id=resource.id.resource_str(),
-            #     )
-            #     for resource_id, values in discovered_resources_raw.items()
-            # ]
-            discovered_resources = []
-            for resource_id, values in discovered_resources_raw.items():
-                LOGGER.error(f'{values=}')
-                LOGGER.error(f'{values.model_dump()=}')
-                dr = DiscoveredResource(
+            discovered_resources: abc.Sequence[DiscoveredResource] = [
+                DiscoveredResource(
                     discovered_resource_id=resource_id,
                     values=values.model_dump(),
                     discovery_resource_id=resource.id.resource_str(),
                 )
-                LOGGER.error(f'{dr=}')
-                LOGGER.error(f'{dr.model_dump()=}')
-                discovered_resources.append(dr)
-            #
-            # [DiscoveredResource(discovered_resource_id='test::MyUnmanagedResource[discovery_agent,val=one]', values={
-            #     'val': 'one'}, managed_resource_uri=None,
-            #                     discovery_resource_id='test::MyDiscoveryResource[discovery_agent,key=key1]',
-            #                     discovery_resource_uri='/api/v2/resource/test%3A%3AMyDiscoveryResource%5Bdiscovery_agent%2Ckey%3Dkey1%5D'),
-            #  DiscoveredResource(discovered_resource_id='test::MyUnmanagedResource[discovery_agent,val=two]', values={
-            #      'val': 'two'}, managed_resource_uri=None,
-            #                     discovery_resource_id='test::MyDiscoveryResource[discovery_agent,key=key1]',
-            #                     discovery_resource_uri='/api/v2/resource/test%3A%3AMyDiscoveryResource%5Bdiscovery_agent%2Ckey%3Dkey1%5D'),
-            #  DiscoveredResource(discovered_resource_id='test::MyUnmanagedResource[discovery_agent,val=three]', values={
-            #      'val': 'three'}, managed_resource_uri=None,
-            #                     discovery_resource_id='test::MyDiscoveryResource[discovery_agent,key=key1]',
-            #                     discovery_resource_uri='/api/v2/resource/test%3A%3AMyDiscoveryResource%5Bdiscovery_agent%2Ckey%3Dkey1%5D')]
+                for resource_id, values in discovered_resources_raw.items()
+            ]
             result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))
 
             if result.code != 200:

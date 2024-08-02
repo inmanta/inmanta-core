@@ -1318,29 +1318,15 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         return query_builder
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
-        # return [
-        #     model.DiscoveredResource(
-        #         discovered_resource_id=res["discovered_resource_id"],
-        #         values=json.loads(res["values"]),
-        #         managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
-        #         discovery_resource_id=res["discovery_resource_id"],
-        #     ).model_dump()
-        #     for res in records
-        # ]
-        out = []
-        import logging
-        LOGGER = logging.getLogger(__name__)
-        for res in records:
-            LOGGER.error(f"{res=}")
-            md = model.DiscoveredResource(
+        return [
+            model.DiscoveredResource(
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
                 managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
                 discovery_resource_id=res["discovery_resource_id"],
             ).model_dump()
-            LOGGER.error(f"{md=}")
-            out.append(md)
-        return out
+            for res in records
+        ]
 
 
 class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
