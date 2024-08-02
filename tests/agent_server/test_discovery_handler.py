@@ -142,7 +142,7 @@ async def test_discovery_resource_handler_basic_test(
     result = await client.release_version(environment, version, push=True)
     assert result.code == 200
 
-    await wait_for_n_deployed_resources(client, environment, version, n=1, timeout=5)
+    await wait_for_n_deployed_resources(client, environment, version, n=1)
 
     # Test batch retrieval
     result = await client.discovered_resources_get_batch(environment)
@@ -164,7 +164,7 @@ async def test_discovery_resource_handler_basic_test(
 
     assert sorted(discovered, key=sort_on_discovered_resource_id) == sorted(expected, key=sort_on_discovered_resource_id)
 
-    # Test single resource retrival
+    # Test single resource retrieval
 
     result = await client.discovered_resources_get(
         environment, f"test::MyUnmanagedResource[discovery_agent,val={all_values[0]}]"

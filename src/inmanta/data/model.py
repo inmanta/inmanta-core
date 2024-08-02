@@ -749,7 +749,7 @@ class LoginReturn(BaseModel):
     user: User
 
 
-def is_resource_id(v: Optional[str], info: ValidationInfo, allow_none: bool = False) -> str | None:
+def is_resource_id(v: Optional[ResourceIdStr], info: ValidationInfo, allow_none: bool = False) -> str | None:
     if v is None:
         if allow_none:
             return v

@@ -214,20 +214,19 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
 
     def check_expected_result(expected_result: Sequence[dict[str, object]], result: Sequence[dict[str, object]]) -> None:
         """
-        Utility function to check that two sequences of dicts are identical.
-        For each item in <expected_result>, the "discovery_resource_id" key is special cased before the check:
-            Key name: "discovery_resource_id" -> "discovery_resource_uri
-            Value: rid -> uri
+        Utility function to check that two sequences of dicts are identical. Special care is taken to make
+        sure "discovery_resource_id" and "discovery_resource_uri" are present with the correct values.
         """
         expected_copy = []
         for item in expected_result:
             item_copy = item.copy()
             if "discovery_resource_id" in item_copy:
-                id = item_copy.pop("discovery_resource_id")
+                id = item_copy["discovery_resource_id"]
                 uri = f"/api/v2/resource/{parse.quote(id)}"
                 item_copy["discovery_resource_uri"] = uri
             else:
                 item_copy["discovery_resource_uri"] = None
+                item_copy["discovery_resource_id"] = None
             expected_copy.append(item_copy)
         assert expected_copy == result
 
