@@ -36,7 +36,7 @@ from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, ResourceIdStr
+from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, LinkedDiscoveredResource, ResourceIdStr
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
@@ -1028,8 +1028,8 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                 )
 
             discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
-            discovered_resources: abc.Sequence[DiscoveredResource] = [
-                DiscoveredResource(
+            discovered_resources: abc.Sequence[LinkedDiscoveredResource] = [
+                LinkedDiscoveredResource(
                     discovered_resource_id=resource_id,
                     values=values.model_dump(),
                     discovery_resource_id=resource.id.resource_str(),

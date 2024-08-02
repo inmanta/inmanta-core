@@ -164,10 +164,8 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
             "managed_resource_uri": (
                 f"/api/v2/resource/{rid}" if i <= 4 else None
             ),  # Last 2 resources are not known to the orchestrator
+            "discovery_resource_id": discovery_resource_id,
         }
-        if i % 2 == 0:
-            # Set the discovery rid for half of the resources:
-            res["discovery_resource_id"] = discovery_resource_id
         discovered_resources.append(res)
 
     result = await agent._client.discovered_resource_create_batch(environment, discovered_resources)
@@ -297,10 +295,10 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     )
     expected_error_message = (
         "Invalid request: Failed to validate argument\n"
-        "1 validation error for DiscoveredResource\n"
+        "1 validation error for LinkedDiscoveredResource\n"
         "discovered_resource_id\n"
-        "  Value error, Invalid id for resource invalid_rid [type=value_error, "
-        "input_value='invalid_rid', input_type=str]\n"
+        "  Value error, Validation failed for discovered_resource_id "
+        "[type=value_error, input_value='invalid_rid', input_type=str]\n"
     )
 
     assert result.code == 400
@@ -311,9 +309,22 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
         discovered_resource_id="invalid_rid",
         values={"value1": "test1", "value2": "test2"},
     )
+    expected_validation_error_1 = (
+        "Invalid request: Failed to validate argument\n"
+        "2 validation errors for LinkedDiscoveredResource\n"
+        "discovered_resource_id\n"
+        "  Value error, Validation failed for discovered_resource_id "
+        "[type=value_error, input_value='invalid_rid', input_type=str]"
+    )
+    expected_validation_error_2 = (
+        "discovery_resource_id\n"
+        "  Input should be a valid string [type=string_type, input_value=None, "
+        "input_type=NoneType]\n"
+    )
 
     assert result.code == 400
-    assert expected_error_message in result.result["message"]
+    assert expected_validation_error_1 in result.result["message"]
+    assert expected_validation_error_2 in result.result["message"]
 
     result = await agent._client.discovered_resource_create(
         tid=environment,
@@ -323,10 +334,10 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     )
     expected_error_message = (
         "Invalid request: Failed to validate argument\n"
-        "1 validation error for DiscoveredResource\n"
+        "1 validation error for LinkedDiscoveredResource\n"
         "discovery_resource_id\n"
-        "  Value error, Invalid id for resource invalid_rid [type=value_error, "
-        "input_value='invalid_rid', input_type=str]\n"
+        "  Value error, Validation failed for discovery_resource_id "
+        "[type=value_error, input_value='invalid_rid', input_type=str]\n"
     )
 
     assert result.code == 400
@@ -345,15 +356,16 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     ]
     result = await agent._client.discovered_resource_create_batch(environment, resources)
 
+    assert result.code == 400
     expected_error_message = (
         "Invalid request: Failed to validate argument\n"
         "1 validation error for discovered_resource_create_batch_arguments\n"
         "discovered_resources.1.discovered_resource_id\n"
-        "  Value error, Invalid id for resource invalid_rid [type=value_error, "
-        "input_value='invalid_rid', input_type=str]\n"
+        "  Value error, Validation failed for discovered_resource_id "
+        "[type=value_error, input_value='invalid_rid', input_type=str]\n"
     )
-    assert result.code == 400
     assert expected_error_message in result.result["message"]
+
     resources = [
         {
             "discovery_resource_id": "test::DiscoveryResource[agent1,key1=key1]",
@@ -371,8 +383,8 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
         "Invalid request: Failed to validate argument\n"
         "1 validation error for discovered_resource_create_batch_arguments\n"
         "discovered_resources.1.discovery_resource_id\n"
-        "  Value error, Invalid id for resource invalid_rid [type=value_error, "
-        "input_value='invalid_rid', input_type=str]\n"
+        "  Value error, Validation failed for discovery_resource_id "
+        "[type=value_error, input_value='invalid_rid', input_type=str]\n"
     )
     assert result.code == 400
     assert expected_error_message in result.result["message"]
@@ -389,12 +401,19 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
         },
     ]
     result = await agent._client.discovered_resource_create_batch(environment, resources)
-    expected_error_message = (
+
+    expected_validation_error_1 = (
         "Invalid request: Failed to validate argument\n"
-        "1 validation error for discovered_resource_create_batch_arguments\n"
+        "2 validation errors for discovered_resource_create_batch_arguments\n"
+        "discovered_resources.0.discovery_resource_id\n"
+        "  Field required [type=missing, input_value={'discovered_resource_id'...t1', "
+        "'value2': 'test2'}}, input_type=dict]\n"
+    )
+    expected_validation_error_2 = (
         "discovered_resources.1.discovery_resource_id\n"
-        "  Value error, Invalid id for resource invalid_rid [type=value_error, "
-        "input_value='invalid_rid', input_type=str]\n"
+        "  Value error, Validation failed for discovery_resource_id "
+        "[type=value_error, input_value='invalid_rid', input_type=str]\n"
     )
     assert result.code == 400
-    assert expected_error_message in result.result["message"]
+    assert expected_validation_error_1 in result.result["message"]
+    assert expected_validation_error_2 in result.result["message"]
