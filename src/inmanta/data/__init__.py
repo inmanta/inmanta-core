@@ -6410,9 +6410,6 @@ class DiscoveredResource(BaseDocument):
             discovery_resource_id=self.discovery_resource_id,
         )
 
-    def __repr__(self):
-        return str(self.__dict__)
-
 
 class File(BaseDocument):
     content_hash: str

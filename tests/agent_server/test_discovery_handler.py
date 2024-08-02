@@ -165,7 +165,9 @@ async def test_discovery_resource_handler_basic_test(
 
     # Test single resource retrival
 
-    result = await client.discovered_resources_get(environment, f"test::MyUnmanagedResource[discovery_agent,val={all_values[0]}]")
+    result = await client.discovered_resources_get(
+        environment, f"test::MyUnmanagedResource[discovery_agent,val={all_values[0]}]"
+    )
     assert result.code == 200
     assert result.result["data"] == expected[0]
 

@@ -290,11 +290,8 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         :return: Complete API ReturnValueWithMeta ready to go out
         """
-        import logging
-        LOGGER = logging.getLogger(__name__)
         try:
             dtos, paging_boundaries_in = await self.get_data()
-            LOGGER.error(f"{dtos=}")
             paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
             if paging_boundaries_in:
                 paging_boundaries = paging_boundaries_in
