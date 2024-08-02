@@ -25,8 +25,9 @@ from collections.abc import Sequence
 from enum import Enum
 from itertools import chain
 from typing import ClassVar, NewType, Optional, Self, Union
-from urllib import parse
+import urllib
 
+import pydantic
 import pydantic.schema
 from pydantic import ConfigDict, Field, ValidationError, computed_field, field_validator, model_validator
 
@@ -36,7 +37,6 @@ import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
-from pydantic_core.core_schema import ValidationInfo
 
 
 def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
@@ -749,12 +749,16 @@ class LoginReturn(BaseModel):
     user: User
 
 
-def is_resource_id(v: Optional[ResourceIdStr], info: ValidationInfo, allow_none: bool = False) -> str | None:
+def is_resource_id(v: Optional[ResourceIdStr], info: pydantic.ValidationInfo, allow_none: bool = False) -> str | None:
     if v is None:
         if allow_none:
             return v
-        raise ValidationError(f"{info.field_name} is None")
-    return resources.Id.parse_id(v).resource_str()
+        raise ValueError(f"{info.field_name} is None")
+    try:
+        return resources.Id.parse_id(v).resource_str()
+    except Exception:
+        raise ValueError(f"Validation failed for {info.field_name}?")
+
 
 
 class DiscoveredResource(BaseModel):
@@ -781,7 +785,7 @@ class DiscoveredResource(BaseModel):
     def discovery_resource_uri(self) -> str | None:
         if self.discovery_resource_id is None:
             return None
-        return f"/api/v2/resource/{parse.quote(self.discovery_resource_id)}"
+        return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id)}"
 
     def to_dao(self, env: uuid) -> "data.DiscoveredResource":
         return data.DiscoveredResource(
