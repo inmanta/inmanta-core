@@ -290,9 +290,11 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         :return: Complete API ReturnValueWithMeta ready to go out
         """
+        import logging
+        LOGGER = logging.getLogger(__name__)
         try:
             dtos, paging_boundaries_in = await self.get_data()
-
+            LOGGER.error(f"{dtos=}")
             paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
             if paging_boundaries_in:
                 paging_boundaries = paging_boundaries_in
@@ -1316,15 +1318,29 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         return query_builder
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
-        return [
-            model.DiscoveredResource(
+        # return [
+        #     model.DiscoveredResource(
+        #         discovered_resource_id=res["discovered_resource_id"],
+        #         values=json.loads(res["values"]),
+        #         managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
+        #         discovery_resource_id=res["discovery_resource_id"],
+        #     ).model_dump()
+        #     for res in records
+        # ]
+        out = []
+        import logging
+        LOGGER = logging.getLogger(__name__)
+        for res in records:
+            LOGGER.error(f"{res=}")
+            md = model.DiscoveredResource(
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
                 managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
                 discovery_resource_id=res["discovery_resource_id"],
             ).model_dump()
-            for res in records
-        ]
+            LOGGER.error(f"{md=}")
+            out.append(md)
+        return out
 
 
 class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):

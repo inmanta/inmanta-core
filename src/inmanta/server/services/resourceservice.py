@@ -1342,8 +1342,10 @@ class ResourceService(protocol.ServerSlice):
     async def discovered_resources_create_batch(
         self, env: data.Environment, discovered_resources: list[DiscoveredResource]
     ) -> None:
-        breakpoint()
+        # breakpoint()
+        LOGGER.error(f"{discovered_resources=}")
         dao_list = [res.to_dao(env.id) for res in discovered_resources]
+        LOGGER.error(f"{dao_list=}")
         await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
 
     @handle(methods_v2.discovered_resources_get, env="tid")
@@ -1375,6 +1377,8 @@ class ResourceService(protocol.ServerSlice):
         try:
             handler = DiscoveredResourceView(environment=env, limit=limit, sort=sort, start=start, end=end, filter=filter)
             out = await handler.execute()
+            LOGGER.error(f"{out=}")
+
             return out
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
