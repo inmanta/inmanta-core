@@ -20,6 +20,7 @@ import json
 from typing import Sequence
 from urllib import parse
 
+import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta.data.model import ResourceVersionIdStr
@@ -158,15 +159,16 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
 
     for i in range(1, 7):
         rid = f"test::Resource[agent1,key{i}=key{i}]"
-        res = {
-            "discovered_resource_id": rid,
-            "values": {"value1": f"test{i}", "value2": f"test{i + 1}"},
-            "managed_resource_uri": (
-                f"/api/v2/resource/{rid}" if i <= 4 else None
-            ),  # Last 2 resources are not known to the orchestrator
-            "discovery_resource_id": discovery_resource_id,
-        }
-        discovered_resources.append(res)
+        discovered_resources.append(
+            {
+                "discovered_resource_id": rid,
+                "values": {"value1": f"test{i}", "value2": f"test{i + 1}"},
+                "managed_resource_uri": (
+                    f"/api/v2/resource/{rid}" if i <= 4 else None
+                ),  # Last 2 resources are not known to the orchestrator
+                "discovery_resource_id": discovery_resource_id,
+            }
+        )
 
     result = await agent._client.discovered_resource_create_batch(environment, discovered_resources)
     assert result.code == 200
@@ -218,13 +220,9 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         expected_copy = []
         for item in expected_result:
             item_copy = item.copy()
-            if "discovery_resource_id" in item_copy:
-                id = item_copy["discovery_resource_id"]
-                uri = f"/api/v2/resource/{parse.quote(id)}"
-                item_copy["discovery_resource_uri"] = uri
-            else:
-                item_copy["discovery_resource_uri"] = None
-                item_copy["discovery_resource_id"] = None
+            id = item_copy["discovery_resource_id"]
+            uri = f"/api/v2/resource/{parse.quote(id)}"
+            item_copy["discovery_resource_uri"] = uri
             expected_copy.append(item_copy)
         assert expected_copy == result
 
@@ -304,27 +302,14 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     assert result.code == 400
     assert expected_error_message in result.result["message"]
 
-    result = await agent._client.discovered_resource_create(
-        tid=environment,
-        discovered_resource_id="invalid_rid",
-        values={"value1": "test1", "value2": "test2"},
-    )
-    expected_validation_error_1 = (
-        "Invalid request: Failed to validate argument\n"
-        "2 validation errors for LinkedDiscoveredResource\n"
-        "discovered_resource_id\n"
-        "  Value error, Validation failed for discovered_resource_id "
-        "[type=value_error, input_value='invalid_rid', input_type=str]"
-    )
-    expected_validation_error_2 = (
-        "discovery_resource_id\n"
-        "  Input should be a valid string [type=string_type, input_value=None, "
-        "input_type=NoneType]\n"
-    )
-
-    assert result.code == 400
-    assert expected_validation_error_1 in result.result["message"]
-    assert expected_validation_error_2 in result.result["message"]
+    # Check that the discovered_resource_create endpoint requires the discovery_resource_id to be provided
+    with pytest.raises(TypeError) as e:
+        result = await agent._client.discovered_resource_create(
+            tid=environment,
+            discovered_resource_id="invalid_rid",
+            values={"value1": "test1", "value2": "test2"},
+        )
+    assert "discovered_resource_create() missing 1 required positional argument: 'discovery_resource_id'" in e.value.args
 
     result = await agent._client.discovered_resource_create(
         tid=environment,

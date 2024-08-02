@@ -796,8 +796,6 @@ class LinkedDiscoveredResource(DiscoveredResource):
     @computed_field  # type: ignore[misc]
     @property
     def discovery_resource_uri(self) -> str | None:
-        if self.discovery_resource_id is None:
-            return None
         return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id)}"
 
     def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
