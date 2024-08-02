@@ -142,8 +142,9 @@ async def test_discovery_resource_handler_basic_test(
     result = await client.release_version(environment, version, push=True)
     assert result.code == 200
 
-    await wait_for_n_deployed_resources(client, environment, version, n=1, timeout=8000)
+    await wait_for_n_deployed_resources(client, environment, version, n=1, timeout=5)
 
+    # Test batch retrieval
     result = await client.discovered_resources_get_batch(environment)
     assert result.code == 200
     discovered = result.result["data"]
@@ -161,6 +162,12 @@ async def test_discovery_resource_handler_basic_test(
         return elem["discovered_resource_id"]
 
     assert sorted(discovered, key=sort_on_discovered_resource_id) == sorted(expected, key=sort_on_discovered_resource_id)
+
+    # Test single resource retrival
+
+    result = await client.discovered_resources_get(environment, f"test::MyUnmanagedResource[discovery_agent,val={all_values[0]}]")
+    assert result.code == 200
+    assert result.result["data"] == expected[0]
 
     # Make sure that a get_facts call on a DiscoveryHandler doesn't fail
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
