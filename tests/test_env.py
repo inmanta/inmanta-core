@@ -35,9 +35,8 @@ import pytest
 
 from inmanta import env, loader, module
 from inmanta.data.model import PipConfig
-from inmanta.env import Pip
+from inmanta.env import Pip, SafeRequirement
 from packaging import version
-from packaging.requirements import Requirement
 from utils import LogSequence, PipIndex, create_python_package
 
 if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
@@ -178,7 +177,7 @@ def test_gen_req_file():
 
     # make sure they all parse
     for req in reqs:
-        Requirement(requirement_string=req)
+        SafeRequirement(requirement_string=req)
 
 
 def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
@@ -207,7 +206,7 @@ def test_process_env_install_from_index(
     package_name: str = "more-itertools"
     assert package_name not in env.process_env.get_installed_packages()
     env.process_env.install_for_config(
-        [Requirement(requirement_string=package_name + (f"=={version}" if version is not None else ""))],
+        [SafeRequirement(requirement_string=package_name + (f"=={version}" if version is not None else ""))],
         config=PipConfig(
             use_system_config=True,  # we need an upstream for some packages
         ),
@@ -222,7 +221,7 @@ def test_process_env_install_from_index(
     # It should hit the cache there and return here.
     # Cheap and fast test
     env.process_env.install_from_index(
-        [Requirement(requirement_string=package_name + (f"=={version}" if version is not None else ""))],
+        [SafeRequirement(requirement_string=package_name + (f"=={version}" if version is not None else ""))],
         use_pip_config=True,
     )
 
@@ -272,7 +271,7 @@ def test_process_env_install_from_index_not_found_env_var(
 
     with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
         env.process_env.install_for_config(
-            [Requirement(requirement_string="this-package-does-not-exist")],
+            [SafeRequirement(requirement_string="this-package-does-not-exist")],
             config=PipConfig(
                 index_url=index_urls[0],
                 # The first element should only be passed to the index_url. If there are indexes in the environment
@@ -309,7 +308,7 @@ setup(name="test")
 
     with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
         env.process_env.install_for_config(
-            requirements=[Requirement(requirement_string="this-package-does-not-exist")],
+            requirements=[SafeRequirement(requirement_string="this-package-does-not-exist")],
             paths=[env.LocalPackagePath(path=str(tmpdir))],
             config=PipConfig(use_system_config=use_system_config),
         )
@@ -326,7 +325,7 @@ def test_process_env_install_from_index_conflicting_reqs(
     package_name: str = "more-itertools"
     with pytest.raises(env.ConflictingRequirements) as e:
         env.process_env.install_for_config(
-            [Requirement(requirement_string=f"{package_name}{version}") for version in [">8.5", "<=8"]],
+            [SafeRequirement(requirement_string=f"{package_name}{version}") for version in [">8.5", "<=8"]],
             config=PipConfig(
                 use_system_config=True,  # we need an upstream for some packages
             ),
@@ -396,7 +395,7 @@ def test_active_env_get_module_file(
         loader.PluginModuleFinder.configure_module_finder([os.path.join(str(tmpdir), "libs")])
 
     assert env.ActiveEnv.get_module_file(module_name) is None
-    env.process_env.install_for_config([Requirement(requirement_string=package_name)], pip_config)
+    env.process_env.install_for_config([SafeRequirement(requirement_string=package_name)], pip_config)
     assert package_name in env.process_env.get_installed_packages()
     module_info: Optional[tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
@@ -452,7 +451,7 @@ def test_active_env_get_module_file_editable_namespace_package(
 
 
 def create_install_package(
-    name: str, version: version.Version, requirements: list[Requirement], local_module_package_index: str
+    name: str, version: version.Version, requirements: list[SafeRequirement], local_module_package_index: str
 ) -> None:
     """
     Creates and installs a simple package with specified requirements. Creates package in a temporary directory and
@@ -542,7 +541,7 @@ def test_active_env_check_basic(
     create_install_package(
         "test-package-two",
         version.Version("1.0.0"),
-        [Requirement(requirement_string="test-package-one~=1.0")],
+        [SafeRequirement(requirement_string="test-package-one~=1.0")],
         local_module_package_index,
     )
     assert_all_checks()
@@ -563,7 +562,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local
     """
     caplog.set_level(logging.WARNING)
     in_scope: Pattern[str] = re.compile("test-package-.*")
-    constraints: list[Requirement] = [Requirement(requirement_string="test-package-one~=1.0")]
+    constraints: list[SafeRequirement] = [SafeRequirement(requirement_string="test-package-one~=1.0")]
 
     env.ActiveEnv.check(in_scope)
 
@@ -582,7 +581,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local
     create_install_package(
         "ext-package-one",
         version.Version("1.0.0"),
-        [Requirement(requirement_string="test-package-one==1.0")],
+        [SafeRequirement(requirement_string="test-package-one==1.0")],
         local_module_package_index,
     )
     env.ActiveEnv.check(in_scope, constraints)
@@ -613,7 +612,7 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
     installed_pkgs = tmpvenv_active_inherit.get_installed_packages()
     assert "inmanta-core" in installed_pkgs, "The inmanta-core package should be installed to run the tests"
 
-    inmanta_requirements = Requirement(requirement_string="inmanta-core==4.0.0")
+    inmanta_requirements = SafeRequirement(requirement_string="inmanta-core==4.0.0")
     with pytest.raises(env.ConflictingRequirements) as excinfo:
         tmpvenv_active_inherit.install_for_config(
             requirements=[inmanta_requirements],
@@ -653,13 +652,13 @@ def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module
     """
 
     def _assert_install(requirement: str, installed: bool) -> None:
-        parsed_requirement = Requirement(requirement_string=requirement)
+        parsed_requirement = SafeRequirement(requirement_string=requirement)
         for r in [requirement, parsed_requirement]:
             assert tmpvenv_active_inherit.are_installed(requirements=[r]) == installed
 
     _assert_install("inmanta-module-elaboratev2module==1.2.3", installed=False)
     tmpvenv_active_inherit.install_for_config(
-        requirements=[Requirement(requirement_string="inmanta-module-elaboratev2module==1.2.3")],
+        requirements=[SafeRequirement(requirement_string="inmanta-module-elaboratev2module==1.2.3")],
         config=PipConfig(
             index_url=local_module_package_index,
         ),
@@ -703,7 +702,7 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
         path=os.path.join(tmpdir, "pkg"),
         publish_index=pip_index,
         optional_dependencies={
-            "optional-pkg": [Requirement(requirement_string="dep[optional-dep]")],
+            "optional-pkg": [SafeRequirement(requirement_string="dep[optional-dep]")],
         },
     )
     create_python_package(
@@ -712,11 +711,11 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
         path=os.path.join(tmpdir, "dep"),
         publish_index=pip_index,
         optional_dependencies={
-            "optional-dep": [Requirement(requirement_string="pkg[optional-pkg]")],
+            "optional-dep": [SafeRequirement(requirement_string="pkg[optional-pkg]")],
         },
     )
 
-    requirements = [Requirement(requirement_string="pkg[optional-pkg]")]
+    requirements = [SafeRequirement(requirement_string="pkg[optional-pkg]")]
     tmpvenv_active_inherit.install_for_config(
         requirements=requirements,
         config=PipConfig(

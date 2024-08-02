@@ -34,7 +34,6 @@ from logging import Logger
 from typing import Any, Collection, Dict, Optional, Union, cast
 
 import inmanta.agent.executor
-import packaging.requirements
 from inmanta import config, const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
@@ -48,6 +47,7 @@ from inmanta.data.model import (
     ResourceType,
     ResourceVersionIdStr,
 )
+from inmanta.env import SafeRequirement
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id
@@ -1340,7 +1340,7 @@ class Agent(SessionEndpoint):
             await loop.run_in_executor(
                 self.thread_pool,
                 self._env.install_for_config,
-                [packaging.requirements.Requirement(requirement_string=e) for e in blueprint.requirements],
+                [SafeRequirement(requirement_string=e) for e in blueprint.requirements],
                 blueprint.pip_config,
             )
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)

@@ -33,10 +33,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence
 
 import inmanta.types
-import packaging.requirements
 from inmanta.agent import config as cfg
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
-from inmanta.env import PythonEnvironment
+from inmanta.env import PythonEnvironment, SafeRequirement
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
 from inmanta.types import JsonType
@@ -269,7 +268,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             install_for_config = functools.partial(
                 self.install_for_config,
-                requirements=[packaging.requirements.Requirement(requirement_string=e) for e in req],
+                requirements=[SafeRequirement(requirement_string=e) for e in req],
                 config=blueprint.pip_config,
             )
             await loop.run_in_executor(self.thread_pool, install_for_config)

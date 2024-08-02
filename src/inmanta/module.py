@@ -59,7 +59,7 @@ from inmanta.ast import CompilerException, LocatableString, Location, Namespace,
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
-from inmanta.env import assert_pip_has_source
+from inmanta.env import SafeRequirement, assert_pip_has_source
 from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
@@ -67,7 +67,7 @@ from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
 from packaging import version
-from packaging.requirements import Requirement
+from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from ruamel.yaml.comments import CommentedMap
 
@@ -97,13 +97,13 @@ class InmantaModuleRequirement:
             used by distinguishing the two on a type level.
     """
 
-    def __init__(self, requirement: Requirement) -> None:
+    def __init__(self, requirement: SafeRequirement) -> None:
         if requirement.name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError(
                 f"InmantaModuleRequirement instances work with inmanta module names, not python package names. "
                 f"Problematic case: {str(requirement)}"
             )
-        self._requirement: Requirement = requirement
+        self._requirement: SafeRequirement = requirement
 
     @property
     def project_name(self) -> str:
@@ -116,8 +116,8 @@ class InmantaModuleRequirement:
         return self._requirement.name.replace("-", "_")
 
     @property
-    def specifier(self) -> str:
-        return str(self._requirement.specifier)
+    def specifier(self) -> SpecifierSet:
+        return self._requirement.specifier
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, InmantaModuleRequirement):
@@ -151,16 +151,16 @@ class InmantaModuleRequirement:
             )
         if "-" in spec:
             raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
-        return cls(Requirement(requirement_string=spec))
+        return cls(SafeRequirement(requirement_string=spec))
 
-    def get_python_package_requirement(self) -> Requirement:
+    def get_python_package_requirement(self) -> SafeRequirement:
         """
-        Return a Requirement with the name of the Python distribution package for this module requirement.
+        Return a SafeRequirement with the name of the Python distribution package for this module requirement.
         """
         module_name = self.project_name
         pkg_name = ModuleV2Source.get_package_name_for(module_name)
         pkg_req_str = str(self).replace(module_name, pkg_name, 1)  # Replace max 1 occurrence
-        return Requirement(requirement_string=pkg_req_str)
+        return SafeRequirement(requirement_string=pkg_req_str)
 
 
 class CompilerExceptionWithExtendedTrace(CompilerException):
@@ -722,14 +722,14 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
         assert_pip_has_source(project.metadata.pip, f"a v2 module {module_name}")
 
-        requirements: list[Requirement] = [req.get_python_package_requirement() for req in module_spec]
+        requirements: list[SafeRequirement] = [req.get_python_package_requirement() for req in module_spec]
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
 
         # Get known requires and add them to prevent invalidating constraints through updates
         # These could be constraints (-c) as well, but that requires additional sanitation
         # Because for pip not every valid -r is a valid -c
         current_requires = project.get_strict_python_requirements_as_list()
-        requirements += [Requirement(requirement_string=r) for r in current_requires]
+        requirements += [SafeRequirement(requirement_string=r) for r in current_requires]
 
         if preinstalled is not None:
             # log warning if preinstalled version does not match constraints
@@ -1177,9 +1177,9 @@ class RequirementsTxtFile:
         Returns True iff this requirements.txt file contains the given package name. The given `pkg_name` is matched
         case insensitive against the requirements in this RequirementsTxtFile.
         """
-        return any(r.name == pkg_name.lower() for r in self._requirements)
+        return any(r.name == pkg_name for r in self._requirements)  # .lower()
 
-    def set_requirement_and_write(self, requirement: Requirement) -> None:
+    def set_requirement_and_write(self, requirement: SafeRequirement) -> None:
         """
         Add the given requirement to the requirements.txt file and update the file on disk, replacing any existing constraints
         on this package.
@@ -2128,7 +2128,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.verify_module_version_compatibility()
 
         # do python install
-        pyreq: list[Requirement] = [Requirement(requirement_string=x) for x in self.collect_python_requirements()]
+        pyreq: list[SafeRequirement] = [SafeRequirement(requirement_string=x) for x in self.collect_python_requirements()]
 
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
@@ -2546,8 +2546,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
         if self.strict_deps_check:
-            constraints: list[Requirement] = [
-                Requirement(requirement_string=item) for item in self.collect_python_requirements()
+            constraints: list[SafeRequirement] = [
+                SafeRequirement(requirement_string=item) for item in self.collect_python_requirements()
             ]
             env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
@@ -2679,7 +2679,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # filter on import stmt
         reqs = []
         for spec in self._metadata.requires:
-            req = [Requirement(requirement_string=e) for e in spec]
+            if isinstance(spec, list):
+                req = [SafeRequirement(requirement_string=e) for e in spec]
+            else:
+                req = [SafeRequirement(requirement_string=spec)]
             if len(req) > 1:
                 print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
@@ -2816,7 +2819,10 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         reqs = []
         for spec in self.get_module_requirements():
-            req = [Requirement(requirement_string=e) for e in spec]
+            if isinstance(spec, list):
+                req = [SafeRequirement(requirement_string=e) for e in spec]
+            else:
+                req = [SafeRequirement(requirement_string=spec)]
             if len(req) > 1:
                 print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
@@ -3216,7 +3222,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         versions = sorted(versions, reverse=True)
 
         for r in requirements:
-            versions = [x for x in r.specifier.filter(versions, not release_only)]
+            versions = [x for x in r.specifier.filter(iterable=versions, prereleases=not release_only)]
 
         comp_version_raw = get_compiler_version()
         comp_version = Version(version=comp_version_raw)
@@ -3427,12 +3433,12 @@ class ModuleV2(Module[ModuleV2Metadata]):
         # Parse config file
         config_parser = ConfigParser()
         config_parser.read(self.get_metadata_file_path())
-        python_pkg_requirement: Requirement = requirement.get_python_package_requirement()
+        python_pkg_requirement: SafeRequirement = requirement.get_python_package_requirement()
         if config_parser.has_option("options", "install_requires"):
             new_install_requires = [
                 r
                 for r in config_parser.get("options", "install_requires").split("\n")
-                if r and Requirement(requirement_string=r).name != python_pkg_requirement.name
+                if r and SafeRequirement(requirement_string=r).name != python_pkg_requirement.name
             ]
             new_install_requires.append(str(python_pkg_requirement))
         else:

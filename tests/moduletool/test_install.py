@@ -35,12 +35,11 @@ from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException
 from inmanta.config import Config
-from inmanta.env import CommandRunner, ConflictingRequirements, PipConfig
+from inmanta.env import CommandRunner, ConflictingRequirements, PipConfig, SafeRequirement
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
-from packaging.requirements import Requirement
 from utils import LogSequence, PipIndex, log_contains, module_from_template
 
 LOGGER = logging.getLogger(__name__)
@@ -252,14 +251,14 @@ def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetc
         os.path.join(modules_v2_dir, "minimalv2module"),
         os.path.join(str(tmpdir), "modone"),
         new_name="modone",
-        new_requirements=[Requirement(requirement_string="lorem~=0.0.1")],
+        new_requirements=[SafeRequirement(requirement_string="lorem~=0.0.1")],
         install=True,
     )
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
         os.path.join(str(tmpdir), "modtwo"),
         new_name="modtwo",
-        new_requirements=[Requirement(requirement_string="lorem~=0.1.0")],
+        new_requirements=[SafeRequirement(requirement_string="lorem~=0.1.0")],
         install=True,
     )
 
@@ -509,7 +508,7 @@ def test_project_install(
         index_url=local_module_package_index,
         # We add tornado, as there is a code path in update for the case where the project has python requires
         python_requires=["tornado"]
-        + [Requirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names],
+        + [SafeRequirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names],
         install_project=False,
     )
 
@@ -542,7 +541,7 @@ def test_project_install(
         autostd=False,
         python_package_sources=[local_module_package_index],
         python_requires=[
-            Requirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names
+            SafeRequirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names
         ]
         + ["lorem"],
         install_project=False,
@@ -678,7 +677,7 @@ def test_project_install_modules_cache_invalid(
         index_url=index.url,
         extra_index_url=[local_module_package_index],
         # make sure main module gets installed, pulling in newest version of dependency module
-        python_requires=[Requirement(requirement_string=module.ModuleV2Source.get_package_name_for(main_module))],
+        python_requires=[SafeRequirement(requirement_string=module.ModuleV2Source.get_package_name_for(main_module))],
     )
 
     # populate project.modules[dependency_module] to force the error conditions in this simplified example
@@ -763,7 +762,7 @@ def test_project_install_incompatible_versions(
         install_project=False,
         add_to_module_path=[v1_modules_path],
         index_url=index.url,
-        python_requires=[Requirement(requirement_string=module.ModuleV2Source.get_package_name_for(v2_mod_name))],
+        python_requires=[SafeRequirement(requirement_string=module.ModuleV2Source.get_package_name_for(v2_mod_name))],
     )
 
     # install project
@@ -816,14 +815,14 @@ def test_project_install_incompatible_dependencies(
         v2_template_path,
         os.path.join(str(tmpdir), "v2mod2"),
         new_name="v2mod2",
-        new_requirements=[Requirement(requirement_string="inmanta-module-v2mod1~=1.0.0")],
+        new_requirements=[SafeRequirement(requirement_string="inmanta-module-v2mod1~=1.0.0")],
         publish_index=index,
     )
     v2mod3: module.ModuleV2Metadata = module_from_template(
         v2_template_path,
         os.path.join(str(tmpdir), "v2mod3"),
         new_name="v2mod3",
-        new_requirements=[Requirement(requirement_string="inmanta-module-v2mod1~=2.0.0")],
+        new_requirements=[SafeRequirement(requirement_string="inmanta-module-v2mod1~=2.0.0")],
         publish_index=index,
     )
 
@@ -837,7 +836,7 @@ def test_project_install_incompatible_dependencies(
         install_project=False,
         index_url=index.url,
         python_requires=[
-            Requirement(
+            SafeRequirement(
                 requirement_string=module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata))
             )
             for metadata in [v2mod2, v2mod3]
@@ -921,7 +920,7 @@ def test_install_from_index_dont_leak_pip_index(
         # Installing a V2 module requires a python package source.
         index_url="unknown",
         python_requires=[
-            Requirement(
+            SafeRequirement(
                 requirement_string=module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata))
             )
             for metadata in [v2mod1]
@@ -983,7 +982,7 @@ def test_install_with_use_config(
         index_url=index.url if not use_pip_config else None,
         use_pip_config_file=use_pip_config,
         python_requires=[
-            Requirement(
+            SafeRequirement(
                 requirement_string=module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata))
             )
             for metadata in [v2mod1]
@@ -1052,7 +1051,7 @@ def test_install_with_use_config_extra_index(
         extra_index_url=[index2.url],
         use_pip_config_file=True,
         python_requires=[
-            Requirement(
+            SafeRequirement(
                 requirement_string=module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata))
             )
             for metadata in [v2mod1, v2mod2]
@@ -1088,7 +1087,7 @@ def test_install_with_use_config_but_PIP_CONFIG_FILE_not_set(
         autostd=False,
         install_project=False,
         use_pip_config_file=True,
-        python_requires=[Requirement(requirement_string="inmanta-module-dummy-module")],
+        python_requires=[SafeRequirement(requirement_string="inmanta-module-dummy-module")],
     )
 
     # install project
@@ -1205,7 +1204,7 @@ def test_install_project_with_install_mode_master(tmpdir: py.path.local, snippet
         autostd=False,
         install_project=False,
         add_to_module_path=[str(tmpdir)],
-        project_requires=[InmantaModuleRequirement(Requirement(requirement_string="mod11==3.2.1"))],
+        project_requires=[InmantaModuleRequirement(SafeRequirement(requirement_string="mod11==3.2.1"))],
         install_mode=InstallMode.master,
     )
 
@@ -1233,7 +1232,7 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
 
     v2_module = "minimalv2module"
 
-    v2_requirements = [Requirement(requirement_string=module.ModuleV2Source.get_package_name_for(v2_module))]
+    v2_requirements = [SafeRequirement(requirement_string=module.ModuleV2Source.get_package_name_for(v2_module))]
 
     # set up project and modules
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
@@ -1334,7 +1333,7 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
     )
 
     modules = ["modone", "modtwo"]
-    v2_requirements = [Requirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod)) for mod in modules]
+    v2_requirements = [SafeRequirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod)) for mod in modules]
 
     snippetcompiler_clean.setup_for_snippet(
         f"""
@@ -1420,7 +1419,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
             autostd=False,
             index_url=local_module_package_index,
             extra_index_url=[index.url],
-            python_requires=[Requirement(requirement_string=module.ModuleV2Source.get_package_name_for("parent_module"))],
+            python_requires=[SafeRequirement(requirement_string=module.ModuleV2Source.get_package_name_for("parent_module"))],
             install_project=True,
         )
     log_contains(
@@ -1452,7 +1451,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
             autostd=False,
             index_url=local_module_package_index,
             extra_index_url=[index.url],
-            python_requires=[Requirement(requirement_string=module.ModuleV2Source.get_package_name_for("parent_module"))],
+            python_requires=[SafeRequirement(requirement_string=module.ModuleV2Source.get_package_name_for("parent_module"))],
             install_project=True,
         )
 
@@ -1485,7 +1484,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         autostd=False,
         index_url=local_module_package_index,
         extra_index_url=[index.url],
-        python_requires=[Requirement(requirement_string=module.ModuleV2Source.get_package_name_for("parent_module"))],
+        python_requires=[SafeRequirement(requirement_string=module.ModuleV2Source.get_package_name_for("parent_module"))],
         install_project=True,
     )
     log_contains(
@@ -1554,7 +1553,7 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler_clean
         autostd=False,
         index_url=local_module_package_index,
         extra_index_url=[index.url],
-        python_requires=[Requirement(requirement_string=module.ModuleV2Source.get_package_name_for("module_b"))],
+        python_requires=[SafeRequirement(requirement_string=module.ModuleV2Source.get_package_name_for("module_b"))],
         install_project=True,
     )
 
@@ -1580,7 +1579,7 @@ Modules versions after installation:
         autostd=False,
         index_url=local_module_package_index,
         extra_index_url=[index.url],
-        python_requires=[Requirement(requirement_string=module.ModuleV2Source.get_package_name_for("module_c"))],
+        python_requires=[SafeRequirement(requirement_string=module.ModuleV2Source.get_package_name_for("module_c"))],
         install_project=True,
     )
 
@@ -1651,7 +1650,8 @@ def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_
         index_url=local_module_package_index,
         extra_index_url=[index.url],
         python_requires=[
-            Requirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod)) for mod in ["module_b", "module_a"]
+            SafeRequirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod))
+            for mod in ["module_b", "module_a"]
         ],
         install_project=True,
         project_requires=[

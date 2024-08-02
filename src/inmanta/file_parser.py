@@ -18,7 +18,7 @@
 
 import os
 
-from packaging.requirements import Requirement
+from inmanta.env import SafeRequirement
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 
@@ -55,11 +55,11 @@ class RequirementsTxtParser:
     """
 
     @classmethod
-    def parse(cls, filename: str) -> list[Requirement]:
+    def parse(cls, filename: str) -> list[SafeRequirement]:
         """
-        Get all the requirements in `filename` as a list of `Requirement` instances.
+        Get all the requirements in `filename` as a list of `SafeRequirement` instances.
         """
-        return [Requirement(requirement_string=r) for r in cls.parse_requirements_as_strs(filename)]
+        return [SafeRequirement(requirement_string=r) for r in cls.parse_requirements_as_strs(filename)]
 
     @classmethod
     def parse_requirements_as_strs(cls, filename: str) -> list[str]:
@@ -92,14 +92,14 @@ class RequirementsTxtParser:
                 if line_continuation_buffer:
                     line_continuation_buffer += line
                     if not line.endswith("\\"):
-                        if Requirement(requirement_string=line_continuation_buffer).name != remove_dep_on_pkg:
+                        if SafeRequirement(requirement_string=line_continuation_buffer.split("#")[0]).name != remove_dep_on_pkg:
                             result += line_continuation_buffer
                         line_continuation_buffer = ""
                 elif not line.strip() or line.strip().startswith("#"):
                     result += line
                 elif line.endswith("\\"):
                     line_continuation_buffer = line
-                elif Requirement(requirement_string=line).name != remove_dep_on_pkg.lower():
+                elif SafeRequirement(requirement_string=line.split("#")[0]).name != remove_dep_on_pkg:  # .lower()
                     result += line
                 else:
                     # Dependency matches `remove_dep_on_pkg` => Remove line from result
