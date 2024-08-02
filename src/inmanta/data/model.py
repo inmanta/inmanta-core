@@ -770,7 +770,9 @@ class DiscoveredResource(BaseModel):
     discovered_resource_id: ResourceIdStr
     values: dict[str, object]
     managed_resource_uri: Optional[str] = None
-    discovery_resource_id: Optional[ResourceIdStr] = None
+
+    # This field is excluded during serialization in favour of the discovery_resource_uri
+    discovery_resource_id: Optional[ResourceIdStr] = Field(default=None, exclude=True)
 
     _validate_discovered_rid = field_validator("discovered_resource_id")(is_resource_id)
     _validate_discovery_rid = field_validator("discovery_resource_id")(functools.partial(is_resource_id, allow_none=True))
