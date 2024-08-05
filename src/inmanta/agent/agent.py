@@ -1253,7 +1253,7 @@ class Agent(SessionEndpoint):
                 resource_install_specs.append(resource_install_spec)
                 # Update the ``_code_cache`` cache to indicate that the given resource type's ResourceInstallSpec
                 # was constructed successfully at the specified version.
-                # TODO: this cache is a slight memory leak
+                # TODO: this cache is a slight memory leak, to be phased out on new executor
                 self._code_cache[(resource_type, version)] = resource_install_spec
             else:
                 LOGGER.error(
@@ -1362,7 +1362,7 @@ class Agent(SessionEndpoint):
         Check if the server storage is configured and ready to use.
         """
 
-        # TODO: review on disk layout: https://github.com/inmanta/inmanta-core/issues/7590
+        # FIXME: review on disk layout: https://github.com/inmanta/inmanta-core/issues/7590
 
         state_dir = cfg.state_dir.get()
 

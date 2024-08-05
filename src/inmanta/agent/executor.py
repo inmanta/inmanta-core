@@ -334,8 +334,6 @@ class VirtualEnvironmentManager:
         :param blueprint: The blueprint specifying the configuration for the new virtual environment.
         :param threadpool: A ThreadPoolExecutor
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
-
-        TODO: Improve handling of bad venv scenarios, such as when the folder exists but is empty or corrupted.
         """
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
