@@ -26,13 +26,13 @@ import os
 import random
 import time
 import uuid
-from asyncio import Lock
-from collections import defaultdict
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Collection, Dict, Optional, Union, cast
 
+import inmanta.agent.executor
+from inmanta import config, const, data, protocol
 import pkg_resources
 
 from inmanta import config, const, data, env, protocol
@@ -48,20 +48,11 @@ from inmanta.data.model import (
     ResourceType,
     ResourceVersionIdStr,
 )
-from inmanta.loader import CodeLoader, ModuleSource
+from inmanta.loader import ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import (
-    CronSchedule,
-    IntervalSchedule,
-    NamedLock,
-    ScheduledTask,
-    TaskMethod,
-    TaskSchedule,
-    add_future,
-    join_threadpools,
-)
+from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, TaskMethod, TaskSchedule, add_future, join_threadpools
 
 LOGGER = logging.getLogger(__name__)
 
@@ -971,26 +962,17 @@ class Agent(SessionEndpoint):
         self._instances: dict[str, AgentInstance] = {}
         self._instances_lock = asyncio.Lock()
 
-        self._loader: Optional[CodeLoader] = None
-        self._env: Optional[env.VirtualEnv] = None
-        if code_loader:
-            # all of this should go into the executor manager https://github.com/inmanta/inmanta-core/issues/7589
-            self._env = env.VirtualEnv(self._storage["env"])
-            self._env.use_virtual_env()
-            self._loader = CodeLoader(self._storage["code"], clean=True)
-            # Lock to ensure only one actual install runs at a time
-            self._loader_lock = Lock()
-            # Keep track for each resource type of the last loaded version
-            self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] = defaultdict(lambda: None)
-            # Cache to prevent re-fetching the same resource-version
-            self._previously_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
-            # Per-resource lock to serialize all actions per resource
-            self._resource_loader_lock = NamedLock()
+        # Cache to prevent re-fetching the same resource-version
+        self._code_cache: dict[tuple[str, int], ResourceInstallSpec] = {}
 
         self.agent_map: Optional[dict[str, str]] = agent_map
 
         remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExecutorMode.forking
         can_have_remote_executor = code_loader
+
+        # Mechanism to speed up tests using the old (<= iso7) agent mechanism
+        # by avoiding spawning a virtual environment.
+        self._code_loader = code_loader
 
         self.executor_manager: executor.ExecutorManager[executor.Executor]
         if remote_executor and can_have_remote_executor:
@@ -1013,6 +995,9 @@ class Agent(SessionEndpoint):
                 asyncio.get_event_loop(),
                 LOGGER,
                 self,
+                self._storage["code"],
+                self._storage["env"],
+                code_loader,
             )
 
     async def _init_agent_map(self) -> None:
@@ -1223,7 +1208,7 @@ class Agent(SessionEndpoint):
             - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
-        if self._loader is None:
+        if not self._code_loader:
             return [], set()
 
         # store it outside the loop, but only load when required
@@ -1232,7 +1217,7 @@ class Agent(SessionEndpoint):
         resource_install_specs: list[ResourceInstallSpec] = []
         invalid_resource_types: executor.FailedResourcesSet = set()
         for resource_type in set(resource_types):
-            cached_spec: Optional[ResourceInstallSpec] = self._previously_loaded.get((resource_type, version))
+            cached_spec: Optional[ResourceInstallSpec] = self._code_cache.get((resource_type, version))
             if cached_spec:
                 LOGGER.debug(
                     "Cache hit, using existing ResourceInstallSpec for resource_type=%s version=%d", resource_type, version
@@ -1268,10 +1253,10 @@ class Agent(SessionEndpoint):
                     resource_type, version, executor.ExecutorBlueprint(pip_config, list(requirements), sources)
                 )
                 resource_install_specs.append(resource_install_spec)
-                # Update the ``_previously_loaded`` cache to indicate that the given resource type's ResourceInstallSpec
+                # Update the ``_code_cache`` cache to indicate that the given resource type's ResourceInstallSpec
                 # was constructed successfully at the specified version.
-                # TODO: this cache is a slight memory leak
-                self._previously_loaded[(resource_type, version)] = resource_install_spec
+                # TODO: this cache is a slight memory leak, to be phased out on new executor
+                self._code_cache[(resource_type, version)] = resource_install_spec
             else:
                 LOGGER.error(
                     "Failed to get source code for %s version=%d\n%s",
@@ -1282,67 +1267,6 @@ class Agent(SessionEndpoint):
                 invalid_resource_types.add(resource_type)
 
         return resource_install_specs, invalid_resource_types
-
-    async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> executor.FailedResourcesSet:
-        """Ensure that the code for the given environment and version is loaded"""
-
-        failed_to_load: executor.FailedResourcesSet = set()
-
-        if self._loader is None:
-            return failed_to_load
-
-        for resource_install_spec in code:
-            # only one logical thread can load a particular resource type at any time
-            async with self._resource_loader_lock.get(resource_install_spec.resource_type):
-                # stop if the last successful load was this one
-                # The combination of the lock and this check causes the reloads to naturally 'batch up'
-                if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.blueprint:
-                    LOGGER.debug(
-                        "Handler code already installed for %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-                    continue
-
-                try:
-                    # Install required python packages and the list of ``ModuleSource`` with the provided pip config
-                    LOGGER.debug(
-                        "Installing handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-                    await self._install(resource_install_spec.blueprint)
-                    LOGGER.debug(
-                        "Installed handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-
-                    self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
-                except Exception:
-                    LOGGER.exception(
-                        "Failed to install handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-                    failed_to_load.add(resource_install_spec.resource_type)
-                    self._last_loaded_version[resource_install_spec.resource_type] = None
-
-        return failed_to_load
-
-    async def _install(self, blueprint: executor.ExecutorBlueprint) -> None:
-        if self._env is None or self._loader is None:
-            raise Exception("Unable to load code when agent is started with code loading disabled.")
-
-        async with self._loader_lock:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                self.thread_pool,
-                self._env.install_for_config,
-                list(pkg_resources.parse_requirements(blueprint.requirements)),
-                blueprint.pip_config,
-            )
-            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
 
     async def _get_pip_config(self, environment: uuid.UUID, version: int) -> PipConfig:
         response = await self._client.get_pip_config(tid=environment, version=version)
@@ -1440,7 +1364,7 @@ class Agent(SessionEndpoint):
         Check if the server storage is configured and ready to use.
         """
 
-        # TODO: review on disk layout: https://github.com/inmanta/inmanta-core/issues/7590
+        # FIXME: review on disk layout: https://github.com/inmanta/inmanta-core/issues/7590
 
         state_dir = cfg.state_dir.get()
 

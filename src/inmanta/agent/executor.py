@@ -560,7 +560,6 @@ class VirtualEnvironmentManager(PoolManager):
 
         :param blueprint: The blueprint specifying the configuration for the new virtual environment.
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
-
         """
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage)

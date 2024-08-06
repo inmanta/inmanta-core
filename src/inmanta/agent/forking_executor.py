@@ -758,8 +758,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
                     for rtype in type_for_spec.get(source, []):
                         my_executor.failed_resource_types.add(rtype)
 
-            # TODO: recovery. If loading failed, we currently never rebuild
-            # https://github.com/inmanta/inmanta-core/issues/7281
+            # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
             return my_executor
 
     async def create_executor(self, executor_id: executor.ExecutorId, venv_checkup_interval: float = 60.0) -> MPExecutor:
