@@ -60,12 +60,12 @@ def test_list_comprehension_double_for(snippetcompiler) -> None:
             base1 = [1, 2]
             base2 = [10, 20]
 
-            entity A: end implement A using std::none
-            entity B: end implement B using std::none
+            entity A: end implement A using none
+            entity B: end implement B using none
             entity C:
                 int n
             end
-            implement C using std::none
+            implement C using none
 
             A.b [0:] -- B
             B.c [0:] -- C
@@ -91,6 +91,9 @@ def test_list_comprehension_double_for(snippetcompiler) -> None:
             l1 = ["1-10", "1-20", "2-10", "2-20"]
             l2 = [1, 2, 3]  # specific order doesn't matter but it should be consistent
             l3 = [10, 20, 10, 20]
+
+            implementation none for std::Entity:
+            end
             """.strip(
                 "\n"
             )
@@ -180,7 +183,8 @@ def test_list_comprehension_order(snippetcompiler) -> None:
             """.strip(
                 "\n"
             )
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -259,7 +263,8 @@ def test_list_comprehension_constructor_trees(snippetcompiler) -> None:
             """.strip(
                 "\n"
             )
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -424,7 +429,8 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
             """.strip(
                 "\n"
             )
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -459,7 +465,8 @@ def test_list_comprehension_gradual_consistency(snippetcompiler, monkeypatch) ->
             """.strip(
                 "\n"
             )
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -522,7 +529,8 @@ def test_list_comprehension_gradual_mixed(snippetcompiler) -> None:
             """.strip(
                 "\n"
             )
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -550,7 +558,8 @@ def test_list_comprehension_duplicate_values(snippetcompiler) -> None:
             """.strip(
                 "\n"
             )
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -587,7 +596,8 @@ def test_list_comprehension_empty_items(snippetcompiler, monkeypatch) -> None:
             """.strip(
                 "\n"
             )
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -759,7 +769,8 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             """.strip(
                 "\n"
             )
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -798,12 +809,12 @@ def test_list_comprehension_direct(snippetcompiler) -> None:
 
     # verify some invalid values
     for i in [92, 95, 100, 89, 0, -1, 43]:
-        snippetcompiler.setup_for_snippet(f"{model_def}\nA(n={i})")
+        snippetcompiler.setup_for_snippet(f"{model_def}\nA(n={i})", autostd=True)
         with pytest.raises(ast.AttributeException):
             compiler.do_compile()
 
     # verify valid values
-    snippetcompiler.setup_for_snippet("\n".join((model_def, valid)))
+    snippetcompiler.setup_for_snippet("\n".join((model_def, valid)), autostd=True)
     compiler.do_compile()
 
 
@@ -877,7 +888,9 @@ def test_list_comprehension_direct_error(snippetcompiler) -> None:
         entity A:
             testdef n
         end
-        implement A using std::none
+        implement A using none
+        implementation none for std::Entity:
+        end
         """.strip(
             "\n"
         )
@@ -886,8 +899,8 @@ def test_list_comprehension_direct_error(snippetcompiler) -> None:
         textwrap.dedent(f"{model_def}\nA(n={1})"),
         (
             "Could not set attribute `n` on instance `__config__::A (instantiated at "
-            "{dir}/main.cf:10)` (reported in Construct(A) "
-            "({dir}/main.cf:10))\n"
+            "{dir}/main.cf:12)` (reported in Construct(A) "
+            "({dir}/main.cf:12))\n"
             "caused by:\n"
             "  Invalid value `test`: the condition for a conditional expression must be a "
             "boolean expression (reported in 'test' ? 42 : 43 "

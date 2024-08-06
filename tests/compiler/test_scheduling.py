@@ -103,7 +103,8 @@ def test_function_rescheduling_with_side_effect(snippetcompiler):
 
         implement Child using std::none
         implement Test using std::none
-        """
+        """,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -129,6 +130,7 @@ def test_function_rescheduling_plugin_with_context(snippetcompiler):
 
         implement Container using std::none
 
-        """
+        """,
+        autostd=True,
     )
     compiler.do_compile()

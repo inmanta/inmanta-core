@@ -120,7 +120,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import CommandRunner, LocalPackagePath, VirtualEnv, mock_process_env
+from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -509,7 +509,7 @@ def deactive_venv():
     old_path_hooks = sys.path_hooks.copy()
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
-    old_process_env: str = env.process_env.python_path
+    old_process_env = env.process_env
     old_working_set = pkg_resources.working_set
     old_available_extensions = (
         dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
@@ -538,7 +538,7 @@ def deactive_venv():
         os.environ["VIRTUAL_ENV"] = old_os_venv
     elif "VIRTUAL_ENV" in os.environ:
         del os.environ["VIRTUAL_ENV"]
-    env.mock_process_env(python_path=old_process_env)
+    env.mock_process_env(old_process_env)
     loader.PluginModuleFinder.reset()
     InmantaBootloader.AVAILABLE_EXTENSIONS = old_available_extensions
 
@@ -1100,7 +1100,7 @@ class ReentrantVirtualEnv(VirtualEnv):
         else:
             # Later run
             self._activate_that()
-            mock_process_env(python_path=self.python_path)
+            mock_process_env(new_process_env=self)
             pkg_resources.working_set = self.working_set
             self._using_venv = True
 
@@ -1142,7 +1142,8 @@ class SnippetCompilationTest(KeepOnFail):
         self,
         snippet: str,
         *,
-        autostd: bool = True,
+        autostd: bool = False,
+        ministd: bool = False,
         install_project: bool = True,
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
         add_to_module_path: Optional[list[str]] = None,
@@ -1193,7 +1194,7 @@ class SnippetCompilationTest(KeepOnFail):
             main_file,
         )
         return self._load_project(
-            autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check, main_file=main_file
+            autostd or ministd, install_project, install_v2_modules, strict_deps_check=strict_deps_check, main_file=main_file
         )
 
     def _load_project(
@@ -1221,7 +1222,7 @@ class SnippetCompilationTest(KeepOnFail):
         Patch env.process_env to accommodate the SnippetCompilationTest's switching between active environments within a single
         running process.
         """
-        env.mock_process_env(env_path=self.env)
+        env.mock_process_env(new_process_env=self.venv)
 
     def _install_v2_modules(self, install_v2_modules: Optional[list[LocalPackagePath]] = None) -> None:
         """Assumes we have a project set"""
@@ -1257,6 +1258,7 @@ class SnippetCompilationTest(KeepOnFail):
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
+        ministd: bool = False,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1264,6 +1266,9 @@ class SnippetCompilationTest(KeepOnFail):
         project_requires = project_requires if project_requires is not None else []
         python_requires = python_requires if python_requires is not None else []
         relation_precedence_rules = relation_precedence_rules if relation_precedence_rules else []
+        ministd_path = os.path.join(__file__, "..", "data/mini_str_container")
+        if ministd:
+            add_to_module_path += ministd_path
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 f"""
@@ -1405,12 +1410,19 @@ class SnippetCompilationTest(KeepOnFail):
             ),
         )
 
-    def setup_for_error(self, snippet, shouldbe, indent_offset=0):
+    def setup_for_error(
+        self,
+        snippet,
+        shouldbe,
+        indent_offset=0,
+        ministd: bool = False,
+        autostd: bool = False,
+    ):
         """
         Set up project to expect an error during compilation or project install.
         """
         try:
-            self.setup_for_snippet(snippet)
+            self.setup_for_snippet(snippet, ministd=ministd, autostd=autostd)
             compiler.do_compile()
             assert False, "Should get exception"
         except CompilerException as e:
@@ -1669,8 +1681,7 @@ def tmpvenv_active(
     sys.prefix = base
 
     # patch env.process_env to recognize this environment as the active one, deactive_venv restores it
-    env.mock_process_env(python_path=str(python_path))
-    env.process_env.notify_change()
+    env.mock_process_env(ActiveEnv(python_path=str(python_path)))
 
     yield tmpvenv
 

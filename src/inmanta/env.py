@@ -943,6 +943,7 @@ class ActiveEnv(PythonEnvironment):
 
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
         super().__init__(env_path=env_path, python_path=python_path)
+        self.constraint_violation_cache: Optional[tuple[set[VersionConflict], set[VersionConflict]]] = None
 
     def is_using_virtual_env(self) -> bool:
         return True
@@ -975,9 +976,8 @@ class ActiveEnv(PythonEnvironment):
         finally:
             self.notify_change()
 
-    @classmethod
     def get_constraint_violations_for_check(
-        cls,
+        self,
         strict_scope: Optional[Pattern[str]] = None,
         constraints: Optional[list[Requirement]] = None,
     ) -> tuple[set[VersionConflict], set[VersionConflict]]:
@@ -985,6 +985,8 @@ class ActiveEnv(PythonEnvironment):
         Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
         in that order.
         """
+        if self.constraint_violation_cache is not None:
+            return self.constraint_violation_cache
 
         class OwnedRequirement(NamedTuple):
             requirement: Requirement
@@ -1000,7 +1002,7 @@ class ActiveEnv(PythonEnvironment):
             for requirement in dist_info.requires()
         )
         inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(r, owner="inmanta-core") for r in cls._get_requirements_on_inmanta_package()
+            OwnedRequirement(r, owner="inmanta-core") for r in self._get_requirements_on_inmanta_package()
         )
         extra_constraints: abc.Set[OwnedRequirement] = frozenset(
             (OwnedRequirement(r) for r in constraints) if constraints is not None else []
@@ -1039,11 +1041,11 @@ class ActiveEnv(PythonEnvironment):
                 else:
                     constraint_violations.add(version_conflict)
 
-        return constraint_violations, constraint_violations_strict
+        self.constraint_violation_cache = (constraint_violations, constraint_violations_strict)
+        return self.constraint_violation_cache
 
-    @classmethod
     def check(
-        cls,
+        self,
         strict_scope: Optional[Pattern[str]] = None,
         constraints: Optional[list[Requirement]] = None,
     ) -> None:
@@ -1057,7 +1059,9 @@ class ActiveEnv(PythonEnvironment):
         :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
             packages meet the given constraints. All listed packages are expected to be installed.
         """
-        constraint_violations, constraint_violations_strict = cls.get_constraint_violations_for_check(strict_scope, constraints)
+        constraint_violations, constraint_violations_strict = self.get_constraint_violations_for_check(
+            strict_scope, constraints
+        )
 
         if len(constraint_violations_strict) != 0:
             raise ConflictingRequirements(
@@ -1068,8 +1072,7 @@ class ActiveEnv(PythonEnvironment):
         for violation in constraint_violations:
             LOGGER.warning("%s", violation)
 
-    @classmethod
-    def check_legacy(cls, in_scope: Pattern[str], constraints: Optional[list[Requirement]] = None) -> bool:
+    def check_legacy(self, in_scope: Pattern[str], constraints: Optional[list[Requirement]] = None) -> bool:
         """
         Check this Python environment for incompatible dependencies in installed packages. This method is a legacy method
         in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
@@ -1082,7 +1085,7 @@ class ActiveEnv(PythonEnvironment):
             packages meet the given constraints. All listed packages are expected to be installed.
         :return: True iff the check succeeds.
         """
-        constraint_violations_non_strict, constraint_violations_strict = cls.get_constraint_violations_for_check(
+        constraint_violations_non_strict, constraint_violations_strict = self.get_constraint_violations_for_check(
             in_scope, constraints
         )
 
@@ -1135,6 +1138,7 @@ class ActiveEnv(PythonEnvironment):
         # This is required to make editable installs work.
         site.addsitedir(self.site_packages_dir)
         importlib.invalidate_caches()
+        self.constraint_violation_cache = None
 
         if const.PLUGINS_PACKAGE in sys.modules:
             mod = sys.modules[const.PLUGINS_PACKAGE]
@@ -1177,16 +1181,16 @@ Singleton representing the Python environment this process is running in.
 
 
 @stable_api
-def mock_process_env(*, python_path: Optional[str] = None, env_path: Optional[str] = None) -> None:
+def mock_process_env(new_process_env: ActiveEnv) -> None:
     """
     Overrides the process environment information. This forcefully sets the environment that is recognized as the outer Python
     environment. This function should only be called when a Python environment has been set up dynamically and this environment
     should be treated as if this process was spawned from it, and even then with great care.
 
-    :param python_path: The path to the python binary. Only one of `python_path` and `env_path` should be set.
-    :param env_path: The path to the python environment directory. Only one of `python_path` and `env_path` should be set.
+    :param new_process_env: new env to use
     """
-    process_env.__init__(python_path=python_path, env_path=env_path)  # type: ignore
+    global process_env
+    process_env = new_process_env
 
 
 @stable_api
@@ -1221,7 +1225,7 @@ class VirtualEnv(ActiveEnv):
 
         self.init_env()
         self._activate_that()
-        mock_process_env(python_path=self.python_path)
+        mock_process_env(new_process_env=self)
 
         # patch up pkg
         self.notify_change()

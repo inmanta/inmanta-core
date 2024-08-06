@@ -46,7 +46,8 @@ t2a = Test2(test1=t)
 t2b = Test2(test1=t)
 
 std::print(t.test2.attribute)
-        """
+        """,
+        ministd=True,
     )
 
     try:
@@ -156,7 +157,8 @@ entity SpecialService extends std::Service:
 
 end
 
-std::Host.services_list [0:] -- SpecialService.host [1]"""
+std::Host.services_list [0:] -- SpecialService.host [1]""",
+        autostd=True,
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
@@ -170,13 +172,13 @@ entity LogFile:
   int members
 end
 
-implement LogFile using std::none
+implement LogFile using none
 
 entity LogCollector:
   string name
 end
 
-implement LogCollector using std::none
+implement LogCollector using none
 
 LogCollector.logfiles [0:] -- LogFile.collectors [0:]
 
@@ -195,8 +197,9 @@ c1 = LogCollector(name="c1")
 c2 = LogCollector(name="c2", logfiles=[lf4, lf7])
 c3 = LogCollector(name="c3", logfiles=[lf4, lf7, lf1])
 
-std::print([c1,c2,lf1,lf2,lf3,lf4,lf5,lf6,lf7,lf8])
-        """
+implementation none for std::Entity:
+end
+"""
     )
 
     (types, _) = compiler.do_compile()
@@ -210,17 +213,21 @@ def test_relation_syntax(snippetcompiler):
 entity Test1:
 
 end
-implement Test1 using std::none
 
 entity Test2:
 end
-implement Test2 using std::none
 
 Test1.tests [0:] -- Test2.test1 [1]
 
 a = Test1(tests=[Test2(),Test2()])
 b = Test1()
 Test2(test1 = b)
+
+implementation none for std::Entity:
+end
+
+implement Test1 using none
+implement Test2 using none
 """
     )
     types, root = compiler.do_compile()
@@ -237,11 +244,9 @@ def test_relation_with_annotation_syntax(snippetcompiler):
 entity Test1:
 
 end
-implement Test1 using std::none
 
 entity Test2:
 end
-implement Test2 using std::none
 
 annotation = 5
 
@@ -250,6 +255,12 @@ Test1.tests [0:] annotation Test2.test1 [1]
 a = Test1(tests=[Test2(),Test2()])
 b = Test1()
 Test2(test1 = b)
+
+implementation none for std::Entity:
+end
+
+implement Test1 using none
+implement Test2 using none
 """
     )
     types, root = compiler.do_compile()
@@ -266,16 +277,19 @@ def test_relation_uni_dir(snippetcompiler):
 entity Test1:
 
 end
-implement Test1 using std::none
 
 entity Test2:
 end
-implement Test2 using std::none
 
 Test1.tests [0:] -- Test2
 
 a = Test1(tests=[Test2(),Test2()])
 
+implementation none for std::Entity:
+end
+
+implement Test1 using none
+implement Test2 using none
 """
     )
     types, root = compiler.do_compile()
@@ -291,11 +305,15 @@ def test_relation_uni_dir_double_define(snippetcompiler):
 entity Test1:
 
 end
-implement Test1 using std::none
 
 entity Test2:
 end
-implement Test2 using std::none
+
+implementation none for std::Entity:
+end
+
+implement Test1 using none
+implement Test2 using none
 
 Test1.tests [0:] -- Test2
 
@@ -319,11 +337,13 @@ foo = "a"
 bar = Test()
 bar.bar = Foo()
 
-implement Test using std::none
-implement Foo using std::none
-
-
 Test.bar [1] foo,bar Foo
+
+implementation none for std::Entity:
+end
+
+implement Test using none
+implement Foo using none
 """
     )
     (_, scopes) = compiler.do_compile()
@@ -347,9 +367,11 @@ end
 
 foo = "a"
 
-implement Test using std::none
-implement Foo using std::none
+implementation none for std::Entity:
+end
 
+implement Test using none
+implement Foo using none
 
 Test.bar [1] foo,bar Foo
 """
@@ -372,9 +394,11 @@ import tests
 foo = tests::unknown()
 bar = "a"
 
-implement Test using std::none
-implement Foo using std::none
+implementation none for std::Entity:
+end
 
+implement Test using none
+implement Foo using none
 
 Test.bar [1] foo,bar Foo
 """
@@ -407,7 +431,6 @@ end
 implement Test using none
 implement Foo using none
 """,
-        autostd=False,
     )
     compiler.do_compile()
 
@@ -417,12 +440,12 @@ def test_587_assign_extend_correct(snippetcompiler):
         """
     entity A:
     end
-    implement A using std::none
+    implement A using none
 
     entity B:
         string name
     end
-    implement B using std::none
+    implement B using none
 
     A.b [0:] -- B
 
@@ -430,6 +453,8 @@ def test_587_assign_extend_correct(snippetcompiler):
     a.b += B(name = "a")
     a.b += B(name = "b")
 
+    implementation none for std::Entity:
+    end
     """
     )
 
@@ -446,18 +471,20 @@ def test_587_assign_extend_incorrect(snippetcompiler):
         """
     entity A:
     end
-    implement A using std::none
+    implement A using none
 
     entity B:
         string name
     end
-    implement B using std::none
+    implement B using none
 
     A.b [1:1] -- B
 
     a = A()
     a.b += B(name = "a")
 
+    implementation none for std::Entity:
+end
     """
     )
 
@@ -515,18 +542,20 @@ def test_610_multi_add(snippetcompiler):
         """
         entity A:
         end
-        implement A using std::none
+        implement A using none
 
         entity B:
             string name
         end
-        implement B using std::none
+        implement B using none
 
         A.b [2:] -- B
 
         a = A()
         a.b = B(name = "a")
 
+        implementation none for std::Entity:
+        end
         """,
         "The object __config__::A (instantiated at {dir}/main.cf:13) is not complete:"
         " attribute b ({dir}/main.cf:11:11) requires 2 values but only 1 are set",
@@ -564,9 +593,12 @@ def test_reflexive(snippetcompiler):
 entity Test1:
 
 end
-implement Test1 using std::none
+implement Test1 using none
 
 Test1.peer [1] -- Test1.peer [1]
+
+implementation none for std::Entity:
+end
 """
     )
     compiler.do_compile()
@@ -577,16 +609,19 @@ def test_1600_relation_arity_exceeded_error_message(snippetcompiler):
         """
 entity A:
 end
-implement A using std::none
+implement A using none
 entity AContainer:
 end
-implement AContainer using std::none
+implement AContainer using none
 
 AContainer.aa [0:2] -- A
 
 
 container = AContainer(aa = [A(), A()])
 container.aa = A()
+
+implementation none for std::Entity:
+end
         """,
         "Could not set attribute `aa` on instance `__config__::AContainer (instantiated at {dir}/main.cf:12)`"
         " (reported in container.aa = Construct(A) ({dir}/main.cf:13))"
@@ -607,8 +642,9 @@ end
 
 A.other [0:%s] -- A
 
-implement A using std::none
-
+implement A using none
+implementation none for std::Entity:
+end
 
 a = A()
 a.other = null
@@ -640,11 +676,14 @@ entity A:
     number[] ns
 end
 
-implement A using std::none
+implement A using none
 
 
 a = A()
 a.ns = null
+
+implementation none for std::Entity:
+end
         """,
         "Could not set attribute `ns` on instance `__config__::A (instantiated at {dir}/main.cf:9)`"
         " (reported in a.ns = null ({dir}/main.cf:10))"
@@ -673,8 +712,9 @@ end
 A.other [0:1] -- A
 A.others [0:] -- A
 
-implement A using std::none
-
+implement A using none
+implementation none for std::Entity:
+end
 
 a = A()
 {statements[0]}
@@ -699,8 +739,11 @@ end
 B.a [:1] -- A
 B(a=A())
 
-implement A using std::none
-implement B using std::none
+implement A using none
+implement B using none
+
+implementation none for std::Entity:
+end
         """
     )
     compiler.do_compile()
@@ -715,10 +758,13 @@ def test_optional_unset(snippetcompiler) -> None:
 entity A:
 end
 A.other [0:1] -- A
-implement A using std::none
+implement A using none
 
 a = A(other=null)
 other = a.other
+
+implementation none for std::Entity:
+end
         """,
         shouldbe=(
             "Optional variable accessed that has no value (attribute `__config__::A.other` of `__config__::A (instantiated at"
@@ -736,10 +782,13 @@ def test_optional_unset_nested(snippetcompiler) -> None:
 entity A:
 end
 A.other [0:1] -- A
-implement A using std::none
+implement A using none
 
 a = A(other=null)
 other = a.other.other
+
+implementation none for A:
+end
         """,
         shouldbe=(
             "Optional variable accessed that has no value (attribute `__config__::A.other` of `__config__::A (instantiated at"
