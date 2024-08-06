@@ -47,7 +47,7 @@ import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.types
 import inmanta.util
-from inmanta import const, tracing, util
+from inmanta import const, tracing
 from inmanta.agent import executor
 from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import (
@@ -80,7 +80,7 @@ class ExecutorContext:
     async def stop(self) -> None:
         """Request the executor to stop"""
         if self.executor:
-            self.executor.stop()
+            await self.executor.stop()
         if self.executor:
             # threadpool finalizer is not used, we expect threadpools to be terminated with the process
             self.executor.join([])
@@ -119,10 +119,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.take_over_logging = take_over_logging
         # This timer will be initialized when the InitCommand is received, see usage of `start_timer_venv_checkup`.
         # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
-        self.timer_venv_scheduler: typing.Optional[util.Scheduler] = None
-        # We want to save the task in order to be able to cancel it in a synchronous manner. Refer to `stop_timer_venv_checkup`
-        # for more details
-        self.timer_venv_checkup: typing.Optional[util.ScheduledTask] = None
+        self.timer_venv_scheduler_interval: typing.Optional[float] = None
         self.logger = logger
 
     def set_status(self, status: str) -> None:
@@ -151,21 +148,13 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             logging.getLogger().removeHandler(self.log_transport)
             self.log_transport = None
 
-    def start_timer_venv_checkup(self, interval: float) -> None:
-        self.timer_venv_scheduler = util.Scheduler("venv_checkup_scheduler")
-        self.timer_venv_checkup = self.timer_venv_scheduler.add_action(
-            action=self.touch_inmanta_venv_status,
-            schedule=util.IntervalSchedule(
-                interval=interval,
-            ),
-        )
+    async def start_timer_venv_checkup(self) -> None:
+        if self.timer_venv_scheduler_interval is None:
+            return
 
-    def stop_timer_venv_checkup(self) -> None:
-        # Given that the stop method of the Scheduler is async, we have no way to make sure that the stop method will get called
-        # (only if the ioloop picks up the task -> might never happen). Therefore, we rely on the sync method that will cancel
-        # the checkup task
-        if self.timer_venv_scheduler is not None and self.timer_venv_checkup is not None:
-            self.timer_venv_scheduler.remove(self.timer_venv_checkup)
+        while not self.stopping:
+            await self.touch_inmanta_venv_status()
+            await asyncio.sleep(self.timer_venv_scheduler_interval)
 
     def get_context(self) -> ExecutorContext:
         return self.ctx
@@ -187,7 +176,6 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
     def connection_lost(self, exc: Exception | None) -> None:
         """We lost connection to the controler, bail out"""
-        self.stop_timer_venv_checkup()
         self._detach_log_shipper()
         self.logger.info("Connection lost", exc_info=exc)
         self.set_status("disconnected")
@@ -279,7 +267,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         self._venv_touch_interval = venv_touch_interval
 
     async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.ModuleSource]:
-        assert context.server.timer_venv_scheduler is None, "InitCommand should be only called once!"
+        assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
 
         loop = asyncio.get_running_loop()
         parent_logger = logging.getLogger("agent.executor")
@@ -302,7 +290,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
 
-        context.server.start_timer_venv_checkup(self._venv_touch_interval)
+        context.server.timer_venv_scheduler_interval = self._venv_touch_interval
+        await asyncio.create_task(context.server.start_timer_venv_checkup)
 
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
@@ -472,7 +461,7 @@ class MPExecutor(executor.Executor, executor.PoolMember):
         self.failed_resource_sources: typing.Sequence[inmanta.loader.ModuleSource] = list()
         self.failed_resource_types: set[ResourceType] = set()
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop by shutdown"""
         self.closing = True
         try:
@@ -481,7 +470,7 @@ class MPExecutor(executor.Executor, executor.PoolMember):
             # Already gone
             pass
 
-    def clean(self) -> None:
+    async def clean(self) -> None:
         """Stop by shutdown and catch any error that may occur"""
         try:
             LOGGER.debug(
@@ -490,7 +479,7 @@ class MPExecutor(executor.Executor, executor.PoolMember):
                 self.connection.get_idle_time().total_seconds(),
                 inmanta.agent.config.agent_executor_retention_time.get(),
             )
-            self.stop()
+            await self.stop()
         except Exception:
             LOGGER.exception(
                 "Unexpected error during executor %s cleanup:",
@@ -848,24 +837,18 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         await self.environment_manager.start()
 
     async def stop(self) -> None:
-        loop = asyncio.get_running_loop()
         await super().stop()
-        await asyncio.gather(*(loop.run_in_executor(self.thread_pool, child.stop) for child in self.children))
+        await asyncio.gather(*(child.stop for child in self.children))
         await self.environment_manager.stop()
-
-    async def force_stop(self, grace_time: float) -> None:
-        await super().stop()
-        await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
         thread_pool_finalizer.append(self.thread_pool)
         await asyncio.gather(*(child.join(timeout) for child in self.children))
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
-        loop = asyncio.get_running_loop()
         children_ids = self.agent_map[agent_name]
         children = [self.executor_map[child_id] for child_id in children_ids]
-        await asyncio.gather(*(loop.run_in_executor(self.thread_pool, child.stop) for child in children))
+        await asyncio.gather(*(child.stop for child in self.children))
         return children
 
     async def get_pool_members(self) -> typing.Sequence[MPExecutor]:

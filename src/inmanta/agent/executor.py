@@ -278,9 +278,11 @@ class PoolMember(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def clean(self) -> None:
+    async def clean(self) -> None:
         """
         Clean the pool member. This method assumes to be in a lock to prevent other operations to overlap with the cleanup
+
+        This method assumes to be running on the io thread, so it cannot be synchronous
         """
         pass
 
@@ -334,7 +336,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
         assert self.is_correctly_initialized()
         return datetime.datetime.fromtimestamp(self.inmanta_venv_status_file.stat().st_mtime).astimezone()
 
-    def clean(self) -> None:
+    async def clean(self) -> None:
         """
         Remove the venv of the executor through the thread pool.
         This method is supposed to be used by the VirtualEnvironmentManager with the lock associated to this executor!
@@ -430,19 +432,9 @@ class PoolManager:
         Cancel the cleaning job of the Pool Manager -> We don't want to wait for the cleaning to finish because it could take a
         long time.
         """
+        # We don't want to cancel the task because it could lead to an inconsistent state (e.g. Venv half removed). Therefore,
+        # we need to wait for the completion of the task
         self.running = False
-        if self.cleanup_job is not None:
-            try:
-                self.cleanup_job.cancel()
-                await asyncio.wait_for(self.cleanup_job, timeout=10)
-            except asyncio.TimeoutError:
-                LOGGER.warning("Stopping %s's cleanup job has timed out!", self.__class__.__name__)
-            except asyncio.CancelledError:
-                # This case can happen because wait_for explicitly awaits the task when a timeout is provided (at least in
-                # Python 3.12)
-                LOGGER.debug("%s's cleanup job is already cancelled!", self.__class__.__name__)
-            finally:
-                self.cleanup_job = None
 
     @abc.abstractmethod
     async def get_pool_members(self) -> Sequence[PoolMember]:
@@ -464,8 +456,6 @@ class PoolManager:
 
         :return: When to run the cleaning next time: default retention time or lowest expiration time of one of the pool members
         """
-        loop = asyncio.get_running_loop()
-
         cleanup_start = datetime.datetime.now().astimezone()
         # Number of seconds relative to cleanup_start
         run_next_cleanup_job_at: float = float(self.retention_time)
@@ -476,10 +466,11 @@ class PoolManager:
                     async with self._locks.get(pool_member.get_id()):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up(self.retention_time):
-                            await loop.run_in_executor(self.thread_pool, pool_member.clean)
+                            await pool_member.clean()
                             self.clean_pool_member_from_manager(pool_member)
                 else:
-                    # If this pool member expires sooner than the cleanup interval, schedule the next cleanup on that timestamp.
+                    # If this pool member expires sooner than the cleanup interval, schedule the next cleanup on that
+                    # timestamp.
                     run_next_cleanup_job_at = min(
                         run_next_cleanup_job_at,
                         (
@@ -500,9 +491,13 @@ class PoolManager:
     async def cleanup_inactive_pool_members_task(self) -> None:
         """
         This task periodically cleans up idle pool member
+
+        We split up `cleanup_inactive_pool_members` and `cleanup_inactive_pool_members_task` in order to be able to clean the
+        cleanup method in the test without being blocked in a loop.
         """
         while self.running:
-            await asyncio.sleep(await self.cleanup_inactive_pool_members())
+            sleep_interval = await self.cleanup_inactive_pool_members()
+            await asyncio.sleep(sleep_interval)
 
 
 class VirtualEnvironmentManager(PoolManager):
@@ -520,8 +515,21 @@ class VirtualEnvironmentManager(PoolManager):
             retention_time=cfg.executor_venv_retention_time.get(),
             thread_pool=thread_pool,
         )
-        self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
+        self._environment_map: dict[str, ExecutorVirtualEnvironment] = {}
         self.envs_dir: str = envs_dir
+
+        # We read everything that is on disk and we reconstruct a view of existing Venvs
+        envs_dir = pathlib.Path(self.envs_dir)
+        try:
+            _, root_folders, _ = next(os.walk(self.envs_dir))
+        except StopIteration as e:
+            raise RuntimeError(f"An error occurred while checking following directory: `{envs_dir.absolute()}`!") from e
+
+        for folder in root_folders:
+            # the name of the folder is the hash!
+            async with self._locks.get(folder):
+                current_folder = envs_dir / folder
+                self._environment_map[folder] = ExecutorVirtualEnvironment(env_path=str(current_folder.absolute()))
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
         """
@@ -580,7 +588,7 @@ class VirtualEnvironmentManager(PoolManager):
         if is_new:
             LOGGER.info("Creating venv for content %s, content hash: %s", str(blueprint), blueprint.blueprint_hash())
             await loop.run_in_executor(self.thread_pool, process_environment.create_and_install_environment, blueprint)
-        self._environment_map[blueprint] = process_environment
+        self._environment_map[blueprint.blueprint_hash()] = process_environment
 
         return process_environment
 
@@ -597,7 +605,7 @@ class VirtualEnvironmentManager(PoolManager):
                 str(blueprint),
                 blueprint.blueprint_hash(),
             )
-            return self._environment_map[blueprint]
+            return self._environment_map[blueprint.blueprint_hash()]
         # Acquire a lock based on the blueprint's hash
         async with self._locks.get(blueprint.blueprint_hash()):
             if blueprint in self._environment_map:
@@ -606,7 +614,7 @@ class VirtualEnvironmentManager(PoolManager):
                     str(blueprint),
                     blueprint.blueprint_hash(),
                 )
-                return self._environment_map[blueprint]
+                return self._environment_map[blueprint.blueprint_hash()]
             # The whole creation of the virtual environment is under lock. Therefore, we know that it will not race with the
             # cleanup as the `INMANTA_ENV_STATUS_FILENAME` will be touched at the end of the creation.
             return await self.create_environment(blueprint)
@@ -615,28 +623,7 @@ class VirtualEnvironmentManager(PoolManager):
         """
         Retrieve the members of the pool: those that need to be checked for the cleanup.
         """
-        # We should walk once for the first-level of folders!
-        envs_dir = pathlib.Path(self.envs_dir)
-        try:
-            _, root_folders, _ = next(os.walk(self.envs_dir))
-        except StopIteration as e:
-            raise RuntimeError(f"An error occurred while checking following directory: `{envs_dir.absolute()}`!") from e
-
-        venv_path_to_blueprint = {pathlib.Path(v.env_path): k for k, v in self._environment_map.items()}
-
-        pool_members = []
-        for folder in root_folders:
-            # the name of the folder is the hash!
-            async with self._locks.get(folder):
-                current_folder = envs_dir / folder
-                blueprint = venv_path_to_blueprint.get(current_folder, None)
-                if blueprint is not None and blueprint in self._environment_map:
-                    current_executor_environment = self._environment_map[blueprint]
-                else:
-                    current_executor_environment = ExecutorVirtualEnvironment(env_path=str(current_folder.absolute()))
-
-                pool_members.append(current_executor_environment)
-        return pool_members
+        return list(self._environment_map.values())
 
     def clean_pool_member_from_manager(self, pool_member: PoolMember) -> None:
         """

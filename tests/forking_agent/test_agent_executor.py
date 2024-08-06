@@ -28,7 +28,7 @@ from inmanta import const
 from inmanta.agent import executor, forking_executor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
-from utils import PipIndex, log_contains, log_doesnt_contain
+from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
 
 logger = logging.getLogger(__name__)
 
@@ -418,28 +418,13 @@ def test():
     assert new_check_executor2 > old_check_executor2
     assert (datetime.datetime.now().astimezone() - new_check_executor2).seconds <= 2
 
-    async def wait_for_agent_stop_running(process_agent: psutil.Process) -> None:
-        """
-        Wait for the agent to stop running
-
-        :param process_agent: The process of the agent
-        """
-        for i in range(10):
-            if not process_agent.is_running():
-                return
-            else:
-                await asyncio.sleep(0.2)
-
-        raise RuntimeError("The agent was still running after 2 seconds")
-
     # Now we want to check if the cleanup is working correctly
     await executor_manager.stop_for_agent("agent1")
-    await wait_for_agent_stop_running(process_agent_1)
+    await retry_limited(not process_agent_1.is_running, timeout=10, interval=0.2)
     # First we want to override the modification date of the `inmanta_venv_status` file
     os.utime(
         executor_1_venv_status_file, (datetime.datetime.now().astimezone().timestamp(), old_datetime.astimezone().timestamp())
     )
-
     venv_dir = pathlib.Path(mpmanager_light.environment_manager.envs_dir)
     assert len([e for e in venv_dir.iterdir()]) == 2, "We should have two Virtual Environments for our 2 executors!"
     # We remove the old VirtualEnvironment
@@ -454,7 +439,7 @@ def test():
 
     # Let's stop the other agent and pretend that the venv is broken
     await executor_manager.stop_for_agent("agent2")
-    await wait_for_agent_stop_running(process_agent_2)
+    await retry_limited(not process_agent_2.is_running, timeout=10, interval=0.2)
     executor_2_venv_status_file.unlink()
 
     await mpmanager_light.environment_manager.cleanup_inactive_pool_members()

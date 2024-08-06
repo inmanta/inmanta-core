@@ -31,11 +31,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Collection, Dict, Optional, Union, cast
 
-import inmanta.agent.executor
 from inmanta import config, const, data, protocol
-import pkg_resources
-
-from inmanta import config, const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
