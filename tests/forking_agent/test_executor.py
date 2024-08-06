@@ -206,7 +206,7 @@ def test():
 
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)
 
-    simplest.stop()
+    await simplest.stop()
     await simplest.join(2)
     with pytest.raises(ConnectionLost):
         await simplest.connection.call(GetName())

@@ -427,8 +427,7 @@ class PoolManager:
 
     async def stop(self) -> None:
         """
-        Cancel the cleaning job of the Pool Manager -> We don't want to wait for the cleaning to finish because it could take a
-        long time.
+        Stop the cleaning job of the Pool Manager.
         """
         # We don't want to cancel the task because it could lead to an inconsistent state (e.g. Venv half removed). Therefore,
         # we need to wait for the completion of the task
@@ -490,7 +489,7 @@ class PoolManager:
         """
         This task periodically cleans up idle pool member
 
-        We split up `cleanup_inactive_pool_members` and `cleanup_inactive_pool_members_task` in order to be able to clean the
+        We split up `cleanup_inactive_pool_members` and `cleanup_inactive_pool_members_task` in order to be able to call the
         cleanup method in the test without being blocked in a loop.
         """
         while self.running:

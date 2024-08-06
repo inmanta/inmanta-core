@@ -117,7 +117,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.ctx = ExecutorContext(self)
         self.log_transport: typing.Optional[LogShipper] = None
         self.take_over_logging = take_over_logging
-        # This timer will be initialized when the InitCommand is received, see usage of `start_timer_venv_checkup`.
+        # This interval will be initialized when the InitCommand is received, see usage of `timer_venv_scheduler_interval`.
         # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
         self.timer_venv_scheduler_interval: typing.Optional[float] = None
         self.logger = logger
