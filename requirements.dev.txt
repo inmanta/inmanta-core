@@ -11,7 +11,7 @@ flake8-junit-report==2.1.0
 time-machine==2.14.2
 
 # documentation
-furo==2024.7.18
+furo==2024.8.6
 inmanta-sphinx==1.11.0
 myst-parser==4.0.0
 sphinx==7.4.7
