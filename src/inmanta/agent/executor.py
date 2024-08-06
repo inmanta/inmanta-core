@@ -433,6 +433,10 @@ class PoolManager:
         # we need to wait for the completion of the task
         self.running = False
 
+    async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
+        if self.cleanup_job is not None:
+            await self.cleanup_job
+
     @abc.abstractmethod
     async def get_pool_members(self) -> Sequence[PoolMember]:
         """
