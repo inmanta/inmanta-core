@@ -698,8 +698,6 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
             It can be overridden to speed up the tests
         :return: An Executor instance
         """
-        loop = asyncio.get_running_loop()
-
         blueprint = executor.ExecutorBlueprint.from_specs(code)
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
         if executor_id in self.executor_map:
@@ -729,8 +727,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
                     f"{oldest_executor.executor_id.identity()} to make room for a new one."
                 )
 
-                # The stop command is synchronous, so let's use the thread_pool
-                loop.run_in_executor(self.thread_pool, oldest_executor.stop)
+                await oldest_executor.stop()
 
             my_executor = await self.create_executor(executor_id, venv_checkup_interval)
             self.__add_executor(executor_id, my_executor)
