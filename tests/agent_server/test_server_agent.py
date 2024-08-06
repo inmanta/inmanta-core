@@ -4056,7 +4056,7 @@ async def test_agent_code_loading_with_failure(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
     )
     # We override the executor_manager because we want to rely on a `InProcessExecutorManager` to test the `ensure_code` method
-    agent.executor_manager = in_process_executor.InProcessExecutorManager(
+    old_executor_manager = in_process_executor.InProcessExecutorManager(
         environment,
         agent._client,
         asyncio.get_event_loop(),
@@ -4066,6 +4066,9 @@ async def test_agent_code_loading_with_failure(
         agent._storage["env"],
         agent._code_loader,
     )
+
+    monkeypatch.setattr(agent, "executor_manager", old_executor_manager)
+
 
     resource_install_specs_1: list[ResourceInstallSpec]
     resource_install_specs_2: list[ResourceInstallSpec]
@@ -4109,6 +4112,7 @@ async def test_agent_code_loading_with_failure(
             f"MKPTCH: Unable to load code when agent is started with code loading disabled."
         )
 
+    monkeypatch.undo()
     monkeypatch.undo()
 
     idx1 = log_index(
