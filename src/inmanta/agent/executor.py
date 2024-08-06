@@ -608,7 +608,7 @@ class VirtualEnvironmentManager(PoolManager):
         """
         assert isinstance(blueprint, EnvBlueprint), "Only EnvBlueprint instances are accepted, subclasses are not allowed."
 
-        if blueprint in self._environment_map:
+        if blueprint.blueprint_hash() in self._environment_map:
             LOGGER.debug(
                 "Found existing virtual environment for content %s, content hash: %s",
                 str(blueprint),
@@ -617,7 +617,7 @@ class VirtualEnvironmentManager(PoolManager):
             return self._environment_map[blueprint.blueprint_hash()]
         # Acquire a lock based on the blueprint's hash
         async with self._locks.get(blueprint.blueprint_hash()):
-            if blueprint in self._environment_map:
+            if blueprint.blueprint_hash() in self._environment_map:
                 LOGGER.debug(
                     "Found existing virtual environment for content %s, content hash: %s",
                     str(blueprint),
