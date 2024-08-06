@@ -117,7 +117,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.ctx = ExecutorContext(self)
         self.log_transport: typing.Optional[LogShipper] = None
         self.take_over_logging = take_over_logging
-        # This task will be initialized when the InitCommand is received, see usage of `venv_cleanup_task`.
+        # This interval and this task will be initialized when the InitCommand is received, see usage of `venv_cleanup_task`.
         # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
         self.timer_venv_scheduler_interval: typing.Optional[float] = None
         # We keep a reference to the periodic cleanup task to prevent it
