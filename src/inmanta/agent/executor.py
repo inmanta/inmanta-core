@@ -498,7 +498,8 @@ class PoolManager:
         """
         while self.running:
             sleep_interval = await self.cleanup_inactive_pool_members()
-            await asyncio.sleep(sleep_interval)
+            if self.running:
+                await asyncio.sleep(sleep_interval)
 
 
 class VirtualEnvironmentManager(PoolManager):
