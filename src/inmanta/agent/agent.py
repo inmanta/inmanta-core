@@ -1227,7 +1227,7 @@ class Agent(SessionEndpoint):
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
         if not self._code_loader:
-            return [], set()
+            return [], {}
 
         # store it outside the loop, but only load when required
         pip_config: Optional[PipConfig] = None

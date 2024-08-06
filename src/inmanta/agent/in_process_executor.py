@@ -522,7 +522,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     out = InProcessExecutor(agent_name, agent_uri, self.environment, self.client, self.eventloop, self.logger)
                     self.executors[agent_name] = out
         assert out.uri == agent_uri
-        out.failed_resources = await self.process.ensure_code(code)
+        out.failed_resources = await self.ensure_code(code)
 
         return out
 
