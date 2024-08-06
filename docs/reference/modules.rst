@@ -9,3 +9,4 @@ Inmanta modules
 
     modules/*
 
+    modules/*/README

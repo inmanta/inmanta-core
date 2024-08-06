@@ -46,7 +46,7 @@ use_autostart_agent_map = Option(
     "config",
     "use_autostart_agent_map",
     False,
-    """If this option is set to true, the agent-map of this agent will be set the the autostart_agent_map configured on the
+    """If this option is set to true, the agent-map of this agent will be set to the autostart_agent_map configured on the
     server. The agent_map will be kept up-to-date automatically.""",
     is_bool,
 )

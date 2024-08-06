@@ -699,8 +699,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                         if rtype not in my_executor.failed_resources:
                             my_executor.failed_resources[rtype] = failed_resource_result.exception
 
-            # TODO: recovery. If loading failed, we currently never rebuild
-            # https://github.com/inmanta/inmanta-core/issues/7281
+            # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
             return my_executor
 
     async def create_executor(self, executor_id: executor.ExecutorId) -> MPExecutor:
