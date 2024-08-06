@@ -290,7 +290,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         context.venv.use_virtual_env()
 
         context.server.timer_venv_scheduler_interval = self._venv_touch_interval
-        await asyncio.create_task(context.server.start_timer_venv_checkup())
+        asyncio.create_task(context.server.start_timer_venv_checkup())
 
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)

@@ -418,9 +418,19 @@ def test():
     assert new_check_executor2 > old_check_executor2
     assert (datetime.datetime.now().astimezone() - new_check_executor2).seconds <= 2
 
+    async def wait_for_agent_stop_running(process_agent: psutil.Process) -> bool:
+        """
+        Wait for the agent to stop running
+        :param process_agent: The process of the agent
+        """
+        while process_agent.is_running():
+            await asyncio.sleep(0.2)
+
+        return True
+
     # Now we want to check if the cleanup is working correctly
     await executor_manager.stop_for_agent("agent1")
-    await retry_limited(not process_agent_1.is_running, timeout=10, interval=0.2)
+    await retry_limited(wait_for_agent_stop_running, process_agent=process_agent_1, timeout=10)
     # First we want to override the modification date of the `inmanta_venv_status` file
     os.utime(
         executor_1_venv_status_file, (datetime.datetime.now().astimezone().timestamp(), old_datetime.astimezone().timestamp())
@@ -439,7 +449,7 @@ def test():
 
     # Let's stop the other agent and pretend that the venv is broken
     await executor_manager.stop_for_agent("agent2")
-    await retry_limited(not process_agent_2.is_running, timeout=10, interval=0.2)
+    await retry_limited(wait_for_agent_stop_running, process_agent=process_agent_2, timeout=10)
     executor_2_venv_status_file.unlink()
 
     await mpmanager_light.environment_manager.cleanup_inactive_pool_members()
