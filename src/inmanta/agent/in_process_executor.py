@@ -526,10 +526,10 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         return out
 
-    async def ensure_code(self, code: typing.Collection[executor.ResourceInstallSpec]) -> executor.FailedResourcesSet:
+    async def ensure_code(self, code: typing.Collection[executor.ResourceInstallSpec]) -> executor.FailedResources:
         """Ensure that the code for the given environment and version is loaded"""
 
-        failed_to_load: executor.FailedResourcesSet = set()
+        failed_to_load: executor.FailedResources = {}
 
         if self._loader is None:
             return failed_to_load
@@ -562,13 +562,17 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     )
 
                     self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
-                except Exception:
-                    self.logger.exception(
+                except Exception as e:
+                    self.logger.debug(
                         "Failed to install handler %s version=%d",
                         resource_install_spec.resource_type,
                         resource_install_spec.model_version,
                     )
-                    failed_to_load.add(resource_install_spec.resource_type)
+                    if resource_install_spec.resource_type not in failed_to_load:
+                        failed_to_load[resource_install_spec.resource_type] = Exception(
+                            f"Failed to install handler {resource_install_spec.resource_type} "
+                            f"version={resource_install_spec.model_version}: {e}"
+                        ).with_traceback(e.__traceback__)
                     self._last_loaded_version[resource_install_spec.resource_type] = None
 
         return failed_to_load
