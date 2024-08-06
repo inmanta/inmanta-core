@@ -117,6 +117,10 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
         import lorem  # noqa: F401
 
     manager = mpmanager
+    # Since we will be waiting for the executors and the Venvs to be cleaned, we need to change the retention time. Otherwise,
+    # we would be waiting for a long time
+    mpmanager.retention_time = 2
+    mpmanager.environment_manager.retention_time = 2
     await manager.start()
 
     inmanta.config.Config.set("test", "aaa", "bbbb")
