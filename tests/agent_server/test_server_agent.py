@@ -37,8 +37,8 @@ import utils
 from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent, wait_for_n_deployed_resources
 from inmanta import agent, config, const, data, execute
 from inmanta.agent import config as agent_config
-from inmanta.agent import executor, in_process_executor
-from inmanta.agent.agent import LOGGER, Agent, DeployRequest, DeployRequestAction, deploy_response_matrix
+from inmanta.agent import executor
+from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deploy_response_matrix
 from inmanta.agent.executor import ResourceInstallSpec
 from inmanta.ast import CompilerException
 from inmanta.config import Config
@@ -4052,23 +4052,12 @@ async def test_agent_code_loading_with_failure(
     res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test3": sources})
     assert res.code == 200
 
+    old_value_config = config.Config.get("agent", "executor-mode")
+    config.Config.set("agent", "executor-mode", "threaded")
+
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
     )
-    # We override the executor_manager because we want to rely on a `InProcessExecutorManager` to test the `ensure_code` method
-    old_executor_manager = in_process_executor.InProcessExecutorManager(
-        environment,
-        agent._client,
-        asyncio.get_event_loop(),
-        LOGGER,
-        agent,
-        agent._storage["code"],
-        agent._storage["env"],
-        agent._code_loader,
-    )
-
-    monkeypatch.setattr(agent, "executor_manager", old_executor_manager)
-
 
     resource_install_specs_1: list[ResourceInstallSpec]
     resource_install_specs_2: list[ResourceInstallSpec]
@@ -4113,7 +4102,6 @@ async def test_agent_code_loading_with_failure(
         )
 
     monkeypatch.undo()
-    monkeypatch.undo()
 
     idx1 = log_index(
         caplog,
@@ -4125,3 +4113,5 @@ async def test_agent_code_loading_with_failure(
     log_index(caplog, "inmanta.agent.agent", logging.ERROR, "Failed to install handler test::Test version=1", idx1)
 
     log_index(caplog, "inmanta.agent.agent", logging.ERROR, "Failed to install handler test::Test2 version=1", idx1)
+
+    config.Config.set("agent", "executor-mode", old_value_config)
