@@ -518,17 +518,25 @@ class VirtualEnvironmentManager(PoolManager):
         self._environment_map: dict[str, ExecutorVirtualEnvironment] = {}
         self.envs_dir: str = envs_dir
 
-        # We read everything that is on disk and we reconstruct a view of existing Venvs
-        envs_dir = pathlib.Path(self.envs_dir)
+    async def start(self) -> None:
+        await super().start()
+        await self.init_environment_map()
+
+    async def init_environment_map(self) -> None:
+        """
+        Initialize the environment map of the VirtualEnvironmentManager: It will read everything on disk to reconstruct a
+        complete view of existing Venvs
+        """
+        path_envs_dir = pathlib.Path(self.envs_dir)
         try:
             _, root_folders, _ = next(os.walk(self.envs_dir))
         except StopIteration as e:
-            raise RuntimeError(f"An error occurred while checking following directory: `{envs_dir.absolute()}`!") from e
+            raise RuntimeError(f"An error occurred while checking following directory: `{path_envs_dir.absolute()}`!") from e
 
         for folder in root_folders:
             # the name of the folder is the hash!
             async with self._locks.get(folder):
-                current_folder = envs_dir / folder
+                current_folder = path_envs_dir / folder
                 self._environment_map[folder] = ExecutorVirtualEnvironment(env_path=str(current_folder.absolute()))
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:

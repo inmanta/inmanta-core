@@ -80,7 +80,7 @@ class ExecutorContext:
     async def stop(self) -> None:
         """Request the executor to stop"""
         if self.executor:
-            await self.executor.stop()
+            self.executor.stop()
         if self.executor:
             # threadpool finalizer is not used, we expect threadpools to be terminated with the process
             self.executor.join([])
@@ -167,7 +167,6 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """Actual shutdown, not async"""
         if not self.stopping:
             # detach logger
-            self.stop_timer_venv_checkup()
             self._detach_log_shipper()
             self.logger.info("Stopping")
             self.stopping = True
@@ -291,7 +290,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         context.venv.use_virtual_env()
 
         context.server.timer_venv_scheduler_interval = self._venv_touch_interval
-        await asyncio.create_task(context.server.start_timer_venv_checkup)
+        await asyncio.create_task(context.server.start_timer_venv_checkup())
 
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
@@ -838,7 +837,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
 
     async def stop(self) -> None:
         await super().stop()
-        await asyncio.gather(*(child.stop for child in self.children))
+        await asyncio.gather(*(child.stop() for child in self.children))
         await self.environment_manager.stop()
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
@@ -848,7 +847,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children_ids = self.agent_map[agent_name]
         children = [self.executor_map[child_id] for child_id in children_ids]
-        await asyncio.gather(*(child.stop for child in self.children))
+        await asyncio.gather(*(child.stop() for child in self.children))
         return children
 
     async def get_pool_members(self) -> typing.Sequence[MPExecutor]:
