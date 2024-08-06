@@ -99,8 +99,8 @@ assert inmanta_plugins.sub.a == 1""",
     assert executor_manager.executor_map[executor_1.executor_id] == executor_1
 
     assert len(venv_manager._environment_map) == 1
-    assert env_blueprint1 in venv_manager._environment_map
-    assert venv_manager._environment_map[env_blueprint1] == executor_1.executor_virtual_env
+    assert env_blueprint1.blueprint_hash() in venv_manager._environment_map
+    assert venv_manager._environment_map[env_blueprint1.blueprint_hash()] == executor_1.executor_virtual_env
 
     # Verify that required packages are installed in the environment
     installed = executor_1.executor_virtual_env.get_installed_packages()
@@ -116,8 +116,8 @@ assert inmanta_plugins.sub.a == 1""",
     assert executor_manager.executor_map[executor_1_reuse.executor_id] == executor_1_reuse
 
     assert len(venv_manager._environment_map) == 1
-    assert env_blueprint1 in venv_manager._environment_map
-    assert venv_manager._environment_map[env_blueprint1] == executor_1_reuse.executor_virtual_env
+    assert env_blueprint1.blueprint_hash() in venv_manager._environment_map
+    assert venv_manager._environment_map[env_blueprint1.blueprint_hash()] == executor_1_reuse.executor_virtual_env
 
     # Changing the source without changing the requirements should create a new executor but reuse the environment
     executor_2 = await executor_manager.get_executor("agent1", "local:", code_for(blueprint2))
@@ -128,8 +128,8 @@ assert inmanta_plugins.sub.a == 1""",
     assert executor_manager.executor_map[executor_2.executor_id] == executor_2
 
     assert len(venv_manager._environment_map) == 1  # Environment is reused
-    assert env_blueprint1 in venv_manager._environment_map
-    assert venv_manager._environment_map[env_blueprint1] == executor_2.executor_virtual_env
+    assert env_blueprint1.blueprint_hash() in venv_manager._environment_map
+    assert venv_manager._environment_map[env_blueprint1.blueprint_hash()] == executor_2.executor_virtual_env
 
     # Changing the requirements should necessitate a new environment
     executor_3 = await executor_manager.get_executor("agent1", "local:", code_for(blueprint3))
@@ -140,8 +140,8 @@ assert inmanta_plugins.sub.a == 1""",
     assert executor_manager.executor_map[executor_3.executor_id] == executor_3
 
     assert len(venv_manager._environment_map) == 2  # A new environment is created
-    assert env_blueprint2 in venv_manager._environment_map
-    assert venv_manager._environment_map[env_blueprint2] == executor_3.executor_virtual_env
+    assert env_blueprint2.blueprint_hash() in venv_manager._environment_map
+    assert venv_manager._environment_map[env_blueprint2.blueprint_hash()] == executor_3.executor_virtual_env
 
     installed = executor_3.executor_virtual_env.get_installed_packages()
     assert all(element in installed for element in requirements2)
