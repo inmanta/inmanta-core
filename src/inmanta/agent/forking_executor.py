@@ -117,9 +117,12 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.ctx = ExecutorContext(self)
         self.log_transport: typing.Optional[LogShipper] = None
         self.take_over_logging = take_over_logging
-        # This interval will be initialized when the InitCommand is received, see usage of `timer_venv_scheduler_interval`.
+        # This task will be initialized when the InitCommand is received, see usage of `venv_cleanup_task`.
         # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
         self.timer_venv_scheduler_interval: typing.Optional[float] = None
+        # We keep a reference to the periodic cleanup task to prevent it
+        # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
+        self.venv_cleanup_task: typing.Optional[asyncio.Task[None]] = None
         self.logger = logger
 
     def set_status(self, status: str) -> None:
@@ -290,7 +293,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         context.venv.use_virtual_env()
 
         context.server.timer_venv_scheduler_interval = self._venv_touch_interval
-        asyncio.create_task(context.server.start_timer_venv_checkup())
+        context.server.venv_cleanup_task = asyncio.create_task(context.server.start_timer_venv_checkup())
 
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
