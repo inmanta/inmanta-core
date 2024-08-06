@@ -563,7 +563,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
                     self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
                 except Exception as e:
-                    self.logger.debug(
+                    self.logger.exception(
                         "Failed to install handler %s version=%d",
                         resource_install_spec.resource_type,
                         resource_install_spec.model_version,
