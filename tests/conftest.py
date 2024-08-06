@@ -843,11 +843,7 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
 
     yield ibl.restserver
 
-    logger.info("WILL CLEAN SERVER")
-
     try:
-        logger.info("STOPPING")
-
         await ibl.stop(timeout=15)
     except concurrent.futures.TimeoutError:
         logger.exception("Timeout during stop of the server in teardown")
