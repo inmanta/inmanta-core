@@ -434,6 +434,9 @@ class PoolManager:
         self.running = False
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
+        """
+        Wait for the cleaning job to terminate.
+        """
         if self.cleanup_job is not None:
             await self.cleanup_job
 

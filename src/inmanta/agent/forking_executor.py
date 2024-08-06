@@ -157,7 +157,8 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
         while not self.stopping:
             await self.touch_inmanta_venv_status()
-            await asyncio.sleep(self.timer_venv_scheduler_interval)
+            if not self.stopping:
+                await asyncio.sleep(self.timer_venv_scheduler_interval)
 
     def get_context(self) -> ExecutorContext:
         return self.ctx
