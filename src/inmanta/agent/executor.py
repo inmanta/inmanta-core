@@ -281,8 +281,6 @@ class PoolMember(abc.ABC):
     async def clean(self) -> None:
         """
         Clean the pool member. This method assumes to be in a lock to prevent other operations to overlap with the cleanup
-
-        This method assumes to be running on the io thread, so it cannot be synchronous
         """
         pass
 
