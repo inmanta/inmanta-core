@@ -1134,7 +1134,6 @@ class ActiveEnv(PythonEnvironment):
         # This is required to make editable installs work.
         site.addsitedir(self.site_packages_dir)
         importlib.invalidate_caches()
-        self.constraint_violation_cache = None
 
         if const.PLUGINS_PACKAGE in sys.modules:
             mod = sys.modules[const.PLUGINS_PACKAGE]
