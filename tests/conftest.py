@@ -18,6 +18,7 @@
 
 import logging.config
 import warnings
+from re import Pattern
 
 from tornado.httpclient import AsyncHTTPClient
 
@@ -1077,9 +1078,15 @@ class ReentrantVirtualEnv(VirtualEnv):
     This is intended for use in testcases to require a lot of venv switching
     """
 
-    def __init__(self, env_path: str) -> None:
+    def __init__(self, env_path: str, re_check: bool = False):
+        """
+        :param re_check: For performance reasons, we don't check all constraints every time,
+            setting re_check makes it check every time
+        """
         super().__init__(env_path)
         self.working_set = None
+        self.was_checked = False
+        self.re_check = re_check
 
     def deactivate(self):
         if self._using_venv:
@@ -1104,13 +1111,27 @@ class ReentrantVirtualEnv(VirtualEnv):
             pkg_resources.working_set = self.working_set
             self._using_venv = True
 
+    def check(
+        self,
+        strict_scope: Optional[Pattern[str]] = None,
+        constraints: Optional[list[Requirement]] = None,
+    ) -> None:
+        # Avoid re-checking
+        if not self.was_checked or self.re_check:
+            super().check(strict_scope, constraints)
+            self.was_checked = True
+
 
 class SnippetCompilationTest(KeepOnFail):
-    def setUpClass(self):
+    def setUpClass(self, re_check_venv: bool = False):
+        """
+        :param re_check_venv: For performance reasons, we don't check all constraints every time,
+            setting re_check_venv makes it check every time
+        """
         self.libs = tempfile.mkdtemp()
         self.repo: str = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
-        self.venv = ReentrantVirtualEnv(env_path=self.env)
+        self.venv = ReentrantVirtualEnv(env_path=self.env, re_check=re_check_venv)
         config.Config.load_config()
         self.keep_shared = False
         self.project = None
@@ -1478,7 +1499,7 @@ def snippetcompiler_clean(modules_dir: str, clean_reset) -> Iterator[SnippetComp
     Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
     """
     ast = SnippetCompilationTest()
-    ast.setUpClass()
+    ast.setUpClass(re_check_venv=True)
     ast.setup_func(modules_dir)
     yield ast
     ast.tear_down_func()

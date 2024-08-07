@@ -943,7 +943,6 @@ class ActiveEnv(PythonEnvironment):
 
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
         super().__init__(env_path=env_path, python_path=python_path)
-        self.constraint_violation_cache: Optional[tuple[set[VersionConflict], set[VersionConflict]]] = None
 
     def is_using_virtual_env(self) -> bool:
         return True
@@ -985,8 +984,6 @@ class ActiveEnv(PythonEnvironment):
         Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
         in that order.
         """
-        if self.constraint_violation_cache is not None:
-            return self.constraint_violation_cache
 
         class OwnedRequirement(NamedTuple):
             requirement: Requirement
@@ -1041,8 +1038,7 @@ class ActiveEnv(PythonEnvironment):
                 else:
                     constraint_violations.add(version_conflict)
 
-        self.constraint_violation_cache = (constraint_violations, constraint_violations_strict)
-        return self.constraint_violation_cache
+        return constraint_violations, constraint_violations_strict
 
     def check(
         self,
