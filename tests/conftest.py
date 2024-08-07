@@ -1200,6 +1200,10 @@ class SnippetCompilationTest(KeepOnFail):
                                     False if a package source is needed for v2 modules to work
         :param main_file: Path to the .cf file to use as main entry point. A relative or an absolute path can be provided.
             If a relative path is used, it's interpreted relative to the root of the project directory.
+        :param autostd: do we automatically import std? This does have a performance impact!
+            it is small on individual test cases, (100 ms) but it adds up quickly (as this is 50% of the run time)
+        :param ministd: if we need some of std, but not everything, this loads a small, embedded version of std, that has less
+            overhead
         """
         self.setup_for_snippet_external(
             snippet,
