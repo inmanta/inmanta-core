@@ -45,7 +45,8 @@ from inmanta.util import NamedLock
 
 LOGGER = logging.getLogger(__name__)
 
-FailedResourcesSet: typing.TypeAlias = set[ResourceType]
+
+FailedResources: typing.TypeAlias = dict[ResourceType, Exception]
 
 
 class AgentInstance(abc.ABC):
@@ -402,7 +403,7 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    failed_resource_types: FailedResourcesSet
+    failed_resources: FailedResources
 
     def cache(self, model_version: int) -> CacheVersionContext:
         """

@@ -212,7 +212,7 @@ class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
         await context.stop()
 
 
-class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.ModuleSource]]):
+class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.FailedModuleSource]]):
     """
     Initialize the executor:
     1. setup the client, using the session id of the agent
@@ -238,7 +238,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         self.environment = environment
         self.uri = uri
 
-    async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.ModuleSource]:
+    async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.FailedModuleSource]:
         loop = asyncio.get_running_loop()
         parent_logger = logging.getLogger("agent.executor")
         logger = parent_logger.getChild(context.name)
@@ -266,16 +266,21 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         sync_client = inmanta.protocol.SyncClient(client=context.client, ioloop=loop)
         sources = [s.with_client(sync_client) for s in self.sources]
 
-        failed: list[inmanta.loader.ModuleSource] = []
+        failed: list[inmanta.loader.FailedModuleSource] = []
         in_place: list[inmanta.loader.ModuleSource] = []
         # First put all files on disk
         for module_source in sources:
             try:
                 await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
                 in_place.append(module_source)
-            except Exception:
+            except Exception as e:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
-                failed.append(module_source)
+                failed.append(
+                    inmanta.loader.FailedModuleSource(
+                        module_source=module_source,
+                        exception=e,
+                    )
+                )
 
         # then try to import them
         for module_source in in_place:
@@ -284,9 +289,14 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                     context.threadpool,
                     functools.partial(loader._load_module, module_source.name, module_source.hash_value, require_reload=False),
                 )
-            except Exception:
+            except Exception as e:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
-                failed.append(module_source)
+                failed.append(
+                    inmanta.loader.FailedModuleSource(
+                        module_source=module_source,
+                        exception=e,
+                    )
+                )
 
         return failed
 
@@ -425,8 +435,8 @@ class MPExecutor(executor.Executor):
         self.executor_virtual_env = venv
 
         # Set by init and parent class that const
-        self.failed_resource_sources: typing.Sequence[inmanta.loader.ModuleSource] = list()
-        self.failed_resource_types: set[ResourceType] = set()
+        self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = list()
+        self.failed_resources: executor.FailedResources = {}
 
     async def stop(self) -> None:
         """Stop by shutdown"""
@@ -676,7 +686,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
             my_executor = await self.create_executor(executor_id)
             self.__add_executor(executor_id, my_executor)
-            if my_executor.failed_resource_sources:
+            if my_executor.failed_resource_results:
                 # If some code loading failed, resolve here
                 # reverse index
                 type_for_spec: dict[inmanta.loader.ModuleSource, list[ResourceType]] = collections.defaultdict(list)
@@ -684,9 +694,10 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                     for source in spec.blueprint.sources:
                         type_for_spec[source].append(spec.resource_type)
                 # resolve
-                for source in my_executor.failed_resource_sources:
-                    for rtype in type_for_spec.get(source, []):
-                        my_executor.failed_resource_types.add(rtype)
+                for failed_resource_result in my_executor.failed_resource_results:
+                    for rtype in type_for_spec.get(failed_resource_result.module_source, []):
+                        if rtype not in my_executor.failed_resources:
+                            my_executor.failed_resources[rtype] = failed_resource_result.exception
 
             # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
             return my_executor
@@ -720,7 +731,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             executor_id.agent_name,
             executor_id.identity(),
         )
-        executor.failed_resource_sources = failed_types
+        executor.failed_resource_results = failed_types
         return executor
 
     async def make_child_and_connect(
