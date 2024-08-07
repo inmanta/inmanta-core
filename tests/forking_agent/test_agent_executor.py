@@ -447,11 +447,14 @@ def test():
     assert len(venvs) == 1, "Only one Virtual Environment should exist!"
     assert [executor_2.executor_virtual_env.env_path] == venvs
 
+    logging.debug("stopping agent 2")
     # Let's stop the other agent and pretend that the venv is broken
     await executor_manager.stop_for_agent("agent2")
     await retry_limited(wait_for_agent_stop_running, process_agent=process_agent_2, timeout=10)
     executor_2_venv_status_file.unlink()
+    logging.debug("agent 2 has been stopped")
 
     await mpmanager_light.environment_manager.cleanup_inactive_pool_members()
     venvs = [str(e) for e in venv_dir.iterdir()]
     assert len(venvs) == 0, "No Virtual Environment should exist!"
+    logging.debug("Finished")

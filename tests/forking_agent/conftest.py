@@ -18,6 +18,7 @@
 
 import asyncio
 import concurrent.futures.thread
+import logging
 import os
 import typing
 import uuid
@@ -59,10 +60,15 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
         return manager
 
     yield make_mpmanager
+    logging.debug("Came back to `mp_manager_factory` fixture")
     await asyncio.wait_for(asyncio.gather(*(manager.stop() for manager in managers)), 10)
+    logging.debug("Managers have stopped")
     await asyncio.wait_for(asyncio.gather(*(manager.join(threadpools, 3) for manager in managers)), 10)
+    logging.debug("Managers have joined")
     for threadpool in threadpools:
+        logging.debug("Shutting down threadpool")
         threadpool.shutdown(wait=False)
+    logging.debug("Threadpools have been shutdown")
 
 
 @pytest.fixture
