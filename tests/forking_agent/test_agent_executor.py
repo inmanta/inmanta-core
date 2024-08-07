@@ -344,7 +344,7 @@ def test():
     assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
 
 
-async def test_executor_creation_and_venv_usage(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager) -> None:
+async def test_executor_creation_and_venv_usage(server_config, pip_index: PipIndex, mpmanager_light: forking_executor.MPManager) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
@@ -423,10 +423,7 @@ def test():
         Wait for the agent to stop running
         :param process_agent: The process of the agent
         """
-        while process_agent.is_running():
-            await asyncio.sleep(0.2)
-
-        return True
+        return not process_agent.is_running()
 
     # Now we want to check if the cleanup is working correctly
     await executor_manager.stop_for_agent("agent1")
