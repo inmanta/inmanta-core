@@ -230,8 +230,8 @@ class PythonWorkingSet:
                 if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
                     # The marker of the requirement doesn't apply on this environment
                     continue
-                if r.name not in installed_packages or (
-                    len(r.specifier) > 0 and str(installed_packages[r.name]) not in r.specifier
+                if r.name.lower() not in installed_packages or (
+                    len(r.specifier) > 0 and str(installed_packages[r.name.lower()]) not in r.specifier
                 ):
                     return False
                 if r.extras:
