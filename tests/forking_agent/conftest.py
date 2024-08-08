@@ -54,6 +54,8 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
             storage_folder=str(storage_folder),
             cli_log=True,
         )
+        # We only want to override it in the test suite
+        manager.environment_manager.retention_time = 7
         managers.append(manager)
         threadpools.append(threadpool)
         return manager

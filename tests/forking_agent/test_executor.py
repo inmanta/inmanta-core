@@ -111,10 +111,6 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
         - the agent_executor_cap option correctly stops the oldest executor.
         - the agent_executor_retention_time option is used to clean up old executors.
     """
-    old_executor_venv_retention_time = inmanta.config.Config.get("agent", "executor-venv-retention-time")
-    old_executor_retention_time = inmanta.config.Config.get("agent", "executor-retention-time")
-    inmanta.config.Config.set("agent", "executor-venv-retention-time", "60")
-    inmanta.config.Config.set("agent", "executor-retention-time", "10")
 
     with pytest.raises(ImportError):
         # make sure lorem isn't installed at the start of the test.
@@ -238,9 +234,6 @@ def test():
     # When we capture signals from the pip installs
     # Can't happen in real deployment as these things happen in different processes
     utils.assert_no_warning(caplog, NOISY_LOGGERS + ["asyncio"])
-
-    inmanta.config.Config.set("agent", "executor-venv-retention-time", str(old_executor_venv_retention_time))
-    inmanta.config.Config.set("agent", "executor-retention-time", str(old_executor_retention_time))
 
 
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
