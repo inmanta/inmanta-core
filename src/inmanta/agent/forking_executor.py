@@ -486,12 +486,6 @@ class MPExecutor(executor.Executor, executor.PoolMember):
     async def clean(self) -> None:
         """Stop by shutdown and catch any error that may occur"""
         try:
-            LOGGER.debug(
-                "Stopping executor %s because it was inactive for %d s, which is longer then the retention time of %d s.",
-                self.executor_id.identity(),
-                self.connection.get_idle_time().total_seconds(),
-                inmanta.agent.config.agent_executor_retention_time.get(),
-            )
             await self.stop()
         except Exception:
             LOGGER.exception(

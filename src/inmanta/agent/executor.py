@@ -340,16 +340,9 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
         Remove the venv of the executor through the thread pool.
         This method is supposed to be used by the VirtualEnvironmentManager with the lock associated to this executor!
         """
-        if self.is_correctly_initialized():
+        if not self.is_correctly_initialized():
             LOGGER.debug(
-                "Removing venv %s because it was inactive for %d s, which is longer then the retention time of %d s.",
-                self.env_path,
-                self.get_idle_time().total_seconds(),
-                cfg.executor_venv_retention_time.get(),
-            )
-        else:
-            LOGGER.debug(
-                "Removing venv %s because it is incomplete (broken venv).",
+                "Venv %s is incomplete (broken venv).",
                 self.env_path,
             )
         self.remove_venv()
@@ -471,6 +464,14 @@ class PoolManager:
                     async with self._locks.get(pool_member.get_id()):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up(self.retention_time):
+                            LOGGER.debug(
+                                "Stopping PoolMember %s of type %s because it was inactive for %d s, which is longer "
+                                "then the retention time of %d s.",
+                                pool_member.get_id(),
+                                type(pool_member).__name__,
+                                pool_member.get_idle_time().total_seconds(),
+                                self.retention_time,
+                            )
                             await pool_member.clean()
                             self.clean_pool_member_from_manager(pool_member)
                 else:
