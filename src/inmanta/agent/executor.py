@@ -332,7 +332,8 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
         """
         Retrieve the last modified timestamp of the inmanta status file
         """
-        assert self.is_correctly_initialized()
+        if not self.is_correctly_initialized():
+            raise RuntimeError("ExecutorVirtualEnvironment is not correctly initialized!")
         return datetime.datetime.fromtimestamp(self.inmanta_venv_status_file.stat().st_mtime).astimezone()
 
     async def clean(self) -> None:
@@ -464,14 +465,23 @@ class PoolManager:
                     async with self._locks.get(pool_member.get_id()):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up(self.retention_time):
-                            LOGGER.debug(
-                                "Stopping PoolMember %s of type %s because it was inactive for %d s, which is longer "
-                                "then the retention time of %d s.",
-                                pool_member.get_id(),
-                                type(pool_member).__name__,
-                                pool_member.get_idle_time().total_seconds(),
-                                self.retention_time,
-                            )
+                            try:
+                                # This could crash if they way to retrieve the idle time is no longer available
+                                idle_time = pool_member.get_idle_time()
+                                LOGGER.debug(
+                                    "Stopping PoolMember %s of type %s because it was inactive for %d s, which is longer "
+                                    "then the retention time of %d s.",
+                                    pool_member.get_id(),
+                                    type(pool_member).__name__,
+                                    idle_time.total_seconds(),
+                                    self.retention_time,
+                                )
+                            except Exception:
+                                LOGGER.debug(
+                                    "Stopping PoolMember %s of type %s because it was in an inconsistent state.",
+                                    pool_member.get_id(),
+                                    type(pool_member).__name__,
+                                )
                             await pool_member.clean()
                             self.clean_pool_member_from_manager(pool_member)
                 else:
