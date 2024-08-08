@@ -26,14 +26,15 @@ import logging
 import logging.config
 import multiprocessing
 import os
+import pathlib
 import socket
 import threading
 import typing
 import uuid
 from asyncio import Future, transports
-from typing import Optional
 
 import inmanta.agent.cache
+import inmanta.agent.config
 import inmanta.agent.executor
 import inmanta.agent.in_process_executor
 import inmanta.config
@@ -44,8 +45,9 @@ import inmanta.logging
 import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
+import inmanta.types
 import inmanta.util
-from inmanta import tracing
+from inmanta import const, tracing
 from inmanta.agent import executor
 from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import (
@@ -115,6 +117,12 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.ctx = ExecutorContext(self)
         self.log_transport: typing.Optional[LogShipper] = None
         self.take_over_logging = take_over_logging
+        # This interval and this task will be initialized when the InitCommand is received, see usage of `venv_cleanup_task`.
+        # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
+        self.timer_venv_scheduler_interval: typing.Optional[float] = None
+        # We keep a reference to the periodic cleanup task to prevent it
+        # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
+        self.venv_cleanup_task: typing.Optional[asyncio.Task[None]] = None
         self.logger = logger
 
     def set_status(self, status: str) -> None:
@@ -126,7 +134,6 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
         # Second stage logging setup
         # Take over logger to ship to remote
-
         if self.take_over_logging:
             # Remove all loggers
             root_logger = logging.root
@@ -143,6 +150,15 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         if self.log_transport:
             logging.getLogger().removeHandler(self.log_transport)
             self.log_transport = None
+
+    async def start_timer_venv_checkup(self) -> None:
+        if self.timer_venv_scheduler_interval is None:
+            return
+
+        while not self.stopping:
+            await self.touch_inmanta_venv_status()
+            if not self.stopping:
+                await asyncio.sleep(self.timer_venv_scheduler_interval)
 
     def get_context(self) -> ExecutorContext:
         return self.ctx
@@ -168,6 +184,14 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.set_status("disconnected")
         self._sync_stop()
         self.stopped.set()
+
+    async def touch_inmanta_venv_status(self) -> None:
+        """
+        Touch the `inmanta_venv_status` file.
+        """
+        # makes mypy happy
+        assert self.ctx.venv is not None
+        (pathlib.Path(self.ctx.venv.env_path) / const.INMANTA_VENV_STATUS_FILENAME).touch()
 
 
 class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
@@ -230,15 +254,24 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         sources: list[inmanta.loader.ModuleSource],
         environment: uuid.UUID,
         uri: str,
+        venv_touch_interval: float = 60.0,
     ):
+        """
+        :param venv_touch_interval: The time interval after which the virtual environment must be touched. Only used for
+            testing. The default value is set to 60.0. It should not be used except for testing purposes. It can be
+            overridden to speed up the tests
+        """
         self.venv_path = venv_path
         self.storage_folder = storage_folder
         self.gid = session_gid
         self.sources = sources
         self.environment = environment
         self.uri = uri
+        self._venv_touch_interval = venv_touch_interval
 
     async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.FailedModuleSource]:
+        assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
+
         loop = asyncio.get_running_loop()
         parent_logger = logging.getLogger("agent.executor")
         logger = parent_logger.getChild(context.name)
@@ -259,6 +292,9 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         # activate venv
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
+
+        context.server.timer_venv_scheduler_interval = self._venv_touch_interval
+        context.server.venv_cleanup_task = asyncio.create_task(context.server.start_timer_venv_checkup())
 
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
@@ -412,7 +448,7 @@ def mp_worker_entrypoint(
     exit(0)
 
 
-class MPExecutor(executor.Executor):
+class MPExecutor(executor.Executor, executor.PoolMember):
     """A Single Child Executor"""
 
     def __init__(
@@ -447,11 +483,24 @@ class MPExecutor(executor.Executor):
             # Already gone
             pass
 
+    async def clean(self) -> None:
+        """Stop by shutdown and catch any error that may occur"""
+        try:
+            await self.stop()
+        except Exception:
+            LOGGER.exception(
+                "Unexpected error during executor %s cleanup:",
+                self.executor_id.identity(),
+            )
+
     def can_be_cleaned_up(self, retention_time: int) -> bool:
         if self.connection.has_outstanding_calls():
             return False
 
         return self.connection.get_idle_time() > datetime.timedelta(seconds=retention_time)
+
+    def get_id(self) -> str:
+        return self.executor_id.identity()
 
     def last_used(self) -> datetime.datetime:
         return self.connection.last_used_at
@@ -556,7 +605,8 @@ class MPExecutor(executor.Executor):
         return await self.connection.call(FactsCommand(resource))
 
 
-class MPManager(executor.ExecutorManager[MPExecutor]):
+# `executor.PoolManager` needs to be before `executor.ExecutorManager` as it defines the start and stop methods (MRO order)
+class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
     """
     This is the executor that provides the new behavior (ISO8+),
     where the agent forks executors in specific venvs to prevent code reloading.
@@ -565,7 +615,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
     def __init__(
         self,
         thread_pool: concurrent.futures.thread.ThreadPoolExecutor,
-        environment_manager: executor.VirtualEnvironmentManager,
         session_gid: uuid.UUID,
         environment: uuid.UUID,
         log_folder: str,
@@ -575,7 +624,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
     ) -> None:
         """
         :param thread_pool:  threadpool to perform work on
-        :param environment_manager: The VirtualEnvironmentManager responsible for managing the virtual environments
         :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
@@ -584,10 +632,12 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         :param cli_log: do we also want to echo the log to std_err
 
         """
+        super().__init__(
+            retention_time=inmanta.agent.config.agent_executor_retention_time.get(),
+            thread_pool=thread_pool,
+        )
         self.init_once()
         self.environment = environment
-        self.thread_pool = thread_pool
-        self.environment_manager = environment_manager
         self.children: list[MPExecutor] = []
         self.log_folder = log_folder
         self.storage_folder = storage_folder
@@ -602,14 +652,10 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         self.executor_map: dict[executor.ExecutorId, MPExecutor] = {}
         self.agent_map: dict[str, set[executor.ExecutorId]] = collections.defaultdict(set)
 
-        self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
-
-        self.executor_retention_time = inmanta.agent.config.agent_executor_retention_time.get()
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
-
-        # We keep a reference to the periodic cleanup task to prevent it
-        # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
-        self.cleanup_job: Optional[asyncio.Task[None]] = None
+        venv_dir = pathlib.Path(self.storage_folder) / "venv"
+        venv_dir.mkdir(exist_ok=True)
+        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venv_dir.absolute()), self.thread_pool)
 
     def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
         self.executor_map[theid] = the_executor
@@ -640,7 +686,11 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             pass
 
     async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
+        self,
+        agent_name: str,
+        agent_uri: str,
+        code: typing.Collection[executor.ResourceInstallSpec],
+        venv_checkup_interval: float = 60.0,
     ) -> MPExecutor:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
@@ -651,6 +701,9 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv.
+        :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
+            testing. The default value is set to 60.0. It should not be used except for testing purposes. It can be
+            It can be overridden to speed up the tests
         :return: An Executor instance
         """
         blueprint = executor.ExecutorBlueprint.from_specs(code)
@@ -684,7 +737,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
 
                 await oldest_executor.stop()
 
-            my_executor = await self.create_executor(executor_id)
+            my_executor = await self.create_executor(executor_id, venv_checkup_interval)
             self.__add_executor(executor_id, my_executor)
             if my_executor.failed_resource_results:
                 # If some code loading failed, resolve here
@@ -702,10 +755,15 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
             return my_executor
 
-    async def create_executor(self, executor_id: executor.ExecutorId) -> MPExecutor:
+    async def create_executor(self, executor_id: executor.ExecutorId, venv_checkup_interval: float = 60.0) -> MPExecutor:
+        """
+        :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
+            testing. The default value is set to 60.0. It should not be used except for testing purposes. It can be
+            overridden to speed up the tests
+        """
         LOGGER.info("Creating executor for agent %s with id %s", executor_id.agent_name, executor_id.identity())
         env_blueprint = executor_id.blueprint.to_env_blueprint()
-        venv = await self.environment_manager.get_environment(env_blueprint, self.thread_pool)
+        venv = await self.environment_manager.get_environment(env_blueprint)
         executor = await self.make_child_and_connect(executor_id, venv)
         LOGGER.debug(
             "Child forked (pid: %s) for executor for agent %s with id %s",
@@ -723,6 +781,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
                 [x.for_transport() for x in executor_id.blueprint.sources],
                 self.environment,
                 executor_id.agent_uri,
+                venv_checkup_interval,
             )
         )
         LOGGER.debug(
@@ -778,65 +837,27 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         return p, parent_conn
 
     async def start(self) -> None:
-        self.running = True
-        self.cleanup_job = asyncio.create_task(self.cleanup_inactive_executors())
+        await super().start()
+        # We need to do this here, otherwise, the scheduler would crash because no event loop would be running
+        await self.environment_manager.start()
 
     async def stop(self) -> None:
-        self.running = False
+        await super().stop()
         await asyncio.gather(*(child.stop() for child in self.children))
-
-    async def force_stop(self, grace_time: float) -> None:
-        await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
+        await self.environment_manager.stop()
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
+        await super().join(thread_pool_finalizer, timeout)
+        await self.environment_manager.join(thread_pool_finalizer, timeout)
+
         thread_pool_finalizer.append(self.thread_pool)
         await asyncio.gather(*(child.join(timeout) for child in self.children))
-        if self.cleanup_job:
-            await self.cleanup_job
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children_ids = self.agent_map[agent_name]
         children = [self.executor_map[child_id] for child_id in children_ids]
-        await asyncio.gather(*(child.stop() for child in children))
+        await asyncio.gather(*(child.stop() for child in self.children))
         return children
 
-    async def cleanup_inactive_executors(self) -> None:
-        """
-        This task periodically cleans up idle executors
-        """
-        while self.running:
-            cleanup_start = datetime.datetime.now().astimezone()
-
-            reschedule_interval: float = self.executor_retention_time
-            for _executor in self.executor_map.values():
-                if _executor.can_be_cleaned_up(self.executor_retention_time):
-                    async with self._locks.get(_executor.executor_id.identity()):
-                        # Check that the executor can still be cleaned up by the time we have acquired the lock
-                        if _executor.can_be_cleaned_up(self.executor_retention_time):
-                            try:
-                                LOGGER.debug(
-                                    "Stopping executor %s because it "
-                                    "was inactive for %d s, which is longer then the retention time of %d s.",
-                                    _executor.executor_id.identity(),
-                                    _executor.connection.get_idle_time().total_seconds(),
-                                    self.executor_retention_time,
-                                )
-                                await _executor.stop()
-                            except Exception:
-                                LOGGER.debug(
-                                    "Unexpected error during executor %s cleanup:",
-                                    _executor.executor_id.identity(),
-                                    exc_info=True,
-                                )
-                else:
-                    reschedule_interval = min(
-                        reschedule_interval,
-                        (
-                            datetime.timedelta(seconds=self.executor_retention_time)
-                            - (cleanup_start - _executor.connection.last_used_at)
-                        ).total_seconds(),
-                    )
-
-            cleanup_end = datetime.datetime.now().astimezone()
-
-            await asyncio.sleep(max(0.0, reschedule_interval - (cleanup_end - cleanup_start).total_seconds()))
+    async def get_pool_members(self) -> typing.Sequence[MPExecutor]:
+        return list(self.executor_map.values())

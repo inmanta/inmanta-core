@@ -45,18 +45,17 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
     def make_mpmanager(agent_session_id: uuid.UUID) -> MPManager:
         log_folder = tmp_path / "logs"
         storage_folder = tmp_path / "executors"
-        venvs = tmp_path / "venvs"
         threadpool = concurrent.futures.thread.ThreadPoolExecutor()
-        venv_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venvs))
         manager = MPManager(
             threadpool,
-            venv_manager,
             agent_session_id,
             uuid.uuid4(),
             log_folder=str(log_folder),
             storage_folder=str(storage_folder),
             cli_log=True,
         )
+        # We only want to override it in the test suite
+        manager.environment_manager.retention_time = 7
         managers.append(manager)
         threadpools.append(threadpool)
         return manager

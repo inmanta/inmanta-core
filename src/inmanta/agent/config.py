@@ -162,6 +162,17 @@ agent_get_resource_backoff: Option[float] = Option(
     is_float,
 )
 
+executor_venv_retention_time: Option[int] = Option(
+    "agent",
+    "executor-venv-retention-time",
+    3600,
+    "This is the number of seconds to wait before unused Python virtual environments of an executor are removed from "
+    "the inmanta server. Setting this option too low may result in a high load on the Inmanta server. Setting it too high"
+    " may result in increased disk usage.",
+    # We know that the .inmanta venv status file is touched every minute, so `60` seconds is the lowest default we can use
+    is_lower_bounded_int(60),
+)
+
 
 class AgentExecutorMode(str, enum.Enum):
     threaded = "threaded"
