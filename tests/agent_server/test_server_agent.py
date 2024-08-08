@@ -3472,7 +3472,7 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     #   [2] Store action
     assert result["logs"][0]["action"] == "deploy"
     assert result["logs"][0]["status"] == "unavailable"
-    assert "Failed to load handler code " in result["logs"][0]["messages"][0]["msg"]
+    assert "failed to load handler code " in result["logs"][0]["messages"][0]["msg"]
 
 
 async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, async_finalizer):
