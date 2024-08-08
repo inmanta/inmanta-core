@@ -22,11 +22,8 @@ import os
 import pathlib
 import subprocess
 
-import psutil
-
 from inmanta import const
 from inmanta.agent import executor, forking_executor
-from inmanta.agent.executor import Executor
 from inmanta.agent.forking_executor import MPExecutor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
@@ -346,7 +343,9 @@ def test():
     assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
 
 
-async def test_executor_creation_and_venv_usage(server_config, pip_index: PipIndex, mpmanager_light: forking_executor.MPManager) -> None:
+async def test_executor_creation_and_venv_usage(
+    server_config, pip_index: PipIndex, mpmanager_light: forking_executor.MPManager
+) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
