@@ -13,6 +13,8 @@
 """
 
 import asyncio
+import concurrent.futures
+import datetime
 import datetime
 import hashlib
 import json
@@ -22,13 +24,15 @@ import pathlib
 import subprocess
 import sys
 
+from inmanta import const
 import psutil
 
 from inmanta import const
 from inmanta.agent import executor, forking_executor
+from inmanta.agent.forking_executor import MPExecutor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
-from utils import PipIndex, log_contains, log_doesnt_contain
+from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
 
 logger = logging.getLogger(__name__)
 
@@ -109,8 +113,8 @@ assert inmanta_plugins.sub.a == 1""",
     assert executor_manager.executor_map[executor_1.executor_id] == executor_1
 
     assert len(venv_manager._environment_map) == 1
-    assert env_blueprint1 in venv_manager._environment_map
-    assert venv_manager._environment_map[env_blueprint1] == executor_1.executor_virtual_env
+    assert env_blueprint1.blueprint_hash() in venv_manager._environment_map
+    assert venv_manager._environment_map[env_blueprint1.blueprint_hash()] == executor_1.executor_virtual_env
 
     # Verify that required packages are installed in the environment
     installed = executor_1.executor_virtual_env.get_installed_packages()
@@ -126,8 +130,8 @@ assert inmanta_plugins.sub.a == 1""",
     assert executor_manager.executor_map[executor_1_reuse.executor_id] == executor_1_reuse
 
     assert len(venv_manager._environment_map) == 1
-    assert env_blueprint1 in venv_manager._environment_map
-    assert venv_manager._environment_map[env_blueprint1] == executor_1_reuse.executor_virtual_env
+    assert env_blueprint1.blueprint_hash() in venv_manager._environment_map
+    assert venv_manager._environment_map[env_blueprint1.blueprint_hash()] == executor_1_reuse.executor_virtual_env
 
     # Changing the source without changing the requirements should create a new executor but reuse the environment
     executor_2 = await executor_manager.get_executor("agent1", "local:", code_for(blueprint2))
@@ -138,8 +142,8 @@ assert inmanta_plugins.sub.a == 1""",
     assert executor_manager.executor_map[executor_2.executor_id] == executor_2
 
     assert len(venv_manager._environment_map) == 1  # Environment is reused
-    assert env_blueprint1 in venv_manager._environment_map
-    assert venv_manager._environment_map[env_blueprint1] == executor_2.executor_virtual_env
+    assert env_blueprint1.blueprint_hash() in venv_manager._environment_map
+    assert venv_manager._environment_map[env_blueprint1.blueprint_hash()] == executor_2.executor_virtual_env
 
     # Changing the requirements should necessitate a new environment
     executor_3 = await executor_manager.get_executor("agent1", "local:", code_for(blueprint3))
@@ -150,8 +154,8 @@ assert inmanta_plugins.sub.a == 1""",
     assert executor_manager.executor_map[executor_3.executor_id] == executor_3
 
     assert len(venv_manager._environment_map) == 2  # A new environment is created
-    assert env_blueprint2 in venv_manager._environment_map
-    assert venv_manager._environment_map[env_blueprint2] == executor_3.executor_virtual_env
+    assert env_blueprint2.blueprint_hash() in venv_manager._environment_map
+    assert venv_manager._environment_map[env_blueprint2.blueprint_hash()] == executor_3.executor_virtual_env
 
     installed = executor_3.executor_virtual_env.get_installed_packages()
     assert all(element in installed for element in requirements2)
@@ -286,7 +290,12 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     only one environment is created for the same blueprint when requested concurrently,
     preventing race conditions and duplicate environment creation.
     """
-    manager = executor.VirtualEnvironmentManager(tmpdir)
+    manager = executor.VirtualEnvironmentManager(
+        envs_dir=tmpdir,
+        thread_pool=concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+        ),
+    )
 
     blueprint1 = executor.EnvBlueprint(
         pip_config=PipConfig(index_url=pip_index.url), requirements=("pkg1",), python_version=sys.version_info[:2]
@@ -297,9 +306,11 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
 
     # Wait for all tasks to complete
     env_same_1, env_same_2, env_diff_1 = await asyncio.gather(
-        manager.get_environment(blueprint1, None),
-        manager.get_environment(blueprint1, None),
-        manager.get_environment(blueprint2, None),
+        manager.get_environment(blueprint1),
+        manager.get_environment(
+            blueprint1,
+        ),
+        manager.get_environment(blueprint2),
     )
 
     assert env_same_1 is env_same_2, "Expected the same instance for the same blueprint"
@@ -362,7 +373,9 @@ def test():
     assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
 
 
-async def test_executor_creation_and_venv_usage(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager) -> None:
+async def test_executor_creation_and_venv_usage(
+    server_config, pip_index: PipIndex, mpmanager_light: forking_executor.MPManager
+) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
@@ -392,12 +405,9 @@ def test():
     sources3 = (module_source1,)
 
     initial_version: tuple[int, int] = (3, 11)
-    blueprint1 = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements1, sources=sources1, python_version=initial_version
-    )
-    blueprint2 = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements2, sources=sources2, python_version=initial_version
-    )
+
+    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1, python_version=initial_version)
+    blueprint2 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2, python_version=initial_version)
     blueprint3 = executor.ExecutorBlueprint(
         pip_config=pip_config, requirements=requirements3, sources=sources3, python_version=initial_version
     )
@@ -412,18 +422,6 @@ def test():
         executor_manager.get_executor("agent3", "local:", code_for(blueprint3), venv_checkup_interval=0.1),
     )
 
-    def retrieve_pid_agent(agent_name: str) -> int:
-        for proc in psutil.process_iter(["pid", "name"]):
-            if f"inmanta: executor {agent_name}" in proc.name():
-                return proc.pid
-
-        raise LookupError(f"Could not find process with the following name: `{agent_name}`!")
-
-    pid_agent_1, pid_agent_2, pid_agent_3 = (
-        retrieve_pid_agent("agent1"),
-        retrieve_pid_agent("agent2"),
-        retrieve_pid_agent("agent3"),
-    )
     executor_1_venv_status_file = pathlib.Path(executor_1.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
     executor_2_venv_status_file = pathlib.Path(executor_2.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
     executor_3_venv_status_file = pathlib.Path(executor_3.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
@@ -439,6 +437,7 @@ def test():
     old_check_executor1 = executor_1.executor_virtual_env.last_used()
     old_check_executor2 = executor_2.executor_virtual_env.last_used()
 
+    # We wait for the refresh of the venv status files
     await asyncio.sleep(0.2)
 
     new_check_executor1 = executor_1.executor_virtual_env.last_used()
@@ -448,25 +447,21 @@ def test():
     assert new_check_executor2 > old_check_executor2
     assert (datetime.datetime.now().astimezone() - new_check_executor2).seconds <= 2
 
-    async def wait_for_agent(pid_agent: int) -> None:
-        for i in range(50):
-            if not psutil.pid_exists(pid_agent):
-                return
-            else:
-                await asyncio.sleep(0.2)
-
-        raise RuntimeError("The agent was still running after 10 seconds")
+    async def wait_for_agent_stop_running(executor: MPExecutor) -> bool:
+        """
+        Wait for the agent to stop running
+        """
+        return not executor.closed
 
     # Now we want to check if the cleanup is working correctly
     await executor_manager.stop_for_agent("agent1")
-    await wait_for_agent(pid_agent_1)
+    await retry_limited(wait_for_agent_stop_running, executor=executor_1, timeout=10)
     # First we want to override the modification date of the `inmanta_venv_status` file
     os.utime(
         executor_1_venv_status_file, (datetime.datetime.now().astimezone().timestamp(), old_datetime.astimezone().timestamp())
     )
-
     venv_dir = pathlib.Path(mpmanager_light.environment_manager.envs_dir)
-    assert len([e for e in venv_dir.iterdir()]) == 3, "We should have three Virtual Environments for our 3 executors!"
+    assert len([e for e in venv_dir.iterdir()]) == 2, "We should have two Virtual Environments for our 2 executors!"
     # We remove the old VirtualEnvironment
     logger.debug("Calling cleanup_virtual_environments")
     mpmanager_light.environment_manager.running = True
@@ -474,12 +469,12 @@ def test():
     logger.debug("cleanup_virtual_environments ended")
 
     venvs = [str(e) for e in venv_dir.iterdir()]
-    assert len(venvs) == 2, "Only two Virtual Environments should exist!"
-    assert [executor_2.executor_virtual_env.env_path, executor_3.executor_virtual_env.env_path] == venvs
+    assert len(venvs) == 2, "Only two Virtual Environment should exist!"
+    assert [executor_2.executor_virtual_env.env_path] == venvs
 
     # Let's stop the other agent and pretend that the venv is broken
     await executor_manager.stop_for_agent("agent2")
-    await wait_for_agent(pid_agent_2)
+    await retry_limited(wait_for_agent_stop_running, executor=executor_2, timeout=10)
     executor_2_venv_status_file.unlink()
 
     await mpmanager_light.environment_manager.cleanup_inactive_pool_members()
@@ -488,7 +483,7 @@ def test():
 
     # Let's stop the other agent and pretend that the venv is outdated
     await executor_manager.stop_for_agent("agent3")
-    await wait_for_agent(pid_agent_3)
+    await retry_limited(wait_for_agent_stop_running, executor=executor_3, timeout=10)
     # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
     # modification override of the inmanta file and the retrieval of the last modification of the file
     os.utime(

@@ -234,9 +234,12 @@ def test():
         await retry_limited(check_automatic_clean_up, 10)
         log_contains(
             caplog,
-            "inmanta.agent.forking_executor",
+            "inmanta.agent.executor",
             logging.DEBUG,
-            (f"Stopping executor {full_runner.executor_id.identity()} because it was inactive for"),
+            (
+                f"Stopping PoolMember {full_runner.executor_id.identity()} of type {type(full_runner).__name__} "
+                "because it was inactive for"
+            ),
         )
 
     # We can get `Caught subprocess termination from unknown pid: %d -> %d`

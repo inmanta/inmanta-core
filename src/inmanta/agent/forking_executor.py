@@ -34,6 +34,7 @@ import uuid
 from asyncio import Future, transports
 
 import inmanta.agent.cache
+import inmanta.agent.config
 import inmanta.agent.executor
 import inmanta.agent.in_process_executor
 import inmanta.config
@@ -44,6 +45,7 @@ import inmanta.logging
 import inmanta.protocol
 import inmanta.protocol.ipc_light
 import inmanta.signals
+import inmanta.types
 import inmanta.util
 from inmanta import const, tracing, util
 from inmanta.agent import executor
@@ -115,9 +117,12 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.ctx = ExecutorContext(self)
         self.log_transport: typing.Optional[LogShipper] = None
         self.take_over_logging = take_over_logging
-        # This timer will be initialized when the InitCommand is received, see usage of `start_timer_venv_checkup`.
+        # This interval and this task will be initialized when the InitCommand is received, see usage of `venv_cleanup_task`.
         # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
-        self.timer_venv_checkup: typing.Optional[util.Scheduler] = None
+        self.timer_venv_scheduler_interval: typing.Optional[float] = None
+        # We keep a reference to the periodic cleanup task to prevent it
+        # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
+        self.venv_cleanup_task: typing.Optional[asyncio.Task[None]] = None
         self.logger = logger
 
     def set_status(self, status: str) -> None:
@@ -146,18 +151,14 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             logging.getLogger().removeHandler(self.log_transport)
             self.log_transport = None
 
-    def start_timer_venv_checkup(self, interval: float) -> None:
-        self.timer_venv_checkup = util.Scheduler("venv_checkup_scheduler")
-        self.timer_venv_checkup.add_action(
-            action=self.touch_inmanta_venv_status,
-            schedule=util.IntervalSchedule(
-                interval=interval,
-            ),
-        )
+    async def start_timer_venv_checkup(self) -> None:
+        if self.timer_venv_scheduler_interval is None:
+            return
 
-    def stop_timer_venv_checkup(self) -> None:
-        if self.timer_venv_checkup is not None:
-            asyncio.ensure_future(self.timer_venv_checkup.stop())
+        while not self.stopping:
+            await self.touch_inmanta_venv_status()
+            if not self.stopping:
+                await asyncio.sleep(self.timer_venv_scheduler_interval)
 
     def get_context(self) -> ExecutorContext:
         return self.ctx
@@ -237,7 +238,7 @@ class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
         await context.stop()
 
 
-class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.ModuleSource]]):
+class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.FailedModuleSource]]):
     """
     Initialize the executor:
     1. setup the client, using the session id of the agent
@@ -270,8 +271,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         self.uri = uri
         self._venv_touch_interval = venv_touch_interval
 
-    async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.ModuleSource]:
-        assert context.server.timer_venv_checkup is None, "InitCommand should be only called once!"
+    async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.FailedModuleSource]:
+        assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
 
         loop = asyncio.get_running_loop()
         parent_logger = logging.getLogger("agent.executor")
@@ -294,7 +295,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
 
-        context.server.start_timer_venv_checkup(self._venv_touch_interval)
+        context.server.timer_venv_scheduler_interval = self._venv_touch_interval
+        context.server.venv_cleanup_task = asyncio.create_task(context.server.start_timer_venv_checkup())
 
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
@@ -302,16 +304,21 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         sync_client = inmanta.protocol.SyncClient(client=context.client, ioloop=loop)
         sources = [s.with_client(sync_client) for s in self.sources]
 
-        failed: list[inmanta.loader.ModuleSource] = []
+        failed: list[inmanta.loader.FailedModuleSource] = []
         in_place: list[inmanta.loader.ModuleSource] = []
         # First put all files on disk
         for module_source in sources:
             try:
                 await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
                 in_place.append(module_source)
-            except Exception:
+            except Exception as e:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
-                failed.append(module_source)
+                failed.append(
+                    inmanta.loader.FailedModuleSource(
+                        module_source=module_source,
+                        exception=e,
+                    )
+                )
 
         # then try to import them
         for module_source in in_place:
@@ -320,9 +327,14 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                     context.threadpool,
                     functools.partial(loader._load_module, module_source.name, module_source.hash_value, require_reload=False),
                 )
-            except Exception:
+            except Exception as e:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
-                failed.append(module_source)
+                failed.append(
+                    inmanta.loader.FailedModuleSource(
+                        module_source=module_source,
+                        exception=e,
+                    )
+                )
 
         return failed
 
@@ -461,8 +473,8 @@ class MPExecutor(executor.Executor, executor.PoolMember):
         self.executor_virtual_env = venv
 
         # Set by init and parent class that const
-        self.failed_resource_sources: typing.Sequence[inmanta.loader.ModuleSource] = list()
-        self.failed_resource_types: set[ResourceType] = set()
+        self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = list()
+        self.failed_resources: executor.FailedResources = {}
 
     async def stop(self) -> None:
         """Stop by shutdown"""
@@ -476,18 +488,11 @@ class MPExecutor(executor.Executor, executor.PoolMember):
     async def clean(self) -> None:
         """Stop by shutdown and catch any error that may occur"""
         try:
-            LOGGER.debug(
-                "Stopping executor %s because it was inactive for %d s, which is longer then the retention time of %d s.",
-                self.executor_id.identity(),
-                self.connection.get_idle_time().total_seconds(),
-                inmanta.agent.config.agent_executor_retention_time.get(),
-            )
             await self.stop()
         except Exception:
             LOGGER.exception(
                 "Unexpected error during executor %s cleanup:",
                 self.executor_id.identity(),
-                exc_info=True,
             )
 
     def can_be_cleaned_up(self, retention_time: int) -> bool:
@@ -612,7 +617,6 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
     def __init__(
         self,
         thread_pool: concurrent.futures.thread.ThreadPoolExecutor,
-        environment_manager: executor.VirtualEnvironmentManager,
         session_gid: uuid.UUID,
         environment: uuid.UUID,
         log_folder: str,
@@ -622,7 +626,6 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
     ) -> None:
         """
         :param thread_pool:  threadpool to perform work on
-        :param environment_manager: The VirtualEnvironmentManager responsible for managing the virtual environments
         :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
@@ -633,11 +636,10 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         """
         super().__init__(
             retention_time=inmanta.agent.config.agent_executor_retention_time.get(),
+            thread_pool=thread_pool,
         )
         self.init_once()
         self.environment = environment
-        self.thread_pool = thread_pool
-        self.environment_manager = environment_manager
         self.children: list[MPExecutor] = []
         self.log_folder = log_folder
         self.storage_folder = storage_folder
@@ -653,6 +655,9 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         self.agent_map: dict[str, set[executor.ExecutorId]] = collections.defaultdict(set)
 
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
+        venv_dir = pathlib.Path(self.storage_folder) / "venv"
+        venv_dir.mkdir(exist_ok=True)
+        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venv_dir.absolute()), self.thread_pool)
 
     def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
         self.executor_map[theid] = the_executor
@@ -736,7 +741,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
 
             my_executor = await self.create_executor(executor_id, venv_checkup_interval)
             self.__add_executor(executor_id, my_executor)
-            if my_executor.failed_resource_sources:
+            if my_executor.failed_resource_results:
                 # If some code loading failed, resolve here
                 # reverse index
                 type_for_spec: dict[inmanta.loader.ModuleSource, list[ResourceType]] = collections.defaultdict(list)
@@ -744,12 +749,12 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
                     for source in spec.blueprint.sources:
                         type_for_spec[source].append(spec.resource_type)
                 # resolve
-                for source in my_executor.failed_resource_sources:
-                    for rtype in type_for_spec.get(source, []):
-                        my_executor.failed_resource_types.add(rtype)
+                for failed_resource_result in my_executor.failed_resource_results:
+                    for rtype in type_for_spec.get(failed_resource_result.module_source, []):
+                        if rtype not in my_executor.failed_resources:
+                            my_executor.failed_resources[rtype] = failed_resource_result.exception
 
-            # TODO: recovery. If loading failed, we currently never rebuild
-            # https://github.com/inmanta/inmanta-core/issues/7281
+            # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
             return my_executor
 
     async def create_executor(self, executor_id: executor.ExecutorId, venv_checkup_interval: float = 60.0) -> MPExecutor:
@@ -760,7 +765,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         """
         LOGGER.info("Creating executor for agent %s with id %s", executor_id.agent_name, executor_id.identity())
         env_blueprint = executor_id.blueprint.to_env_blueprint()
-        venv = await self.environment_manager.get_environment(env_blueprint, self.thread_pool)
+        venv = await self.environment_manager.get_environment(env_blueprint)
         executor = await self.make_child_and_connect(executor_id, venv)
         LOGGER.debug(
             "Child forked (pid: %s) for executor for agent %s with id %s",
@@ -787,7 +792,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
             executor_id.agent_name,
             executor_id.identity(),
         )
-        executor.failed_resource_sources = failed_types
+        executor.failed_resource_results = failed_types
         return executor
 
     async def make_child_and_connect(
@@ -835,23 +840,25 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
 
     async def start(self) -> None:
         await super().start()
+        # We need to do this here, otherwise, the scheduler would crash because no event loop would be running
+        await self.environment_manager.start()
 
     async def stop(self) -> None:
         await super().stop()
         await asyncio.gather(*(child.stop() for child in self.children))
-
-    async def force_stop(self, grace_time: float) -> None:
-        await super().stop()
-        await asyncio.gather(*(child.force_stop(grace_time) for child in self.children))
+        await self.environment_manager.stop()
 
     async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
+        await super().join(thread_pool_finalizer, timeout)
+        await self.environment_manager.join(thread_pool_finalizer, timeout)
+
         thread_pool_finalizer.append(self.thread_pool)
         await asyncio.gather(*(child.join(timeout) for child in self.children))
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children_ids = self.agent_map[agent_name]
         children = [self.executor_map[child_id] for child_id in children_ids]
-        await asyncio.gather(*(child.stop() for child in children))
+        await asyncio.gather(*(child.stop() for child in self.children))
         return children
 
     async def get_pool_members(self) -> typing.Sequence[MPExecutor]:
