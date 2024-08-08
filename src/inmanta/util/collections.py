@@ -34,10 +34,13 @@ V = TypeVar("V", bound=Hashable)
 # TODO: better name?
 class BidirectionalManyToManyMapping(MutableMapping[P, Set[S]], Generic[P, S]):
     # TODO: docstring + mention that it only supports methods on the mapping, not on the underlying sets
-    def __init__(self) -> None:
+    def __init__(self, mapping: Optional[Mapping[P, Set[S]]] = None) -> None:
         # TODO: better names than primary and secondary?
         self._primary: dict[P, set[S]] = {}
         self._secondary: dict[S, set[P]] = {}
+        if mapping is not None:
+            for key, values in mapping.items():
+                self.set_primary(key, values)
 
     @staticmethod
     def _set(primary: dict[K, set[V]], secondary: dict[V, set[K]], key: K, values: Set[V]) -> None:
@@ -97,10 +100,10 @@ class BidirectionalManyToManyMapping(MutableMapping[P, Set[S]], Generic[P, S]):
     def __len__(self) -> int:
         return len(self._primary)
 
-    def __repr__(self) -> int:
+    def __repr__(self) -> str:
         return f"BidirectionalManyToManyMapping({self._primary!r})"
 
-    def __str__(self) -> int:
+    def __str__(self) -> str:
         return str(self._primary)
 
 
@@ -128,19 +131,19 @@ class ScalingTest:
     nb_updates: int
 
     @staticmethod
-    def generate_mapping(*, size: int, nb_targets: int, target_range: int = None) -> Mapping[int, int]:
+    def generate_mapping(*, size: int, nb_targets: int, target_range: Optional[int] = None) -> dict[int, set[int]]:
         return {
             i: {random.randint(1, target_range if target_range is not None else size) for _ in range(nb_targets)}
             for i in range(size)
         }
 
     def test(self) -> None:
-        init_mapping: Mapping[int, int] = self.generate_mapping(size=self.size, nb_targets=self.nb_targets)
-        updates: Mapping[int, int] = self.generate_mapping(
+        init_mapping: Mapping[int, Set[int]] = self.generate_mapping(size=self.size, nb_targets=self.nb_targets)
+        updates: Mapping[int, Set[int]] = self.generate_mapping(
             size=self.nb_updates, nb_targets=self.nb_targets, target_range=self.size
         )
 
-        m = BidirectionalManyToManyMapping()
+        m: BidirectionalManyToManyMapping[int, int] = BidirectionalManyToManyMapping()
         time_start: float = time.process_time()
         for k, v in init_mapping.items():
             m[k] = v
