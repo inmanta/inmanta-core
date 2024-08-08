@@ -87,7 +87,8 @@ end
 implement std::HostConfig using linux when host.os == std::linux
 
 std::Host(name="vm1", os=std::linux)
-"""
+""",
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -235,6 +236,7 @@ std::print(h.name.test)
 """,
         "can not get attribute test, h.name is not an entity but a str with value 'test'"
         " (reported in h.name.test ({dir}/main.cf:3))",
+        autostd=True,
     )
 
 

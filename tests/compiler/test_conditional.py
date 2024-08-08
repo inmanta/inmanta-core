@@ -30,10 +30,13 @@ def test_if_true(snippetcompiler):
 entity Test:
     string field
 end
-implement Test using std::none
+implement Test using none
 test = Test()
 if 1 == 1:
     test.field = "substitute"
+end
+
+implementation none for std::Entity:
 end
         """
     )
@@ -48,10 +51,13 @@ def test_if_false(snippetcompiler):
 entity Test:
     string field
 end
-implement Test using std::none
+implement Test using none
 test = Test()
 if 0 == 1:
     test.field = "substitute"
+end
+
+implementation none for std::Entity:
 end
         """,
         "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete: "
@@ -65,12 +71,15 @@ def test_if_else_true(snippetcompiler):
 entity Test:
     string field
 end
-implement Test using std::none
+implement Test using none
 test = Test()
 if 1 == 1:
     test.field = "substitute"
 else:
     test.field = "alt"
+end
+
+implementation none for std::Entity:
 end
         """
     )
@@ -85,12 +94,15 @@ def test_if_else_false(snippetcompiler):
 entity Test:
     string field
 end
-implement Test using std::none
+implement Test using none
 test = Test()
 if 0 == 1:
     test.field = "substitute"
 else:
     test.field = "alt"
+end
+
+implementation none for std::Entity:
 end
         """
     )
@@ -106,12 +118,12 @@ entity Test:
     string field
     string field2
 end
-implement Test using std::none
+implement Test using none
 
 entity A:
     string a = ""
 end
-implement A using std::none
+implement A using none
 
 test = Test()
 a = A(a="a")
@@ -122,6 +134,9 @@ if a.a == "b":
 else:
     test.field = "alt"
     test.field2 = "alt2"
+end
+
+implementation none for std::Entity:
 end
         """
     )
@@ -150,7 +165,7 @@ def test_if_elif_elif_else(if_value, elif1_value, elif2_value, result, snippetco
 entity Test:
     string field
 end
-implement Test using std::none
+implement Test using none
 test = Test()
 if {}:
     test.field = "if_branche"
@@ -160,6 +175,9 @@ elif {}:
     test.field = "elif2_branche"
 else:
     test.field = "else_branche"
+end
+
+implementation none for std::Entity:
 end
             """.format(
         if_value,
@@ -177,13 +195,16 @@ def test_if_elif_true(snippetcompiler):
 entity Test:
     string field
 end
-implement Test using std::none
+implement Test using none
 test = Test()
 a = 3
 if a == 2:
     test.field = "if_branche"
 elif a == 3:
     test.field = "elif1_branche"
+end
+
+implementation none for std::Entity:
 end
             """
     snippetcompiler.setup_for_snippet(snippet)
@@ -197,13 +218,16 @@ def test_if_elif_false(snippetcompiler):
 entity Test:
     string field
 end
-implement Test using std::none
+implement Test using none
 test = Test()
 a = 4
 if a == 2:
     test.field = "if_branche"
 elif a == 3:
     test.field = "elif1_branche"
+end
+
+implementation none for std::Entity:
 end
             """
     snippetcompiler.setup_for_error(
@@ -231,11 +255,14 @@ def test_if_scope_double_assignment(snippetcompiler):
 entity Test:
     string field
 end
-implement Test using std::none
+implement Test using none
 a = Test()
 if 1 == 1:
     a.field = "val"
     a = 3
+end
+
+implementation none for std::Entity:
 end
         """,
         "The object at a is not an Entity but a <class 'int'> with value 3 (reported in a.field = 'val' ({dir}/main.cf:8))",
@@ -248,7 +275,7 @@ def test_if_scope_capture(snippetcompiler):
 entity Test:
     string field
 end
-implement Test using std::none
+implement Test using none
 
 b = 1
 if 1 == 1:
@@ -258,6 +285,9 @@ if 1 == 1:
         a.field = "val"
     end
     a = Test()
+end
+
+implementation none for std::Entity:
 end
         """
     )
@@ -294,7 +324,8 @@ else:
 end
 r1.test = t
 r2.test = t
-        """
+        """,
+        autostd=True,
     )
     (_, scopes) = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
@@ -323,7 +354,8 @@ else:
     t.multiple = false
 end
 t = Test()
-        """
+        """,
+        autostd=True,
     )
     (_, scopes) = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
@@ -338,7 +370,7 @@ entity Test:
     bool f_success
 end
 
-implement Test using std::none
+implement Test using none
 
 dct = {"t": true, "f": false}
 
@@ -353,6 +385,9 @@ if dct["f"]:
     x.f_success = false
 else:
     x.f_success = true
+end
+
+implementation none for std::Entity:
 end
         """,
     )
@@ -396,13 +431,16 @@ def test_1804_false_and_condition(snippetcompiler):
 entity A:
     int n
 end
-implement A using std::none
+implement A using none
 
 x = A(n = 42)
 if false and true == true:
     x.n = 0
 else:
     x.n = 42
+end
+
+implementation none for std::Entity:
 end
         """,
     )
@@ -451,7 +489,10 @@ typedef mytype as string matching self in ["a","b"] or null
 entity A:
     mytype myvalue = "x"
 end
-implement A using std::none
+implement A using none
+
+implementation none for std::Entity:
+end
         """,
         "Invalid right hand value `null`: `or` expects a boolean "
         "(reported in ((self in ['a', 'b']) or null) ({dir}/main.cf:2))",
@@ -486,7 +527,7 @@ def test_1808_non_boolean_when(snippetcompiler):
         """
 entity A:
 end
-implement A using std::none
+implement A using none
 
 str = "some_string"
 
@@ -495,6 +536,9 @@ end
 implement A using i when str
 
 A()
+
+implementation none for std::Entity:
+end
         """,
         "Invalid value `some_string`: the condition for a conditional implementation can only be a boolean expression"
         " (reported in implement __config__::A using i when str ({dir}/main.cf:10:11))",
@@ -521,7 +565,8 @@ end
 x = A(n = 42)
 y = A(n = -42)
 z = A(n = 0)
-        """
+        """,
+        ministd=True,
     )
     (_, scopes) = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
@@ -540,7 +585,9 @@ end
 
 A.others [0:] -- A
 
-implement A using std::none
+implement A using none
+implementation none for std::Entity:
+end
 implement A using a when self.primary is defined ? self.primary > 0 : self.secondary > 0
 
 implementation a for A:
@@ -597,7 +644,8 @@ end
 
 
 A(y = A())
-        """
+        """,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -611,7 +659,7 @@ def test_conditional_expression_gradual(snippetcompiler) -> None:
             """
             entity A: end
             A.others [0:] -- A
-            implement A using std::none
+            implement A using none
 
             # gradual execution of iterable
             a = A()
@@ -621,6 +669,9 @@ def test_conditional_expression_gradual(snippetcompiler) -> None:
                 # this seems like bad practice, but it should work as long as the list comprehension is executed gradually.
                 a.others += A()
             end
+
+            implementation none for std::Entity:
+end
             """.strip(
                 "\n"
             )
@@ -662,7 +713,8 @@ def test_if_statement_unknown(snippetcompiler) -> None:
                 assert.success = false
             end
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -690,7 +742,8 @@ def test_conditional_expression_unknown(snippetcompiler) -> None:
 
             assert = std::is_unknown(tests::unknown() ? Contradiction() : Contradiction())
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -704,4 +757,5 @@ std::print(x ? "test" : "no test")
         "Invalid value `1`: the condition for a conditional expression must be a "
         "boolean expression (reported in x ? 'test' : 'no test' "
         "({dir}/main.cf:3:12))",
+        ministd=True,
     )

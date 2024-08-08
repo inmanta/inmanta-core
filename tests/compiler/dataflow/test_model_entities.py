@@ -30,9 +30,12 @@ entity B extends A:
     int n = 1
 end
 
-implement A using std::none
-implement B using std::none
+implement A using none
+implement B using none
 
 B()
+
+implementation none for std::Entity:
+end
         """,
     )

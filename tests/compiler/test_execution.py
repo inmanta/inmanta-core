@@ -54,11 +54,11 @@ def test_issue_201_double_set(snippetcompiler):
 entity Test1:
 
 end
-implement Test1 using std::none
+implement Test1 using none
 
 entity Test2:
 end
-implement Test2 using std::none
+implement Test2 using none
 
 Test1.test2 [0:] -- Test2.test1 [1]
 
@@ -68,7 +68,8 @@ b=Test2()
 b.test1 = a
 b.test1 = a
 
-std::print(b.test1)
+implementation none for std::Entity:
+end
 """
     )
 
@@ -280,7 +281,9 @@ entity  Thing:
    string value = ""
 end
 
-implement Thing using std::none
+implement Thing using none
+implementation none for std::Entity:
+end
 
 index Thing(id)
 
@@ -303,13 +306,15 @@ entity  Thing:
    string value
 end
 
-implement Thing using std::none
+implement Thing using none
 
 index Thing(id)
 
 a = Thing(id=5)
 a.value="{{a.id}}"
 
+implementation none for std::Entity:
+end
 """
     )
 
@@ -332,9 +337,11 @@ entity StringWrapper:
     string value
 end
 
-implement Thing using std::none
-implement StringWrapper using std::none
+implement Thing using none
+implement StringWrapper using none
 
+implementation none for std::Entity:
+end
 
 index Thing(id)
 
@@ -464,7 +471,8 @@ implement B using std::none
 a3.b = std::key_sort(a1.b, "name")
 a1.b = a2.b
 a2.b += b
-"""
+""",
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -494,6 +502,7 @@ def test_relation_precedence_policy(snippetcompiler) -> None:
 
     snippetcompiler.setup_for_snippet(
         non_deterministic_model,
+        autostd=True,
         relation_precedence_rules=[
             RelationPrecedenceRule(
                 first_type="__config__::A",
@@ -508,6 +517,7 @@ def test_relation_precedence_policy(snippetcompiler) -> None:
 
     snippetcompiler.setup_for_snippet(
         non_deterministic_model,
+        autostd=True,
         relation_precedence_rules=[
             RelationPrecedenceRule(
                 first_type="__config__::A",
@@ -535,7 +545,10 @@ def test_validation_relation_precedence_rules(snippetcompiler, caplog) -> None:
         A.list [0:] -- A
         A.optional [0:1] -- A
 
-        implement A using std::none
+        implement A using none
+
+        implementation none for std::Entity:
+        end
 
         typedef tcp_port as int matching self > 0 and self < 65535
     """

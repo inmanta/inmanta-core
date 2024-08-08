@@ -252,7 +252,7 @@ def test_get_types_and_scopes(snippetcompiler):
 
     # Assert types in namespace std
     types_in_std_ns = namespace_to_type_name["std"]
-    assert len(types_in_std_ns) > 1
+    assert len(types_in_std_ns) >= 1
     assert "std::Entity" in types_in_std_ns
 
     # Verify scopes

@@ -59,12 +59,15 @@ entity Foo:
   dict blah = {"a":"a"}
 end
 
-implement Foo using std::none
+implement Foo using none
 
 a=Foo(bar={})
 b=Foo(bar={"a":z})
 c=Foo(bar={}, blah={"z":"y"})
 z=5
+
+implementation none for Foo:
+end
 """
     )
 
@@ -191,7 +194,8 @@ end
 X(x="1234")
 
 implement X using std::none
-"""
+""",
+        autostd=True,
     )
 
     compiler.do_compile()
@@ -213,6 +217,7 @@ implement X using std::none
         """Could not set attribute `x` on instance `__config__::X (instantiated at {dir}/main.cf:8)` (reported in Construct(X) ({dir}/main.cf:8))
 caused by:
   Unable to resolve `z`: a type constraint can not reference variables. (reported in z ({dir}/main.cf:1:55))""",  # noqa: E501,
+        autostd=True,
     )
 
 
@@ -225,11 +230,14 @@ entity Test:
     string str
 end
 
-implement Test using std::none
+implement Test using none
 
 dct = { "config": {"n": 42, "m": 0 } }
 
 x = Test(**dct["config"], str = "Hello World!")
+
+implementation none for Test:
+end
 """
     )
     (_, root) = compiler.do_compile()
@@ -249,12 +257,15 @@ entity Test:
     int v = 0
 end
 
-implement Test using std::none
+implement Test using none
 
 values = {%s}
 t = Test(
     **values
 )
+
+implementation none for Test:
+end
         """
         % ("'v': 10" if override else ""),
     )
@@ -290,12 +301,15 @@ end
 
 index Test(n, m)
 
-implement Test using std::none
+implement Test using none
 
 dct = { "config": {"n": 42, "m": 0 } }
 
 x = Test(n = 42, m = 0, str = "Hello World!")
 y = Test(**dct["config"], str = "Hello World!")
+
+implementation none for Test:
+end
 """
     )
     (_, root) = compiler.do_compile()
@@ -317,12 +331,15 @@ end
 
 index Test(n, m)
 
-implement Test using std::none
+implement Test using none
 
 dct = {"m": 0}
 x = Test(n = 42, m = 0, str = "Hello World!")
 
 y = Test[n = 42, **dct]
+
+implementation none for Test:
+end
     """
     )
     (_, root) = compiler.do_compile()
@@ -339,7 +356,7 @@ def test_short_indexlookup_kwargs(snippetcompiler):
 entity Collection:
 end
 
-implement Collection using std::none
+implement Collection using cnone
 
 entity Test:
     int n
@@ -350,7 +367,7 @@ end
 Collection.tests [0:] -- Test.collection [1]
 index Test(collection, n, m)
 
-implement Test using std::none
+implement Test using none
 
 dct = {"m": 0}
 c = Collection()
@@ -359,6 +376,12 @@ x = Test(collection = c, n = 42, m = 0, str = "Hello World!")
 y = Test(collection = c, n = 0, m = 0, str = "Hello World!")
 
 z = c.tests[n = 42, **dct]
+
+implementation none for Test:
+end
+
+implementation cnone for Collection:
+end
     """
     )
     (_, root) = compiler.do_compile()
@@ -460,7 +483,9 @@ def test_dict_is_defined_4317(snippetcompiler, lookup_path, expectation):
     entity Test:
         dict a = {"a": "ok", "b": null}
     end
-    implement Test using std::none
+    implementation none for Test:
+end
+    implement Test using none
     t = Test()
 
     a = {

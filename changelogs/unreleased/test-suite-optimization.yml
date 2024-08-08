@@ -1,0 +1,2 @@
+description: Speed up tests on the compiler
+destination-branches: [master, iso7]

@@ -97,9 +97,11 @@ class DataflowTestHelper:
         assert graph is not None
         return graph
 
-    def compile(self, snippet: str, expected_error_type: Optional[type[RuntimeException]] = None) -> None:
+    def compile(
+        self, snippet: str, expected_error_type: Optional[type[RuntimeException]] = None, autostd: bool = False
+    ) -> None:
         def compile():
-            self.snippetcompiler.setup_for_snippet(snippet)
+            self.snippetcompiler.setup_for_snippet(snippet, autostd=autostd)
             Config.set("compiler", "datatrace_enable", "true")
             (self._types, root_ns) = compiler.do_compile()
             self._namespace = root_ns.get_child("__config__")
