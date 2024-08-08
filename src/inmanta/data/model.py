@@ -17,7 +17,9 @@
 """
 
 import datetime
+import functools
 import typing
+import urllib
 import uuid
 from collections import abc
 from collections.abc import Sequence
@@ -27,7 +29,7 @@ from typing import ClassVar, NewType, Optional, Self, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -747,6 +749,16 @@ class LoginReturn(BaseModel):
     user: User
 
 
+def is_resource_id(v: ResourceIdStr, info: pydantic.ValidationInfo) -> str:
+    try:
+        return resources.Id.parse_id(v).resource_str()
+    except Exception:
+        raise ValueError(f"Validation failed for {info.field_name}")
+
+
+ResourceId: typing.TypeAlias = typing.Annotated[ResourceIdStr, pydantic.AfterValidator(is_resource_id)]
+
+
 class DiscoveredResource(BaseModel):
     """
     :param discovered_resource_id: The name of the resource
@@ -755,23 +767,44 @@ class DiscoveredResource(BaseModel):
         managed by the orchestrator e.g. "/api/v2/resource/<rid>". Or None if the resource is not managed.
     """
 
-    discovered_resource_id: ResourceIdStr
+    discovered_resource_id: ResourceId
     values: dict[str, object]
     managed_resource_uri: Optional[str] = None
 
-    @field_validator("discovered_resource_id")
-    @classmethod
-    def discovered_resource_id_is_resource_id(cls, v: str) -> str:
-        if resources.Id.is_resource_id(v):
-            return v
-        raise ValueError(f"id {v} is not of type ResourceIdStr")
+    _validate_discovered_rid = field_validator("discovered_resource_id")(is_resource_id)
 
-    def to_dao(self, env: uuid) -> "data.DiscoveredResource":
+    def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
         return data.DiscoveredResource(
             discovered_resource_id=self.discovered_resource_id,
             values=self.values,
             discovered_at=datetime.datetime.now(),
             environment=env,
+        )
+
+
+class LinkedDiscoveredResource(DiscoveredResource):
+    """
+    DiscoveredResource linked to the discovery resource that discovered it.
+
+    :param discovery_resource_id: Resource id of the (managed) discovery resource that reported this
+           discovered resource.
+    """
+
+    discovery_resource_id: ResourceId
+    _validate_discovery_rid = field_validator("discovery_resource_id")(functools.partial(is_resource_id))
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def discovery_resource_uri(self) -> str | None:
+        return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id)}"
+
+    def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
+        return data.DiscoveredResource(
+            discovered_resource_id=self.discovered_resource_id,
+            values=self.values,
+            discovered_at=datetime.datetime.now(),
+            environment=env,
+            discovery_resource_id=self.discovery_resource_id,
         )
 
 

@@ -1,0 +1,8 @@
+description: >
+  Update the endpoints returning discovered resource (`GET /api/v2/discovered/<discovered_resource_id>` and
+  `GET /api/v2/discovered`) to include a link to the resource responsible for the discovery.
+issue-nr: 7528
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  minor-improvement: "{{description}}"

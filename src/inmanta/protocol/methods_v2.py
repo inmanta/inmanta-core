@@ -24,7 +24,7 @@ from typing import Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
+from inmanta.data.model import LinkedDiscoveredResource, PipConfig, ResourceIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
@@ -1546,13 +1546,17 @@ def set_password(username: str, password: str) -> None:
     varkw=True,
 )
 def discovered_resource_create(
-    tid: uuid.UUID, discovered_resource_id: str, **kwargs: object  # bypass the type checking for the values
+    tid: uuid.UUID,
+    discovered_resource_id: str,
+    discovery_resource_id: str,
+    **kwargs: object,  # bypass the type checking for the values
 ) -> None:
     """
     create a discovered resource.
 
     :param tid: The id of the environment this resource belongs to
     :param discovered_resource_id: The id of the discovered_resource
+    :param discovery_resource_id: The id of the discovery resource responsible for discovering this resource
     :param **kwargs: The following arguments are supported:
            values: The values associated with the discovered_resource
     """
@@ -1566,7 +1570,7 @@ def discovered_resource_create(
     client_types=[ClientType.agent],
     api_version=2,
 )
-def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: list[DiscoveredResource]) -> None:
+def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: list[LinkedDiscoveredResource]) -> None:
     """
     create multiple discovered resource in the DB
     :param tid: The id of the environment this resource belongs to
@@ -1608,6 +1612,7 @@ def discovered_resources_get_batch(
     """
     Get a list of discovered resources.
 
+    The discovery resource responsible for discovering each resource is included.
     For resources that the orchestrator is already managing, a link to the corresponding resource is provided. The full list of
     supported links can be found :ref:`here <api_self_referencing_links>`.
 

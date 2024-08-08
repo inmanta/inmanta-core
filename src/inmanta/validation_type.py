@@ -120,7 +120,6 @@ def parametrize_type(
 
 
 class HashKeyContainer:
-
     def __init__(self, validation_parameters: Optional[abc.Mapping[str, object]] = None):
         if isinstance(validation_parameters, DictProxy):
             validation_parameters = validation_parameters.unwrap(validation_parameters)
