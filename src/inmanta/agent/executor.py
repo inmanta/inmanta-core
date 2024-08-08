@@ -466,15 +466,12 @@ class PoolManager:
         run_next_cleanup_job_at: float = float(self.retention_time)
         pool_members = await self.get_pool_members()
         for pool_member in pool_members:
-            LOGGER.debug(f"Will clean pool member {pool_member.get_id()}")
             try:
                 if pool_member.can_be_cleaned_up(self.retention_time):
                     async with self._locks.get(pool_member.get_id()):
-                        LOGGER.debug(f"Have the lock for pool member {pool_member.get_id()}")
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up(self.retention_time):
                             await pool_member.clean()
-                            LOGGER.debug(f"pool member {pool_member.get_id()} has been cleaned")
                             self.clean_pool_member_from_manager(pool_member)
                 else:
                     # If this pool member expires sooner than the cleanup interval, schedule the next cleanup on that
@@ -506,7 +503,6 @@ class PoolManager:
         while self.running:
             sleep_interval = await self.cleanup_inactive_pool_members()
             if self.running:
-                LOGGER.debug(f"Manager will clean for {sleep_interval} seconds")
                 await asyncio.sleep(sleep_interval)
 
 
