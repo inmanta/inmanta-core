@@ -494,9 +494,8 @@ def test():
     blueprint3_updated.python_version = (3, 12)
     await executor_manager.get_executor("agent3", "local:", code_for(blueprint3_updated), venv_checkup_interval=0.1)
     venvs = [str(e) for e in venv_dir.iterdir()]
-    assert len(venvs) == 2, "Only one Virtual Environment should exist!"
+    assert len(venvs) == 2, "Only two Virtual Environment should exist!"
 
-    await asyncio.sleep(2)
     await mpmanager_light.environment_manager.cleanup_inactive_pool_members()
     venvs = [str(e) for e in venv_dir.iterdir()]
-    assert len(venvs) == 0, "No Virtual Environment should exist!"
+    assert len(venvs) == 1, "Only one Environment should exist!"

@@ -992,7 +992,6 @@ class Agent(SessionEndpoint):
         self._code_loader = code_loader
 
         self.executor_manager: executor.ExecutorManager[executor.Executor]
-        self.environment_manager: Optional[executor.VirtualEnvironmentManager] = None
         if remote_executor and can_have_remote_executor:
             LOGGER.info("Selected forking agent executor mode")
             assert self.environment is not None  # Mypy
@@ -1049,8 +1048,6 @@ class Agent(SessionEndpoint):
     async def stop(self) -> None:
         await super().stop()
         await self.executor_manager.stop()
-        if self.environment_manager is not None:
-            await self.environment_manager.stop()
 
         threadpools_to_join = [self.thread_pool]
 
@@ -1083,9 +1080,6 @@ class Agent(SessionEndpoint):
         self._io_loop = asyncio.get_running_loop()
         await super().start()
         await self.executor_manager.start()
-        if self.environment_manager is not None:
-            # We need to do this here, otherwise, the scheduler would crash because no event loop would be running
-            await self.environment_manager.start()
 
     async def add_end_point_name(self, name: str) -> None:
         async with self._instances_lock:

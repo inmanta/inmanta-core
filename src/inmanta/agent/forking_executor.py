@@ -171,7 +171,6 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """Actual shutdown, not async"""
         if not self.stopping:
             # detach logger
-            self.stop_timer_venv_checkup()
             self._detach_log_shipper()
             self.logger.info("Stopping")
             self.stopping = True
@@ -180,7 +179,6 @@ class ExecutorServer(IPCServer[ExecutorContext]):
 
     def connection_lost(self, exc: Exception | None) -> None:
         """We lost connection to the controler, bail out"""
-        self.stop_timer_venv_checkup()
         self._detach_log_shipper()
         self.logger.info("Connection lost", exc_info=exc)
         self.set_status("disconnected")
@@ -858,7 +856,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children_ids = self.agent_map[agent_name]
         children = [self.executor_map[child_id] for child_id in children_ids]
-        await asyncio.gather(*(child.stop() for child in self.children))
+        await asyncio.gather(*(child.stop() for child in children))
         return children
 
     async def get_pool_members(self) -> typing.Sequence[MPExecutor]:
