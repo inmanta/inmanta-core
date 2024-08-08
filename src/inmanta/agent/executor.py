@@ -45,7 +45,8 @@ from inmanta.util import NamedLock
 
 LOGGER = logging.getLogger(__name__)
 
-FailedResourcesSet: typing.TypeAlias = set[ResourceType]
+
+FailedResources: typing.TypeAlias = dict[ResourceType, Exception]
 
 
 class AgentInstance(abc.ABC):
@@ -334,8 +335,6 @@ class VirtualEnvironmentManager:
         :param blueprint: The blueprint specifying the configuration for the new virtual environment.
         :param threadpool: A ThreadPoolExecutor
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
-
-        TODO: Improve handling of bad venv scenarios, such as when the folder exists but is empty or corrupted.
         """
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
@@ -404,7 +403,7 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    failed_resource_types: FailedResourcesSet
+    failed_resources: FailedResources
 
     def cache(self, model_version: int) -> CacheVersionContext:
         """

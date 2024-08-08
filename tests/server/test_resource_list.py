@@ -588,7 +588,7 @@ async def very_big_env(server, client, environment, clienthelper, agent_factory,
         def resource_id(ri: int) -> str:
             if iteration > 0 and ri > 40:
                 ri += 10
-            return f"test::XResource{int(ri/20)}[agent{tenant_index},sub={ri}]"
+            return f"test::XResource{int(ri / 20)}[agent{tenant_index},sub={ri}]"
 
         resources = [
             {
