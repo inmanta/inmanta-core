@@ -671,42 +671,6 @@ class VirtualEnvironmentManager(PoolManager):
 
         del self._environment_map[entry_to_remove]
 
-    async def get_pool_members(self) -> Sequence[ExecutorVirtualEnvironment]:
-        """
-        Retrieve the members of the pool: those that need to be checked for the cleanup.
-        """
-        # We should walk once for the first-level of folders!
-        envs_dir = pathlib.Path(self.envs_dir)
-        _, root_folders, _ = next(os.walk(self.envs_dir))
-        venv_path_to_blueprint = {pathlib.Path(v.env_path): k for k, v in self._environment_map.items()}
-
-        pool_members = []
-        for folder in root_folders:
-            # the name of the folder is the hash!
-            async with self._locks.get(folder):
-                current_folder = envs_dir / folder
-                blueprint = venv_path_to_blueprint.get(current_folder, None)
-                if blueprint is not None and blueprint in self._environment_map:
-                    current_executor_environment = self._environment_map[blueprint]
-                else:
-                    current_executor_environment = ExecutorVirtualEnvironment(
-                        env_path=str(current_folder.absolute()),
-                        threadpool=None,
-                    )
-
-                pool_members.append(current_executor_environment)
-        return pool_members
-
-    def clean_pool_member_from_manager(self, pool_member: PoolMember) -> None:
-        """
-        Additional cleanup operation(s) that need to be performed by the Manager regarding the pool member being cleaned.
-        This method assumes to be in a lock to prevent other operations to overlap with the cleanup.
-        """
-        venv_path_to_blueprint = {pathlib.Path(v.env_path).name: k for k, v in self._environment_map.items()}
-        entry_to_remove = venv_path_to_blueprint[pool_member.get_id()]
-
-        del self._environment_map[entry_to_remove]
-
 
 class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):
     """

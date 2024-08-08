@@ -47,7 +47,7 @@ import inmanta.protocol.ipc_light
 import inmanta.signals
 import inmanta.types
 import inmanta.util
-from inmanta import const, tracing, util
+from inmanta import const, tracing
 from inmanta.agent import executor
 from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import (
