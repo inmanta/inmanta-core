@@ -5,7 +5,7 @@ black = black src tests tests_common
 
 .PHONY: install
 install:
-    pip install  -U setuptools pip uv
+	pip install -U setuptools pip uv
 	uv pip install -U -r requirements.txt -r requirements.dev.txt
 	uv pip install -e .
 
