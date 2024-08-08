@@ -447,16 +447,29 @@ def mp_worker_entrypoint(
     logger.info(f"Stopped with PID: {os.getpid()}")
     exit(0)
 
+class MPProcess:
+    """
 
-class MPExecutor(executor.Executor, executor.PoolMember):
-    """A Single Child Executor"""
+    Physical process proxy, hands out child executors
+
+    Termination scenarios:
+    - connection loss:
+       - all outstand calls fail, future calls fail as well
+       - signal parent to drop this instance and all its children from the cache
+       - clean up using _force_stop
+    - no more children
+       - send stop to remote end
+       - wait for connection loss
+    - termination request from parent
+       - send stop to children
+    """
 
     def __init__(
         self,
         owner: "MPManager",
         process: multiprocessing.Process,
         connection: ExecutorClient,
-        executor_id: executor.ExecutorId,
+        executor_blueprint: executor.ExecutorBlueprint,
         venv: executor.ExecutorVirtualEnvironment,
     ):
         self.process = process
@@ -466,50 +479,17 @@ class MPExecutor(executor.Executor, executor.PoolMember):
         self.closed = False
         self.owner = owner
         self.termination_lock = threading.Lock()
+
         # Pure for debugging purpose
-        self.executor_id = executor_id
+        self.executor_blueprint = executor_blueprint
         self.executor_virtual_env = venv
 
         # Set by init and parent class that const
         self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = list()
         self.failed_resources: executor.FailedResources = {}
 
-    async def stop(self) -> None:
-        """Stop by shutdown"""
-        self.closing = True
-        try:
-            self.connection.call(StopCommand(), False)
-        except inmanta.protocol.ipc_light.ConnectionLost:
-            # Already gone
-            pass
-
-    async def clean(self) -> None:
-        """Stop by shutdown and catch any error that may occur"""
-        try:
-            LOGGER.debug(
-                "Stopping executor %s because it was inactive for %d s, which is longer then the retention time of %d s.",
-                self.executor_id.identity(),
-                self.connection.get_idle_time().total_seconds(),
-                inmanta.agent.config.agent_executor_retention_time.get(),
-            )
-            await self.stop()
-        except Exception:
-            LOGGER.exception(
-                "Unexpected error during executor %s cleanup:",
-                self.executor_id.identity(),
-            )
-
-    def can_be_cleaned_up(self, retention_time: int) -> bool:
-        if self.connection.has_outstanding_calls():
-            return False
-
-        return self.connection.get_idle_time() > datetime.timedelta(seconds=retention_time)
-
-    def get_id(self) -> str:
-        return self.executor_id.identity()
-
-    def last_used(self) -> datetime.datetime:
-        return self.connection.last_used_at
+        # TODO: child termination on connection loss
+        # TODO: add stop method, stop protocol
 
     async def force_stop(self, grace_time: float = inmanta.const.EXECUTOR_GRACE_HARD) -> None:
         """
@@ -586,18 +566,76 @@ class MPExecutor(executor.Executor, executor.PoolMember):
         assert self.closing
         await asyncio.get_running_loop().run_in_executor(self.owner.thread_pool, functools.partial(self._force_stop, timeout))
 
+
+class MPExecutor(executor.Executor):
+    """A Single Child Executor
+
+    termination:
+    - stop requested by parent:
+      - send stop to remote end
+      - signal parent we are stopped
+    - stop by timer
+      - send stop to remote end
+      - signal parent we are stopped
+
+    """
+
+    def __init__(
+        self,
+        process: MPProcess,
+        executor_id: executor.ExecutorId,
+    ):
+        self.process = process
+        self.executor_id = executor_id
+
+        # connection stats
+        self.in_flight = 0
+        self.last_used_at = datetime.datetime.now().astimezone()
+
+    async def call(self, method: IPCMethod[ExecutorContext, ReturnType]) -> ReturnType:
+        try:
+            self.in_flight += 1
+            out = await self.process.connection.call(method)
+            self.last_used_at = datetime.datetime.now().astimezone()
+            return out
+        finally:
+            self.in_flight-= 1
+
+    def get_idle_time(self) -> datetime.timedelta:
+        return datetime.datetime.now().astimezone() - self.last_used_at
+
+    # TODO: migrate
+    async def stop(self) -> None:
+        """Stop by shutdown"""
+        self.closing = True
+        try:
+            self.connection.call(StopCommand(), False)
+        except inmanta.protocol.ipc_light.ConnectionLost:
+            # Already gone
+            pass
+
+    def can_be_cleaned_up(self, retention_time: int) -> bool:
+        if self.in_flight > 0:
+            return False
+
+        return self.get_idle_time() > datetime.timedelta(seconds=retention_time)
+
+    def last_used(self) -> datetime.datetime:
+        return self.last_used_at
+
+
     async def close_version(self, version: int) -> None:
-        await self.connection.call(CloseVersionCommand(version))
+        await self.call(CloseVersionCommand(version))
 
     async def open_version(self, version: int) -> None:
-        await self.connection.call(OpenVersionCommand(version))
+        await self.call(OpenVersionCommand(version))
 
     async def dry_run(
         self,
         resources: typing.Sequence["inmanta.agent.executor.ResourceDetails"],
         dry_run_id: uuid.UUID,
     ) -> None:
-        await self.connection.call(DryRunCommand(resources, dry_run_id))
+        await self.call(DryRunCommand(resources, dry_run_id))
 
     async def execute(
         self,
@@ -605,10 +643,10 @@ class MPExecutor(executor.Executor, executor.PoolMember):
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
     ) -> None:
-        await self.connection.call(ExecuteCommand(gid, resource_details, reason))
+        await self.call(ExecuteCommand(gid, resource_details, reason))
 
     async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> inmanta.types.Apireturn:
-        return await self.connection.call(FactsCommand(resource))
+        return await self.call(FactsCommand(resource))
 
 
 # `executor.PoolManager` needs to be before `executor.ExecutorManager` as it defines the start and stop methods (MRO order)
@@ -616,6 +654,12 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
     """
     This is the executor that provides the new behavior (ISO8+),
     where the agent forks executors in specific venvs to prevent code reloading.
+
+    This class has a two layer cache:
+      blueprint -> process
+      executor_id -> executor
+
+    Executors are co-hosted on processes if they share a blueprint
     """
 
     def __init__(
@@ -821,6 +865,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
 
     def _child_closed(self, child_handle: MPExecutor) -> None:
         """Internal, for child to remove itself once stopped"""
+        # TODO: two types of children now
         try:
             self.children.remove(child_handle)
             self.__remove_executor(child_handle)
