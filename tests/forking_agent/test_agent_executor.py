@@ -26,6 +26,8 @@ import psutil
 
 from inmanta import const
 from inmanta.agent import executor, forking_executor
+from inmanta.agent.executor import Executor
+from inmanta.agent.forking_executor import MPExecutor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
 from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
@@ -380,20 +382,6 @@ def test():
         executor_manager.get_executor("agent2", "local:", code_for(blueprint2), venv_checkup_interval=0.1),
     )
 
-    def retrieve_process_agent(agent_name: str) -> psutil.Process:
-        """
-        Retrieve the PID of the agent
-
-        :param agent_name: The name of the agent from which we want to retrieve the PID
-        """
-        for proc in psutil.process_iter(["pid", "name"]):
-            if f"inmanta: executor {agent_name}" in proc.name():
-                return proc
-
-        raise LookupError(f"Could not find process with the following name: `{agent_name}`!")
-
-    process_agent_1 = retrieve_process_agent("agent1")
-    process_agent_2 = retrieve_process_agent("agent2")
     executor_1_venv_status_file = pathlib.Path(executor_1.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
     executor_2_venv_status_file = pathlib.Path(executor_2.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
 
@@ -418,16 +406,15 @@ def test():
     assert new_check_executor2 > old_check_executor2
     assert (datetime.datetime.now().astimezone() - new_check_executor2).seconds <= 2
 
-    async def wait_for_agent_stop_running(process_agent: psutil.Process) -> bool:
+    async def wait_for_agent_stop_running(executor: MPExecutor) -> bool:
         """
         Wait for the agent to stop running
-        :param process_agent: The process of the agent
         """
-        return not process_agent.is_running()
+        return not executor.closed
 
     # Now we want to check if the cleanup is working correctly
     await executor_manager.stop_for_agent("agent1")
-    await retry_limited(wait_for_agent_stop_running, process_agent=process_agent_1, timeout=10)
+    await retry_limited(wait_for_agent_stop_running, executor=executor_1, timeout=10)
     # First we want to override the modification date of the `inmanta_venv_status` file
     os.utime(
         executor_1_venv_status_file, (datetime.datetime.now().astimezone().timestamp(), old_datetime.astimezone().timestamp())
@@ -447,7 +434,7 @@ def test():
     logging.debug("stopping agent 2")
     # Let's stop the other agent and pretend that the venv is broken
     await executor_manager.stop_for_agent("agent2")
-    await retry_limited(wait_for_agent_stop_running, process_agent=process_agent_2, timeout=10)
+    await retry_limited(wait_for_agent_stop_running, executor=executor_2, timeout=10)
     executor_2_venv_status_file.unlink()
     logging.debug("agent 2 has been stopped")
 
