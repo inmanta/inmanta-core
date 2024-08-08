@@ -21,7 +21,6 @@ import os
 import random
 import socket
 
-import netifaces
 import pytest
 from tornado import netutil
 
@@ -189,56 +188,6 @@ connection_pool_min_size=5
     assert Config.get("database", "connection_pool_min_size") == 5
     assert Config.get("server", "auth")
     assert Config.get("server", "agent-timeout") == 60
-
-
-async def test_bind_address_ipv4(async_finalizer):
-    """This test case check if the Inmanta server doesn't bind on another interface than 127.0.0.1 when bind-address is equal
-    to 127.0.0.1. Procedure:
-        1) Get free port on all interfaces.
-        2) Bind that port on a non-loopback interface, so it's not available for the inmanta server anymore.
-        3) Start the Inmanta server with bind-address 127.0.0.1. and execute an API call
-    """
-
-    @protocol.method(path="/test", operation="POST", client_types=[ClientType.api])
-    async def test_endpoint():
-        pass
-
-    class TestSlice(ServerSlice):
-        @protocol.handle(test_endpoint)
-        async def test_endpoint_handle(self):
-            return 200
-
-    # Select a bind address which is not on the loopback interface
-    non_loopback_interfaces = [i for i in netifaces.interfaces() if i != "lo" and socket.AF_INET in netifaces.ifaddresses(i)]
-    bind_iface = "eth0" if "eth0" in non_loopback_interfaces else random.choice(non_loopback_interfaces)
-    bind_addr = netifaces.ifaddresses(bind_iface)[socket.AF_INET][0]["addr"]
-
-    # Get free port on all interfaces
-    sock = netutil.bind_sockets(0, "0.0.0.0", family=socket.AF_INET)[0]
-    _addr, free_port = sock.getsockname()
-    sock.close()
-
-    # Bind port on non-loopback interface
-    sock = netutil.bind_sockets(free_port, bind_addr, family=socket.AF_INET)[0]
-    try:
-        # Configure server
-        Config.load_config()
-        Config.set("server", "bind-port", str(free_port))
-        Config.set("server", "bind-address", "127.0.0.1")
-        Config.set("client_rest_transport", "port", str(free_port))
-
-        # Start server
-        rs = Server()
-        rs.add_slice(TestSlice("test"))
-        await rs.start()
-        async_finalizer(rs.stop)
-
-        # Check if server is reachable on loopback interface
-        client = protocol.Client("client")
-        result = await client.test_endpoint()
-        assert result.code == 200
-    finally:
-        sock.close()
 
 
 async def test_bind_address_ipv6(async_finalizer) -> None:

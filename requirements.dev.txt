@@ -1,6 +1,5 @@
 inmanta-dev-dependencies[pytest,async,core]==2.129.0
 bumpversion==0.6.0
-netifaces==0.11.0
 openapi_spec_validator==0.7.1
 pip2pi==0.8.2
 types-PyYAML==6.0.12.20240724
