@@ -1033,8 +1033,6 @@ class ActiveEnv(PythonEnvironment):
             for requirement in dist_info.requires or []
             if SafeRequirement(requirement).marker is None
         )
-        # for e in installed_constraints:
-        #     e.requirement.name = canonicalize_name(e.requirement.name).lower()
 
         inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
             OwnedRequirement(r, owner="inmanta-core") for r in cls._get_requirements_on_inmanta_package()
@@ -1265,7 +1263,6 @@ class VirtualEnv(ActiveEnv):
         self._activate_that()
         mock_process_env(python_path=self.python_path)
 
-        # patch up pkg
         self.notify_change()
 
         self._using_venv = True

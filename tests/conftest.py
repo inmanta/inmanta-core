@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import importlib.metadata
 import logging.config
 import warnings
 
@@ -94,14 +94,12 @@ from configparser import ConfigParser
 from typing import Callable, Dict, Optional, Union
 
 import asyncpg
-import pkg_resources
 import psutil
 import py
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
@@ -510,7 +508,6 @@ def deactive_venv():
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
-    old_working_set = pkg_resources.working_set
     old_available_extensions = (
         dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
     )
@@ -527,7 +524,6 @@ def deactive_venv():
     sys.path_hooks.extend(old_path_hooks)
     # Clear cache for sys.path_hooks
     sys.path_importer_cache.clear()
-    pkg_resources.working_set = old_working_set
     # Restore PYTHONPATH
     if old_pythonpath is not None:
         os.environ["PYTHONPATH"] = old_pythonpath
@@ -1084,7 +1080,7 @@ class ReentrantVirtualEnv(VirtualEnv):
     def deactivate(self):
         if self._using_venv:
             self._using_venv = False
-            self.working_set = pkg_resources.working_set
+            self.working_set = importlib.metadata.distributions()
 
     def use_virtual_env(self) -> None:
         """
@@ -1101,7 +1097,7 @@ class ReentrantVirtualEnv(VirtualEnv):
             # Later run
             self._activate_that()
             mock_process_env(python_path=self.python_path)
-            pkg_resources.working_set = self.working_set
+            self.working_set = importlib.metadata.distributions()
             self._using_venv = True
 
 
