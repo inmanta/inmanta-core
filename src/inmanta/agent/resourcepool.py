@@ -14,15 +14,46 @@
     limitations under the License.
 
     Contact: code@inmanta.com
+
+    This file contains the caching mechanism for the forking executor
+
+    The complexity is that:
+    1. we need to cache processes on blueprint id
+    2. we need to cache executors (running on processes) on executor id
+    3. invalidate both caches if a process dies
+    4. invalidate executors based on idle time
+    5. invalidate executors based on nr per agent
+    6. closed processes if they are no longer in use
+    7. never invalidate executors that have work in flight
+
+    The solution is a combination of pool manager/pool members that can:
+    1. can perform invalidation according to various stategies
+    2. has fairly accurate membership tracking (for requirements 4  and 5) through events/listeners \
+        (cache responds correctly to crashes)
+    3. members can be contained in multiple cache
+
+    To make this work, we propagate the 'closed' event, that indicates when a pool member has terminated.
+    We use it for cache eviction and failure propagation.
+
+    The `closing` status is tracked on each member and checked when taking an item out of the cache.
+    As such, the cache can contain closing items. These are replaced when being checked out.
+    We don't propagate this as an event, as they will eventually get a closed event.
+
+    The intended usage is that:
+    1. A single Pool Manager manages a pool of processes (no eviction policy)
+    2. each process is a pool manager for a set of executors (evict self when pool is empty, on receival of closed event)
+    3. an overarching pool manager also caches executors on top of the other two (i.e. it never creates new things),
+        it evicts based on time and executors per agent
 """
+
 import abc
+import asyncio
 import datetime
 import logging
+from typing import Callable, Coroutine, Generic, Optional, Sequence, TypeVar
 
 import inmanta.util
-import asyncio
-
-from typing import Optional, Sequence, TypeVar, Generic, Callable, Coroutine
+from inmanta.const import LOG_LEVEL_TRACE
 
 LOGGER = logging.getLogger(__name__)
 
@@ -33,12 +64,23 @@ class PoolMember(abc.ABC, Generic[TPoolID]):
 
     def __init__(self, my_id: TPoolID):
         self.id = my_id
+
+        # Time based expiry
         self.last_used: datetime.datetime = datetime.datetime.now().astimezone()
+
+        # state tracking
         self.is_stopping = False
         self.is_stopped = False
+
+        # event propagation
         self.termination_listeners: list[Callable[[Type[self]], Awaitable[None]]] = []
 
+    @property
+    def running(self) -> bool:
+        return not self.is_stopping and not self.is_stopped
+
     def touch(self):
+        """Update time last used"""
         self.last_used = datetime.datetime.now().astimezone()
 
     def can_be_cleaned_up(self) -> bool:
@@ -52,7 +94,6 @@ class PoolMember(abc.ABC, Generic[TPoolID]):
         Retrieve the idle time of this pool member
         """
         return datetime.datetime.now().astimezone() - self.last_used
-
 
     def get_id(self) -> TPoolID:
         """
@@ -80,6 +121,8 @@ class PoolMember(abc.ABC, Generic[TPoolID]):
 
 
 TPoolMember = TypeVar("TPoolMember", bound=PoolMember)
+
+
 class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
     """
     A pool of slow objects
@@ -88,6 +131,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
     As such, the pool id does not necessarily identify the correct object
 
     """
+
     def __init__(self) -> None:
         self.is_stopped = False
         self.is_stopping = False
@@ -95,20 +139,17 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
         self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
         self.pool: dict[TPoolID, TPoolMember] = {}
 
-        # We keep a reference to the periodic cleanup task to prevent it
-        # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
-        # self.cleanup_job: Optional[asyncio.Task[None]] = None
+        self.closing_children: set[TPoolMember] = set()
 
-        # self.retention_time: int = retention_time
-        #
-        self.closing_childern: set[TPoolMember] = set()
+    @property
+    def running(self) -> bool:
+        return not self.is_stopping and not self.is_stopped
 
     async def start(self) -> None:
         """
         Start the cleaning job of the Pool Manager
         """
         pass
-        # self.cleanup_job = asyncio.create_task(self.cleanup_inactive_pool_members_task())
 
     async def stop(self) -> None:
         """
@@ -123,9 +164,14 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
         """
         Wait for the cleaning job to terminate.
         """
-        # if self.cleanup_job is not None:
-        #     await self.cleanup_job
         pass
+
+    def my_name(self) -> str:
+        """Method to improve logging output by naming this executor"""
+        return "PoolManager"
+
+    def member_name(self, member: TPoolMember) -> str:
+        return "PoolMember"
 
     async def request_close(self, pool_member: TPoolMember) -> None:
         """
@@ -135,7 +181,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
         """
         if pool_member.is_stopped:
             return
-        self.closing_childern.add(pool_member)
+        self.closing_children.add(pool_member)
         await pool_member.close()
 
     async def child_closed(self, pool_member: TPoolMember) -> bool:
@@ -148,7 +194,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
 
         :return: if we effectively removed it from the pool
         """
-        self.closing_childern.discard(pool_member)
+        self.closing_children.discard(pool_member)
 
         theid = pool_member.get_id()
         registered_for_id = self.pool.get(theid)
@@ -163,10 +209,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
             self.pool.pop(theid)
             return True
 
-    async def get(
-        self,
-        member_id: TPoolID
-    ) -> TPoolMember:
+    async def get(self, member_id: TPoolID) -> TPoolMember:
         """
         Returns a new pool member
         """
@@ -175,16 +218,11 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
             if member_id in self.pool:
                 it = self.pool[member_id]
                 if not it.is_stopping:
-                    # TODO logging
-#                    LOGGER.debug("Found existing executor for agent %s with id %s", agent_name, executor_id.identity())
+                    LOGGER.debug("Found existing %s for %s with id %s", self.my_name(), self.member_name(member_id), member_id)
                     it.touch()
                     return it
-                # TODO: do we need the ability to join?
-                # else:
-                #     LOGGER.debug(
-                #         "Found stale executor for agent %s with id %s, waiting for close", agent_name, executor_id.identity()
-                #     )
-                #     await it.join(inmanta.const.EXECUTOR_GRACE_HARD)
+                else:
+                    self.pre_replace(it)
             return await self._create_or_replace(member_id)
 
     async def _create_or_replace(self, member_id: TPoolID) -> TPoolMember:
@@ -199,6 +237,10 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
 
         return my_executor
 
+    async def pre_replace(self, member: PoolMember) -> None:
+        """Hook method to join items being replaced, called under lock"""
+        pass
+
     async def pre_create_capacity_check(self, member_id: TPoolID) -> None:
         """
         Check if any members should be closed for the given id
@@ -207,61 +249,88 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
         """
         pass
 
-
     @abc.abstractmethod
     async def create_member(self, executor_id: TPoolID) -> TPoolMember:
         pass
 
-    # async def cleanup_inactive_pool_members(self) -> float:
-    #     """
-    #     Cleans up idle pool member
-    #
-    #     :return: When to run the cleaning next time: default retention time or lowest expiration time of one of the pool members
-    #     """
-    #     cleanup_start = datetime.datetime.now().astimezone()
-    #     # Number of seconds relative to cleanup_start
-    #     run_next_cleanup_job_at: float = float(self.retention_time)
-    #     pool_members = await self.get_pool_members()
-    #     for pool_member in pool_members:
-    #         LOGGER.debug(f"Will clean pool member {pool_member.get_id()}")
-    #         try:
-    #             if pool_member.can_be_cleaned_up(self.retention_time):
-    #                 async with self._locks.get(pool_member.get_id()):
-    #                     LOGGER.debug(f"Have the lock for pool member {pool_member.get_id()}")
-    #                     # Check that the executor can still be cleaned up by the time we have acquired the lock
-    #                     if pool_member.can_be_cleaned_up(self.retention_time):
-    #                         await pool_member.clean()
-    #                         LOGGER.debug(f"pool member {pool_member.get_id()} has been cleaned")
-    #                         self.clean_pool_member_from_manager(pool_member)
-    #             else:
-    #                 # If this pool member expires sooner than the cleanup interval, schedule the next cleanup on that
-    #                 # timestamp.
-    #                 run_next_cleanup_job_at = min(
-    #                     run_next_cleanup_job_at,
-    #                     (
-    #                         datetime.timedelta(seconds=self.retention_time) - (cleanup_start - pool_member.last_used())
-    #                     ).total_seconds(),
-    #                 )
-    #         except Exception:
-    #             LOGGER.exception(
-    #                 "An error occurred while cleaning the %s pool member `%s`",
-    #                 self.__class__.__name__,
-    #                 pool_member.get_id(),
-    #             )
-    #
-    #     cleanup_end = datetime.datetime.now().astimezone()
-    #
-    #     return max(0.0, run_next_cleanup_job_at - (cleanup_end - cleanup_start).total_seconds())
-    #
-    # async def cleanup_inactive_pool_members_task(self) -> None:
-    #     """
-    #     This task periodically cleans up idle pool member
-    #
-    #     We split up `cleanup_inactive_pool_members` and `cleanup_inactive_pool_members_task` in order to be able to call the
-    #     cleanup method in the test without being blocked in a loop.
-    #     """
-    #     while self.running:
-    #         sleep_interval = await self.cleanup_inactive_pool_members()
-    #         if self.running:
-    #             LOGGER.debug(f"Manager will clean for {sleep_interval} seconds")
-    #             await asyncio.sleep(sleep_interval)
+
+class TimeBasedPoolManager(PoolManager[TPoolID, TPoolMember]):
+
+    def __init__(self, retention_time: int) -> None:
+        super().__init__()
+
+        # We keep a reference to the periodic cleanup task to prevent it
+        # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
+        self.cleanup_job: Optional[asyncio.Task[None]] = None
+        self.retention_time: int = retention_time
+
+    async def start(self) -> None:
+        """
+        Start the cleaning job of the Pool Manager
+        """
+        await super().start()
+        self.cleanup_job = asyncio.create_task(self.cleanup_inactive_pool_members_task())
+
+    async def join(self) -> None:
+        """
+        Wait for the cleaning job to terminate.
+        """
+        if self.cleanup_job is not None:
+            await self.cleanup_job
+        await super().join()
+
+    async def cleanup_inactive_pool_members_task(self) -> None:
+        """
+        This task periodically cleans up idle pool member
+
+        We split up `cleanup_inactive_pool_members` and `cleanup_inactive_pool_members_task` in order to be able to call the
+        cleanup method in the test without being blocked in a loop.
+        """
+        while self.running:
+            sleep_interval = await self.cleanup_inactive_pool_members()
+            if self.running:
+                LOGGER.log(LOG_LEVEL_TRACE, f"Manager will clean in %.2f seconds", sleep_interval)
+                await asyncio.sleep(sleep_interval)
+
+    async def cleanup_inactive_pool_members(self) -> float:
+        """
+        Cleans up idle pool member
+
+        :return: When to run the cleaning next time: default retention time or lowest expiration time of one of the pool members
+        """
+        cleanup_start = datetime.datetime.now().astimezone()
+        # Clean up anything older than this
+        expiry = datetime.timedelta(seconds=self.retention_time)
+        oldest_time = cleanup_start - expiry
+        # Number of seconds relative to cleanup_start
+        run_next_cleanup_job_in: float = float(self.retention_time)
+        pool_members = list(self.pool.values())
+        for pool_member in pool_members:
+            try:
+                if pool_member.can_be_cleaned_up() and pool_member.last_used < oldest_time and pool_member.running:
+                    async with self._locks.get(pool_member.get_id()):
+                        # Check that the executor can still be cleaned up by the time we have acquired the lock
+                        if pool_member.can_be_cleaned_up() and pool_member.last_used < oldest_time and pool_member.running:
+                            LOGGER.debug(
+                                f"Pool member %s with %.2f >= %d is about to expire",
+                                pool_member.get_id(),
+                                (cleanup_start - pool_member.last_used).total_seconds(),
+                                self.retention_time,
+                            )
+                            await self.request_close(pool_member)
+                else:
+                    # If this pool member expires sooner than the cleanup interval, schedule the next cleanup on that
+                    # timestamp.
+                    run_next_cleanup_job_in = min(
+                        run_next_cleanup_job_in,
+                        (pool_member.last_used - oldest_time).total_seconds(),
+                    )
+            except Exception:
+                LOGGER.exception(
+                    "An error occurred while cleaning the pool member `%s`",
+                    pool_member.get_id(),
+                )
+
+        cleanup_end = datetime.datetime.now().astimezone()
+
+        return max(0.0, run_next_cleanup_job_in - (cleanup_end - cleanup_start).total_seconds())

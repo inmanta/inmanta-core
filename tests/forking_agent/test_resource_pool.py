@@ -15,17 +15,20 @@
 
     Contact: code@inmanta.com
 """
+
+import asyncio
 import itertools
 
-from inmanta.agent.resourcepool import PoolMember, PoolManager, TPoolID, TPoolMember
+from inmanta.agent.resourcepool import PoolManager, PoolMember, TimeBasedPoolManager, TPoolID, TPoolMember
 
 
 async def test_resource_pool():
 
     counter = itertools.count()
+
     class SimplePoolMember(PoolMember[str]):
 
-        def __init__(self, my_id:str) -> None:
+        def __init__(self, my_id: str) -> None:
             super().__init__(my_id)
             self.count = next(counter)
 
@@ -39,7 +42,6 @@ async def test_resource_pool():
     class SimplePoolManager(PoolManager[SimplePoolMember, str]):
         async def create_member(self, executor_id: str) -> SimplePoolMember:
             return SimplePoolMember(my_id=executor_id)
-
 
     manager = SimplePoolManager()
     await manager.start()
@@ -57,10 +59,50 @@ async def test_resource_pool():
     assert a1.count != a3.count
 
     await manager.request_close(a1)
-    assert len(manager.closing_childern) == 0
+    assert len(manager.closing_children) == 0
 
     await manager.request_close(a3)
-    assert len(manager.closing_childern) == 0
+    assert len(manager.closing_children) == 0
+
+
+async def test_timed_resource_pool():
+    counter = itertools.count()
+
+    class SimplePoolMember(PoolMember[str]):
+
+        def __init__(self, my_id: str) -> None:
+            super().__init__(my_id)
+            self.count = next(counter)
+            self.anchor = asyncio.Event()
+
+        def __repr__(self):
+            return self.id + str(self.count)
+
+        async def close(self) -> None:
+            await super().close()
+            await self.closed()
+            self.anchor.set()
+
+    class SimplePoolManager(TimeBasedPoolManager[SimplePoolMember, str]):
+        async def create_member(self, executor_id: str) -> SimplePoolMember:
+            return SimplePoolMember(my_id=executor_id)
+
+    manager = SimplePoolManager(0.02)
+    await manager.start()
+
+    a1 = await manager.get("a")
+    a1_2 = await manager.get("a")
+    b1 = await manager.get("b")
+
+    assert a1.count == a1_2.count
+    assert b1.id != a1.id
+
+    await asyncio.wait_for(b1.anchor.wait(), 2)
+    assert not a1.running
+    assert not b1.running
+    assert not manager.pool
+    assert not manager.closing_children
+
 
 async def test_resource_pool_stacking():
     counter = itertools.count()
@@ -79,6 +121,7 @@ async def test_resource_pool_stacking():
             await self.closed()
 
     dcounter = itertools.count()
+
     class DoublePoolManager(PoolManager[SimplePoolMember, str], PoolMember[str]):
         async def create_member(self, executor_id: str) -> SimplePoolMember:
             return SimplePoolMember(my_id=executor_id)
@@ -100,7 +143,6 @@ async def test_resource_pool_stacking():
             await super().child_closed(pool_member)
             if len(self.pool) == 0:
                 await self.close()
-
 
     class UpperManager(PoolManager[DoublePoolManager, str]):
 
@@ -142,7 +184,6 @@ async def test_resource_pool_stacking():
             producer = await self.sub_manager.get(pre)
             return await producer.get(executor_id)
 
-
     om = OverManager()
     await om.start()
     aa = await om.get("a.a")
@@ -153,7 +194,3 @@ async def test_resource_pool_stacking():
 
     assert len(om.pool) == 0
     assert len(om.sub_manager.pool) == 0
-
-
-
-
