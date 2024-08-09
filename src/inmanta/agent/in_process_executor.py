@@ -23,8 +23,6 @@ from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Optional
 
-import pkg_resources
-
 import inmanta.agent.cache
 import inmanta.protocol
 import inmanta.util
@@ -36,6 +34,7 @@ from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.const import ParameterSource
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
+from inmanta.env import SafeRequirement
 from inmanta.loader import CodeLoader
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn
@@ -586,7 +585,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             await loop.run_in_executor(
                 self.process.thread_pool,
                 self._env.install_for_config,
-                list(pkg_resources.parse_requirements(blueprint.requirements)),
+                [SafeRequirement(requirement_string=e) for e in blueprint.requirements],
                 blueprint.pip_config,
             )
             await loop.run_in_executor(self.process.thread_pool, self._loader.deploy_version, blueprint.sources)

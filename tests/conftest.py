@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import importlib.metadata
 import logging.config
 import warnings
@@ -1915,8 +1916,8 @@ def index_with_pkgs_containing_optional_deps() -> str:
             path=os.path.join(tmpdirname, "pkg"),
             publish_index=pip_index,
             optional_dependencies={
-                "optional-a": [Requirement.parse("dep-a")],
-                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
+                "optional-a": [SafeRequirement(requirement_string="dep-a")],
+                "optional-b": [SafeRequirement(requirement_string="dep-b"), SafeRequirement(requirement_string="dep-c")],
             },
         )
         for pkg_name in ["dep-a", "dep-b", "dep-c"]:

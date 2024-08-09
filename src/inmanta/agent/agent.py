@@ -33,8 +33,6 @@ from logging import Logger
 from typing import Any, Collection, Dict, Optional, Union, cast
 
 from inmanta import config, const, data, protocol
-import inmanta.agent.executor
-from inmanta import config, const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
@@ -47,8 +45,7 @@ from inmanta.data.model import (
     ResourceType,
     ResourceVersionIdStr,
 )
-from inmanta.env import SafeRequirement
-from inmanta.loader import CodeLoader, ModuleSource
+from inmanta.loader import ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id
 from inmanta.types import Apireturn, JsonType
