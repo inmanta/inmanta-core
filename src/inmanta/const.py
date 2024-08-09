@@ -349,3 +349,10 @@ TRACEPARENT = "traceparent"
 # Resource sets marked for deletion during a partial export can be passed via this env
 # variable as a space separated list of set ids.
 INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"
+
+
+# File present in the root of a virtual environment of an executor.
+# This file is created after the venv is correctly created and touched at regular intervals while it's actively used.
+# It's used to determine whether a venv is only partially created (due to a server crash for example) or to determine when the
+# venv was last used.
+INMANTA_VENV_STATUS_FILENAME = ".inmanta_venv_status"
