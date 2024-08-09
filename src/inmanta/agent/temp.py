@@ -35,7 +35,7 @@ class RequiresProvidesMapping(BidirectionalManyToManyMapping[ResourceIdStr, Reso
         return self.get_primary(resource)
 
     def get_provides(self, resource: ResourceIdStr) -> Optional[Set[ResourceIdStr]]:
-        return self.get_secondary(resource)
+        return self.get_reverse(resource)
 
     # TODO: methods for updating requires-provides
 
@@ -63,8 +63,8 @@ class ResourceStatus(StrEnum):
     HAS_UPDATE: Resource's operational state does not match latest desired state, as far as we know. Either the resource
         has never been deployed, or was deployed for a different desired state or a compliance check revealed a diff.
     """
-    UP_TO_DATE: str = enum.auto()
-    HAS_UPDATE: str = enum.auto()
+    UP_TO_DATE = enum.auto()
+    HAS_UPDATE = enum.auto()
     # TODO: undefined / orphan? Otherwise a simple boolean `has_update` or `dirty` might suffice
 
 
@@ -77,9 +77,9 @@ class DeploymentResult(StrEnum):
     DEPLOYED: Last resource deployment was successful.
     FAILED: Last resource deployment was unsuccessful.
     """
-    NEW: str = enum.auto()
-    DEPLOYED: str = enum.auto()
-    FAILED: str = enum.auto()
+    NEW = enum.auto()
+    DEPLOYED = enum.auto()
+    FAILED = enum.auto()
     # TODO: design also has SKIPPED, do we need it now or add it later?
 
 
@@ -113,7 +113,7 @@ class ModelState:
         attributes: ResourceDetails,
     ) -> None:
         # TODO: raise KeyError if already lives in state?
-        self.resources[rid] = attributes
+        self.resources[resource] = attributes
         if resource in self.resource_state:
             self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
         else:
@@ -124,7 +124,7 @@ class ModelState:
         resource: ResourceIdStr,
         requires: Set[ResourceIdStr],
     ) -> None:
-        self.requires[rid] = requires
+        self.requires[resource] = requires
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -154,15 +154,70 @@ Type alias for the union of all task types. Allows exhaustive case matches.
 @dataclass
 class BlockedDeploy:
     # TODO: docstring: deploy blocked on requires -> blocked_on is subset of requires or None when not yet calculated
-    #   + mention that only deploys are ever blocked
+    #   + mention that only deploys (never other tasks) are ever blocked
     task: Deploy
     blocked_on: Optional[Set[ResourceIdStr]] = None
 
 
+@dataclass(frozen=True, order=True, kw_only=True)
+class TaskQueueItem:
+    priority: int
+    task: Task = dataclasses.field(compare=False)
+    # TODO: better name. Purpose is to uniquely identify a task item, even if an identical task happens to be added later
+    item_id: Task = dataclasses.field(compare=False)
+
+
+# TODO: style uniformity: dataclass vs normal class
+class AgentQueues:
+    """
+    Per-agent priority queue for ready-to-execute tasks.
+    """
+    # TODO: relies on undocumented asyncio.PriorityQueue._queue field and the fact that it's a heapq -> refinement ticket
+
+    # TODO: implement queue worker, but where to put it? This class or scheduler? Or separate worker class with self.lock?
+
+    def __init__(self) -> None:
+        # TODO: document that queue must not be used directly by class users
+        self._agent_queues: dict[str, asyncio.PriorityQueue[TaskQueueItem]] = {}
+        self._tasks_by_resource: dict[ResourceIdStr, list[Task]] = {}
+        # can not drop tasks from queue without breaking the heap invariant, or potentially breaking asyncio.Queue invariants
+        # => take approach suggested in heapq docs: simply mark as deleted
+        self._dropped_tasks: set[TaskQueueItem] = set()
+
+    def put_nowait(task: Task, priority: int) -> None:
+        # TODO: current implementation is only PoC grade, notable item_id is missing, and dict presence is never checked
+        item: TaskQueueItem = TaskQueueItem(priority=priority, task=task, item_id=0)
+        self._tasks_by_resource[task.resource].append(task)
+        self._agent_queues[agent].put_nowait(item)
+
+    # TODO: current interface and implementation is only PoC grade
+    def drop(self, task: Task) -> None:
+        self._dropped_tasks.add(task)
+        # TODO: also drop from _tasks_by_resource
+
+    def sorted(self, agent: str) -> list[Task]:
+        # TODO: remove this method: it's only a PoC to hightlight how to achieve a sorted view
+        queue: asyncio.PriorityQueue = self._agent_queues[agent]
+        queue._queue.sort()
+        return [item.task for item in queue._queue if item not in self._dropped_tasks]
+
+    async def get(self, agent: str) -> Task:
+        # TODO: current implementation is only PoC grade
+        queue: asyncio.PriorityQueue = self._agent_queues[agent]
+        while True:
+            item: TaskQueueItem = await queue.get()
+            if item in self._dropped_tasks:
+                deleted.discard(item)
+                continue
+            # TODO: drop from _tasks_by_resource
+            return item.task
+
+
 @dataclass
 class ScheduledWork:
-    # TODO: in_progress?
+    # TODO: keep track of in_progress tasks?
     # TODO: make this a data type with bidirectional read+remove access (ResourceIdStr -> list[Task]), so reset_requires can access it
+    #       See Wouter's PR for a base?
     agent_queues: dict[str, list[Task]] = dataclasses.field(default_factory=dict)
     waiting: dict[ResourceIdStr, BlockedDeploy] = dataclasses.field(default_factory=dict)
 
@@ -189,11 +244,29 @@ class ScheduledWork:
 
 
 # TODO: name
+# TODO: expand docstring
 class Scheduler:
+    """
+    Scheduler for resource actions. Reads resource state from the database and accepts deploy, dry-run, ... requests from the
+    server. Schedules these requests as tasks according to priorities and, in case of deploy tasks, requires-provides edges.
+    """
     def __init__(self) -> None:
-        # TODO
         self._state: Optional[ModelState] = None
-        self.work: ScheduledWork = ScheduledWork()
+        self._work: ScheduledWork = ScheduledWork()
+
+        # The scheduler continuously processes work in the scheduled work's queues and processes results of executed tasks,
+        # which may update both the resource state and the scheduled work (e.g. move unblocked tasks to the queue).
+        # TODO: below might not be accurate: will we really use a single worker, or one per agent queue?
+        # Since we use a single worker to process the queue, little concurrency control is required there. We only need to lock
+        # out state read/write when external events require us update scheduler state from outside this continuous process.
+        # To this end we uphold two locks:
+        # lock to block scheduler state access during scheduler-wide state updates (e.g. trigger deploy)
+        # TODO: does this lock need to allow shared access or can we make the queue worker access it serially without blocking
+        #   concurrent tasks (e.g. acqurie only when reading / writing, let go while waiting for agent to do work).
+        #   IF SO, document that the lock must only be acquired in very short bursts, except during thses state updates
+        self._scheduler_lock: asyncio.Lock = asyncio.Lock()
+        # lock to serialize scheduler state updates (i.e. process new version)
+        self._update_lock: asyncio.Lock = asyncio.Lock()
 
     def start(self) -> None:
         # TODO (ticket): read from DB instead
@@ -214,36 +287,40 @@ class Scheduler:
         resources: Mapping[ResourceIdStr, ResourceDetails],
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
     ) -> None:
-        # TODO: make sure it doesn't block queue until lock is acquired: either run on thread or make sure to regularly pass
-        #   control to IO loop (preferred)
-        # TODO: design step 1: acquire update lock
-        # TODO: what to do when an export changes handler code without changing attributes? Consider in deployed state? What
-        #   does current implementation do?
-        deleted_resources: Set[ResourceIdStr] = self.state.resources.keys() - resources.keys()
-        # TODO: drop deleted resources from scheduled work
+        async with self._update_lock.acquire():
+            # Inspect new state and mark resources as "update pending" where appropriate. Since this method is the only writer
+            # for "update pending", and a stale read is acceptable, we can do this part before acquiring the exclusive scheduler
+            # lock.
+            # TODO: what to do when an export changes handler code without changing attributes? Consider in deployed state? What
+            #   does current implementation do?
+            deleted_resources: Set[ResourceIdStr] = self.state.resources.keys() - resources.keys()
+            # TODO: drop deleted resources from scheduled work
 
-        new_desired_state: list[ResourceIdStr] = []
-        changed_requires: list[ResourceIdStr] = []
-        for resource, details in resources.items():
-            if resource not in self.state.resources or details.attribute_hash != self.state.resources[resource].attribute_hash:
-                self.state.update_pending.add(resource)
-                new_desired_state.append(resource)
-            if requires.get(resource, set()) != self.state.requires.get(resource, set()):
-                self.state.update_pending.add(resource)
-                changed_requires.append(resource)
-        # TODO: design step 4: acquire scheduler lock
-        self.state.version = version
-        for resource in new_desired_state:
-            self.state.update_desired_state(resource, resources[resource])
-        for resource in changed_requires:
-            self.state.update_requires(resource, requires[resource])
-            self.work.update_requires(resource)
+            # TODO: make sure this part (before scheduler lock is acquired) doesn't block queue until lock is acquired: either
+            # run on thread or make sure to regularly pass control to IO loop (preferred)
+            new_desired_state: list[ResourceIdStr] = []
+            changed_requires: list[ResourceIdStr] = []
+            for resource, details in resources.items():
+                if resource not in self.state.resources or details.attribute_hash != self.state.resources[resource].attribute_hash:
+                    self.state.update_pending.add(resource)
+                    new_desired_state.append(resource)
+                if requires.get(resource, set()) != self.state.requires.get(resource, set()):
+                    self.state.update_pending.add(resource)
+                    changed_requires.append(resource)
 
-        # TODO: design step 6: release scheduler lock
-        # TODO: design step 7: drop update_pending
-        # TODO: design step 8: release update lock
-        # TODO: design step 9: call into normal deploy flow's part after the lock (step 4)
-        # TODO: design step 10: Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added again by a deploy trigger
+            #
+            async with self._scheduler_lock.acquire():
+                self.state.version = version
+                for resource in new_desired_state:
+                    self.state.update_desired_state(resource, resources[resource])
+                for resource in changed_requires:
+                    self.state.update_requires(resource, requires[resource])
+                    self._work.reset_requires(resource)
+
+                # TODO: design step 6: release scheduler lock
+                # TODO: design step 7: drop update_pending
+            # TODO: design step 9: call into normal deploy flow's part after the lock (step 4)
+            # TODO: design step 10: Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added again by a deploy trigger
 
 
 # TODO: what needs to be refined before hand-off?
