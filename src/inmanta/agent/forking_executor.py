@@ -856,7 +856,7 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children_ids = self.agent_map[agent_name]
         children = [self.executor_map[child_id] for child_id in children_ids]
-        await asyncio.gather(*(child.stop() for child in self.children))
+        await asyncio.gather(*(child.stop() for child in children))
         return children
 
     async def get_pool_members(self) -> typing.Sequence[MPExecutor]:
