@@ -21,7 +21,7 @@ import os
 import random
 import socket
 
-import netifaces
+import psutil
 import pytest
 from tornado import netutil
 
@@ -209,9 +209,13 @@ async def test_bind_address_ipv4(async_finalizer):
             return 200
 
     # Select a bind address which is not on the loopback interface
-    non_loopback_interfaces = [i for i in netifaces.interfaces() if i != "lo" and socket.AF_INET in netifaces.ifaddresses(i)]
-    bind_iface = "eth0" if "eth0" in non_loopback_interfaces else random.choice(non_loopback_interfaces)
-    bind_addr = netifaces.ifaddresses(bind_iface)[socket.AF_INET][0]["addr"]
+    non_loopback_interfaces = [
+        address
+        for (name, adresses) in psutil.net_if_addrs().items()
+        for (family, address, netmask, ptp, broadcast) in adresses
+        if name != "lo" and family == socket.AF_INET
+    ]
+    bind_addr = random.choice(non_loopback_interfaces)
 
     # Get free port on all interfaces
     sock = netutil.bind_sockets(0, "0.0.0.0", family=socket.AF_INET)[0]
