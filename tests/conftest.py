@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import importlib.metadata
 import logging.config
 import warnings
 
@@ -94,14 +95,12 @@ from configparser import ConfigParser
 from typing import Callable, Dict, Optional, Union
 
 import asyncpg
-import pkg_resources
 import psutil
 import py
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
@@ -120,7 +119,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import CommandRunner, LocalPackagePath, VirtualEnv, mock_process_env
+from inmanta.env import CommandRunner, LocalPackagePath, SafeRequirement, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -510,7 +509,6 @@ def deactive_venv():
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
-    old_working_set = pkg_resources.working_set
     old_available_extensions = (
         dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
     )
@@ -527,7 +525,6 @@ def deactive_venv():
     sys.path_hooks.extend(old_path_hooks)
     # Clear cache for sys.path_hooks
     sys.path_importer_cache.clear()
-    pkg_resources.working_set = old_working_set
     # Restore PYTHONPATH
     if old_pythonpath is not None:
         os.environ["PYTHONPATH"] = old_pythonpath
@@ -1090,7 +1087,7 @@ class ReentrantVirtualEnv(VirtualEnv):
     def deactivate(self):
         if self._using_venv:
             self._using_venv = False
-            self.working_set = pkg_resources.working_set
+            self.working_set = importlib.metadata.distributions()
 
     def use_virtual_env(self) -> None:
         """
@@ -1107,7 +1104,7 @@ class ReentrantVirtualEnv(VirtualEnv):
             # Later run
             self._activate_that()
             mock_process_env(python_path=self.python_path)
-            pkg_resources.working_set = self.working_set
+            self.working_set = importlib.metadata.distributions()
             self._using_venv = True
 
 
@@ -1154,7 +1151,7 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path: Optional[list[str]] = None,
         python_package_sources: Optional[list[str]] = None,
         project_requires: Optional[list[InmantaModuleRequirement]] = None,
-        python_requires: Optional[list[Requirement]] = None,
+        python_requires: Optional[list[SafeRequirement]] = None,
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
         strict_deps_check: Optional[bool] = None,
@@ -1256,7 +1253,7 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path: Optional[list[str]] = None,
         python_package_sources: Optional[list[str]] = None,
         project_requires: Optional[list[InmantaModuleRequirement]] = None,
-        python_requires: Optional[list[Requirement]] = None,
+        python_requires: Optional[list[SafeRequirement]] = None,
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
         use_pip_config_file: bool = False,
@@ -1919,8 +1916,8 @@ def index_with_pkgs_containing_optional_deps() -> str:
             path=os.path.join(tmpdirname, "pkg"),
             publish_index=pip_index,
             optional_dependencies={
-                "optional-a": [Requirement.parse("dep-a")],
-                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
+                "optional-a": [SafeRequirement(requirement_string="dep-a")],
+                "optional-b": [SafeRequirement(requirement_string="dep-b"), SafeRequirement(requirement_string="dep-c")],
             },
         )
         for pkg_name in ["dep-a", "dep-b", "dep-c"]:

@@ -34,14 +34,12 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence
 
-import pkg_resources
-
 import inmanta.types
 import inmanta.util
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
-from inmanta.env import PythonEnvironment
+from inmanta.env import PythonEnvironment, SafeRequirement
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
 from inmanta.types import JsonType
@@ -310,7 +308,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, PoolMember):
         self.init_env()
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             self.install_for_config(
-                requirements=list(pkg_resources.parse_requirements(req)),
+                requirements=[SafeRequirement(requirement_string=e) for e in req],
                 config=blueprint.pip_config,
             )
 

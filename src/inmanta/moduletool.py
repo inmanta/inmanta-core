@@ -38,14 +38,13 @@ from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import IO, TYPE_CHECKING, Any, Optional
+from typing import IO, Any, Optional
 
 import click
 import more_itertools
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
-from pkg_resources import Requirement
 
 import build
 import inmanta
@@ -56,6 +55,7 @@ from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
+from inmanta.env import SafeRequirement
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -76,12 +76,8 @@ from inmanta.module import (
     gitprovider,
 )
 from inmanta.stable_api import stable_api
+from packaging.requirements import InvalidRequirement
 from packaging.version import Version
-
-if TYPE_CHECKING:
-    from packaging.requirements import InvalidRequirement
-else:
-    from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
 LOGGER = logging.getLogger(__name__)
 
@@ -477,7 +473,7 @@ compatible with the dependencies specified by the updated modules.
         def do_update(specs: Mapping[str, Sequence[InmantaModuleRequirement]], modules: list[str]) -> None:
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
-            v2_python_specs: list[Requirement] = [
+            v2_python_specs: list[SafeRequirement] = [
                 module_spec.get_python_package_requirement()
                 for module, module_specs in specs.items()
                 for module_spec in module_specs
@@ -489,7 +485,7 @@ compatible with the dependencies specified by the updated modules.
                 # Because for pip not every valid -r is a valid -c
                 current_requires = my_project.get_strict_python_requirements_as_list()
                 env.process_env.install_for_config(
-                    v2_python_specs + [Requirement.parse(r) for r in current_requires],
+                    v2_python_specs + [SafeRequirement(requirement_string=r) for r in current_requires],
                     my_project.metadata.pip,
                     upgrade=True,
                 )
