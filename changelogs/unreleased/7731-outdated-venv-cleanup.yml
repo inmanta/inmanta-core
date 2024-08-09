@@ -1,0 +1,4 @@
+---
+description: Clean virtual environments that rely on outdated python version.
+change-type: minor
+destination-branches: [master]

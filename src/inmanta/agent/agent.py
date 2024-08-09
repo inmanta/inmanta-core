@@ -24,6 +24,7 @@ import enum
 import logging
 import os
 import random
+import sys
 import time
 import traceback
 import uuid
@@ -1268,7 +1269,14 @@ class Agent(SessionEndpoint):
                         continue
 
                 resource_install_spec = ResourceInstallSpec(
-                    resource_type, version, executor.ExecutorBlueprint(pip_config, list(requirements), sources)
+                    resource_type,
+                    version,
+                    executor.ExecutorBlueprint(
+                        pip_config=pip_config,
+                        requirements=list(requirements),
+                        sources=sources,
+                        python_version=sys.version_info[:2],
+                    ),
                 )
                 resource_install_specs.append(resource_install_spec)
                 # Update the ``_code_cache`` cache to indicate that the given resource type's ResourceInstallSpec
