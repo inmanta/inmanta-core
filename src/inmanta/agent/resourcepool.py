@@ -151,7 +151,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
         """
         pass
 
-    async def stop(self) -> None:
+    async def close(self) -> None:
         """
         Stop the cleaning job of the Pool Manager.
         """
@@ -179,7 +179,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
 
         This method assumes to be in a lock to prevent other operations to overlap with the cleanup.
         """
-        if pool_member.is_stopped:
+        if pool_member.is_stopping:
             return
         self.closing_children.add(pool_member)
         await pool_member.close()
@@ -218,14 +218,14 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
         """
         # Acquire a lock based on the executor's pool id
         async with self._locks.get(self.get_lock_name_for(member_id)):
-            if member_id in self.pool:
-                it = self.pool[member_id]
+            it = self.pool.get(member_id, None)
+            if it is not None:
                 if not it.is_stopping:
                     LOGGER.debug("Found existing %s for %s with id %s", self.my_name(), self.member_name(it), member_id)
                     it.touch()
                     return it
                 else:
-                    self.pre_replace(it)
+                    await self.pre_replace(it)
             return await self._create_or_replace(member_id)
 
     async def _create_or_replace(self, member_id: TPoolID) -> TPoolMember:
@@ -315,8 +315,8 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TPoolMember]):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up() and pool_member.last_used < oldest_time and pool_member.running:
                             LOGGER.debug(
-                                f"Pool member %s with %.2f >= %d is about to expire",
-                                pool_member.get_id(),
+                                f"%s with %.2f >= %d is about to expire",
+                                self.member_name(pool_member),
                                 (cleanup_start - pool_member.last_used).total_seconds(),
                                 self.retention_time,
                             )

@@ -136,7 +136,7 @@ async def test_resource_pool_stacking():
 
         async def close(self) -> None:
             await PoolMember.close(self)
-            await PoolManager.stop(self)
+            await PoolManager.close(self)
             await self.closed()
 
         async def child_closed(self, pool_member: SimplePoolMember) -> bool:

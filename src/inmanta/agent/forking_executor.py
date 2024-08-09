@@ -31,7 +31,9 @@ import socket
 import threading
 import typing
 import uuid
-from asyncio import Future, transports
+from asyncio import Future, Lock, transports
+from concurrent.futures import ThreadPoolExecutor
+from typing import Awaitable
 
 import inmanta.agent.cache
 import inmanta.agent.config
@@ -48,7 +50,8 @@ import inmanta.signals
 import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
-from inmanta.agent import executor
+from inmanta.agent import executor, resourcepool
+from inmanta.agent.resourcepool import PoolManager, PoolMember, TPoolID, TPoolMember
 from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
@@ -59,9 +62,12 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
+from inmanta.util import NamedLock, Scheduler, join_threadpools
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(__name__)
+
+# TODO: strip URI, it is too complex
 
 
 class ExecutorContext:
@@ -69,21 +75,60 @@ class ExecutorContext:
 
     client: typing.Optional[inmanta.protocol.SessionClient]
     venv: typing.Optional[inmanta.env.VirtualEnv]
-    name: str
-    executor: typing.Optional["inmanta.agent.in_process_executor.InProcessExecutor"]
+    environment: uuid.UUID
+    executors: dict[str, "inmanta.agent.in_process_executor.InProcessExecutor"] = {}
 
-    def __init__(self, server: "ExecutorServer") -> None:
+    def __init__(self, server: "ExecutorServer", environment: uuid.UUID) -> None:
         self.server = server
         self.threadpool = concurrent.futures.thread.ThreadPoolExecutor()
+        self.environment = environment
         self.name = server.name
+
+    def get(self, name: str) -> "inmanta.agent.in_process_executor.InProcessExecutor":
+        return self.executors[name]
+
+    # We have no join here yet, don't know if we need it
+    async def init_for(self, name: str, uri: str) -> None:
+        LOGGER.info("Starting for %s", name)
+        if name in self.executors:
+            LOGGER.info("Waiting for old executor %s to shutdown", name)
+            # We existed before
+            old_one = self.executors[name]
+            # But were stopped
+            assert old_one.is_stopped()
+            # Make sure old one is down
+            finalizer: list[ThreadPoolExecutor] = []
+            old_one.join(finalizer)
+            await join_threadpools(finalizer)
+
+        loop = asyncio.get_running_loop()
+        parent_logger = logging.getLogger("agent.executor")
+        assert self.client  # mypy
+        # Setup agent instance
+        executor = inmanta.agent.in_process_executor.InProcessExecutor(
+            agent_name=name,
+            agent_uri=uri,
+            environment=self.environment,
+            client=self.client,
+            eventloop=loop,
+            parent_logger=parent_logger,
+        )
+        self.executors[name] = executor
+
+    async def stop_for(self, name: str) -> None:
+        try:
+            LOGGER.info("Stopping for %s", name)
+            self.get(name).stop()
+        except:
+            LOGGER.exception("Stop failed for %s", name)
 
     async def stop(self) -> None:
         """Request the executor to stop"""
-        if self.executor:
-            self.executor.stop()
-        if self.executor:
-            # threadpool finalizer is not used, we expect threadpools to be terminated with the process
-            self.executor.join([])
+        for executor in self.executors.values():
+            executor.stop()
+        # TODO: no join here either
+        # threadpool finalizer is not used, we expect threadpools to be terminated with the process
+        # self.executor.join([])
         await self.server.stop()
 
 
@@ -107,23 +152,37 @@ class ExecutorServer(IPCServer[ExecutorContext]):
     Pipe break: go to 3a and 3b
     """
 
-    def __init__(self, name: str, logger: logging.Logger, take_over_logging: bool = True) -> None:
+    def __init__(self, name: str, environment: uuid.UUID, logger: logging.Logger, take_over_logging: bool = True) -> None:
         """
         :param take_over_logging: when we are connected and are able to stream logs, do we remove all other log handlers?
         """
         super().__init__(name)
+        self.environment = environment
+
+        # State machine
         self.stopping = False
         self.stopped = asyncio.Event()
-        self.ctx = ExecutorContext(self)
+
+        # logging
         self.log_transport: typing.Optional[LogShipper] = None
         self.take_over_logging = take_over_logging
+        self.logger = logger
+
+        # sub executors
+        self.ctx = ExecutorContext(self, environment)
+
+        # venc keep alive
         # This interval and this task will be initialized when the InitCommand is received, see usage of `venv_cleanup_task`.
         # We set this to `None` as this field will be used to ensure that the InitCommand is only called once
         self.timer_venv_scheduler_interval: typing.Optional[float] = None
         # We keep a reference to the periodic cleanup task to prevent it
         # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
         self.venv_cleanup_task: typing.Optional[asyncio.Task[None]] = None
-        self.logger = logger
+
+    def ainit(self, timer_venv_scheduler_interval: float) -> None:
+        """Second stage init, once the eventloop is present"""
+        self.timer_venv_scheduler_interval = timer_venv_scheduler_interval
+        self.venv_cleanup_task = asyncio.create_task(self.start_timer_venv_checkup())
 
     def set_status(self, status: str) -> None:
         """Update the process name to reflect the identity and status of this executor"""
@@ -149,22 +208,13 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         # Once connection is lost, we want to detach asap to keep the logging clean and efficient
         if self.log_transport:
             logging.getLogger().removeHandler(self.log_transport)
-            self.log_transport = None
-
-    async def start_timer_venv_checkup(self) -> None:
-        if self.timer_venv_scheduler_interval is None:
-            return
-
-        while not self.stopping:
-            await self.touch_inmanta_venv_status()
-            if not self.stopping:
-                await asyncio.sleep(self.timer_venv_scheduler_interval)
 
     def get_context(self) -> ExecutorContext:
         return self.ctx
 
     async def stop(self) -> None:
         """Perform shutdown"""
+        # shutdown children
         self._sync_stop()
 
     def _sync_stop(self) -> None:
@@ -182,8 +232,19 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self._detach_log_shipper()
         self.logger.info("Connection lost", exc_info=exc)
         self.set_status("disconnected")
+        # We don't shutdown the sub-executors, but we just drop dead.
         self._sync_stop()
         self.stopped.set()
+        self.log_transport = None
+
+    async def start_timer_venv_checkup(self) -> None:
+        if self.timer_venv_scheduler_interval is None:
+            return
+
+        while not self.stopping:
+            await self.touch_inmanta_venv_status()
+            if not self.stopping:
+                await asyncio.sleep(self.timer_venv_scheduler_interval)
 
     async def touch_inmanta_venv_status(self) -> None:
         """
@@ -236,6 +297,15 @@ class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
         await context.stop()
 
 
+class StopCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    async def call(self, context: ExecutorContext) -> None:
+        await context.stop_for(self.name)
+
+
 class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.FailedModuleSource]]):
     """
     Initialize the executor:
@@ -252,8 +322,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         storage_folder: str,
         session_gid: uuid.UUID,
         sources: list[inmanta.loader.ModuleSource],
-        environment: uuid.UUID,
-        uri: str,
         venv_touch_interval: float = 60.0,
     ):
         """
@@ -265,8 +333,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         self.storage_folder = storage_folder
         self.gid = session_gid
         self.sources = sources
-        self.environment = environment
-        self.uri = uri
         self._venv_touch_interval = venv_touch_interval
 
     async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.FailedModuleSource]:
@@ -276,25 +342,14 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         parent_logger = logging.getLogger("agent.executor")
         logger = parent_logger.getChild(context.name)
 
+        context.server.ainit(self._venv_touch_interval)
+
         # setup client
         context.client = inmanta.protocol.SessionClient("agent", self.gid)
-
-        # Setup agent instance
-        context.executor = inmanta.agent.in_process_executor.InProcessExecutor(
-            agent_name=context.name,
-            agent_uri=self.uri,
-            environment=self.environment,
-            client=context.client,
-            eventloop=loop,
-            parent_logger=parent_logger,
-        )
 
         # activate venv
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
-
-        context.server.timer_venv_scheduler_interval = self._venv_touch_interval
-        context.server.venv_cleanup_task = asyncio.create_task(context.server.start_timer_venv_checkup())
 
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
@@ -337,66 +392,78 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         return failed
 
 
-class OpenVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
-    def __init__(self, version: int) -> None:
-        self.version = version
+    def __init__(self, name: str, uri: str) -> None:
+        self.name = name
+        self.uri = uri
 
     async def call(self, context: ExecutorContext) -> None:
-        assert context.executor is not None
-        await context.executor.open_version(self.version)
+        await context.init_for(self.name, self.uri)
+
+
+class OpenVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+
+    def __init__(self, agent_name: str, version: int) -> None:
+        self.version = version
+        self.agent_name = agent_name
+
+    async def call(self, context: ExecutorContext) -> None:
+        await context.get(self.agent_name).open_version(self.version)
 
 
 class CloseVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
-    def __init__(self, version: int) -> None:
+    def __init__(self, agent_name: str, version: int) -> None:
         self.version = version
+        self.agent_name = agent_name
 
     async def call(self, context: ExecutorContext) -> None:
-        assert context.executor is not None
-        await context.executor.close_version(self.version)
+        await context.get(self.agent_name).close_version(self.version)
 
 
 class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
     def __init__(
         self,
+        agent_name: str,
         resources: typing.Sequence["inmanta.agent.executor.ResourceDetails"],
         dry_run_id: uuid.UUID,
     ) -> None:
+        self.agent_name = agent_name
         self.resources = resources
         self.dry_run_id = dry_run_id
 
     async def call(self, context: ExecutorContext) -> None:
-        assert context.executor is not None
-        await context.executor.dry_run(self.resources, self.dry_run_id)
+        await context.get(self.agent_name).dry_run(self.resources, self.dry_run_id)
 
 
 class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
     def __init__(
         self,
+        agent_name: str,
         gid: uuid.UUID,
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
     ) -> None:
+        self.agent_name = agent_name
         self.gid = gid
         self.resource_details = resource_details
         self.reason = reason
 
     async def call(self, context: ExecutorContext) -> None:
-        assert context.executor is not None
-        await context.executor.execute(self.gid, self.resource_details, self.reason)
+        await context.get(self.agent_name).execute(self.gid, self.resource_details, self.reason)
 
 
 class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta.types.Apireturn]):
 
-    def __init__(self, resource: "inmanta.agent.executor.ResourceDetails") -> None:
+    def __init__(self, agent_name: str, resource: "inmanta.agent.executor.ResourceDetails") -> None:
+        self.agent_name = agent_name
         self.resource = resource
 
     async def call(self, context: ExecutorContext) -> inmanta.types.Apireturn:
-        assert context.executor is not None
-        return await context.executor.get_facts(self.resource)
+        return await context.get(self.agent_name).get_facts(self.resource)
 
 
 def set_executor_status(name: str, status: str) -> None:
@@ -408,6 +475,7 @@ def set_executor_status(name: str, status: str) -> None:
 def mp_worker_entrypoint(
     socket: socket.socket,
     name: str,
+    environment: uuid.UUID,
     log_level: int,
     cli_log: bool,
     config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
@@ -437,7 +505,7 @@ def mp_worker_entrypoint(
         # also performs setup of log shipper
         # this is part of stage 2 logging setup
         transport, protocol = await loop.connect_accepted_socket(
-            functools.partial(ExecutorServer, name, logger, not cli_log), socket
+            functools.partial(ExecutorServer, name, environment, logger, not cli_log), socket
         )
         inmanta.signals.setup_signal_handlers(protocol.stop)
         await protocol.stopped.wait()
@@ -448,82 +516,94 @@ def mp_worker_entrypoint(
     exit(0)
 
 
-class MPExecutor(executor.Executor, executor.PoolMember):
-    """A Single Child Executor"""
+class MPProcess(PoolManager[executor.ExecutorId, "MPExecutor"], PoolMember[executor.ExecutorBlueprint]):
+    """
+
+    Physical process proxy, hands out child executors
+
+    Termination scenarios:
+    - connection loss:
+       - all outstand calls fail, future calls fail as well
+       - signal parent to drop this instance and all its children from the cache
+       - clean up using _force_stop
+    - no more children
+       - send stop to remote end
+       - wait for connection loss
+    - termination request from parent
+       - send stop to children
+    """
 
     def __init__(
         self,
-        owner: "MPManager",
+        name: str,
         process: multiprocessing.Process,
         connection: ExecutorClient,
-        executor_id: executor.ExecutorId,
+        executor_blueprint: executor.ExecutorBlueprint,
         venv: executor.ExecutorVirtualEnvironment,
     ):
+        PoolMember.__init__(self, executor_blueprint)
+        PoolManager.__init__(self)
+
+        self.name = name
+
         self.process = process
         self.connection = connection
-        self.connection.finalizers.append(self.force_stop)
-        self.closing = False
-        self.closed = False
-        self.owner = owner
+        self.connection.finalizers.append(self.connection_lost)
+
         self.termination_lock = threading.Lock()
+
         # Pure for debugging purpose
-        self.executor_id = executor_id
+        self.executor_blueprint = executor_blueprint  # TODO: duplicates my_id
         self.executor_virtual_env = venv
 
         # Set by init and parent class that const
         self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = list()
-        self.failed_resources: executor.FailedResources = {}
 
-    async def stop(self) -> None:
-        """Stop by shutdown"""
-        self.closing = True
-        try:
-            self.connection.call(StopCommand(), False)
-        except inmanta.protocol.ipc_light.ConnectionLost:
-            # Already gone
-            pass
+    def my_name(self) -> str:
+        return f"Executor Process {self.name} for PID {self.process.pid}"  # TODO: align with PS listing name
 
-    async def clean(self) -> None:
-        """Stop by shutdown and catch any error that may occur"""
-        try:
-            await self.stop()
-        except Exception:
-            LOGGER.exception(
-                "Unexpected error during executor %s cleanup:",
-                self.executor_id.identity(),
-            )
+    def member_name(self, member: "MPExecutor") -> str:
+        return f"Executor for {member.get_id().agent_name}"
 
-    def can_be_cleaned_up(self, retention_time: int) -> bool:
-        if self.connection.has_outstanding_calls():
-            return False
+    def get_lock_name_for(self, member_id: executor.ExecutorId) -> str:
+        return member_id.identity()
 
-        return self.connection.get_idle_time() > datetime.timedelta(seconds=retention_time)
+    async def connection_lost(self) -> None:
+        # Setting is_stopping causes us not to send out stop commands
+        self.is_stopping = True
+        # eagerly terminate children
+        # Setting is_stopping on the children shortcuts their normal termination
+        # This may loop back here via the child_closed callback when the last child is removed
+        # Cycle will be broken on self.close()
+        for child in list(self.pool.values()):
+            await child.closed()
+        # wait for close
+        await self.join_process()
 
-    def get_id(self) -> str:
-        return self.executor_id.identity()
-
-    def last_used(self) -> datetime.datetime:
-        return self.connection.last_used_at
-
-    async def force_stop(self, grace_time: float = inmanta.const.EXECUTOR_GRACE_HARD) -> None:
+    async def join_process(self, grace_time: float = inmanta.const.EXECUTOR_GRACE_HARD) -> None:
         """
         Stop by process close
 
         This method will never raise an exeption, but log it instead.
         """
-        self.closing = True
-        await asyncio.get_running_loop().run_in_executor(
-            self.owner.thread_pool, functools.partial(self._force_stop, grace_time)
-        )
+        self.is_stopping = True
+        if not self.is_stopped:
+            await asyncio.get_running_loop().run_in_executor(None, functools.partial(self._join_process, grace_time))
+            # todo: manage threadpool
+        await self.closed()
 
-    def _force_stop(self, grace_time: float) -> None:
-        """This method will never raise an exeption, but log it instead, as it is used as a finalizer"""
-        if self.closed:
+    def _join_process(self, grace_time: float) -> None:
+        """
+        This method will never raise an exeption, but log it instead, as it is used as a finalizer
+
+        Should be called from the async variant above
+        """
+        if self.is_stopped:
             return
         with self.termination_lock:
             # This code doesn't work when two threads go through it
             # Multiprocessing it too brittle for that
-            if self.closed:
+            if self.is_stopped:
                 return
             try:
 
@@ -533,9 +613,8 @@ class MPExecutor(executor.Executor, executor.PoolMember):
 
                 if self.process.exitcode is None:
                     LOGGER.warning(
-                        "Executor for agent %s with id %s didn't stop after timeout of %d seconds. Killing it.",
-                        self.executor_id.agent_name,
-                        self.executor_id.identity(),
+                        "%s didn't stop after timeout of %d seconds. Killing it.",
+                        self.my_name(),
                         grace_time,
                     )
                     # still running! Be a bit more firm
@@ -549,49 +628,120 @@ class MPExecutor(executor.Executor, executor.PoolMember):
                     pass
                 else:
                     LOGGER.warning(
-                        "Executor for agent %s with id %s and pid %s failed to shutdown.",
-                        self.executor_id.agent_name,
-                        self.executor_id.identity(),
+                        "%s and pid %s failed to shutdown.",
+                        self.my_name(),
                         self.process.pid,
                         exc_info=True,
                     )
             except Exception:
                 LOGGER.warning(
-                    "Executor for agent %s with id %s and pid %s failed to shutdown.",
-                    self.executor_id.agent_name,
-                    self.executor_id.identity(),
+                    "%s and pid %s failed to shutdown.",
+                    self.my_name(),
                     self.process.pid,
                     exc_info=True,
                 )
-            # Discard this executor, even if we could not close it
-            self._set_closed()
 
-    def _set_closed(self) -> None:
-        # this code can be raced from the join call and the disconnect handler
-        # relying on the GIL to keep us safe
-        if not self.closed:
-            self.closing = True
-            self.closed = True
-            self.owner._child_closed(self)
+    async def close(self) -> None:
+        if not self.is_stopping:
+            self.is_stopping = True
+            await PoolMember.close(self)
+            self.connection.call(StopCommand(), False)
+
+        # At the moment, we don't eagery terminate the children here yet, we wait for connection to drop
+
+    async def child_closed(self, pool_member: "MPExecutor") -> bool:
+        result = await super().child_closed(pool_member)
+        if len(self.pool) == 0:
+            await self.close()
+        return result
 
     async def join(self, timeout: float = inmanta.const.EXECUTOR_GRACE_HARD) -> None:
-        if self.closed:
+        if self.is_stopped:
             return
-        assert self.closing
-        await asyncio.get_running_loop().run_in_executor(self.owner.thread_pool, functools.partial(self._force_stop, timeout))
+        await self.join_process()
+
+    async def create_member(self, executor_id: executor.ExecutorId) -> "MPExecutor":
+        member = MPExecutor(self, executor_id)
+        await member.start()
+        return member
+
+
+class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]):
+    """A Single Child Executor
+
+    termination:
+    - stop requested by parent:
+      - send stop to remote end
+      - signal parent we are stopped
+    - stop by timer
+      - send stop to remote end
+      - signal parent we are stopped
+
+    """
+
+    def __init__(
+        self,
+        process: MPProcess,
+        executor_id: executor.ExecutorId,
+    ):
+        super().__init__(executor_id)
+
+        self.name = executor_id.agent_name
+        self.process = process
+
+        # connection stats
+        self.in_flight = 0
+
+        # close_task
+        self.stop_task: Awaitable[None]
+
+        # Set by init and parent class that const
+        self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = process.failed_resource_results
+        self.failed_resources: executor.FailedResources = {}
+
+    async def call(self, method: IPCMethod[ExecutorContext, ReturnType]) -> ReturnType:
+        try:
+            self.in_flight += 1
+            out = await self.process.connection.call(method)
+            self.last_used_at = datetime.datetime.now().astimezone()
+            return out
+        finally:
+            self.in_flight -= 1
+
+    async def start(self):
+        await self.call(InitCommandFor(self.name, self.id.agent_uri))
+
+    async def close(self) -> None:
+        """Stop by shutdown"""
+        if self.is_stopping:
+            return
+        await super().close()
+
+        async def inner_close() -> None:
+            try:
+                self.process.connection.call(StopCommandFor(self.name))
+            except inmanta.protocol.ipc_light.ConnectionLost:
+                # Already gone
+                pass
+            await self.closed()
+
+        self.stop_task = asyncio.create_task(inner_close())
+
+    def can_be_cleaned_up(self) -> bool:
+        return self.in_flight == 0
 
     async def close_version(self, version: int) -> None:
-        await self.connection.call(CloseVersionCommand(version))
+        await self.call(CloseVersionCommand(self.id.agent_name, version))
 
     async def open_version(self, version: int) -> None:
-        await self.connection.call(OpenVersionCommand(version))
+        await self.call(OpenVersionCommand(self.id.agent_name, version))
 
     async def dry_run(
         self,
         resources: typing.Sequence["inmanta.agent.executor.ResourceDetails"],
         dry_run_id: uuid.UUID,
     ) -> None:
-        await self.connection.call(DryRunCommand(resources, dry_run_id))
+        await self.call(DryRunCommand(self.id.agent_name, resources, dry_run_id))
 
     async def execute(
         self,
@@ -599,17 +749,172 @@ class MPExecutor(executor.Executor, executor.PoolMember):
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
     ) -> None:
-        await self.connection.call(ExecuteCommand(gid, resource_details, reason))
+        await self.call(ExecuteCommand(self.id.agent_name, gid, resource_details, reason))
 
     async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> inmanta.types.Apireturn:
-        return await self.connection.call(FactsCommand(resource))
+        return await self.call(FactsCommand(self.id.agent_name, resource))
+
+    async def join(self) -> None:
+        assert self.is_stopping
+        await self.stop_task
+
+
+class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, MPProcess]):
+
+    def __init__(
+        self,
+        thread_pool: concurrent.futures.thread.ThreadPoolExecutor,
+        session_gid: uuid.UUID,
+        environment: uuid.UUID,
+        log_folder: str,
+        storage_folder: str,
+        log_level: int = logging.INFO,
+        cli_log: bool = False,
+    ) -> None:
+        """
+        :param thread_pool:  threadpool to perform work on
+        :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
+        :param environment: the inmanta environment we are deploying for
+        :param log_folder: folder to place log files for the executors
+        :param storage_folder: folder to place code files
+        :param log_level: log level for the executors
+        :param cli_log: do we also want to echo the log to std_err
+
+        """
+        super().__init__()
+        self.init_once()
+
+        self.thread_pool = thread_pool
+
+        self.environment = environment
+        self.session_gid = session_gid
+
+        # on disk
+        self.log_folder = log_folder
+        self.storage_folder = storage_folder
+        os.makedirs(self.log_folder, exist_ok=True)
+        os.makedirs(self.storage_folder, exist_ok=True)
+        venv_dir = pathlib.Path(self.storage_folder) / "venv"
+        venv_dir.mkdir(exist_ok=True)
+
+        # Env manager
+        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venv_dir.absolute()), self.thread_pool)
+
+        # logging
+        self.log_level = log_level
+        self.cli_log = cli_log
+
+    @classmethod
+    def init_once(cls) -> None:
+        try:
+            multiprocessing.set_start_method("forkserver")
+            # Load common modules
+            # Including this one
+            multiprocessing.set_forkserver_preload(["inmanta.config", __name__, "inmanta.agent._set_fork_server_process_name"])
+        except RuntimeError:
+            # already set
+            pass
+
+    async def start(self) -> None:
+        await super().start()
+        # We need to do this here, otherwise, the scheduler would crash because no event loop would be running
+        await self.environment_manager.start()
+
+    async def stop(self) -> None:
+        await self.close()
+
+    async def close(self) -> None:
+        await super().close()
+        await asyncio.gather(*(self.request_close(child) for child in self.pool.values()))
+        await self.environment_manager.stop()
+
+    async def join(self) -> None:
+        await super().join()
+        thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor] = []
+        await self.environment_manager.join(thread_pool_finalizer, 1)  # TODO
+        await join_threadpools(thread_pool_finalizer)
+        await asyncio.gather(*(child.join() for child in self.pool.values()))
+
+    async def create_member(self, blueprint: executor.ExecutorBlueprint) -> MPProcess:
+        # TODO: logging
+        # LOGGER.info("Creating executor for agent %s with id %s", executor_id.agent_name, executor_id.identity())
+        venv = await self.environment_manager.get_environment(blueprint.to_env_blueprint())
+        executor = await self.make_child_and_connect(blueprint, venv)
+        # LOGGER.debug(
+        #     "Child forked (pid: %s) for executor for agent %s with id %s",
+        #     executor.process.pid,
+        #     executor_id.agent_name,
+        #     executor_id.identity(),
+        # )
+        storage_for_blueprint = os.path.join(self.storage_folder, "code", blueprint.blueprint_hash())
+        os.makedirs(storage_for_blueprint, exist_ok=True)
+        failed_types = await executor.connection.call(
+            InitCommand(
+                venv.env_path,
+                storage_for_blueprint,
+                self.session_gid,
+                [x.for_transport() for x in blueprint.sources],
+            )
+        )
+        # LOGGER.debug(
+        #     "Child initialized (pid: %s) for executor for agent %s with id %s",
+        #     executor.process.pid,
+        #     executor_id.agent_name,
+        #     executor_id.identity(),
+        # )
+        executor.failed_resource_results = failed_types
+        return executor
+
+    async def make_child_and_connect(
+        self, executor_id: executor.ExecutorBlueprint, venv: executor.ExecutorVirtualEnvironment
+    ) -> MPProcess:
+        """Async code to make a child process and share a socket with it"""
+        loop = asyncio.get_running_loop()
+        name = executor_id.blueprint_hash()  # TODO
+
+        # Start child
+        process, parent_conn = await loop.run_in_executor(
+            self.thread_pool, functools.partial(self._make_child, name, self.environment, self.log_level, self.cli_log)
+        )
+        # Hook up the connection
+        transport, protocol = await loop.connect_accepted_socket(
+            functools.partial(ExecutorClient, f"executor.{name}"), parent_conn
+        )
+
+        child_handle = MPProcess(name, process, protocol, executor_id, venv)
+        return child_handle
+
+    def _make_child(
+        self, name: str, environment: uuid.UUID, log_level: int, cli_log: bool
+    ) -> tuple[multiprocessing.Process, socket.socket]:
+        """Sync code to make a child process and share a socket with it"""
+        parent_conn, child_conn = socket.socketpair()
+        # Fork an ExecutorServer
+        p = multiprocessing.Process(
+            target=mp_worker_entrypoint,
+            args=(child_conn, name, environment, log_level, cli_log, inmanta.config.Config.config_as_dict()),
+            name=f"agent.executor.{name}",
+        )
+        p.start()
+        child_conn.close()
+
+        return p, parent_conn
+
+    def get_lock_name_for(self, member_id: executor.ExecutorBlueprint) -> str:
+        return member_id.blueprint_hash()
 
 
 # `executor.PoolManager` needs to be before `executor.ExecutorManager` as it defines the start and stop methods (MRO order)
-class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
+class MPManager(resourcepool.TimeBasedPoolManager[executor.ExecutorId, MPExecutor], executor.ExecutorManager[MPExecutor]):
     """
     This is the executor that provides the new behavior (ISO8+),
     where the agent forks executors in specific venvs to prevent code reloading.
+
+    This class has a two layer cache:
+      blueprint -> process
+      executor_id -> executor
+
+    Executors are co-hosted on processes if they share a blueprint
     """
 
     def __init__(
@@ -634,56 +939,21 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         """
         super().__init__(
             retention_time=inmanta.agent.config.agent_executor_retention_time.get(),
-            thread_pool=thread_pool,
         )
-        self.init_once()
+
+        self.process_pool = MPPool(thread_pool, session_gid, environment, log_folder, storage_folder, log_level, cli_log)
+
         self.environment = environment
-        self.children: list[MPExecutor] = []
-        self.log_folder = log_folder
-        self.storage_folder = storage_folder
-        os.makedirs(self.log_folder, exist_ok=True)
-        os.makedirs(self.storage_folder, exist_ok=True)
-        self.log_level = log_level
-        self.cli_log = cli_log
-        self.session_gid = session_gid
 
-        # These maps are cleaned by the close callbacks
-        # This means it can contain closing entries
-        self.executor_map: dict[executor.ExecutorId, MPExecutor] = {}
-        self.agent_map: dict[str, set[executor.ExecutorId]] = collections.defaultdict(set)
-
+        self.agent_map: dict[str, set[MPExecutor]] = collections.defaultdict(set)
+        # cleanup
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
-        venv_dir = pathlib.Path(self.storage_folder) / "venv"
-        venv_dir.mkdir(exist_ok=True)
-        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venv_dir.absolute()), self.thread_pool)
 
-    def __add_executor(self, theid: executor.ExecutorId, the_executor: MPExecutor) -> None:
-        self.executor_map[theid] = the_executor
-        self.agent_map[theid.agent_name].add(theid)
+    def get_lock_name_for(self, member_id: executor.ExecutorId) -> str:
+        return member_id.identity()
 
-    def __remove_executor(self, the_executor: MPExecutor) -> None:
-        theid = the_executor.executor_id
-        registered_for_id = self.executor_map.get(theid)
-        if registered_for_id is None:
-            # Not found
-            return
-        if registered_for_id != the_executor:
-            # We have a stale instance that refused to close before
-            # it was replaced and has now gone down
-            return
-        self.executor_map.pop(theid)
-        self.agent_map[theid.agent_name].discard(theid)
-
-    @classmethod
-    def init_once(cls) -> None:
-        try:
-            multiprocessing.set_start_method("forkserver")
-            # Load common modules
-            # Including this one
-            multiprocessing.set_forkserver_preload(["inmanta.config", __name__, "inmanta.agent._set_fork_server_process_name"])
-        except RuntimeError:
-            # already set
-            pass
+    def member_name(self, member: "MPExecutor") -> str:
+        return f"Executor for {member.get_id().agent_name}"
 
     async def get_executor(
         self,
@@ -708,156 +978,66 @@ class MPManager(executor.PoolManager, executor.ExecutorManager[MPExecutor]):
         """
         blueprint = executor.ExecutorBlueprint.from_specs(code)
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
-        if executor_id in self.executor_map:
-            it = self.executor_map[executor_id]
-            if not it.closing:
-                LOGGER.debug("Found existing executor for agent %s with id %s", agent_name, executor_id.identity())
-                return it
-        # Acquire a lock based on the executor's identity (agent name, agent uri and blueprint hash)
-        async with self._locks.get(executor_id.identity()):
-            if executor_id in self.executor_map:
-                it = self.executor_map[executor_id]
-                if not it.closing:
-                    LOGGER.debug("Found existing executor for agent %s with id %s", agent_name, executor_id.identity())
-                    return it
-                else:
-                    LOGGER.debug(
-                        "Found stale executor for agent %s with id %s, waiting for close", agent_name, executor_id.identity()
-                    )
-                    await it.join(inmanta.const.EXECUTOR_GRACE_HARD)
-            n_executors_for_agent = len(self.agent_map[executor_id.agent_name])
-            if n_executors_for_agent >= self.max_executors_per_agent:
-                # Close oldest executor:
-                executor_ids = self.agent_map[executor_id.agent_name]
-                oldest_executor = min([self.executor_map[id] for id in executor_ids], key=lambda e: e.connection.last_used_at)
-                LOGGER.debug(
-                    f"Reached executor cap for agent {executor_id.agent_name}. Stopping oldest executor "
-                    f"{oldest_executor.executor_id.identity()} to make room for a new one."
-                )
 
-                await oldest_executor.stop()
+        my_executor = await self.get(executor_id)
 
-            my_executor = await self.create_executor(executor_id, venv_checkup_interval)
-            self.__add_executor(executor_id, my_executor)
-            if my_executor.failed_resource_results:
-                # If some code loading failed, resolve here
-                # reverse index
-                type_for_spec: dict[inmanta.loader.ModuleSource, list[ResourceType]] = collections.defaultdict(list)
-                for spec in code:
-                    for source in spec.blueprint.sources:
-                        type_for_spec[source].append(spec.resource_type)
-                # resolve
-                for failed_resource_result in my_executor.failed_resource_results:
-                    for rtype in type_for_spec.get(failed_resource_result.module_source, []):
-                        if rtype not in my_executor.failed_resources:
-                            my_executor.failed_resources[rtype] = failed_resource_result.exception
+        if my_executor.failed_resource_results and not my_executor.failed_resources:
+            # If some code loading failed, resolve here
+            # reverse index
+            type_for_spec: dict[inmanta.loader.ModuleSource, list[ResourceType]] = collections.defaultdict(list)
+            for spec in code:
+                for source in spec.blueprint.sources:
+                    type_for_spec[source].append(spec.resource_type)
+            # resolve
+            for failed_resource_result in my_executor.failed_resource_results:
+                for rtype in type_for_spec.get(failed_resource_result.module_source, []):
+                    if rtype not in my_executor.failed_resources:
+                        my_executor.failed_resources[rtype] = failed_resource_result.exception
 
-            # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
-            return my_executor
+        # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
+        return my_executor
 
-    async def create_executor(self, executor_id: executor.ExecutorId, venv_checkup_interval: float = 60.0) -> MPExecutor:
-        """
-        :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
-            testing. The default value is set to 60.0. It should not be used except for testing purposes. It can be
-            overridden to speed up the tests
-        """
-        LOGGER.info("Creating executor for agent %s with id %s", executor_id.agent_name, executor_id.identity())
-        env_blueprint = executor_id.blueprint.to_env_blueprint()
-        venv = await self.environment_manager.get_environment(env_blueprint)
-        executor = await self.make_child_and_connect(executor_id, venv)
-        LOGGER.debug(
-            "Child forked (pid: %s) for executor for agent %s with id %s",
-            executor.process.pid,
-            executor_id.agent_name,
-            executor_id.identity(),
-        )
-        storage_for_blueprint = os.path.join(self.storage_folder, "code", executor_id.blueprint.blueprint_hash())
-        os.makedirs(storage_for_blueprint, exist_ok=True)
-        failed_types = await executor.connection.call(
-            InitCommand(
-                venv.env_path,
-                storage_for_blueprint,
-                self.session_gid,
-                [x.for_transport() for x in executor_id.blueprint.sources],
-                self.environment,
-                executor_id.agent_uri,
-                venv_checkup_interval,
+    async def create_member(self, executor_id: executor.ExecutorId) -> MPExecutor:
+        process = await self.process_pool.get(executor_id.blueprint)
+        result = await process.get(executor_id)
+        self.agent_map.get(executor_id.agent_name).add(result)
+        return result
+
+    async def child_closed(self, pool_member: MPExecutor) -> bool:
+        self.agent_map.get(pool_member.get_id().agent_name).discard(pool_member)
+        return await super().child_closed(pool_member)
+
+    async def pre_create_capacity_check(self, member_id: executor.ExecutorId) -> None:
+        executors = [executor for executor in self.agent_map[member_id.agent_name] if executor.running]
+
+        n_executors_for_agent = len(executors)
+        if n_executors_for_agent >= self.max_executors_per_agent:
+            # Close oldest executor:
+            oldest_executor = min(executors, key=lambda e: e.last_used)
+            LOGGER.debug(
+                f"Reached executor cap for agent {member_id.agent_name}. Stopping oldest executor "
+                f"{member_id.identity()} to make room for a new one."
             )
-        )
-        LOGGER.debug(
-            "Child initialized (pid: %s) for executor for agent %s with id %s",
-            executor.process.pid,
-            executor_id.agent_name,
-            executor_id.identity(),
-        )
-        executor.failed_resource_results = failed_types
-        return executor
 
-    async def make_child_and_connect(
-        self, executor_id: executor.ExecutorId, venv: executor.ExecutorVirtualEnvironment
-    ) -> MPExecutor:
-        """Async code to make a child process and share a socket with it"""
-        loop = asyncio.get_running_loop()
-        name = executor_id.agent_name
-
-        # Start child
-        process, parent_conn = await loop.run_in_executor(
-            self.thread_pool, functools.partial(self._make_child, name, self.log_level, self.cli_log)
-        )
-        # Hook up the connection
-        transport, protocol = await loop.connect_accepted_socket(
-            functools.partial(ExecutorClient, f"executor.{name}"), parent_conn
-        )
-
-        child_handle = MPExecutor(self, process, protocol, executor_id, venv)
-        self.children.append(child_handle)
-        return child_handle
-
-    def _child_closed(self, child_handle: MPExecutor) -> None:
-        """Internal, for child to remove itself once stopped"""
-        try:
-            self.children.remove(child_handle)
-            self.__remove_executor(child_handle)
-        except ValueError:
-            # already gone
-            pass
-
-    def _make_child(self, name: str, log_level: int, cli_log: bool) -> tuple[multiprocessing.Process, socket.socket]:
-        """Sync code to make a child process and share a socket with it"""
-        parent_conn, child_conn = socket.socketpair()
-        # Fork an ExecutorServer
-        p = multiprocessing.Process(
-            target=mp_worker_entrypoint,
-            args=(child_conn, name, log_level, cli_log, inmanta.config.Config.config_as_dict()),
-            name=f"agent.executor.{name}",
-        )
-        p.start()
-        child_conn.close()
-
-        return p, parent_conn
+            await self.request_close(oldest_executor)
 
     async def start(self) -> None:
         await super().start()
         # We need to do this here, otherwise, the scheduler would crash because no event loop would be running
-        await self.environment_manager.start()
+        await self.process_pool.start()
 
     async def stop(self) -> None:
-        await super().stop()
-        await asyncio.gather(*(child.stop() for child in self.children))
-        await self.environment_manager.stop()
+        await self.close()
 
-    async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
-        await super().join(thread_pool_finalizer, timeout)
-        await self.environment_manager.join(thread_pool_finalizer, timeout)
+    async def close(self) -> None:
+        await self.process_pool.close()
+        await super().close()
 
-        thread_pool_finalizer.append(self.thread_pool)
-        await asyncio.gather(*(child.join(timeout) for child in self.children))
+    async def join(self) -> None:
+        await super().join()
+        await self.process_pool.join()
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
-        children_ids = self.agent_map[agent_name]
-        children = [self.executor_map[child_id] for child_id in children_ids]
-        await asyncio.gather(*(child.stop() for child in self.children))
+        children = list(self.agent_map[agent_name])
+        await asyncio.gather(*(self.request_close(child) for child in children))
         return children
-
-    async def get_pool_members(self) -> typing.Sequence[MPExecutor]:
-        return list(self.executor_map.values())

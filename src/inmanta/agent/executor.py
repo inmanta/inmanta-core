@@ -205,6 +205,9 @@ class ExecutorBlueprint(EnvBlueprint):
             other.sources,
         )
 
+    def __hash__(self) -> int:
+        return hash(self.blueprint_hash())
+
 
 @dataclasses.dataclass
 class ExecutorId:
