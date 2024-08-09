@@ -50,7 +50,7 @@ import abc
 import asyncio
 import datetime
 import logging
-from typing import Callable, Coroutine, Generic, Optional, Sequence, TypeVar
+from typing import Any, Awaitable, Callable, Coroutine, Generic, Optional, Self, Sequence, TypeVar
 
 import inmanta.util
 from inmanta.const import LOG_LEVEL_TRACE
@@ -73,13 +73,13 @@ class PoolMember(abc.ABC, Generic[TPoolID]):
         self.is_stopped = False
 
         # event propagation
-        self.termination_listeners: list[Callable[[Type[self]], Awaitable[None]]] = []
+        self.termination_listeners: list[Callable[[PoolMember[TPoolID]], Coroutine[Any, Any, Any]]] = []
 
     @property
     def running(self) -> bool:
         return not self.is_stopping and not self.is_stopped
 
-    def touch(self):
+    def touch(self) -> None:
         """Update time last used"""
         self.last_used = datetime.datetime.now().astimezone()
 
@@ -209,16 +209,19 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
             self.pool.pop(theid)
             return True
 
+    def get_lock_name_for(self, member_id: TPoolID) -> str:
+        return str(member_id)
+
     async def get(self, member_id: TPoolID) -> TPoolMember:
         """
         Returns a new pool member
         """
         # Acquire a lock based on the executor's pool id
-        async with self._locks.get(member_id):
+        async with self._locks.get(self.get_lock_name_for(member_id)):
             if member_id in self.pool:
                 it = self.pool[member_id]
                 if not it.is_stopping:
-                    LOGGER.debug("Found existing %s for %s with id %s", self.my_name(), self.member_name(member_id), member_id)
+                    LOGGER.debug("Found existing %s for %s with id %s", self.my_name(), self.member_name(it), member_id)
                     it.touch()
                     return it
                 else:
@@ -308,7 +311,7 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TPoolMember]):
         for pool_member in pool_members:
             try:
                 if pool_member.can_be_cleaned_up() and pool_member.last_used < oldest_time and pool_member.running:
-                    async with self._locks.get(pool_member.get_id()):
+                    async with self._locks.get(self.get_lock_name_for(pool_member.get_id())):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up() and pool_member.last_used < oldest_time and pool_member.running:
                             LOGGER.debug(
