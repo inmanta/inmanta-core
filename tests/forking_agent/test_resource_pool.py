@@ -19,7 +19,7 @@
 import asyncio
 import itertools
 
-from inmanta.agent.resourcepool import PoolManager, PoolMember, TimeBasedPoolManager, TPoolID, TPoolMember
+from inmanta.agent.resourcepool import PoolManager, PoolMember, TimeBasedPoolManager
 
 
 async def test_resource_pool():

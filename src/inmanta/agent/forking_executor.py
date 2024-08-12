@@ -31,7 +31,7 @@ import socket
 import threading
 import typing
 import uuid
-from asyncio import Future, Lock, transports
+from asyncio import Future, transports
 from concurrent.futures import ThreadPoolExecutor
 from typing import Awaitable
 
@@ -51,7 +51,7 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.resourcepool import PoolManager, PoolMember, TPoolID, TPoolMember
+from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
@@ -62,7 +62,7 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
-from inmanta.util import NamedLock, Scheduler, join_threadpools
+from inmanta.util import join_threadpools
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(__name__)
@@ -119,13 +119,13 @@ class ExecutorContext:
         try:
             LOGGER.info("Stopping for %s", name)
             self.get(name).stop()
-        except:
+        except Exception:
             LOGGER.exception("Stop failed for %s", name)
 
     async def stop(self) -> None:
         """Request the executor to stop"""
-        for executor in self.executors.values():
-            executor.stop()
+        for my_executor in self.executors.values():
+            my_executor.stop()
         # TODO: no join here either
         # threadpool finalizer is not used, we expect threadpools to be terminated with the process
         # self.executor.join([])
@@ -784,6 +784,9 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, MPProcess]):
         super().__init__()
         self.init_once()
 
+        # Can be overriden in tests
+        self.venv_checkup_interval: float = 60.0
+
         self.thread_pool = thread_pool
 
         self.environment = environment
@@ -854,6 +857,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, MPProcess]):
                 storage_for_blueprint,
                 self.session_gid,
                 [x.for_transport() for x in blueprint.sources],
+                self.venv_checkup_interval,
             )
         )
         # LOGGER.debug(
@@ -960,7 +964,6 @@ class MPManager(resourcepool.TimeBasedPoolManager[executor.ExecutorId, MPExecuto
         agent_name: str,
         agent_uri: str,
         code: typing.Collection[executor.ResourceInstallSpec],
-        venv_checkup_interval: float = 60.0,
     ) -> MPExecutor:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
@@ -999,6 +1002,7 @@ class MPManager(resourcepool.TimeBasedPoolManager[executor.ExecutorId, MPExecuto
 
     async def create_member(self, executor_id: executor.ExecutorId) -> MPExecutor:
         process = await self.process_pool.get(executor_id.blueprint)
+        # TODO: we have a race here: the process can become empty between these two calls
         result = await process.get(executor_id)
         self.agent_map.get(executor_id.agent_name).add(result)
         return result

@@ -50,7 +50,7 @@ import abc
 import asyncio
 import datetime
 import logging
-from typing import Any, Awaitable, Callable, Coroutine, Generic, Optional, Self, Sequence, TypeVar
+from typing import Any, Callable, Coroutine, Generic, Optional, TypeVar
 
 import inmanta.util
 from inmanta.const import LOG_LEVEL_TRACE
@@ -292,7 +292,7 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TPoolMember]):
         while self.running:
             sleep_interval = await self.cleanup_inactive_pool_members()
             if self.running:
-                LOGGER.log(LOG_LEVEL_TRACE, f"Manager will clean in %.2f seconds", sleep_interval)
+                LOGGER.log(LOG_LEVEL_TRACE, "Manager will clean in %.2f seconds", sleep_interval)
                 await asyncio.sleep(sleep_interval)
 
     async def cleanup_inactive_pool_members(self) -> float:
@@ -315,7 +315,7 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TPoolMember]):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up() and pool_member.last_used < oldest_time and pool_member.running:
                             LOGGER.debug(
-                                f"%s with %.2f >= %d is about to expire",
+                                "%s with %.2f >= %d is about to expire",
                                 self.member_name(pool_member),
                                 (cleanup_start - pool_member.last_used).total_seconds(),
                                 self.retention_time,

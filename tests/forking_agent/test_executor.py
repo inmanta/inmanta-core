@@ -33,7 +33,7 @@ import inmanta.util
 import utils
 from inmanta.agent import executor
 from inmanta.agent.executor import ExecutorBlueprint
-from inmanta.agent.forking_executor import MPManager, MPPool
+from inmanta.agent.forking_executor import MPManager
 from inmanta.data import PipConfig
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import NOISY_LOGGERS, log_contains, retry_limited
@@ -199,7 +199,7 @@ def test():
             caplog,
             "inmanta.agent.forking_executor",
             logging.DEBUG,
-            (f"Reached executor cap for agent agent2. Stopping oldest executor "),
+            ("Reached executor cap for agent agent2. Stopping oldest executor "),
         )
 
     # Assert shutdown and back up
