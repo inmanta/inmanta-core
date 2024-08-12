@@ -15,13 +15,18 @@
 
     Contact: code@inmanta.com
 """
+
+import logging.config
 import warnings
 
 from tornado.httpclient import AsyncHTTPClient
 
+import _pytest.logging
 import toml
-from inmanta.config import AuthJWTConfig
+from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
+from inmanta.protocol import auth
+from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -100,7 +105,6 @@ from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
-import build.env
 import inmanta
 import inmanta.agent
 import inmanta.app
@@ -108,6 +112,7 @@ import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
 import inmanta.user_setup
+import logfire
 from inmanta import config, const, data, env, loader, protocol, resources
 from inmanta.agent import config as agent_cfg
 from inmanta.agent import handler
@@ -147,7 +152,9 @@ from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_ty
 
 logger = logging.getLogger(__name__)
 
-TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["resourceaction_resource"]  # Join table
+TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
+    "resourceaction_resource",
+]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
@@ -540,7 +547,7 @@ def reset_metrics():
     pyformance.set_global_registry(MetricsRegistry())
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function")
 async def clean_reset(create_db, clean_db, deactive_venv):
     reset_all_objects()
     config.Config._reset()
@@ -577,8 +584,8 @@ def reset_all_objects():
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
     V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
-    AuthJWTConfig.reset()
-    InmantaLoggerConfig.clean_instance()
+    auth.AuthJWTConfig.reset()
+    InmantaLoggerConfig.clean_instance(root_handlers_to_remove=[h for h in logging.root.handlers if not is_caplog_handler(h)])
     AsyncHTTPClient.configure(None)
 
 
@@ -590,7 +597,7 @@ def disable_isolated_env_builder_cache() -> None:
 @pytest.fixture(scope="function", autouse=True)
 def restore_cwd():
     """
-    Restore the current working directory after search test.
+    Restore the current working directory after each test.
     """
     yield
     os.chdir(initial_cwd)
@@ -599,9 +606,9 @@ def restore_cwd():
 @pytest.fixture(scope="function")
 def no_agent_backoff(inmanta_config: ConfigParser) -> None:
     old_backoff = agent_cfg.agent_get_resource_backoff.get()
-    inmanta_config.set(section="config", option="agent-get-resource-backoff", value="0")
+    agent_cfg.agent_get_resource_backoff.set("0")
     yield
-    inmanta_config.set(section="config", option="agent-get-resource-backoff", value=str(old_backoff))
+    agent_cfg.agent_get_resource_backoff.set(str(old_backoff))
 
 
 @pytest.fixture()
@@ -619,7 +626,7 @@ def free_socket():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def inmanta_config() -> Iterator[ConfigParser]:
+def inmanta_config(clean_reset) -> Iterator[ConfigParser]:
     config.Config.load_config()
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
@@ -629,12 +636,33 @@ def inmanta_config() -> Iterator[ConfigParser]:
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
 
-    yield config.Config._get_instance()
+    yield config.Config.get_instance()
 
 
 @pytest.fixture
 def server_pre_start(server_config):
     """This fixture is called by the server. Override this fixture to influence server config"""
+
+
+@pytest.fixture
+def disable_background_jobs(monkeypatch):
+    """
+    This fixture disables the scheduling of all background jobs.
+    """
+
+    class NoopScheduler(Scheduler):
+        def add_action(
+            self,
+            action: TaskMethod,
+            schedule: Union[TaskSchedule, int],
+            cancel_on_stop: bool = True,
+            quiet_mode: bool = False,
+        ) -> Optional[ScheduledTask]:
+            pass
+
+    monkeypatch.setattr(inmanta.server.protocol, "Scheduler", NoopScheduler)
+
+    yield None
 
 
 @pytest.fixture(scope="function")
@@ -670,7 +698,9 @@ async def agent(server, environment):
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server):
+async def agent_factory(
+    server,
+) -> Callable[[uuid.UUID, Optional[str], Optional[dict[str, str]], bool, list[str]], Awaitable[Agent]]:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     config.Config.set("config", "agent-deploy-interval", "0")
@@ -765,11 +795,14 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     with tempfile.TemporaryDirectory() as state_dir:
         port = str(unused_tcp_port_factory())
 
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
+
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "password", pg_password)
         config.Config.set("database", "connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -783,6 +816,9 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
+        config.Config.set("agent", "executor-mode", "forking")
+        config.Config.set("agent", "executor-venv-retention-time", "60")
+        config.Config.set("agent", "executor-retention-time", "10")
         yield config
 
 
@@ -795,7 +831,7 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
 
     try:
         await ibl.start()
@@ -832,40 +868,17 @@ async def server_multi(
     with tempfile.TemporaryDirectory() as state_dir:
         ssl, auth, ca = request.param
 
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        utils.configure_auth(auth, ca, ssl)
 
-        if auth:
-            config.Config.set("server", "auth", "true")
-
-        for x, ct in [
-            ("server", None),
-            ("agent_rest_transport", ["agent"]),
-            ("compiler_rest_transport", ["compiler"]),
-            ("client_rest_transport", ["api", "compiler"]),
-            ("cmdline_rest_transport", ["api"]),
-        ]:
-            if ssl and not ca:
-                config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
-                config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
-                config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
-                config.Config.set(x, "ssl", "True")
-            if ssl and ca:
-                capath = os.path.join(path, "ca", "enduser-certs")
-
-                config.Config.set(x, "ssl_cert_file", os.path.join(capath, "server.crt"))
-                config.Config.set(x, "ssl_key_file", os.path.join(capath, "server.key.open"))
-                config.Config.set(x, "ssl_ca_cert_file", os.path.join(capath, "server.chain"))
-                config.Config.set(x, "ssl", "True")
-            if auth and ct is not None:
-                token = protocol.encode_token(ct)
-                config.Config.set(x, "token", token)
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
 
         port = str(unused_tcp_port_factory())
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "password", pg_password)
         config.Config.set("database", "connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -878,8 +891,11 @@ async def server_multi(
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
+        config.Config.set("agent", "executor-mode", "forking")
+        config.Config.set("agent", "executor-venv-retention-time", "60")
+        config.Config.set("agent", "executor-retention-time", "10")
 
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
 
         try:
             await ibl.start()
@@ -1145,6 +1161,7 @@ class SnippetCompilationTest(KeepOnFail):
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
+        main_file: str = "main.cf",
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1165,6 +1182,8 @@ class SnippetCompilationTest(KeepOnFail):
         :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
         :param use_pip_config_file: True iff the pip config file should be used and no source is required for v2 to work
                                     False if a package source is needed for v2 modules to work
+        :param main_file: Path to the .cf file to use as main entry point. A relative or an absolute path can be provided.
+            If a relative path is used, it's interpreted relative to the root of the project directory.
         """
         self.setup_for_snippet_external(
             snippet,
@@ -1177,8 +1196,11 @@ class SnippetCompilationTest(KeepOnFail):
             use_pip_config_file,
             index_url,
             extra_index_url,
+            main_file,
         )
-        return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
+        return self._load_project(
+            autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check, main_file=main_file
+        )
 
     def _load_project(
         self,
@@ -1240,6 +1262,7 @@ class SnippetCompilationTest(KeepOnFail):
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
+        main_file: str = "main.cf",
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1286,7 +1309,7 @@ class SnippetCompilationTest(KeepOnFail):
                 )
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
-        self.main = os.path.join(self.project_dir, "main.cf")
+        self.main = os.path.join(self.project_dir, main_file)
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
 
@@ -1304,6 +1327,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete=False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         return self._do_export(
             deploy=False,
@@ -1311,6 +1335,7 @@ class SnippetCompilationTest(KeepOnFail):
             do_raise=do_raise,
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            soft_delete=soft_delete,
         )
 
     def get_exported_json(self) -> JsonType:
@@ -1324,6 +1349,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete=False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         """
         helper function to allow actual export to be run on a different thread
@@ -1338,6 +1364,7 @@ class SnippetCompilationTest(KeepOnFail):
         options.depgraph = False
         options.deploy = deploy
         options.ssl = False
+        options.soft_delete = soft_delete
 
         from inmanta.export import Exporter  # noqa: H307
 
@@ -1369,6 +1396,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete: bool = False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
         """Export to an actual server"""
         return await asyncio.get_running_loop().run_in_executor(
@@ -1379,6 +1407,7 @@ class SnippetCompilationTest(KeepOnFail):
                 do_raise=do_raise,
                 partial_compile=partial_compile,
                 resource_sets_to_remove=resource_sets_to_remove,
+                soft_delete=soft_delete,
             ),
         )
 
@@ -1427,7 +1456,7 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
 
 @pytest.fixture(scope="function")
 def snippetcompiler(
-    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str
+    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str, clean_reset
 ) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
@@ -1438,7 +1467,7 @@ def snippetcompiler(
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler_clean(modules_dir: str) -> Iterator[SnippetCompilationTest]:
+def snippetcompiler_clean(modules_dir: str, clean_reset) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
     """
@@ -1649,15 +1678,9 @@ def tmpvenv_active(
     env.mock_process_env(python_path=str(python_path))
     env.process_env.notify_change()
 
-    # Force refresh build's decision on whether it should use virtualenv or venv. This decision is made based on the active
-    # environment, which we're changing now.
-    build.env._should_use_virtualenv.cache_clear()
-
     yield tmpvenv
 
     loader.unload_modules_for_path(site_packages)
-    # Force refresh build's cache once more
-    build.env._should_use_virtualenv.cache_clear()
 
 
 @pytest.fixture
@@ -1673,12 +1696,41 @@ def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env
     loader.unload_modules_for_path(venv.site_packages_dir)
 
 
+@pytest.fixture
+def create_empty_local_package_index_factory() -> Callable[[str], str]:
+    """
+    A fixture that acts as a factory to create empty local pip package indexes.
+    Each call creates a new index in a different temporary directory.
+    """
+
+    created_directories: list[str] = []
+
+    def _create_local_package_index(prefix: str = "test"):
+        """
+        Creates an empty pip index. The prefix argument is used as a prefix for the temporary directory name
+        for clarity and debugging purposes. The 'dir2pi' tool will then create a 'simple' directory inside
+        this temporary directory, which contains the index files.
+        """
+        tmpdir = tempfile.mkdtemp(prefix=f"{prefix}-")
+        created_directories.append(tmpdir)  # Keep track of the tempdir for cleanup
+        dir2pi(argv=["dir2pi", tmpdir])
+        index_dir = os.path.join(tmpdir, "simple")  # The 'simple' directory is created inside the tmpdir by dir2pi
+        return index_dir
+
+    yield _create_local_package_index
+
+    # Cleanup after the session ends
+    for directory in created_directories:
+        shutil.rmtree(directory)
+
+
 @pytest.fixture(scope="session")
 def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
     :return: The path to the index
     """
+
     cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
     build_dir = os.path.join(cache_dir, "build")
     index_dir = os.path.join(build_dir, "simple")
@@ -1700,8 +1752,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         )
 
     if _should_rebuild_cache():
-        logger.info(f"Cache {cache_dir} is dirty. Rebuilding cache.")
-        # Remove cache
+        logger.info("Cache %s is dirty. Rebuilding cache.", cache_dir)  # Remove cache
         if os.path.exists(cache_dir):
             shutil.rmtree(cache_dir)
         os.makedirs(build_dir)
@@ -1719,14 +1770,19 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         # Update timestamp file
         open(timestamp_file, "w").close()
     else:
-        logger.info(f"Using cache {cache_dir}")
+        logger.info("Using cache %s", cache_dir)
 
     yield index_dir
 
 
 @pytest.fixture
 async def migrate_db_from(
-    request: pytest.FixtureRequest, hard_clean_db, hard_clean_db_post, postgresql_client: asyncpg.Connection, server_pre_start
+    request: pytest.FixtureRequest,
+    hard_clean_db,
+    hard_clean_db_post,
+    postgresql_client: asyncpg.Connection,
+    disable_background_jobs,
+    server_pre_start,
 ) -> AsyncIterator[Callable[[], Awaitable[None]]]:
     """
     Restores a db dump and yields a function that starts the server and migrates the database schema to the latest version.
@@ -1741,7 +1797,7 @@ async def migrate_db_from(
         await PGRestore(fh.readlines(), postgresql_client).run()
         logger.debug("Restored %s", marker.args[0])
 
-    bootloader: InmantaBootloader = InmantaBootloader()
+    bootloader: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
     async def migrate() -> None:
         # start boatloader, triggering db migration
@@ -1817,6 +1873,37 @@ async def set_running_tests():
     inmanta.RUNNING_TESTS = True
 
 
+def is_caplog_handler(handler: logging.Handler) -> bool:
+    return isinstance(
+        handler,
+        (
+            _pytest.logging._FileHandler,
+            _pytest.logging._LiveLoggingStreamHandler,
+            _pytest.logging._LiveLoggingNullHandler,
+            _pytest.logging.LogCaptureHandler,
+        ),
+    )
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def dont_remove_caplog_handlers(request, monkeypatch):
+    """
+    Caplog captures log messages by attaching handlers to the root logger. This fixture makes sure the
+    inmanta.logging.FullLoggingConfig.apply_config() method doesn't remove any handlers that were added by the caplog fixture.
+    """
+    original_apply_config = inmanta_logging.FullLoggingConfig.apply_config
+
+    def patched_apply_config(self) -> None:
+        caplog_handlers = [h for h in logging.root.handlers if is_caplog_handler(h)]
+        original_apply_config(self)
+        # Re-add caplog handlers that were removed by the call to apply_config()
+        for current_handler in caplog_handlers:
+            if current_handler not in logging.root.handlers:
+                logging.root.addHandler(current_handler)
+
+    monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "apply_config", patched_apply_config)
+
+
 @pytest.fixture(scope="session")
 def index_with_pkgs_containing_optional_deps() -> str:
     """
@@ -1857,3 +1944,13 @@ def disable_version_and_agent_cleanup_job():
     orchestrationservice.PERFORM_CLEANUP = False
     yield
     orchestrationservice.PERFORM_CLEANUP = old_perform_cleanup
+
+
+@pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
+def configure_logfire():
+    """Configure logfire to ensure all the instrumentation works correctly and does not provide warnings. This does not
+    setup tracing for tests"""
+    logfire.configure(
+        send_to_logfire=False,
+        console=False,
+    )

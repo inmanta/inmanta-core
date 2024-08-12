@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import uuid
@@ -22,7 +23,7 @@ import uuid
 from inmanta import const, data, resources
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
-from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs, retry_limited, wait_until_logs_are_available
+from utils import _wait_until_deployment_finishes, no_error_in_logs, retry_limited, wait_until_logs_are_available
 
 
 async def test_get_facts(resource_container, client, clienthelper, environment, agent, caplog):
@@ -82,10 +83,12 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
     assert result.code == 503
 
     env_uuid = uuid.UUID(environment)
-    params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-    while len(params) < 3:
+
+    async def wait_for_three_params():
         params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-        await asyncio.sleep(0.1)
+        return len(params) >= 3
+
+    await retry_limited(wait_for_three_params, 10)
 
     result = await client.get_param(environment, "key1", resource_id_wov)
     assert result.code == 200
@@ -223,8 +226,9 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     ]
 
     resource_states = {
-        "test::Fact[agent1,key=key4],v=%d" % version: const.ResourceState.undefined,
-        "test::Fact[agent1,key=key5],v=%d" % version: const.ResourceState.undefined,
+        "test::Fact[agent1,key=key4]": const.ResourceState.undefined,
+        "test::Fact[agent1,key=key1]": const.ResourceState.undefined,
+        "test::Fact[agent1,key=key5]": const.ResourceState.undefined,
     }
 
     async def get_fact(rid, result_code=200, limit=10, lower_limit=2):
@@ -251,10 +255,10 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     )
     assert result.code == 200
 
-    await get_fact("test::Fact[agent1,key=key1]")  # undeployable
+    await get_fact("test::Fact[agent1,key=key1]", 503)  # undeployable
     await get_fact("test::Fact[agent1,key=key2]")  # normal
     await get_fact("test::Fact[agent1,key=key3]", 503)  # not present
-    await get_fact("test::Fact[agent1,key=key4]")  # unknown
+    await get_fact("test::Fact[agent1,key=key4]", 503)  # unknown
     await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
     f6 = await get_fact("test::Fact[agent1,key=key6]")  # normal
     f7 = await get_fact("test::Fact[agent1,key=key7]")  # normal
@@ -267,28 +271,11 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
 
     await _wait_until_deployment_finishes(client, environment, version)
 
-    await get_fact("test::Fact[agent1,key=key1]")  # undeployable
+    await get_fact("test::Fact[agent1,key=key1]", 503)  # undeployable
     await get_fact("test::Fact[agent1,key=key2]")  # normal
     await get_fact("test::Fact[agent1,key=key3]")  # not present -> present
-    await get_fact("test::Fact[agent1,key=key4]")  # unknown
+    await get_fact("test::Fact[agent1,key=key4]", 503)  # unknown
     await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
-
-    await agent.stop()
-
-    def wait_until_log_records_are_available() -> bool:
-        try:
-            log_sequence = LogSequence(caplog, allow_errors=False, ignore=["tornado.access"])
-            for i in range(5):
-                log_sequence = log_sequence.contains("inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact")
-            log_sequence.no_more_errors()
-        except AssertionError:
-            return False
-        else:
-            return True
-
-    # The get_parameter() API calls from the server to the agent are executed asynchronously with respect the
-    # get_param() API calls done from the test case to the server. Here we wait until all log records are available.
-    await retry_limited(wait_until_log_records_are_available, timeout=10)
 
 
 async def test_purged_resources(resource_container, client, clienthelper, server, environment, agent, no_agent_backoff):
@@ -378,6 +365,17 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     assert result.code == 200
     assert len(result.result["parameters"]) == 4
 
+    # Create version 3 to be able to delete version 2
+    version = await clienthelper.get_version()
+    assert version == 3
+
+    await clienthelper.put_version_simple([], version)
+
+    result = await client.release_version(
+        environment, version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
+    assert result.code == 200
+
     # Remove version 2
     result = await client.delete_version(tid=environment, id=2)
     assert result.code == 200
@@ -430,4 +428,4 @@ async def test_get_fact_no_code(resource_container, client, clienthelper, enviro
     log_entry = result["logs"][0]
     assert log_entry["action"] == "getfact"
     assert log_entry["status"] == "unavailable"
-    assert "Failed to load" in log_entry["messages"][0]["msg"]
+    assert "Unable to deserialize" in log_entry["messages"][0]["msg"]

@@ -75,7 +75,6 @@ try:
 except ImportError:
     TYPE_CHECKING = False
 
-
 LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
@@ -99,7 +98,10 @@ class InmantaModuleRequirement:
 
     def __init__(self, requirement: Requirement) -> None:
         if requirement.project_name.startswith(ModuleV2.PKG_NAME_PREFIX):
-            raise ValueError("InmantaModuleRequirement instances work with inmanta module names, not python package names.")
+            raise ValueError(
+                f"InmantaModuleRequirement instances work with inmanta module names, not python package names. "
+                f"Problematic case: {str(requirement)}"
+            )
         self._requirement: Requirement = requirement
 
     @property
@@ -330,21 +332,27 @@ class GitProvider:
     def fetch(self, repo: str) -> None:
         pass
 
+    @abstractmethod
     def status(self, repo: str, untracked_files_mode: Optional[UntrackedFilesMode] = None) -> str:
         pass
 
+    @abstractmethod
     def get_all_tags(self, repo: str) -> list[str]:
         pass
 
+    @abstractmethod
     def get_version_tags(self, repo: str, only_return_stable_versions: bool = False) -> list[version.Version]:
         pass
 
+    @abstractmethod
     def get_file_for_version(self, repo: str, tag: str, file: str) -> str:
         pass
 
+    @abstractmethod
     def checkout_tag(self, repo: str, tag: str) -> None:
         pass
 
+    @abstractmethod
     def commit(
         self,
         repo: str,
@@ -358,15 +366,19 @@ class GitProvider:
     def tag(self, repo: str, tag: str) -> None:
         pass
 
+    @abstractmethod
     def push(self, repo: str) -> str:
         pass
 
+    @abstractmethod
     def pull(self, repo: str) -> str:
         pass
 
+    @abstractmethod
     def get_remote(self, repo: str) -> Optional[str]:
         pass
 
+    @abstractmethod
     def is_git_repository(self, repo: str) -> bool:
         pass
 
@@ -1380,11 +1392,17 @@ class ModuleV2Metadata(ModuleMetadata):
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
       Valid values are [==, ~=, >=]. *Default is '~='*
     :param install_requires: The Python packages this module depends on.
+    :param four_digit_version: Whether to use a four-digit version format (e.g. 23.4.1.0) instead of the standard
+        three-digit format (e.g. 23.4.1).
+        Even without setting this option to True, a fourth digit is allowed as a revision digit. However, the tooling
+        will not use it by default. For example, you can use the '--revision' flag with the command
+        'inmanta module release --dev --revision' even if 'four_digit_version' is set to False. But if you don't specify
+        '--revision' explicitly, the tooling will consider 'patch' to be the lowest increment.
     """
 
     install_requires: list[str]
     version_tag: str = ""
-
+    four_digit_version: bool = False
     _raw_parser: typing.ClassVar[type[CfgParser]] = CfgParser
 
     @field_validator("version")
@@ -1443,9 +1461,7 @@ class ModuleV2Metadata(ModuleMetadata):
     @classmethod
     def _substitute_version(cls: type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
         result = re.sub(
-            r"(\[metadata\][^\[]*[ \t\f\v]*version[ \t\f\v]*=[ \t\f\v]*)[\S]+(\n|$)",
-            rf"\g<1>{new_version}\n",
-            source,
+            r"(\[metadata\][^\[]*?\bversion[ \t\f\v]*=[ \t\f\v]*)[\S]+(\n|$)", rf"\g<1>{new_version}\n", source, flags=re.DOTALL
         )
         if "[egg_info]" not in result:
             result = f"{result}\n[egg_info]\ntag_build = {version_tag}"
@@ -1467,7 +1483,7 @@ class ModuleV2Metadata(ModuleMetadata):
 
         if not out.has_section("metadata"):
             out.add_section("metadata")
-        for k, v in self.dict(exclude_none=True, exclude={"install_requires"}).items():
+        for k, v in self.dict(exclude_none=True, exclude={"install_requires", "version_tag"}).items():
             out.set("metadata", k, str(v))
 
         if self.version_tag:
@@ -1609,18 +1625,16 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         result in an error.
         When a non-strict check is done, only version conflicts in a direct dependency will result in an error.
         All other violations will only result in a warning message.
-    :param agent_install_dependency_modules: [EXPERT FEATURE] If true, when a module declares Python dependencies on
+    :param agent_install_dependency_modules: [DEPRECATED] If true, when a module declares Python dependencies on
         other (v2) modules, the agent will install these dependency modules with pip. This option should only be enabled
         if the agent is configured with the appropriate pip related environment variables. The option allows to an extent
         for inter-module dependencies within handler code, even if the dependency module doesn't have any handlers that
         would otherwise be considered relevant for this agent.
-
         Care should still be taken when you use inter-module imports. The current code loading mechanism does not explicitly
         order reloads. A general guideline is to use qualified imports where you can (import the module rather than objects
         from the module). When this is not feasible, you should be aware of
         `Python's reload semantics <https://docs.python.org/3/library/importlib.html#importlib.reload>`_ and take this into
         account when making changes to handler code.
-
         Another caveat is that if the dependency module does contain code that is relevant for the agent, it will be loaded
         like any other handler code and it will be this code that is imported by any dependent modules (though depending on
         the load order the very first import may use the version installed by pip). If at some point this dependency module's
@@ -1648,7 +1662,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
     ] = []
     strict_deps_check: bool = True
-    agent_install_dependency_modules: bool = False
+    agent_install_dependency_modules: bool = True
     pip: ProjectPipConfig = ProjectPipConfig()
 
     @field_validator("modulepath", mode="before")
@@ -2778,6 +2792,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         self._ast_cache: dict[str, tuple[list[Statement], BasicBlock]] = {}  # Cache for expensive method calls
         self._import_cache: dict[str, list[DefineImport]] = {}  # Cache for expensive method calls
         self._dir_cache: Dict[str, list[str]] = {}  # Cache containing all the filepaths present in a dir
+        self._plugin_file_cache: Optional[list[tuple[Path, ModuleName]]] = None
 
     @classmethod
     @abstractmethod
@@ -2961,17 +2976,19 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         Generate a list of all Python files in the given plugin directory.
         This method prioritizes .pyc files over .py files, uses caching to avoid duplicate directory walks,
-        and only considers directories that are Python packages.
+        includes namespace packages and excludes the model directory.
         """
         # Return cached results if this directory has been processed before
         if plugin_dir in self._dir_cache:
             return self._dir_cache[plugin_dir]
 
         files: dict[str, str] = {}
+        model_dir_path: str = os.path.join(plugin_dir, "inmanta_plugins", self.name, "model")
 
-        for dirpath, dirnames, filenames in os.walk(plugin_dir):
-            # Skip non-package directories (those without an __init__.py or __init__.pyc file)
-            if not any(fname for fname in filenames if fname in ["__init__.py", "__init__.pyc"]):
+        for dirpath, dirnames, filenames in os.walk(plugin_dir, topdown=True):
+            # Modify dirnames in-place to stop os.walk from descending into any more subdirectories of the model directory
+            if dirpath.startswith(model_dir_path):
+                dirnames[:] = []
                 continue
 
             # Skip this directory if it's already in the cache
@@ -3012,6 +3029,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
         """
+        if self._plugin_file_cache is not None:
+            return iter(self._plugin_file_cache)
+
         plugin_dir: Optional[str] = self.get_plugin_dir()
 
         if plugin_dir is None:
@@ -3022,13 +3042,15 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         ):
             raise InvalidModuleException(f"Directory {plugin_dir} should be a valid python package with a __init__.py file")
 
-        return (
+        self._plugin_file_cache = [
             (
                 Path(file_name),
                 ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self.name)),
             )
             for file_name in self._list_python_files(plugin_dir)
-        )
+        ]
+
+        return iter(self._plugin_file_cache)
 
     def load_plugins(self) -> None:
         """

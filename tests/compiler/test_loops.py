@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import textwrap
 
 import inmanta.compiler as compiler
@@ -168,6 +169,14 @@ def test_resultcollector_receive_result_flatten(snippetcompiler) -> None:
             # => no flattening would result in `["test"]` in the list
             # => naive flattening might treat the string as a sequence and flatten to ["t", "e", "s", "t"]
             for x in [["test"]]:
+                if x != "test":
+                    assert.success = false
+                end
+            end
+
+            # Test composed lists as well as constant lists
+             a = "test"
+             for x in [["test"], a, [a]]:
                 if x != "test":
                     assert.success = false
                 end

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import os
 from collections import defaultdict
@@ -24,6 +25,7 @@ import pkg_resources
 import yaml
 
 from inmanta import data
+from inmanta import logging as inmanta_logging
 from inmanta.config import feature_file_config
 from inmanta.data.model import ExtensionStatus
 from inmanta.server.protocol import ServerSlice
@@ -86,6 +88,9 @@ class StringListFeature(Feature[list[str]]):
         super().__init__(slice, name, description, default_value=["*"])
 
 
+FeatureValueTypes = bool | str | list[str]
+
+
 class ProductMetadata:
     def __init__(self, product: str, edition: str, license: str, version: Optional[str]) -> None:
         self.product = product
@@ -102,18 +107,19 @@ class FeatureManager:
 
         slices:
             slice_name:
-                feature_name: bool
+                feature_name: FeatureValueTypes
 
     """
 
     def __init__(self) -> None:
         self._features: dict[str, dict[str, Feature[object]]] = defaultdict(dict)
-        self._feature_config: dict[str, dict[str, Any]] = self._load_feature_config()
+        self._feature_config: dict[str, dict[str, FeatureValueTypes]] = self._load_feature_config()
 
     def get_features(self) -> list[Feature[object]]:
         return [feature for slice in self._features.values() for feature in slice.values()]
 
-    def _load_feature_config(self) -> dict[str, dict[str, Any]]:
+    def _load_feature_config(self) -> dict[str, dict[str, FeatureValueTypes]]:
+        """Return the value of the slices key in the feature config file"""
         feature_file = feature_file_config.get()
         if feature_file is None:
             return {}
@@ -123,7 +129,7 @@ class FeatureManager:
             return {}
 
         with open(feature_file, encoding="utf-8") as fd:
-            result = yaml.safe_load(fd)
+            result: dict[str, dict[str, dict[str, FeatureValueTypes]]] = yaml.safe_load(fd)
 
         if "slices" in result:
             return result["slices"]
@@ -221,3 +227,11 @@ class ApplicationContext:
         Returns the list of all available environment settings
         """
         return sorted(data.Environment._settings.values(), key=lambda x: x.name)
+
+    def register_default_logging_config(self, logging_config: inmanta_logging.LoggingConfigExtension) -> None:
+        """
+        Used by an Inmanta extension to register the default configuration of specific loggers, formatters
+        and handlers it uses.
+        """
+        inmanta_logger_config = inmanta_logging.InmantaLoggerConfig.get_current_instance()
+        inmanta_logger_config.register_default_logging_config(logging_config)

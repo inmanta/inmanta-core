@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import os
 import warnings
 from typing import Optional
@@ -30,7 +31,7 @@ from utils import module_from_template, v1_module_from_template
 def test_str_on_instance_pos(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-import std
+import std::testing
 
 entity Hg:
 end
@@ -47,19 +48,19 @@ end
 
 
 for i in hg.hosts:
-    std::ConfigFile(host=i, path="/fx", content="")
+    std::testing::NullResource(name=i.name)
 end
 """
     )
     (types, _) = compiler.do_compile()
-    files = types["std::File"].get_all_instances()
-    assert len(files) == 3
+    test_resources = types["std::testing::NullResource"].get_all_instances()
+    assert len(test_resources) == 3
 
 
 def test_str_on_instance_neg(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-import std
+import std::testing
 
 entity Hg:
 end
@@ -76,13 +77,13 @@ end
 
 
 for i in hg.hosts:
-    std::ConfigFile(host=i, path="/fx", content="")
+    std::testing::NullResource(name=i.name)
 end
 """
     )
     (types, _) = compiler.do_compile()
-    files = types["std::File"].get_all_instances()
-    assert len(files) == 1
+    test_resources = types["std::testing::NullResource"].get_all_instances()
+    assert len(test_resources) == 1
 
 
 def test_implements_inheritance(snippetcompiler):
@@ -445,7 +446,8 @@ def test_modules_plugin_deprecated(
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
-    test_module_plugin_contents: str = f"""
+    test_module_plugin_contents: str = (
+        f"""
 from inmanta.plugins import plugin, deprecated
 
 {decorator}
@@ -453,6 +455,7 @@ from inmanta.plugins import plugin, deprecated
 def get_one() -> "int":
     return 1
         """.strip()
+    )
 
     v1_module_from_template(
         v1_template_path,
@@ -512,7 +515,8 @@ def test_modules_failed_import_deprecated(tmpdir: str, snippetcompiler_clean, mo
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
-    test_module_plugin_contents: str = f"""
+    test_module_plugin_contents: str = (
+        f"""
 deprecated = lambda f=None, **kwargs: f if f is not None else deprecated
 from inmanta.plugins import plugin
 
@@ -521,6 +525,7 @@ from inmanta.plugins import plugin
 def get_one() -> "int":
     return 1
             """.strip()
+    )
 
     v1_module_from_template(
         v1_template_path,
@@ -560,7 +565,8 @@ def test_modules_fail_deprecated(
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
-    test_module_plugin_contents: str = f"""
+    test_module_plugin_contents: str = (
+        f"""
 from inmanta.plugins import plugin, deprecated
 
 {decorator1}
@@ -568,6 +574,7 @@ from inmanta.plugins import plugin, deprecated
 def get_one() -> "int":
     return 1
             """.strip()
+    )
 
     v1_module_from_template(
         v1_template_path,
@@ -610,7 +617,8 @@ def test_modules_plugin_custom_name_deprecated(
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
-    test_module_plugin_contents: str = """
+    test_module_plugin_contents: str = (
+        """
 from inmanta.plugins import plugin, deprecated
 
 @deprecated
@@ -618,6 +626,7 @@ from inmanta.plugins import plugin, deprecated
 def get_one() -> "int":
     return 1
             """.strip()
+    )
 
     v1_module_from_template(
         v1_template_path,
@@ -659,7 +668,7 @@ end
 implement Test using test
 Test()
 """,
-        r"variable n not found (reported in Format(This is test {{{{n}}}}) ({dir}/main.cf:5))",
+        r"variable n not found (reported in Format('This is test {{{{n}}}}') ({dir}/main.cf:5))",
     )
 
 

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 # Adapted from pyformance
 
 import asyncio
@@ -76,7 +77,6 @@ class AsyncReporter:
 
 
 class InfluxReporter(AsyncReporter):
-
     """
     InfluxDB reporter using native http api
     (based on https://influxdb.com/docs/v1.1/guides/writing_data.html)
@@ -127,7 +127,9 @@ class InfluxReporter(AsyncReporter):
             # Only set if we actually were able to get a successful response
             self._did_create_database = True
         except Exception:
-            LOGGER.warning("Cannot create database %s to %s", self.database, self.server, exc_info=True)
+            LOGGER.warning(
+                "Failed to connect to or create the influx database %s on %s", self.database, self.server, exc_info=True
+            )
 
     async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None) -> None:
         http_client = AsyncHTTPClient()

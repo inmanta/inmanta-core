@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import textwrap
 
 from inmanta import compiler
@@ -33,6 +34,9 @@ def test_plus(snippetcompiler) -> None:
 
             var2 = 1.5 + 2
             var2 = 3.5
+
+            var3 = "hello" + "world"
+            var3 = "helloworld"
 
             ###########
             # TestInt #
@@ -593,3 +597,25 @@ def test_precedence_rules(snippetcompiler) -> None:
         )
     )
     compiler.do_compile()
+
+
+def test_error_reporting(snippetcompiler) -> None:
+    """
+    Verify the error reporting for the arithmetic operations.
+    """
+    snippetcompiler.setup_for_error(
+        "1 + [1, 2]",
+        "Unsupported operand type(s) for plus: 'int' (1) and 'list' ([1, 2]) (reported in (1 + [1, 2]) ({dir}/main.cf:1))",
+    )
+    snippetcompiler.setup_for_error(
+        "[1, 2] + 1",
+        "Unsupported operand type(s) for plus: 'list' ([1, 2]) and 'int' (1) (reported in ([1, 2] + 1) ({dir}/main.cf:1))",
+    )
+    snippetcompiler.setup_for_error(
+        "1 + 'hello'",
+        "Unsupported operand type(s) for plus: 'int' (1) and 'str' ('hello') (reported in (1 + 'hello') ({dir}/main.cf:1))",
+    )
+    snippetcompiler.setup_for_error(
+        "'hello' + 1",
+        "Can only concatenate str (not 'int' (1)) to str (reported in ('hello' + 1) ({dir}/main.cf:1))",
+    )

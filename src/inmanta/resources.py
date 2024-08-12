@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import json
 import logging
 import re
@@ -55,7 +56,7 @@ class resource:  # noqa: N801
     :class:`~inmanta.resources.Resource`
 
     :param name: The name of the entity in the configuration model it creates a resources from. For example
-                 :inmanta:entity:`std::File`
+                 :inmanta:entity:`std::testing::NullResource`
     :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on an agent. This attribute
                          can be mapped.
     :param agent: This string indicates how the agent of this resource is determined. This string points to an attribute,
@@ -463,11 +464,7 @@ class Resource(metaclass=ResourceMeta):
 
         force_fields = False
         if cls_resource is None:
-            if not use_generic:
-                raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
-            else:
-                cls_resource = cls
-                force_fields = True
+            raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
 
         obj = cls_resource(obj_id)
         obj.populate(obj_map, force_fields)
@@ -658,7 +655,8 @@ class Id:
 
     def __init__(self, entity_type: str, agent_name: str, attribute: str, attribute_value: str, version: int = 0) -> None:
         """
-        :attr entity_type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::File`.
+        :attr entity_type: The resource type, as defined in the configuration model.
+            For example :inmanta:entity:`std::testing::NullResource`.
         :attr agent_name: The agent responsible for this resource.
         :attr attribute: The key attribute that uniquely identifies this resource on the agent
         :attr attribute_value: The corresponding value for this key attribute.
@@ -721,10 +719,13 @@ class Id:
         """
         String representation for this resource id with the following format:
             <type>[<agent>,<attribute>=<value>]
-            - type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::File`.
+
+            - type: The resource type, as defined in the configuration model.
+                For example :inmanta:entity:`std::testing::NullResource`.
             - agent: The agent responsible for this resource.
             - attribute: The key attribute that uniquely identifies this resource on the agent
             - value: The corresponding value for this key attribute.
+
         :return: Returns a :py:class:`inmanta.data.model.ResourceIdStr`
         """
         return cast(

@@ -17,6 +17,7 @@
 """
 
 import abc
+import itertools
 import logging
 import re
 from collections.abc import Sequence
@@ -223,6 +224,27 @@ class WildDictPath(abc.ABC):
         :param container: the container to search in
         """
 
+    def resolve_wild_cards(self: TWDP, container: object) -> Sequence[TWDP]:
+        """
+        Resolve all the wild cards contained in this wild dict path, based on the
+        given container.  For each possible set of values that can replace the wild
+        cards and still resolve a subset of the elements matched by this expression,
+        return a wild dict path expression without the use of any wild card.
+
+        The set of all elements that can be resolved by all returned wild dict paths
+        for the given container, should be equal to the set of all elements matched by
+        this wild dict path expression for the given container.
+
+        This method may return a NotImplementedError if the path upon which it is called
+        isn't supported by the method.
+
+        :param container: the container to search in
+        """
+        raise NotImplementedError(
+            "There is no default behavior for resolve_wild_cards on the base class WildDictCard, "
+            "it should be implemented in the sub classes."
+        )
+
     @abc.abstractmethod
     def to_str(self) -> str:
         """
@@ -322,6 +344,43 @@ class WildInDict(WildDictPath):
         if self._validate_container(container):
             try:
                 return [value for key, value in container.items() if self.key.matches(key)]
+            except KeyError:
+                return []
+        else:
+            raise ContainerStructureException(f"{container} is not a Dict")
+
+    def resolve_wild_cards(self, container: object) -> Sequence["WildInDict"]:
+        """
+        Get one WildInDict by key matching the wild key of this object.
+
+        ..code-block:: python
+
+            assert WildInDict("a").resolve_wild_cards(
+                {
+                    "a": "b",
+                    "aa": "bb",
+                    "c": "d",
+                }
+            ) == [
+                WildInDict("a"),
+            ]
+
+            assert WildInDict("*").resolve_wild_cards(
+                {
+                    "a": "b",
+                    "aa": "bb",
+                    "c": "d",
+                }
+            ) == [
+                WildInDict("a"),
+                WildInDict("aa"),
+                WildInDict("c"),
+            ]
+
+        """
+        if self._validate_container(container):
+            try:
+                return [WildInDict(str(key)) for key in container if self.key.matches(key)]
             except KeyError:
                 return []
         else:
@@ -504,6 +563,103 @@ class WildKeyedList(WildDictPath):
             and all(any(key.matches(k) and value.matches(v) for k, v in dct.items()) for key, value in self.key_value_pairs)
         ]
 
+    def resolve_wild_cards(self, container: object) -> Sequence["WildKeyedList"]:
+        """
+        Get one WildKeyedList by set of matching key value pairs that can be found
+        in the given container at the relation specified in this object.
+
+        As of now, this method can not be called on dict path expressions using a wild card
+        in the key of any key-value pair.  This is because the behavior for such type of path
+        is undefined.  It might get defined later on, once we get a use case for them.
+        If the method is called on such a path, a NotImplementedError is raised.
+
+        ..code-block:: python
+
+            assert WildKeyedList("relation","key_attribute","*").resolve_wild_cards(
+                {
+                    "relation":[
+                        {
+                            "key_attribute":"key_value",
+                            "other_attribute":"other_value",
+                        },
+                        {
+                            "key_attribute":"other_value",
+                        },
+                        {
+                            "other_key_attribute":"other_value",
+                        },
+                    [
+                }
+            ) == [
+                WildKeyedList("relation", "key_attribute", "key_value"),
+                WildKeyedList("relation", "key_attribute", "other_value"),
+            ]
+
+            assert WildKeyedList("relation",[("key_attribute","*"), ("other_attribute", "*")]).resolve_wild_cards(
+                {
+                    "relation":[
+                        {
+                            "key_attribute":"key_value",
+                            "other_attribute":"other_value",
+                        },
+                        {
+                            "key_attribute":"other_value",
+                        },
+                        {
+                            "other_key_attribute":"other_value",
+                        },
+                    [
+                }
+            ) == [
+                WildKeyedList("relation", [("key_attribute","key_value"), ("other_attribute", "other_value")]),
+            ]
+
+        """
+        # Check if we have a wild card for any of the keys, if we do, raise a NotImplementedError
+        # as we didn't define an expected behavior for it yet
+        for key, _ in self.key_value_pairs:
+            if key == WildCardValue():
+                raise NotImplementedError(
+                    "Can not call resolve_wild_cards on this path because it uses "
+                    f"wild cards (`*`) for some of its keys: `{self}`.  The desired "
+                    "behavior of resolve_wild_cards for this type of path is currently undefined."
+                )
+
+        outer = self._validate_outer_container(container)
+        try:
+            inner = outer[self.relation.value]
+        except KeyError:
+            return []
+
+        # Save here all the KeyedList that can be constructed
+        matches: list[WildKeyedList] = []
+
+        # Check each of the inner values, and emit as many paths for it
+        # as can be created to match it (within the constraints of this path
+        # filters)
+        for dct in self._validate_inner_container(inner):
+            if not isinstance(dct, dict):
+                # Can't be a match, it is not even a dict
+                continue
+
+            # Save here all the key-value pairs that will compose our
+            # KeyedList dict path
+            pairs = [
+                [(str(k), str(v)) for k, v in dct.items() if key.matches(k) and value.matches(v)]
+                for key, value in self.key_value_pairs
+            ]
+
+            # Emit one KeyedList for each combination of matched key-value pairs
+            matches.extend(
+                WildKeyedList(
+                    self.relation.value,
+                    path,
+                )
+                for path in itertools.product(*pairs)
+            )
+
+        return matches
+
     def to_str(self) -> str:
         escaped_relation: str = self.relation.escape()
         escaped_key_value_pairs: str = "][".join(key.escape() + "=" + value.escape() for key, value in self.key_value_pairs)
@@ -608,6 +764,26 @@ class WildComposedPath(WildDictPath):
 
         return containers
 
+    def resolve_wild_cards(self, container: object) -> Sequence["WildComposedPath"]:
+        if container is None:
+            raise IndexError("Can not get anything from None")
+
+        if len(self.expanded_path) == 0:
+            # No need to dig further
+            return []
+
+        if len(self.expanded_path) == 1:
+            # The path is equivalent to its unique element, but we have to wrap
+            # each of the possible path into a ComposedPath object to be consistent
+            return [WildComposedPath(path=[path]) for path in self.expanded_path[0].resolve_wild_cards(container)]
+
+        return [
+            WildComposedPath(path=[path, *next_part.get_path_sections()])
+            for path in self.expanded_path[0].resolve_wild_cards(container)
+            for elem in path.get_elements(container)
+            for next_part in WildComposedPath(path=self.expanded_path[1:]).resolve_wild_cards(elem)
+        ]
+
     def to_str(self) -> str:
         return self.path
 
@@ -632,6 +808,12 @@ class WildNullPath(WildDictPath):
     def get_elements(self, container: object) -> list[object]:
         if self._validate_container(container):
             return [container]
+        else:
+            raise ContainerStructureException(f"{container} is not a Dict")
+
+    def resolve_wild_cards(self, container: object) -> Sequence["WildNullPath"]:
+        if self._validate_container(container):
+            return [WildNullPath()]
         else:
             raise ContainerStructureException(f"{container} is not a Dict")
 

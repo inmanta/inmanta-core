@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import json
 import logging
 import os
@@ -35,9 +36,9 @@ from utils import LogSequence
 
 async def assert_resource_set_assignment(environment, assignment: dict[str, Optional[str]]) -> None:
     """
-    Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
+    Verify whether the resources on the server are assigned to the resource sets given via the assignment argument.
 
-    :param environment
+    :param environment: environment uuid
     :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
                        belong to.
     """
@@ -222,8 +223,8 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
 async def test_server_export(snippetcompiler, server: Server, client, environment):
     snippetcompiler.setup_for_snippet(
         """
-            h = std::Host(name="test", os=std::linux)
-            f = std::ConfigFile(host=h, path="/etc/motd", content="test")
+            import std::testing
+            f = std::testing::NullResource(name="test")
         """
     )
     await snippetcompiler.do_export_and_deploy()
@@ -457,7 +458,8 @@ exp::Test3(
     )
 
 
-async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent) -> None:
+@pytest.mark.parametrize("soft_delete", [True, False])
+async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent, soft_delete: bool) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
     """
@@ -474,6 +476,7 @@ async def test_resource_set(snippetcompiler, modules_dir: str, environment, clie
         await snippetcompiler.do_export_and_deploy(
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            soft_delete=soft_delete,
         )
 
     # Full compile
@@ -537,9 +540,54 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         },
     )
 
+    # Test soft_delete option
+
+    model = """
+        import test_resources
+
+        g = test_resources::Resource(value="A", agent="A", key="the_resource_g")
+        std::ResourceSet(name="resource_set_5", resources=[g])
+
+        """
+    if not soft_delete:
+        with pytest.raises(
+            Exception,
+            match=(
+                "Invalid request: Following resource sets are present in the removed resource"
+                " sets and in the resources that are exported: {'resource_set_5'}"
+            ),
+        ):
+            await export_model(
+                model=model,
+                partial_compile=True,
+                resource_sets_to_remove=["resource_set_5"],
+            )
+
+    else:
+        await export_model(
+            model=model,
+            partial_compile=True,
+            resource_sets_to_remove=["resource_set_5"],
+        )
+        await assert_resource_set_assignment(
+            environment,
+            assignment={
+                "the_resource_a": "resource_set_1",
+                "the_resource_c2": "resource_set_1",
+                "the_resource_d": "resource_set_3",
+                "the_resource_e": "resource_set_3",
+                "the_resource_f": "resource_set_4",
+                "the_resource_g": "resource_set_5",  # Check it didn't get removed
+                "the_resource_y": None,
+                "the_resource_z": None,
+            },
+        )
+
     response = await client.list_versions(tid=environment)
     assert response.code == 200
-    assert len(response.result["versions"]) == 2
+
+    # One of the 3 partial compiles is expected to fail when soft_delete is true:
+    assert len(response.result["versions"]) == 2 + soft_delete
     last_version_nr = 0
     expected_pip_config = {
         "extra-index-url": ["example.inmanta.com/index"],

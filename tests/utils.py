@@ -15,19 +15,24 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
+import base64
 import configparser
 import datetime
 import functools
 import json
 import logging
+import math
 import os
+import random
 import shutil
 import uuid
 from collections import abc
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timezone
+from logging import LogRecord
 from typing import Any, Optional, TypeVar, Union
 
 import pytest
@@ -37,14 +42,14 @@ from pkg_resources import Requirement, parse_version
 import build
 import build.env
 from _pytest.mark import MarkDecorator
-from inmanta import const, data, env, module, util
+from inmanta import config, const, data, env, module, protocol, util
 from inmanta.data import ResourceIdStr
 from inmanta.data.model import PipConfig
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
-from inmanta.util import get_compiler_version
+from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
 from packaging import version
 
@@ -203,26 +208,54 @@ class LogSequence:
         self.allow_errors = allow_errors
         self.ignore = ignore
 
-    def _find(self, loggerpart, level, msg, after=0):
+    def _find(self, loggerpart, level, msg, after=0, min_level: int = math.inf):
+        """
+
+        :param loggerpart: part of the logger name to match
+        :param level: exact log level to match
+        :param min_level: minimal level to match (works as normal loglevel settings that take all higher levels)
+        :param msg: part of the message to match on
+        :param after: starting point in th capture buffer to search
+
+        :return: matched index in the capture buffer, -1 for no match
+        """
         for i, (logger_name, log_level, message) in enumerate(self.caplog.record_tuples[after:]):
             if msg in message:
-                if loggerpart in logger_name and level == log_level:
+                if loggerpart in logger_name and (level == log_level or (log_level >= min_level)):
                     if any(i in logger_name for i in self.ignore):
                         continue
                     return i + after
         return -1
 
-    def contains(self, loggerpart, level, msg):
-        index = self._find(loggerpart, level, msg, self.index)
+    def get(self, loggerpart, level, msg, min_level: int = math.inf) -> LogRecord:
+        idx = self._find(loggerpart, level, msg, self.index, min_level)
+        if idx < 0:
+            raise KeyError()
+        return self.caplog.records[idx]
+
+    def contains(self, loggerpart, level, msg, min_level: int = math.inf) -> "LogSequence":
+        """
+        :param loggerpart: part of the logger name to match
+        :param level: exact log level to match
+        :param min_level: minimal level to match (works as normal loglevel settings that take all higher levels)
+        :param msg: part of the message to match on
+        """
+        index = self._find(loggerpart, level, msg, self.index, min_level)
         if not self.allow_errors:
             # first error is later
-            idxe = self._find("", logging.ERROR, "", self.index)
+            idxe = self._find("", logging.ERROR, "", self.index, min_level)
             assert idxe == -1 or idxe >= index
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
-    def assert_not(self, loggerpart, level, msg):
-        idx = self._find(loggerpart, level, msg, self.index)
+    def assert_not(self, loggerpart, level, msg, min_level: int = math.inf) -> None:
+        """
+        :param loggerpart: part of the logger name to match
+        :param level: exact log level to match
+        :param min_level: minimal level to match (works as normal loglevel settings that take all higher levels)
+        :param msg: part of the message to match on
+        """
+        idx = self._find(loggerpart, level, msg, self.index, min_level)
         assert idx == -1, f"{idx}, {self.caplog.record_tuples[idx]}"
 
     def no_more_errors(self):
@@ -240,7 +273,7 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
     Assert there are no warning, except from the list of loggers to allow
     """
     for record in caplog.records:
-        assert record.levelname != "WARNING" or (record.name in loggers_to_allow), record
+        assert record.levelname != "WARNING" or (record.name in loggers_to_allow), str(record) + record.getMessage()
 
 
 def configure(unused_tcp_port, database_name, database_port):
@@ -260,6 +293,34 @@ def configure(unused_tcp_port, database_name, database_port):
     Config.set("database", "port", str(database_port))
 
 
+def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+    if auth:
+        config.Config.set("server", "auth", "true")
+    for x, ct in [
+        ("server", None),
+        ("agent_rest_transport", ["agent"]),
+        ("compiler_rest_transport", ["compiler"]),
+        ("client_rest_transport", ["api", "compiler"]),
+        ("cmdline_rest_transport", ["api"]),
+    ]:
+        if ssl and not ca:
+            config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
+            config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
+            config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
+            config.Config.set(x, "ssl", "True")
+        if ssl and ca:
+            capath = os.path.join(path, "ca", "enduser-certs")
+
+            config.Config.set(x, "ssl_cert_file", os.path.join(capath, "server.crt"))
+            config.Config.set(x, "ssl_key_file", os.path.join(capath, "server.key.open"))
+            config.Config.set(x, "ssl_ca_cert_file", os.path.join(capath, "server.chain"))
+            config.Config.set(x, "ssl", "True")
+        if auth and ct is not None:
+            token = protocol.encode_token(ct)
+            config.Config.set(x, "token", token)
+
+
 async def report_db_index_usage(min_precent=100):
     q = (
         "select relname ,idx_scan ,seq_scan , 100*idx_scan / (seq_scan + idx_scan) percent_of_times_index_used,"
@@ -271,6 +332,21 @@ async def report_db_index_usage(min_precent=100):
 
     for row in result:
         print(row)
+
+
+async def wait_until_version_is_released(client, environment: uuid.UUID, version: int) -> None:
+    """
+    Wait until the configurationmodel with the given version and environment is released.
+    """
+
+    async def _is_version_released() -> bool:
+        result = await client.get_version(tid=environment, id=version)
+        if result.code == 404:
+            return False
+        assert result.code == 200
+        return result.result["model"]["released"]
+
+    await retry_limited(_is_version_released, timeout=10)
 
 
 async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
@@ -336,7 +412,7 @@ class ClientHelper:
         assert res.code == 200
         return res.result["data"]
 
-    async def put_version_simple(self, resources: dict[str, Any], version: int) -> None:
+    async def put_version_simple(self, resources: list[dict[str, Any]], version: int, wait_for_released: bool = False) -> None:
         res = await self.client.put_version(
             tid=self.environment,
             version=version,
@@ -346,6 +422,17 @@ class ClientHelper:
             compiler_version=get_compiler_version(),
         )
         assert res.code == 200, res.result
+        if wait_for_released:
+            await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
+
+    async def is_released(self, version: int) -> bool:
+        versions = await self.client.list_versions(tid=self.environment)
+        assert versions.code == 200
+        lookup = {v["version"]: v["released"] for v in versions.result["versions"]}
+        return lookup[version]
+
+    async def wait_for_deployed(self, version: int) -> None:
+        await _wait_until_deployment_finishes(client=self.client, environment=self.environment, version=version)
 
 
 def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> dict[str, Any]:
@@ -362,7 +449,7 @@ def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: 
 @functools.lru_cache(1)
 def get_product_meta_data() -> ProductMetadata:
     """Get the produce meta-data"""
-    bootloader = InmantaBootloader()
+    bootloader = InmantaBootloader(configure_logging=True)
     context = bootloader.load_slices()
     return context.get_product_metadata()
 
@@ -497,6 +584,7 @@ def module_from_template(
     new_content_init_cf: Optional[str] = None,
     new_content_init_py: Optional[str] = None,
     in_place: bool = False,
+    four_digit_version: bool = False,
 ) -> module.ModuleV2Metadata:
     """
     Creates a v2 module from a template.
@@ -514,6 +602,7 @@ def module_from_template(
     :param new_content_init_cf: The new content of the _init.cf file.
     :param new_content_init_py: The new content of the __init__.py file.
     :param in_place: Modify the module in-place instead of copying it.
+    :param four_digit_version: if the version uses 4 digits (3 by default)
     """
 
     def to_python_requires(
@@ -530,6 +619,8 @@ def module_from_template(
     config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
     config: configparser.ConfigParser = configparser.ConfigParser()
     config.read(config_file)
+    if four_digit_version:
+        config["metadata"]["four_digit_version"] = "True"
     if new_version is not None:
         base, tag = module.ModuleV2Metadata.split_version(new_version)
         config["metadata"]["version"] = base
@@ -697,3 +788,22 @@ def get_as_naive_datetime(timestamp: datetime) -> datetime:
     if timestamp.tzinfo is None:
         return timestamp
     return timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def make_random_file(size: int = 0) -> tuple[str, bytes, str]:
+    """
+    Generate a random file.
+
+    :param size: If size is > 0 content is generated that is equal or more than size.
+    """
+    randomvalue = str(random.randint(0, 10000))
+    if size > 0:
+        while len(randomvalue) < size:
+            randomvalue += randomvalue
+
+    content = ("Hello world %s\n" % (randomvalue)).encode()
+    hash = hash_file(content)
+
+    body = base64.b64encode(content).decode("ascii")
+
+    return hash, content, body

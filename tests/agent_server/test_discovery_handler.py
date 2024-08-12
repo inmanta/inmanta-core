@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import uuid
 from collections import abc
 
@@ -149,6 +150,7 @@ async def test_discovery_resource_handler_basic_test(
         {
             "discovered_resource_id": f"test::MyUnmanagedResource[discovery_agent,val={val}]",
             "values": {"val": val},
+            "managed_resource_uri": None,
         }
         for val in all_values
     ]

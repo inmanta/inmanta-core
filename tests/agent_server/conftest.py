@@ -15,13 +15,14 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import time
 import uuid
 from collections import defaultdict, namedtuple
 from threading import Condition
-from typing import Generic
+from typing import Any, Generic
 
 from pytest import fixture
 
@@ -83,10 +84,11 @@ async def _deploy_resources(client, environment, resources, version, push, agent
     return result
 
 
-async def wait_for_n_deployed_resources(client, environment, version, n, timeout=10):
+async def wait_for_n_deployed_resources(client, environment, version, n, timeout=5):
     async def is_deployment_finished():
         result = await client.get_version(environment, version)
         assert result.code == 200
+        print(result.result["model"])
         return result.result["model"]["done"] >= n
 
     await retry_limited(is_deployment_finished, timeout)
@@ -108,7 +110,7 @@ ResourceContainer = namedtuple(
 
 
 @fixture(scope="function")
-def resource_container():
+def resource_container(clean_reset):
     @resource("test::Resource", agent="agent", id_attribute="key")
     class MyResource(Resource):
         """
@@ -212,6 +214,18 @@ def resource_container():
         """
 
         fields = ("key", "value", "set_state_to_deployed", "purged")
+
+    @resource("test::EventResource", agent="agent", id_attribute="key")
+    class EventResource(PurgeableResource):
+        """
+        Raise a SkipResource exception in the deploy() handler method.
+        """
+
+        fields = ("key", "value", "change", "purged")
+
+        @classmethod
+        def get_change(cls, _, r):
+            return False
 
     # Remote control state, shared over all resources
     _STATE = defaultdict(dict)
@@ -527,11 +541,18 @@ def resource_container():
     waiter = Condition()
 
     async def wait_for_done_with_waiters(client, env_id, version, wait_for_this_amount_of_resources_in_done=None, timeout=10):
+        def log_progress(done: int, total: int) -> None:
+            logger.info(
+                "waiting with waiters, %s/%s resources done",
+                done,
+                (wait_for_this_amount_of_resources_in_done if wait_for_this_amount_of_resources_in_done else total),
+            )
+
         # unhang waiters
         result = await client.get_version(env_id, version)
         assert result.code == 200
         now = time.time()
-        logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
+        log_progress(result.result["model"]["done"], result.result["model"]["total"])
         while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
             if now + timeout < time.time():
                 raise Exception("Timeout")
@@ -541,7 +562,7 @@ def resource_container():
             ):
                 break
             result = await client.get_version(env_id, version)
-            logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
+            log_progress(result.result["model"]["done"], result.result["model"]["total"])
             waiter.acquire()
             waiter.notify_all()
             waiter.release()
@@ -579,6 +600,61 @@ def resource_container():
                 raise Exception("Timeout occurred")
             logger.info("Releasing waiter %s", self.traceid)
             super().deploy(ctx, resource, requires)
+
+    @provider("test::EventResource", name="test_event_processing")
+    class EventResourceProvider(CRUDHandler[EventResource]):
+        def __init__(self, agent, io=None):
+            super().__init__(agent, io)
+            self.traceid = uuid.uuid4()
+
+        def read_resource(self, ctx: HandlerContext, resource: EventResource) -> None:
+            logger.info("Hanging waiter %s", self.traceid)
+            waiter.acquire()
+            notified_before_timeout = waiter.wait(timeout=10)
+            waiter.release()
+            if not notified_before_timeout:
+                raise Exception("Timeout occurred")
+            logger.info("Releasing waiter %s", self.traceid)
+
+            Provider.read(resource.id.get_agent_name(), resource.key)
+            environment = self._agent.environment
+
+            async def should_redeploy() -> bool:
+                client = self.get_client()
+                result = await client.get_resource_events(
+                    environment,
+                    resource.id.resource_version_str(),
+                    const.Change.nochange,
+                )
+                if result.code != 200:
+                    raise RuntimeError(
+                        f"Unexpected response code when checking for events: received {result.code} "
+                        f"(expected 200): {result.result}"
+                    )
+                changed_dependencies = result.result["data"]
+                assert isinstance(changed_dependencies, dict)
+
+                actual_changes = {k: v for k, v in changed_dependencies.items() if v}
+                if actual_changes:
+                    ctx.debug("Change found: %(changes)s, deploying", changes=actual_changes)
+                else:
+                    ctx.debug("No changes, not deploying")
+
+                return bool(actual_changes)
+
+            resource.change = self.run_sync(should_redeploy)
+
+        def create_resource(self, ctx: HandlerContext, resource: EventResource) -> None:
+            Provider.touch(resource.id.get_agent_name(), resource.key)
+            ctx.set_created()
+
+        def update_resource(self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: EventResource) -> None:
+            Provider.touch(resource.id.get_agent_name(), resource.key)
+            ctx.set_updated()
+
+        def delete_resource(self, ctx: HandlerContext, resource: EventResource) -> None:
+            Provider.touch(resource.id.get_agent_name(), resource.key)
+            ctx.set_purged()
 
     @provider("test::Deploy", name="test_wait")
     class Deploy(Provider):

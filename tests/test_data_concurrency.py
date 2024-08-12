@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from utils import get_resource
 
 """
@@ -104,7 +105,7 @@ async def test_4889_deadlock_delete_resource_action_update(
         is_suitable_for_partial_compiles=False,
     ).insert()
 
-    resource = model.ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
+    resource = model.ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={version}")
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.available,
@@ -119,7 +120,7 @@ async def test_4889_deadlock_delete_resource_action_update(
         id=parameter_id,
         source=const.ParameterSource.user,
         value="val",
-        resource_id="std::File[agent1,path=/etc/file1]",
+        resource_id="std::testing::NullResource[agent1,name=file1]",
     )
     assert result.code == 200
 

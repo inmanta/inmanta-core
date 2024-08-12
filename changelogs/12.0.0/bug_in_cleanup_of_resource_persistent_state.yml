@@ -1,0 +1,3 @@
+description: Fix bug in cleanup of resource persistent state
+change-type: patch
+destination-branches: [master, iso7]

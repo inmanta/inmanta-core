@@ -42,6 +42,8 @@ This mapping is done by adding a static method to the resource class with ``get_
 name. This static method has two arguments: a reference to the exporter and the instance of the
 entity it is serializing.
 
+..
+    This uses std::File, which is to be removed, but it re-constructs it, so that is OK
 
 .. code-block:: python
     :linenos:
@@ -105,7 +107,7 @@ Facts are properties of the environment whose values are not managed by the orch
 Facts are either used as input in a model, e.g. a virtual machine provider provides an ip and the model then uses this
 ip to run a service, or used for reporting purposes.
 
-Retrieving a fact in the model is done with the `std::getfact() <../../../reference/modules/std.html#std.getfact>`_
+Retrieving a fact in the model is done with the `std::getfact() <../reference/modules/std.html#std.getfact>`_
 function.
 
 Example taken from the `openstack Inmanta module <https://github.com/inmanta/openstack>`_:

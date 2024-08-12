@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import typing
 import warnings
 from re import error as RegexError

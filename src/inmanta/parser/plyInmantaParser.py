@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import functools
 import logging
 import re
@@ -27,7 +28,7 @@ from typing import Optional, Union
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
 
-from inmanta.ast import LocatableString, Location, Namespace, Range
+from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
 from inmanta.ast.statements import ExpressionStatement, Literal, Statement
@@ -740,7 +741,15 @@ def p_function_call_err_dot(p: YaccProduction) -> None:
 
 def p_list_def(p: YaccProduction) -> None:
     "list_def : '[' operand_list ']'"
-    p[0] = CreateList(p[2])
+    node = CreateList(p[2])
+    try:
+        node = Literal(node.as_constant())
+    except RuntimeException:
+        # Can't shortcut
+        pass
+
+    p[0] = node
+
     attach_lnr(p, 1)
 
 
@@ -842,7 +851,16 @@ def p_pair_list_empty(p: YaccProduction) -> None:
 
 def p_map_def(p: YaccProduction) -> None:
     "map_def : '{' pair_list '}'"
+
+    # the constructor does duplicate check
     p[0] = CreateDict(p[2])
+    try:
+        # if we can, shortcut to a constant
+        p[0] = Literal({k: v.as_constant() for k, v in p[2]})
+    except RuntimeException:
+        # Can't shortcut
+        pass
+
     attach_lnr(p, 1)
 
 
@@ -912,7 +930,11 @@ def p_constant_fstring(p: YaccProduction) -> None:
     formatter = string.Formatter()
 
     # formatter.parse returns an iterable of tuple (literal_text, field_name, format_spec, conversion)
-    parsed: Iterable[tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(str(p[1]))
+    parsed: abc.Sequence[tuple[str, Optional[str], Optional[str], Optional[str]]]
+    try:
+        parsed = list(formatter.parse(str(p[1])))
+    except ValueError as e:
+        raise ParserException(p[1].location, str(p[1]), f"Invalid f-string: {e}")
 
     start_lnr = p[1].location.lnr
     start_char_pos = p[1].location.start_char + 2  # FSTRING tokens begin with `f"` or `f'` of length 2

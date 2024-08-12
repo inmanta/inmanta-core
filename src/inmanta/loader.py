@@ -15,7 +15,9 @@
 
     Contact: code@inmanta.com
 """
+
 import base64
+import functools
 import hashlib
 import importlib
 import importlib.util
@@ -23,6 +25,7 @@ import inspect
 import logging
 import os
 import pathlib
+import shutil
 import sys
 import types
 from collections import abc
@@ -30,7 +33,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
-from itertools import chain, starmap
+from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
@@ -45,6 +48,17 @@ MODULE_DIR = "modules"
 PLUGIN_DIR = "plugins"
 
 LOGGER = logging.getLogger(__name__)
+
+
+def get_inmanta_module_name(python_module_name: str) -> str:
+    """Small utility to convert python module into inmanta module"""
+    module_parts = python_module_name.split(".")
+    if module_parts[0] != const.PLUGINS_PACKAGE:
+        raise Exception(
+            "All instances from which the source is loaded, should be defined in the inmanta plugins package. "
+            "%s does not match" % python_module_name
+        )
+    return module_parts[1]
 
 
 class SourceNotFoundException(Exception):
@@ -85,20 +99,7 @@ class SourceInfo:
 
     def _get_module_name(self) -> str:
         """Get the name of the inmanta module, derived from the python module name"""
-        module_parts = self.module_name.split(".")
-        if module_parts[0] != const.PLUGINS_PACKAGE:
-            raise Exception(
-                "All instances from which the source is loaded, should be defined in the inmanta plugins package. "
-                "%s does not match" % self.module_name
-            )
-
-        return module_parts[1]
-
-    def get_siblings(self) -> Iterator["SourceInfo"]:
-        """
-        Returns an iterator over SourceInfo objects for all plugin source files in this Inmanta module (including this one).
-        """
-        return starmap(SourceInfo, module.Project.get().modules[self._get_module_name()].get_plugin_files())
+        return get_inmanta_module_name(self.module_name)
 
     @property
     def requires(self) -> list[str]:
@@ -116,16 +117,28 @@ class SourceInfo:
 class CodeManager:
     """This class is responsible for loading and packaging source code for types (resources, handlers, ...) that need to be
     available in a remote process (e.g. agent).
+
+    __type_file: Maps Inmanta type names (e.g., ``std::testing::NullResource``, ``mymodule::Mytype``)
+                 to sets of filenames containing
+                 the necessary source code (all plugin files in the module).
+    __file_info: Stores metadata about each individual source code file. The keys are file paths and the values
+                 in this dictionary are ``SourceInfo`` objects.
     """
 
     def __init__(self) -> None:
+        # Old implementation
+        # Use by external code
         self.__type_file: dict[str, set[str]] = {}
         self.__file_info: dict[str, SourceInfo] = {}
+
+        # Cache of module to source info
+        self.__module_to_source_info: dict[str, list[SourceInfo]] = {}
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
 
-        :param type_name: The inmanta type name for which the source of type_object will be registered. For example std::File
+        :param type_name: The inmanta type name for which the source of type_object will be registered.
+            For example std::testing::NullResource
         :param instance: An instance for which the code needs to be registered.
         """
         file_name = self.get_object_source(instance)
@@ -139,15 +152,28 @@ class CodeManager:
         if file_name in self.__type_file[type_name]:
             return
 
-        # don't just store this file, but all plugin files in its Inmanta module to allow for importing helper modules
-        all_plugin_files: list[SourceInfo] = list(SourceInfo(file_name, instance.__module__).get_siblings())
+        # get the module
+        module_name = get_inmanta_module_name(instance.__module__)
+
+        all_plugin_files: list[SourceInfo] = self._get_source_info_for_module(module_name)
+
         self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)
 
-        if file_name in self.__file_info:
-            return
+    def _get_source_info_for_module(self, module_name: str) -> list[SourceInfo]:
+        if module_name in self.__module_to_source_info:
+            return self.__module_to_source_info[module_name]
 
-        for file_info in all_plugin_files:
+        sources = [
+            SourceInfo(path, module_name) for path, module_name in module.Project.get().modules[module_name].get_plugin_files()
+        ]
+
+        self.__module_to_source_info[module_name] = sources
+
+        # Register files
+        for file_info in sources:
             self.__file_info[file_info.path] = file_info
+
+        return sources
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """Get the path of the source file in which type_object is defined"""
@@ -174,6 +200,7 @@ class CodeManager:
 
 
 @dataclass(frozen=True)
+@functools.total_ordering
 class ModuleSource:
     """
     :param name: the name of the python module. e.g. inmanta_plugins.model.x
@@ -189,6 +216,16 @@ class ModuleSource:
     source: Optional[bytes] = None
     _client: Optional["protocol.SyncClient"] = None
 
+    def __lt__(self, other):
+        if not isinstance(other, ModuleSource):
+            return NotImplemented
+        return (self.name, self.hash_value, self.is_byte_code) < (other.name, other.hash_value, other.is_byte_code)
+
+    def __eq__(self, other):
+        if not isinstance(other, ModuleSource):
+            return False
+        return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
+
     def get_source_code(self) -> bytes:
         """Load the source code"""
         if self.source is not None:
@@ -203,6 +240,20 @@ class ModuleSource:
 
         return base64.b64decode(response.result["content"])
 
+    def for_transport(self) -> "ModuleSource":
+        return ModuleSource(name=self.name, hash_value=self.hash_value, is_byte_code=self.is_byte_code, source=self.source)
+
+    def with_client(self, client: "protocol.SyncClient") -> "ModuleSource":
+        return ModuleSource(
+            name=self.name, hash_value=self.hash_value, is_byte_code=self.is_byte_code, source=self.source, _client=client
+        )
+
+
+@dataclass(frozen=True)
+class FailedModuleSource:
+    module_source: ModuleSource
+    exception: Exception
+
 
 class CodeLoader:
     """
@@ -211,19 +262,22 @@ class CodeLoader:
     :param code_dir: The directory where the code is stored
     """
 
-    def __init__(self, code_dir: str) -> None:
+    def __init__(self, code_dir: str, clean: bool = False) -> None:
         self.__code_dir = code_dir
         self.__modules: dict[str, tuple[str, types.ModuleType]] = {}  # A map with all modules we loaded, and its hv
 
-        self.__check_dir()
+        self.__check_dir(clean)
 
-        mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-        PluginModuleFinder.configure_module_finder(modulepaths=[mod_dir], prefer=True)
+        self.mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
+        PluginModuleFinder.configure_module_finder(modulepaths=[self.mod_dir], prefer=True)
 
-    def __check_dir(self) -> None:
+    def __check_dir(self, clean: bool = False) -> None:
         """
         Check if the code directory
         """
+        if clean and os.path.exists(self.__code_dir):
+            shutil.rmtree(self.__code_dir)
+
         # check for the code dir
         if not os.path.exists(self.__code_dir):
             os.makedirs(self.__code_dir, exist_ok=True)
@@ -232,19 +286,28 @@ class CodeLoader:
         if not os.path.exists(os.path.join(self.__code_dir, MODULE_DIR)):
             os.makedirs(os.path.join(self.__code_dir, MODULE_DIR), exist_ok=True)
 
-    def _load_module(self, mod_name: str, hv: str) -> None:
+    def _load_module(self, mod_name: str, hv: str, require_reload: bool = True) -> None:
         """
         Load or reload a module
+
+        :arg require_reload: if set to true, we will explcitly reload modules, otherwise we keep them as is
         """
+
+        # Importing a module -> only the first import loads the code
+        # cache of loaded modules mechanism -> starts afresh when agent is restarted
         try:
             if mod_name in self.__modules:
-                mod = importlib.reload(self.__modules[mod_name][1])
+                if require_reload:
+                    mod = importlib.reload(self.__modules[mod_name][1])
+                else:
+                    LOGGER.debug("Not reloading module %s", mod_name)
+                    return
             else:
                 mod = importlib.import_module(mod_name)
             self.__modules[mod_name] = (hv, mod)
-            LOGGER.info("Loaded module %s" % mod_name)
+            LOGGER.info("Loaded module %s", mod_name)
         except ImportError:
-            LOGGER.exception("Unable to load module %s" % mod_name)
+            LOGGER.exception("Unable to load module %s", mod_name)
 
     def install_source(self, module_source: ModuleSource) -> bool:
         """
@@ -325,7 +388,7 @@ class CodeLoader:
             is_changed = self.install_source(module_source)
             if is_changed:
                 to_reload.append(module_source)
-
+        # This whole mechanism can go if we spawn a new venv with the new code when required
         if len(to_reload) > 0:
             importlib.invalidate_caches()
             for module_source in to_reload:

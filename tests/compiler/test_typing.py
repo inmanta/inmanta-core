@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import re
 
 import pytest
@@ -531,22 +532,6 @@ def test_float_type(snippetcompiler):
     assert Number().validate(y)
     assert Number().validate(z)
     assert Number().validate(u)
-
-
-def test_lookup_on_float_with_int(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-entity A:
-    float x
-end
-implement A using std::none
-index A(x)
-a = A(x=1.0)
-y = A[x=1]
-a = y
-        """,
-    )
-    compiler.do_compile()
 
 
 def test_print_float(snippetcompiler, capsys):

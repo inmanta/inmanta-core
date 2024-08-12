@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import itertools
 import logging
 import os
@@ -43,6 +44,7 @@ from inmanta.execute.runtime import (
     ResultVariableProxy,
     VariableABC,
     Waiter,
+    WaiterSet,
 )
 from inmanta.execute.tracking import ModuleTracker
 
@@ -303,7 +305,7 @@ class Scheduler:
 
         return range_to_range
 
-    def find_wait_cycle(self, attributes_with_precedence_rule: list[RelationAttribute], allwaiters: set[Waiter]) -> bool:
+    def find_wait_cycle(self, attributes_with_precedence_rule: list[RelationAttribute], allwaiters: WaiterSet) -> bool:
         """
         Preconditions: no progress is made anymore
 
@@ -380,11 +382,9 @@ class Scheduler:
         waitqueue = PrioritisedDelayedResultVariableQueue(attributes_with_precedence_rule)
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
         zerowaiters: Deque[DelayedResultVariable[Any]] = deque()
-        # queue containing everything, to find hanging statements
-        all_statements: set[Waiter] = set()
 
         # Wrap in object to pass around
-        queue = QueueScheduler(compiler, basequeue, waitqueue, self.types, all_statements)
+        queue = QueueScheduler(compiler, basequeue, waitqueue, self.types)
 
         # emit all top level statements
         for block in blocks:
@@ -420,7 +420,7 @@ class Scheduler:
                 next = basequeue.popleft()
                 try:
                     next.execute()
-                    all_statements.discard(next)
+                    queue.remove_from_all(next)
                     count = count + 1
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
@@ -508,16 +508,17 @@ class Scheduler:
         else:
             raise MultiException(excns)
 
-        if all_statements:
+        remaining_waiters: WaiterSet = queue.allwaiters
+        if remaining_waiters:
             stmt = None
-            for st in all_statements:
+            for st in remaining_waiters:
                 if isinstance(st, ExecutionUnit):
                     stmt = st
                     break
 
             assert stmt is not None
 
-            raise RuntimeException(stmt.expression, "not all statements executed %s" % all_statements)
+            raise RuntimeException(stmt.expression, "not all statements executed: %s" % list(remaining_waiters))
 
         return True
 

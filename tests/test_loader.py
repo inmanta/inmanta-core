@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import hashlib
 import importlib.abc
 import importlib.machinery
@@ -62,8 +63,8 @@ def test_code_manager(tmpdir: py.path.local):
     import inmanta_plugins.single_plugin_file as single
 
     mgr = loader.CodeManager()
-    mgr.register_code("std::File", single.MyHandler)
-    mgr.register_code("std::Directory", multi.MyHandler)
+    mgr.register_code("std::testing::NullResource", single.MyHandler)
+    mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
 
     def assert_content(source_info: SourceInfo, handler) -> str:
         filename = inspect.getsourcefile(handler)
@@ -77,11 +78,11 @@ def test_code_manager(tmpdir: py.path.local):
 
     # get types
     types = dict(mgr.get_types())
-    assert "std::File" in types
-    assert "std::Directory" in types
+    assert "std::testing::NullResource" in types
+    assert "multiple_plugin_files::NullResourceBis" in types
 
-    single_type_list: list[SourceInfo] = types["std::File"]
-    multi_type_list: list[SourceInfo] = types["std::Directory"]
+    single_type_list: list[SourceInfo] = types["std::testing::NullResource"]
+    multi_type_list: list[SourceInfo] = types["multiple_plugin_files::NullResourceBis"]
 
     assert len(single_type_list) == 1
     single_content: str = assert_content(single_type_list[0], single.MyHandler)
@@ -105,13 +106,13 @@ def test_code_manager(tmpdir: py.path.local):
 
     # verify requirements behavior
     source_info: SourceInfo = single_type_list[0]
-    # by default only install non-module dependencies
-    assert source_info.requires == ["lorem"]
-    project._metadata.agent_install_dependency_modules = True
+    # by default also install dependencies on other modules
+    assert source_info.requires == ["inmanta-module-std", "lorem"]
+    project._metadata.agent_install_dependency_modules = False
     # reset cache
     source_info._requires = None
-    # when enabled, also install dependencies on other modules
-    assert source_info.requires == ["inmanta-module-std", "lorem"]
+    # when disabled only install non-module dependencies
+    assert source_info.requires == ["lorem"]
 
 
 def test_code_loader(tmp_path, caplog):

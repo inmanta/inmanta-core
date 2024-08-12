@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 from inmanta.const import (
     DONE_STATES,
     INITIAL_STATES,

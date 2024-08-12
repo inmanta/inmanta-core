@@ -21,13 +21,14 @@ import json
 from abc import ABC
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Generic, Optional, TypeVar, Union, cast
+from typing import Generic, Mapping, Optional, TypeVar, Union, cast
 from urllib import parse
 from urllib.parse import quote
 from uuid import UUID
 
 from asyncpg import Record
 
+import inmanta.data
 from inmanta import data
 from inmanta.data import (
     APILIMIT,
@@ -52,7 +53,7 @@ from inmanta.data import (
     ResourceAction,
     ResourceHistoryOrder,
     ResourceLogOrder,
-    ResourceOrder,
+    ResourceStatusOrder,
     SimpleQueryBuilder,
     VersionedResourceOrder,
     model,
@@ -165,8 +166,19 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         last_id: Optional[PRIMITIVE_SQL_TYPES] = None,
         start: Optional[PRIMITIVE_SQL_TYPES] = None,
         end: Optional[PRIMITIVE_SQL_TYPES] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        filter: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
+        """
+        All boundary values for paging are exclusive, i.e. the returned page will contain only values strictly larger/smaller
+        than the boundary value. "start", "first", "end" and "last" are poorly named: they imply to be ordering-aware, while
+        they're actually only about the requested page containing "larger" or "smaller" values respectively, regardless of
+        the requested order.
+
+        :param first_id: secondary boundary value for min bound. If not None, boundary is `> (start, first_id)`.
+        :param last_id: secondary boundary value for max bound. If not None, boundary is `< (end, last_id)`.
+        :param start: primary boundary value for min bound. If first_id is None, boundary is `> start`.
+        :param end: primary boundary value for max bound. If last_id is None, boundary is `< end`.
+        """
         self.limit = self.validate_limit(limit)
         self.raw_filter = filter or {}
         self.filter: dict[str, QueryFilter] = self.process_filters(filter)
@@ -378,7 +390,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         links = {}
 
-        url_query_params: dict[str, Optional[Union[SimpleTypes, list[str]]]] = {
+        url_query_params: dict[str, Optional[Union[SimpleTypes, Sequence[str]]]] = {
             "limit": self.limit,
             "sort": str(self.order),
         }
@@ -445,7 +457,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         return limit
 
 
-class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
+class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
     def __init__(
         self,
         env: data.Environment,
@@ -459,7 +471,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         deploy_summary: bool = False,
     ) -> None:
         super().__init__(
-            order=ResourceOrder.parse_from_string(sort),
+            order=ResourceStatusOrder.parse_from_string(sort),
             limit=limit,
             first_id=first_id,
             last_id=last_id,
@@ -469,6 +481,28 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         )
         self.environment = env
         self.deploy_summary = deploy_summary
+
+        # Rewrite the filter to special case orphan handling
+        # We handle the non-orphan case by changing the query, so we don't need the filter
+        # This doesn't affect the paging links, as they use the raw filter
+
+        status_filter_type, status_filter_fields = self.filter.get("status", (None, {}))
+        assert status_filter_type is None or status_filter_type == inmanta.data.QueryType.COMBINED
+        assert isinstance(status_filter_fields, dict)
+        self.drop_orphans = "orphaned" in status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []) or (
+            "orphaned" not in status_filter_fields.get(inmanta.data.QueryType.CONTAINS, ["orphaned"])
+        )
+
+        if self.drop_orphans:
+            # clean filter for orphans
+            try:
+                status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []).remove("orphaned")
+                if not status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []):
+                    del status_filter_fields[inmanta.data.QueryType.NOT_CONTAINS]
+                if not status_filter_fields:
+                    del self.filter["status"]
+            except ValueError:
+                pass
 
     @property
     def allowed_filters(self) -> dict[str, type[Filter]]:
@@ -486,68 +520,80 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        def subquery_latest_version_for_single_resource(higher_than: Optional[str]) -> str:
-            """
-            Returns a subquery to select a single row from a resource table:
-                - for the first resource id higher than the given boundary
-                - the highest (released) version for which a resource with this id exists
-
-            :param higher_than: If given, the subquery selects the first resource id higher than this value (may be a column).
-                If not given, the subquery selects the first resource id, period.
-            """
-            higher_than_condition: str = f"AND r.resource_id > {higher_than}" if higher_than is not None else ""
-            return f"""
-                SELECT
-                    r.resource_id,
-                    r.attributes,
-                    r.resource_type,
-                    r.agent,
-                    r.resource_id_value,
-                    r.model,
-                    r.environment,
-                    (
-                        CASE WHEN (SELECT r.model < latest_version.version FROM latest_version)
-                            THEN 'orphaned' -- use the CTE to check the status
-                            ELSE r.status::text
-                        END
-                    ) as status
-                FROM resource r
-                JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
-                WHERE r.environment = $1 AND cm.released = TRUE {higher_than_condition}
-                ORDER BY resource_id, model DESC
-                LIMIT 1
-            """
-
-        query_builder = SimpleQueryBuilder(
+        new_query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
             prelude=f"""
-                /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
-                /* The latest_version CTE finds the maximum released version number in the environment */
-                WITH RECURSIVE latest_version AS (
+               WITH latest_version AS (
                     SELECT MAX(public.configurationmodel.version) as version
                     FROM public.configurationmodel
                     WHERE public.configurationmodel.released=TRUE AND environment=$1
-                ),
-                /*
-                emulate a loose (or skip) index scan (https://wiki.postgresql.org/wiki/Loose_indexscan):
-                1 resource_id at a time, select the latest (released) version it exists in.
-                */
-                cte AS (
-                    /* Initial row for recursion: select relevant version for first resource */
-                    ( {subquery_latest_version_for_single_resource(higher_than=None)} )
-                    UNION ALL
-                    SELECT next_r.*
-                    FROM cte curr_r
-                    CROSS JOIN LATERAL (
-                        /* Recurse: select relevant version for next resource (one higher in the sort order than current) */
-                        {subquery_latest_version_for_single_resource(higher_than="curr_r.resource_id")}
-                    ) next_r
+                ), versioned_resource_state AS (
+                    SELECT
+                        rps.*,
+                        CASE
+                            -- try the cheap, trivial option first because the lookup has a big performance impact
+                            WHEN EXISTS (
+                                SELECT 1
+                                FROM resource AS r
+                                WHERE r.environment = rps.environment AND r.resource_id = rps.resource_id AND r.model = (
+                                    SELECT version FROM latest_version
+                                )
+                            ) THEN (SELECT version FROM latest_version)
+                            -- only if the resource does not exist in the latest released version, search for the latest
+                            -- version it does exist in
+                            ELSE (
+                                SELECT MAX(r.model)
+                                FROM resource AS r
+                                JOIN configurationmodel AS m
+                                    ON r.environment = m.environment AND r.model = m.version AND m.released = TRUE
+                                WHERE r.environment = rps.environment AND r.resource_id = rps.resource_id
+                            )
+                        END AS version
+                    FROM resource_persistent_state AS rps
+                    WHERE rps.environment = $1
+                ), result AS (
+                    SELECT
+                        rps.resource_id,
+                        r.attributes,
+                        rps.resource_type,
+                        rps.agent,
+                        rps.resource_id_value,
+                        r.model,
+                        rps.environment,
+                        (
+                            CASE
+                                -- The resource_persistent_state.last_non_deploying_status column is only populated for
+                                -- actual deployment operations to prevent locking issues. This case-statement calculates
+                                -- the correct state from the combination of the resource table and the
+                                -- resource_persistent_state table.
+                                WHEN r.model < (SELECT version FROM latest_version)
+                                    THEN 'orphaned'
+                                WHEN r.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
+                                    -- The deploying, undefined and skipped_for_undefined states are not tracked in the
+                                    -- resource_persistent_state table.
+                                    THEN r.status::text
+                                WHEN rps.last_deployed_attribute_hash != r.attribute_hash
+                                    -- The hash changed since the last deploy -> new desired state
+                                    THEN r.status::text
+                                    -- No override required, use last known state from actual deployment
+                                    ELSE rps.last_non_deploying_status::text
+                            END
+                        ) as status
+                    FROM versioned_resource_state AS rps
+            -- LEFT join for trivial `COUNT(*)`. Not applicable when filtering orphans because left table contains orphans.
+                    {'' if self.drop_orphans else 'LEFT'} JOIN resource AS r
+                        ON r.environment = rps.environment
+                          AND r.resource_id = rps.resource_id
+           -- shortcut the version selection to the latest one iff we wish to exclude orphans
+           -- => no per-resource MAX required + wider index application
+                          AND r.model = {'(SELECT version FROM latest_version)' if self.drop_orphans else 'rps.version'}
+                    WHERE rps.environment = $1
                 )
             """,
-            from_clause="FROM cte r",
+            from_clause="FROM result AS r",
             values=[self.environment.id],
         )
-        return query_builder
+        return new_query_builder
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.LatestReleasedResource]:
         dtos: Sequence[LatestReleasedResource] = [
@@ -559,6 +605,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 requires=json.loads(resource["attributes"]).get("requires", []),
             )
             for resource in records
+            if resource["attributes"]  # filter out bad joins
         ]
         return dtos
 
@@ -660,8 +707,9 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
         query_builder = SimpleQueryBuilder(
             select_clause="""SELECT id, remote_id, environment, requested,
                             started, completed, do_export, force_update,
-                            metadata, environment_variables, success, version,
-                            partial, removed_resource_sets, exporter_plugin,
+                            metadata, requested_environment_variables, used_environment_variables,
+                            mergeable_environment_variables,
+                            success, version, partial, removed_resource_sets, exporter_plugin,
                             notify_failed_compile, failed_compile_message""",
             from_clause=f" FROM {data.Compile.table_name()}",
             filter_statements=["environment = $1"],
@@ -683,7 +731,11 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 do_export=compile["do_export"],
                 force_update=compile["force_update"],
                 metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
-                environment_variables=json.loads(compile["environment_variables"]) if compile["environment_variables"] else {},
+                environment_variables=(
+                    json.loads(compile["used_environment_variables"]) if compile["used_environment_variables"] else None
+                ),
+                requested_environment_variables=json.loads(compile["requested_environment_variables"]),
+                mergeable_environment_variables=json.loads(compile["mergeable_environment_variables"]),
                 partial=compile["partial"],
                 removed_resource_sets=compile["removed_resource_sets"],
                 exporter_plugin=compile["exporter_plugin"],
@@ -741,9 +793,11 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                 version=desired_state["version"],
                 date=desired_state["date"],
                 total=desired_state["total"],
-                labels=[DesiredStateLabel(name=desired_state["type"], message=desired_state["message"])]
-                if desired_state["type"] and desired_state["message"]
-                else [],
+                labels=(
+                    [DesiredStateLabel(name=desired_state["type"], message=desired_state["message"])]
+                    if desired_state["type"] and desired_state["message"]
+                    else []
+                ),
                 status=desired_state["status"],
             )
             for desired_state in records
@@ -779,7 +833,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
         return {}
 
     def get_base_url(self) -> str:
-        return f"/api/v2/resource/{quote(self.rid,safe='')}/history"
+        return f"/api/v2/resource/{quote(self.rid, safe='')}/history"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
@@ -873,7 +927,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
             "action": ContainsFilterResourceAction,
         }
 
-    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[Mapping[str, Sequence[str]]]) -> dict[str, QueryFilter]:
         # Change the api names of the filters to the names used internally in the database
         query = super().process_filters(filter)
         if query.get("minimal_log_level"):
@@ -1147,7 +1201,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
             "status": ContainsFilter,
         }
 
-    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[Mapping[str, Sequence[str]]]) -> dict[str, QueryFilter]:
         out_filter = super().process_filters(filter)
         # name is ambiguous, qualify
         if "name" in out_filter:
@@ -1206,6 +1260,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         sort: str = "discovered_resource_id.asc",
         start: Optional[str] = None,
         end: Optional[str] = None,
+        filter: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         super().__init__(
             order=DiscoveredResourceOrder.parse_from_string(sort),
@@ -1214,7 +1269,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
             last_id=None,
             start=start,
             end=end,
-            filter=None,
+            filter=filter,
         )
         self.environment = environment
 
@@ -1223,16 +1278,31 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         """
         Return the specification of the allowed filters, see FilterValidator
         """
-        return {}
+        return {
+            "managed": BooleanEqualityFilter,
+        }
 
     def get_base_url(self) -> str:
         return "/api/v2/discovered"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
-            select_clause="SELECT environment, discovered_resource_id, values",
-            from_clause=f" FROM {data.DiscoveredResource.table_name()}",
-            filter_statements=["environment = $1"],
+            select_clause="SELECT *",
+            prelude=f"""
+            WITH result AS (
+                SELECT
+                    dr.environment,
+                    dr.discovered_resource_id,
+                    dr.values,
+                    (rps.resource_id IS NOT NULL)  AS managed
+
+                FROM {data.DiscoveredResource.table_name()} as dr
+                LEFT JOIN {data.ResourcePersistentState.table_name()} rps
+                ON dr.environment=rps.environment AND dr.discovered_resource_id = rps.resource_id
+                WHERE dr.environment = $1
+            )
+            """,
+            from_clause="FROM result AS r",
             values=[self.environment.id],
         )
         return query_builder
@@ -1242,6 +1312,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
             model.DiscoveredResource(
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
+                managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
             ).model_dump()
             for res in records
         ]

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import logging
 import uuid
@@ -112,7 +113,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
         environment: uuid.UUID,
         title: str,
         message: str,
-        uri: str,
+        uri: Optional[str] = None,
         severity: const.NotificationSeverity = const.NotificationSeverity.message,
         connection: Optional[Connection] = None,
     ) -> None:

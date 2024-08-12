@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import base64
 import logging
 import typing
@@ -26,8 +27,7 @@ from inmanta import const
 from inmanta.agent import Agent
 from inmanta.agent.handler import ResourceHandler
 from inmanta.protocol import SessionClient, VersionMatch, common
-from test_protocol import make_random_file
-from utils import _wait_until_deployment_finishes, log_contains
+from utils import _wait_until_deployment_finishes, log_contains, make_random_file
 
 T = TypeVar("T")
 

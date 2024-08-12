@@ -145,15 +145,22 @@ class CreateList(ReferenceStatement):
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         qlist = []
-
         for i in range(len(self.items)):
             value = self.items[i]
-            qlist.append(value.execute_direct(requires))
+            item = value.execute_direct(requires)
+            if isinstance(item, list):
+                # flatten cfr BaseListVariable._set_value
+                qlist.extend(item)
+            else:
+                qlist.append(item)
 
         return qlist
 
     def as_constant(self) -> list[object]:
-        return [item.as_constant() for item in self.items]
+        list_result = (v.as_constant() for v in self.items)
+        # flatten cfr BaseListVariable._set_value
+        flat_result = [item for element in list_result for item in ((element,) if not isinstance(element, list) else element)]
+        return flat_result
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("CreateList.get_node() placeholder for %s" % self).reference()
@@ -480,10 +487,17 @@ class IndexLookup(ReferenceStatement, Resumer):
 
 class ShortIndexLookup(IndexLookup):
     """lookup of the form
-    vm = ip::Host(...)
-    file = std::File(host=vm, path="/etc/motd", ...)
+    entity ExtendedHost extends ip::Host:
+    end
 
-    vm.files[path="/etc/motd"]
+    ExtendedHost.resources [0:] -- std::testing::NullResource.host[1]
+
+    host = ExtendedHost(...)
+    resource = std::testing::NullResource(name='test', host=host, ...)
+
+    index std::testing::NullResource(host, name)
+
+    host.resources[name="test"]
     """
 
     __slots__ = ("rootobject", "relation", "querypart", "wrapped_querypart")
@@ -563,7 +577,7 @@ class FormattedString(ReferenceStatement):
         return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
 
     def __repr__(self) -> str:
-        return "Format(%s)" % self._format_string
+        return "Format(%r)" % self._format_string
 
 
 class StringFormat(FormattedString):
@@ -595,12 +609,17 @@ class FStringFormatter(Formatter):
     def __init__(self) -> None:
         Formatter.__init__(self)
 
-    def get_field(self, key: str, args: abc.Sequence[object], kwds: abc.Mapping[str, object]) -> tuple[object, str]:
+    def get_field(self, key: str, args: abc.Sequence[object], kwargs: abc.Mapping[str, object]) -> tuple[object, str]:
         """
         Overrides Formatter.get_field. Composite variable names are expected to be resolved at this point and can be
         retrieved by their full name.
+
+        Key is the full string between '{' and '}', e.g. ' a.b.c ' in '{ a.b.c }'. We override this method rather than get_value
+        because we want to leverage the compiler to execute the reference, rather than just to execute the first component
+        ('a'), and let Python handle subsequent components through attribute lookups, as is the default Formatter behavior.
         """
-        return (kwds[key], key)
+        # may raise KeyError, which has to be handled by format caller
+        return (kwargs[key], key)
 
 
 class StringFormatV2(FormattedString):
@@ -636,6 +655,25 @@ class StringFormatV2(FormattedString):
                 value = int(value)
             kwargs[full_name] = value
 
-        result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
+        try:
+            result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
+        except KeyError as e:
+            key: str = str(e)
+            if key == "'0'":
+                # special-case '{}' (which is valid in Python) with a more informative error message
+                raise RuntimeException(
+                    self, "f-strings do not support positional substitutions via '{}', use variable or attribute keys instead"
+                )
+            # this is probably not reachable in practice, but it might trigger if Python ever changes the '0' key
+            # or the resolution order
+            raise RuntimeException(self, f"Invalid key in f-string: '{key}'")
+        except ValueError as e:
+            raise RuntimeException(self, f"Invalid f-string: {e}")
 
         return result_string
+
+    def __repr__(self) -> str:
+        return "StringFormatV2(%r)" % self._format_string
+
+    def __str__(self) -> str:
+        return repr(self._format_string)

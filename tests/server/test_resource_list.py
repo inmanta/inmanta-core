@@ -15,14 +15,24 @@
 
     Contact: code@inmanta.com
 """
+
+import asyncio
 import json
+import logging
+import time
+import typing
+import uuid
 from datetime import datetime
 from operator import itemgetter
 from uuid import UUID
 
 import pytest
+from dateutil.tz import UTC
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
+import inmanta.util
+import util.performance
+import utils
 from inmanta import data
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource, ResourceVersionIdStr
@@ -49,10 +59,10 @@ async def test_resource_list_no_released_version(server, client):
     )
     await cm.insert()
 
-    path = f"/etc/file{1}"
-    key = f"std::File[agent1,path={path}]"
+    name = "file1"
+    key = f"std::testing::NullResource[agent1,name={name}]"
     res1_v1 = data.Resource.new(
-        environment=env.id, resource_version_id=ResourceVersionIdStr(f"{key},v={version}"), attributes={"path": path}
+        environment=env.id, resource_version_id=ResourceVersionIdStr(f"{key},v={version}"), attributes={"name": name}
     )
     await res1_v1.insert()
 
@@ -85,15 +95,15 @@ async def test_has_only_one_version_from_resource(server, client):
         await cm.insert()
 
     version = 1
-    path = "/etc/file" + str(1)
-    key = "std::File[agent1,path=" + path + "]"
-    res1_v1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"path": path})
+    name = "file" + str(1)
+    key = "std::testing::NullResource[agent1,name=" + name + "]"
+    res1_v1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
     await res1_v1.insert()
     version = 2
     res1_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
-        attributes={"path": path},
+        attributes={"name": name},
         status=ResourceState.deploying,
     )
     await res1_v2.insert()
@@ -101,7 +111,7 @@ async def test_has_only_one_version_from_resource(server, client):
     res1_v3 = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
-        attributes={"path": path},
+        attributes={"name": name},
         status=ResourceState.deployed,
     )
     await res1_v3.insert()
@@ -109,21 +119,22 @@ async def test_has_only_one_version_from_resource(server, client):
     res1_v4 = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
-        attributes={"path": path, "new_attr": 123, "requires": ["abc"]},
+        attributes={"name": name, "new_attr": 123, "requires": ["abc"]},
         status=ResourceState.deployed,
     )
     await res1_v4.insert()
+    await res1_v4.update_persistent_state(last_non_deploying_status=ResourceState.deployed)
 
     version = 1
-    path = "/etc/file" + str(2)
-    key = "std::File[agent1,path=" + path + "]"
-    res2_v1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"path": path})
+    name = "file" + str(2)
+    key = "std::testing::NullResource[agent1,name=" + name + "]"
+    res2_v1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
     await res2_v1.insert()
     version = 2
     res2_v2 = data.Resource.new(
         environment=env.id,
         resource_version_id=key + ",v=%d" % version,
-        attributes={"path": path},
+        attributes={"name": name},
         status=ResourceState.deploying,
     )
     await res2_v2.insert()
@@ -170,13 +181,27 @@ async def env_with_resources(server, client):
                 status=status,
             )
             await res.insert()
+            await res.update_persistent_state(
+                last_deploy=datetime.now(tz=UTC),
+                last_non_deploying_status=(
+                    status
+                    if status
+                    not in [
+                        ResourceState.available,
+                        ResourceState.deploying,
+                        ResourceState.undefined,
+                        ResourceState.skipped_for_undefined,
+                    ]
+                    else None
+                ),
+            )
 
-    await create_resource("agent1", "/etc/file1", "std::File", ResourceState.available, [1, 2, 3])
-    await create_resource("agent1", "/etc/file2", "std::File", ResourceState.deploying, [1, 2])  # Orphaned
-    await create_resource("agent2", "/etc/file3", "std::File", ResourceState.deployed, [2])  # Orphaned
-    await create_resource("agent2", "/tmp/file4", "std::File", ResourceState.unavailable, [3])
-    await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3])
-    await create_resource("agent3", "/tmp/dir6", "std::Directory", ResourceState.deployed, [3])
+    await create_resource("agent1", "/etc/file1", "test::File", ResourceState.available, [1, 2, 3])
+    await create_resource("agent1", "/etc/file2", "test::File", ResourceState.deploying, [1, 2])  # Orphaned
+    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [2])  # Orphaned
+    await create_resource("agent2", "/tmp/file4", "test::File", ResourceState.unavailable, [3])
+    await create_resource("agent2", "/tmp/dir5", "test::Directory", ResourceState.skipped, [3])
+    await create_resource("agent3", "/tmp/dir6", "test::Directory", ResourceState.deployed, [3])
 
     env2 = data.Environment(name="dev-test2", project=project.id, repo_url="", repo_branch="")
     await env2.insert()
@@ -190,9 +215,9 @@ async def env_with_resources(server, client):
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
-    await create_resource("agent1", "/tmp/file7", "std::File", ResourceState.deployed, [3], environment=env2.id)
-    await create_resource("agent1", "/tmp/file2", "std::File", ResourceState.deployed, [3], environment=env2.id)
-    await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3], environment=env2.id)
+    await create_resource("agent1", "/tmp/file7", "test::File", ResourceState.deployed, [3], environment=env2.id)
+    await create_resource("agent1", "/tmp/file2", "test::File", ResourceState.deployed, [3], environment=env2.id)
+    await create_resource("agent2", "/tmp/dir5", "test::Directory", ResourceState.skipped, [3], environment=env2.id)
 
     env3 = data.Environment(name="dev-test3", project=project.id, repo_url="", repo_branch="")
     await env3.insert()
@@ -206,7 +231,7 @@ async def env_with_resources(server, client):
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
-    await create_resource("agent2", "/etc/file3", "std::File", ResourceState.deployed, [6], environment=env3.id)
+    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [6], environment=env3.id)
 
     yield env
 
@@ -233,6 +258,10 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 1
 
+    result = await client.resource_list(env.id, filter={"resource_id_value": ["file"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 4
+
     result = await client.resource_list(env.id, filter={"resource_id_value": ["/etc/file", "/tmp/file"]})
     assert result.code == 200
     assert len(result.result["data"]) == 4
@@ -241,7 +270,11 @@ async def test_filter_resources(server, client, env_with_resources):
     assert result.code == 200
     assert len(result.result["data"]) == 2
 
-    result = await client.resource_list(env.id, filter={"resource_type": ["Directory"], "resource_id_value": "1"})
+    result = await client.resource_list(env.id, filter={"resource_type": ["File"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 4
+
+    result = await client.resource_list(env.id, filter={"resource_type": ["File"], "resource_id_value": "5"})
     assert result.code == 200
     assert len(result.result["data"]) == 0
 
@@ -295,7 +328,7 @@ async def test_filter_resources(server, client, env_with_resources):
         env.id,
         filter={
             "resource_id_value": ["/etc/file", "/tmp/file"],
-            "resource_type": "file",
+            "resource_type": "File",
             "agent": "agent1",
             "status": ["!orphaned"],
         },
@@ -522,3 +555,199 @@ async def test_deploy_summary(server, client, env_with_resources):
     result = await client.resource_list(env2.id, deploy_summary=True)
     assert result.code == 200
     assert result.result["metadata"]["deploy_summary"] == empty_summary
+
+
+@pytest.fixture
+async def very_big_env(server, client, environment, clienthelper, agent_factory, instances: int) -> int:
+    env_obj = await data.Environment.get_by_id(environment)
+    await env_obj.set(data.AUTO_DEPLOY, True)
+
+    agent = await agent_factory(
+        environment=environment,
+        agent_map={f"agent{tenant_index}": "local:" for tenant_index in range(50)},
+        agent_names=[f"agent{tenant_index}" for tenant_index in range(50)],
+    )
+    deploy_counter = 0
+    # The mix:
+    # 100 versions -> increments , all hashes change after 50 steps
+    # each with 5000 resources (50 sets of 100 resources)
+    # one undefined
+    # one skip for undef
+    # one failed
+    # one skipped
+    # 500 orphans: in second half, produce 10 orphans each
+    # every 10th version is not released
+
+    async def make_resource_set(tenant_index: int, iteration: int) -> int:
+        is_full = tenant_index == 0 and iteration == 0
+        if is_full:
+            version = await clienthelper.get_version()
+        else:
+            version = 0
+
+        def resource_id(ri: int) -> str:
+            if iteration > 0 and ri > 40:
+                ri += 10
+            return f"test::XResource{int(ri / 20)}[agent{tenant_index},sub={ri}]"
+
+        resources = [
+            {
+                "id": f"{resource_id(ri)},v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [] if ri % 2 == 0 else [resource_id(ri - 1)],
+                "my_attribute": iteration,
+            }
+            for ri in range(100)
+        ]
+        resource_state = {resource_id(0): ResourceState.undefined}
+        resource_sets = {resource_id(ri): f"set{tenant_index}" for ri in range(100)}
+        if is_full:
+            result = await client.put_version(
+                environment,
+                version,
+                resources,
+                resource_state,
+                [],
+                {},
+                compiler_version=inmanta.util.get_compiler_version(),
+                resource_sets=resource_sets,
+            )
+            assert result.code == 200
+        else:
+            result = await client.put_partial(
+                environment,
+                resource_state=resource_state,
+                unknowns=[],
+                version_info={},
+                resources=resources,
+                resource_sets=resource_sets,
+            )
+            assert result.code == 200
+            version = result.result["data"]
+        await utils.wait_until_version_is_released(client, environment, version)
+
+        result = await agent._client.get_resources_for_agent(environment, f"agent{tenant_index}", incremental_deploy=True)
+        assert result.code == 200
+        assert result.result["resources"]
+
+        async def deploy(resource) -> None:
+            nonlocal deploy_counter
+            rid = resource["id"]
+            actionid = uuid.uuid4()
+            deploy_counter = deploy_counter + 1
+            await agent._client.resource_deploy_start(environment, rid, actionid)
+            if "sub=4]" in rid:
+                return
+            else:
+                if "sub=2]" in rid:
+                    status = ResourceState.failed
+                elif "sub=3]" in rid:
+                    status = ResourceState.skipped
+                else:
+                    status = ResourceState.deployed
+                await agent._client.resource_deploy_done(environment, rid, actionid, status)
+
+        await asyncio.gather(*(deploy(resource) for resource in result.result["resources"]))
+
+    for iteration in [0, 1]:
+        for tenant in range(instances):
+            await make_resource_set(tenant, iteration)
+            logging.getLogger(__name__).warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
+
+    return instances
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("instances", [2])  # set the size
+@pytest.mark.parametrize("trace", [False])  # make it analyze the queries
+async def test_resources_paging_performance(client, environment, very_big_env: int, trace: bool, async_finalizer):
+    """Scaling test, not part of the norma testsuite"""
+    # Basic sanity
+    result = await client.resource_list(environment, limit=5, deploy_summary=True)
+    assert result.code == 200
+    assert result.result["metadata"]["deploy_summary"] == {
+        "by_state": {
+            "available": very_big_env - 1,
+            "cancelled": 0,
+            "deployed": (95 * very_big_env),
+            "deploying": 1,
+            "failed": very_big_env,
+            "skipped": very_big_env,
+            "skipped_for_undefined": very_big_env,
+            "unavailable": 0,
+            "undefined": very_big_env,
+        },
+        "total": very_big_env * 100,
+    }
+
+    port = get_bind_port()
+    base_url = f"http://localhost:{port}"
+    http_client = AsyncHTTPClient()
+
+    # Test link for self page
+    filters = [
+        ({}, very_big_env * 110),
+        ({"status": "!orphaned"}, very_big_env * 100),
+        ({"status": "deploying"}, 1),
+        ({"status": "deployed"}, 95 * very_big_env),
+        ({"status": "available"}, very_big_env - 1),
+        ({"agent": "agent0"}, 110),
+        ({"agent": "someotheragent"}, 0),
+        ({"resource_id_value": "39"}, very_big_env),
+    ]
+
+    orders = [
+        f"{field}.{direction}"
+        for field, direction in [
+            ("agent", "DESC"),
+            ("agent", "ASC"),
+            ("resource_type", "DESC"),
+            ("resource_type", "ASC"),
+            ("status", "DESC"),
+            ("status", "ASC"),
+            ("resource_id_value", "DESC"),
+            ("resource_id_value", "ASC"),
+        ]
+    ]
+
+    if trace:
+        util.performance.hook_base_document()
+
+        async def unpatch():
+            util.performance.unhook_base_document()
+
+        async_finalizer(unpatch)
+
+    for filter, totalcount in filters:
+        for order in orders:
+            # Pages 1-3
+            async def time_call() -> typing.Union[float, dict[str, str]]:
+                start = time.monotonic()
+                result = await client.resource_list(environment, deploy_summary=True, filter=filter, limit=10, sort=order)
+                assert result.code == 200
+                assert result.result["metadata"]["total"] == totalcount
+                return (time.monotonic() - start) * 1000, result.result.get("links", {})
+
+            async def time_page(links: dict[str, str], name: str) -> typing.Union[float, dict[str, str]]:
+                start = time.monotonic()
+                if name not in links:
+                    return 0, {}
+                url = f"""{base_url}{links[name]}"""
+                request = HTTPRequest(
+                    url=url,
+                    headers={"X-Inmanta-tid": str(environment)},
+                )
+                response = await http_client.fetch(request, raise_error=False)
+                assert response.code == 200
+                result = json.loads(response.body.decode("utf-8"))
+                assert result["metadata"]["total"] == totalcount
+                return (time.monotonic() - start) * 1000, result["links"]
+
+            latency_page1, links = await time_call()
+            latency_page2, links = await time_page(links, "next")
+            latency_page3, links = await time_page(links, "next")
+
+            logging.getLogger(__name__).warning(
+                "Timings %s %s %d %d %d", filter, order, latency_page1, latency_page2, latency_page3
+            )

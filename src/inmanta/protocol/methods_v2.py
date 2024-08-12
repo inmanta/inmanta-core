@@ -17,11 +17,12 @@
 
     Module defining the v2 rest api
 """
+
 import datetime
 import uuid
 from typing import Literal, Optional, Union
 
-from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
+from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
 from inmanta.protocol import methods
@@ -266,7 +267,7 @@ def resume_environment(tid: uuid.UUID) -> None:
 )
 def environment_clear(id: uuid.UUID) -> None:
     """
-    Clear all data from this environment.
+    Clear all data from this environment. The environment will be temporarily halted during the decommissioning process.
 
     :param id: The uuid of the environment.
 
@@ -484,7 +485,9 @@ def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = Fals
     """
 
 
-@typedmethod(path="/agentmap", api=False, server_agent=True, operation="POST", client_types=[], api_version=2)
+@typedmethod(
+    path="/agentmap", api=False, server_agent=True, enforce_auth=False, operation="POST", client_types=[], api_version=2
+)
 def update_agent_map(agent_map: dict[str, str]) -> None:
     """
     Notify an agent about the fact that the autostart_agent_map has been updated.
@@ -861,6 +864,31 @@ def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.F
     """
 
 
+# This should be be get operation,
+# but we can overflow the max url length if we don't put the parameters in the body
+# as such, we made this a post
+@typedmethod(
+    path="/resources/status",
+    operation="POST",
+    agent_server=True,
+    arg_options={**methods.ENV_OPTS},
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def resources_status(
+    tid: uuid.UUID,
+    version: int,
+    rids: list[model.ResourceIdStr],
+) -> dict[model.ResourceIdStr, ResourceState]:
+    """
+    Get the deployment status for a batch of resource ids
+
+    :param tid: The id of the environment the resources belong to
+    :param version: Version of the model to get the status for
+    :param rids: List of resource ids to fetch the status for.
+    """
+
+
 @typedmethod(path="/compilereport", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def get_compile_reports(
     tid: uuid.UUID,
@@ -1122,6 +1150,34 @@ def get_parameters(
 
 
 @typedmethod(
+    path="/parameters/<name>",
+    operation="PUT",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api, ClientType.compiler, ClientType.agent],
+    api_version=2,
+)
+def set_parameter(
+    tid: uuid.UUID,
+    name: str,
+    source: ParameterSource,
+    value: str,
+    metadata: Optional[dict[str, str]] = None,
+    recompile: bool = False,
+) -> ReturnValue[model.Parameter]:
+    """
+    Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
+    Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
+
+    :param tid: The id of the environment
+    :param name: The name of the parameter
+    :param source: The source of the parameter.
+    :param value: The value of the parameter
+    :param metadata: Optional. Metadata about the parameter
+    :param recompile: Optional. Whether to trigger a recompile if the value of the parameter changed.
+    """
+
+
+@typedmethod(
     path="/facts",
     operation="GET",
     arg_options=methods.ENV_OPTS,
@@ -1162,6 +1218,38 @@ def get_all_facts(
     :return: A list of all matching facts
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/facts/<name>",
+    operation="PUT",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api, ClientType.compiler, ClientType.agent],
+    api_version=2,
+)
+def set_fact(
+    tid: uuid.UUID,
+    name: str,
+    source: ParameterSource,
+    value: str,
+    resource_id: str,
+    metadata: Optional[dict[str, str]] = None,
+    recompile: bool = False,
+    expires: Optional[bool] = True,
+) -> ReturnValue[model.Fact]:
+    """
+    Set a fact on the server. If the fact is a tracked unknown, it will trigger a recompile on the server.
+    Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
+
+    :param tid: The id of the environment
+    :param name: The name of the fact
+    :param source: The source of the fact
+    :param value: The value of the fact
+    :param resource_id: The resource this fact belongs to
+    :param metadata: Optional. Metadata about the fact
+    :param recompile: Optional. Whether to trigger a recompile if the value of the fact changed.
+    :param expires: Optional. If the fact should expire or not. By default, facts expire.
     """
 
 
@@ -1235,6 +1323,9 @@ def list_notifications(
 ) -> list[model.Notification]:
     """
     List the notifications in an environment.
+
+    The returned notification objects may carry links to other objects, e.g. a compile report. The full list of supported links
+    can be found :ref:`here <api_self_referencing_links>`.
 
     :param tid: The id of the environment
     :param limit: Limit the number of notifications that are returned
@@ -1388,7 +1479,9 @@ def get_environment_metrics(
 
 @typedmethod(path="/login", operation="POST", client_types=[ClientType.api], enforce_auth=False, api_version=2)
 def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
-    """Login a user. When the login succeeds an authentication header is returned with the Bearer token set.
+    """Login a user.
+
+     When the login succeeds an authentication header is returned with the Bearer token set.
 
     :param username: The user to login
     :param password: The password of this user
@@ -1401,6 +1494,14 @@ def list_users() -> list[model.User]:
     """List all users
 
     :return: A list of all users"""
+
+
+@typedmethod(path="/current_user", operation="GET", client_types=[ClientType.api], api_version=2)
+def get_current_user() -> model.CurrentUser:
+    """Get the current logged in user (based on the provided JWT) and server auth settings
+
+    :raises NotFound: Raised when server authentication is not enabled
+    """
 
 
 @typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
@@ -1502,8 +1603,15 @@ def discovered_resources_get_batch(
     start: Optional[str] = None,
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
+    filter: Optional[dict[str, list[str]]] = None,
 ) -> list[model.DiscoveredResource]:
     """
+    Get a list of discovered resources.
+
+    For resources that the orchestrator is already managing, a link to the corresponding resource is provided. The full list of
+    supported links can be found :ref:`here <api_self_referencing_links>`.
+
+
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
     :param start: The lower limit for the order by column (exclusive).
@@ -1513,6 +1621,15 @@ def discovered_resources_get_batch(
     :param sort: Return the results sorted according to the parameter value.
             The following sorting attributes are supported: 'discovered_resource_id'.
             The following orders are supported: 'asc', 'desc'
+    :param filter: Filter the list of returned resources.
+        Default behavior: return all discovered resources.
+        Filtering by 'managed' is supported:
+
+            - filter.managed=true: only return discovered resources that the orchestrator is already aware of i.e.
+              resources that are present in any released configuration model of environment tid.
+            - filter.managed=false: only return discovered resources that the orchestrator is unaware of i.e. resources
+              that are not part of any released configuration model of environment tid.
+
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid

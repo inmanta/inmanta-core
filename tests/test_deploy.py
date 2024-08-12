@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import collections
 import os
 import subprocess
@@ -26,24 +27,29 @@ from tornado import process
 from inmanta import deploy
 
 
-def test_deploy(snippetcompiler, tmpdir, postgres_db):
-    file_name = tmpdir.join("test_file")
+@pytest.mark.parametrize("default_main_file", [True, False])
+def test_deploy(snippetcompiler, tmpdir, postgres_db, default_main_file: bool, capsys):
+    """
+    Test the deploy command. The default_main_file parameter checks that the deploy command accepts
+    files other than `main.cf` through its `-f` cli option.
+    """
     # TODO: when agentconfig deploys no longer require an agent restart, define a new agent. Currently this makes the
     # test to slow.
-    snippetcompiler.setup_for_snippet(
-        """
-    host = std::Host(name="internal", os=std::linux)
-    file = std::Symlink(host=host, source="/dev/null", target="%s")
+    code = """
+        import std::testing
+        test_resource = std::testing::NullResource(name="test")
     """
-        % file_name
-    )
+
+    main_file = "main.cf" if default_main_file else "other.cf"
+    project = snippetcompiler.setup_for_snippet(code, main_file=main_file)
 
     os.chdir(snippetcompiler.project_dir)
-    Options = collections.namedtuple("Options", ["dryrun", "dashboard"])
-    options = Options(dryrun=False, dashboard=False)
+    Options = collections.namedtuple("Options", ["dryrun", "dashboard", "main_file"])
+    options = Options(dryrun=False, dashboard=False, main_file=main_file)
 
-    assert not file_name.exists()
+    out, err = capsys.readouterr()
 
+    assert out == ""
     run = deploy.Deploy(options, postgresport=postgres_db.port)
     try:
         if not run.setup():
@@ -52,22 +58,22 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db):
     finally:
         run.stop()
 
-    assert file_name.exists()
+    out, err = capsys.readouterr()
+    assert "deployed\n[1 / 1]" in out
+    assert project.main_file == main_file
 
 
 @pytest.mark.slowtest
-def test_deploy_with_non_default_config(snippetcompiler, tmpdir) -> None:
+def test_deploy_with_non_default_config(snippetcompiler, tmpdir, capsys) -> None:
     """
     Ensure that configuration options set in one of the inmanta configuration
     files cannot make the `inmanta deploy` fail.
     """
-    file_name = tmpdir.join("test_file")
     snippetcompiler.setup_for_snippet(
         """
-    host = std::Host(name="internal", os=std::linux)
-    file = std::Symlink(host=host, source="/dev/null", target="%s")
+    import std::testing
+    a = std::testing::NullResource()
     """
-        % file_name
     )
 
     path_dot_inmanta_file = os.path.join(snippetcompiler.project_dir, ".inmanta")
@@ -87,9 +93,9 @@ bind-address=192.168.100.100
         """
         )
 
-    assert not file_name.exists()
-    subprocess.check_call([sys.executable, "-m", "inmanta.app", "deploy"], cwd=snippetcompiler.project_dir)
-    assert file_name.exists()
+    out = subprocess.check_output([sys.executable, "-m", "inmanta.app", "deploy"], cwd=snippetcompiler.project_dir)
+    output = out.decode("utf-8")
+    assert "deployed\n[1 / 1]" in output
 
 
 async def test_fork(server):

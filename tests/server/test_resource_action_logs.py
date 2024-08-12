@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import json
 import logging
@@ -28,7 +29,7 @@ from inmanta import const, data
 from inmanta.server.config import get_bind_port
 
 # This resource ID has some garbage characters, to make sure the queries are good
-resource_id_a = r"std::File[agent1,path=/tmp#/%%/\_file1.txt]"
+resource_id_a = r"std::testing::NullResource[agent1,name=/tmp#/%%/\_file1.txt]"
 
 
 @pytest.fixture
@@ -63,17 +64,15 @@ async def env_with_logs(client, server, environment: str):
             environment=uuid.UUID(environment),
             resource_version_id=f"{resource_id_a},v={i}",
             status=const.ResourceState.deployed,
-            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
-            attributes={"path": "/etc/file2"},
+            attributes={"name": "file2"},
         )
         await res1.insert()
 
         res2 = data.Resource.new(
             environment=uuid.UUID(environment),
-            resource_version_id=f"std::Directory[agent1,path=/tmp/dir2],v={i}",
+            resource_version_id=f"std::testing::NullResource[agent1,name=dir2],v={i}",
             status=const.ResourceState.deployed,
-            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
-            attributes={"path": "/etc/dir2"},
+            attributes={"name": "dir2"},
         )
         await res2.insert()
 
@@ -82,7 +81,7 @@ async def env_with_logs(client, server, environment: str):
             version=i,
             resource_version_ids=[
                 f"{resource_id_a},v={i}",
-                f"std::Directory[agent1,path=/tmp/dir2],v={i}",
+                f"std::testing::NullResource[agent1,name=dir2],v={i}",
             ],
             action_id=action_id,
             action=const.ResourceAction.deploy if i % 2 else const.ResourceAction.pull,
@@ -314,16 +313,14 @@ async def test_log_without_kwargs(server, client, environment: str):
         environment=uuid.UUID(environment),
         resource_version_id=f"{resource_id_a},v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res1.insert()
 
     res2 = data.Resource.new(
         environment=uuid.UUID(environment),
-        resource_version_id="std::Directory[agent1,path=/tmp/dir2],v=1",
+        resource_version_id="std::testing::NullResource[agent1,name=dir2],v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
         attributes={"path": "/etc/file2"},
     )
     await res2.insert()
@@ -333,7 +330,7 @@ async def test_log_without_kwargs(server, client, environment: str):
         version=1,
         resource_version_ids=[
             f"{resource_id_a},v=1",
-            "std::Directory[agent1,path=/tmp/dir2],v=1",
+            "std::testing::NullResource[agent1,name=dir2],v=1",
         ],
         action_id=uuid.uuid4(),
         action=const.ResourceAction.deploy,
@@ -371,17 +368,15 @@ async def test_log_nested_kwargs(server, client, environment: str):
         environment=uuid.UUID(environment),
         resource_version_id=f"{resource_id_a},v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
-        attributes={"path": "/etc/file2"},
+        attributes={"name": "file2"},
     )
     await res1.insert()
 
     res2 = data.Resource.new(
         environment=uuid.UUID(environment),
-        resource_version_id="std::Directory[agent1,path=/tmp/dir2],v=1",
+        resource_version_id="std::testing::NullResource[agent1,name=dir2],v=1",
         status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
-        attributes={"path": "/etc/file2"},
+        attributes={"name": "file2"},
     )
     await res2.insert()
 
@@ -390,7 +385,7 @@ async def test_log_nested_kwargs(server, client, environment: str):
         version=1,
         resource_version_ids=[
             f"{resource_id_a},v=1",
-            "std::Directory[agent1,path=/tmp/dir2],v=1",
+            "std::testing::NullResource[agent1,name=dir2],v=1",
         ],
         action_id=uuid.uuid4(),
         action=const.ResourceAction.deploy,

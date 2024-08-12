@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import functools
 import operator
 import uuid
@@ -28,7 +29,6 @@ import pytest
 
 from inmanta import const, data
 from inmanta.server import SLICE_ENVIRONMENT_METRICS, protocol
-from inmanta.server.services import environment_metrics_service
 from inmanta.server.services.environment_metrics_service import (
     DEFAULT_CATEGORY,
     AgentCountMetricsCollector,
@@ -42,7 +42,7 @@ from inmanta.server.services.environment_metrics_service import (
     ResourceCountMetricsCollector,
 )
 from inmanta.util import get_compiler_version, parse_timestamp
-from utils import ClientHelper
+from utils import ClientHelper, wait_until_version_is_released
 
 env_uuid = uuid.uuid4()
 
@@ -54,15 +54,12 @@ async def env_metrics_service(server_config, init_dataclasses_and_load_schema) -
 
 
 @pytest.fixture
-def server_pre_start(server_config):
+def server_pre_start(disable_background_jobs, server_config):
     """
-    This fixture is called before the server starts to disable all actions done
-    by the EnvironmentMetricsService on the metrics-related database tables.
+    This fixture is called before the server starts and will disable background jobs
+    that might interfere with the testing by calling into the disable_background_jobs
+    fixture.
     """
-    old_disable_env_metrics_service = environment_metrics_service.DISABLE_ENV_METRICS_SERVICE
-    environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = True
-    yield
-    environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = old_disable_env_metrics_service
 
 
 @pytest.fixture
@@ -459,6 +456,10 @@ async def test_resource_count_metric(clienthelper, client, agent):
     )
     assert result.code == 200
     assert len(await data.Resource.get_list()) == 6
+
+    # Wait until the latest version in each environment is released
+    await wait_until_version_is_released(client, environment=env_uuid1, version=version_env1)
+    await wait_until_version_is_released(client, environment=env_uuid2, version=version_env2)
 
     # adds the ResourceCountMetricsCollector
     rcmc = ResourceCountMetricsCollector()

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import configparser
 import logging
 import os
@@ -284,3 +285,11 @@ def test_module_conversion_build_tags(tmpdir: py.path.local, modules_dir: str, f
     metadata: ModuleV2Metadata = ModuleV2.from_path(new_mod_dir).metadata
     assert metadata.version == base
     assert metadata.version_tag == tag
+
+    config = metadata.to_config()
+    assert "metadata" in config
+    assert "name" in config["metadata"]
+    assert config["metadata"]["name"] == "inmanta-module-mytaggedmodule"
+    assert "version" in config["metadata"]
+    assert config["metadata"]["version"] == base
+    assert "version_tag" not in config["metadata"]

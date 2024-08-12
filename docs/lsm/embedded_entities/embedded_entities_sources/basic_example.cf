@@ -1,6 +1,5 @@
 import lsm
 import lsm::fsm
-import ip
 
 entity ServiceX extends lsm::ServiceEntity:
     """
@@ -26,7 +25,7 @@ entity Router extends lsm::EmbeddedEntity:
         :attr chassis: The chassis of the router.
     """
     string name
-    ip::ip system_ip
+    std::ipv4_address system_ip
     lsm::attribute_modifier system_ip__modifier="rw+"
     string vendor
     string chassis

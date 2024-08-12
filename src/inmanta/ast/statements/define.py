@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 # pylint: disable-msg=R0923,W0613
 
 import logging
@@ -620,10 +621,10 @@ class DefineIndex(DefinitionStatement):
                 rattribute = entity_type.get_attribute(str_attribute)
                 self.anchors.append(AttributeAnchor(attribute.get_location(), rattribute))
                 assert rattribute is not None  # Make mypy happy
-                if rattribute.is_optional():
+                if rattribute.is_optional() and isinstance(rattribute, RelationAttribute):
                     raise IndexException(
                         self,
-                        f"Index can not contain optional attributes, Attribute ' {attribute}.{entity_type}' is optional",
+                        f"Index can not contain optional relations, Relation ' {attribute}.{entity_type}' is optional",
                     )
                 if rattribute.is_multi():
                     raise IndexException(

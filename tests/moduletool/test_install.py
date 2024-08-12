@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import os
 import re
@@ -1265,14 +1266,19 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
 @pytest.mark.slowtest
 def test_real_time_logging(caplog):
     """
-    Make sure the logging in run_command_and_stream_output happens in real time
+    Make sure the run_command_and_stream_output avoids executing shell commands but also that the logging in
+    run_command_and_stream_output happens in real time
     """
     caplog.set_level(logging.DEBUG)
 
-    cmd: list[str] = ["sh -c 'echo one && sleep 1 && echo two'"]
+    with pytest.raises(FileNotFoundError) as e:
+        CommandRunner(LOGGER).run_command_and_stream_output(["sh -c 'echo one && sleep 1 && echo two'"])
+    assert str(e.value) == "[Errno 2] No such file or directory: \"sh -c 'echo one && sleep 1 && echo two'\""
+
     return_code: int
     output: list[str]
-    return_code, output = CommandRunner(LOGGER).run_command_and_stream_output(cmd, shell=True)
+    cmd: list[str] = ["sh", "-c", "echo one && sleep 1 && echo two"]
+    return_code, output = CommandRunner(LOGGER).run_command_and_stream_output(cmd)
     assert return_code == 0
 
     assert "one" in caplog.records[0].message

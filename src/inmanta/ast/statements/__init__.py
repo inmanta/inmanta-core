@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from collections import abc
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
@@ -216,11 +217,27 @@ class ExpressionStatement(RequiresEmitStatement):
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         """
-        Execute this statement in a static context without any scheduling, returning the expression's result.
+        Execute this expression in a static context without any scheduling, returning the expression's result.
+
+        Used by typedefs to force immediate evaluation.
 
         :param requires: A dictionary mapping names to values.
         """
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
+
+    def as_constant(self) -> object:
+        """
+        Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
+
+        It is very similar to self.execute_direct({}) with the difference that:
+         - This method can be called prior to normalization
+         - It is expected to not have side effects (e.g. call plugins, construct entities, ....)
+
+        Because it is more restrictive, it can be called during the typing stage more safely
+
+        Used for constant propagation and default values
+        """
+        raise RuntimeException(None, "%s is not a constant" % self)
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
@@ -264,12 +281,6 @@ class ExpressionStatement(RequiresEmitStatement):
         if result is not None and resultcollector is not None:
             resultcollector.receive_result_flatten(result, self.location)
         return result
-
-    def as_constant(self) -> object:
-        """
-        Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
-        """
-        raise RuntimeException(None, "%s is not a constant" % self)
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         """

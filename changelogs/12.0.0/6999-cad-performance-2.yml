@@ -1,0 +1,4 @@
+description: Improve performance of cross agent dependency resolution - bugfix
+change-type: patch
+destination-branches: [master, iso7]
+

@@ -11,6 +11,7 @@
     limitations under the License.
     Contact: code@inmanta.com
 """
+
 import os
 from collections import abc
 

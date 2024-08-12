@@ -16,10 +16,10 @@
     Contact: code@inmanta.com
 """
 
-COMPILER_VERSION = "2024.1.1"
+COMPILER_VERSION = "2025.0"
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-__version__ = "11.1.0"
+__version__ = "13.1.0"
 
 RUNNING_TESTS = False
 """

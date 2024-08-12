@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump build from 1.1.1 to 1.2.1
+destination-branches:
+- master
+sections: {}

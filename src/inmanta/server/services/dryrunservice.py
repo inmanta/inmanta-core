@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import uuid
@@ -41,7 +42,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class DyrunService(protocol.ServerSlice):
-    """Slice for dryun support"""
+    """Slice for dryrun support"""
 
     agent_manager: AgentManager
     autostarted_agent_manager: AutostartedAgentManager
@@ -123,7 +124,7 @@ class DyrunService(protocol.ServerSlice):
 
     async def _save_resources_without_changes_to_dryrun(
         self, dryrun_id: uuid.UUID, resources: list[data.Resource], diff_status: Optional[ResourceDiffStatus] = None
-    ):
+    ) -> None:
         for res in resources:
             parsed_id = Id.parse_id(res.resource_id)
             parsed_id.set_version(res.model)
@@ -153,7 +154,7 @@ class DyrunService(protocol.ServerSlice):
 
     @handle(methods.dryrun_list, env="tid")
     async def dryrun_list(self, env: data.Environment, version: Optional[int] = None) -> Apireturn:
-        query_args = {}
+        query_args: dict[str, object] = {}
         query_args["environment"] = env.id
         if version is not None:
             model = await data.ConfigurationModel.get_version(environment=env.id, version=version)

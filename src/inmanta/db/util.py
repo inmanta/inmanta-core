@@ -15,12 +15,14 @@
 
     Contact: code@inmanta.com
 """
+
+import abc
 import collections.abc
 import logging
 import re
-from collections import abc
 from dataclasses import dataclass
-from typing import NamedTuple, Optional
+from types import TracebackType
+from typing import Callable, NamedTuple, Optional, Type
 
 from asyncpg import Connection
 
@@ -237,9 +239,9 @@ class EnumUpdateDefinition:
     """
 
     name: str
-    values: abc.Sequence[str]
-    deleted_values: abc.Mapping[str, Optional[str]]
-    columns: abc.Mapping[str, abc.Sequence[ColumnDefinition]]
+    values: collections.abc.Sequence[str]
+    deleted_values: collections.abc.Mapping[str, Optional[str]]
+    columns: collections.abc.Mapping[str, collections.abc.Sequence[ColumnDefinition]]
 
 
 async def replace_enum_type(new_type: EnumUpdateDefinition, *, connection: Connection) -> None:
@@ -276,3 +278,56 @@ async def replace_enum_type(new_type: EnumUpdateDefinition, *, connection: Conne
             if default:
                 await connection.execute(f"ALTER TABLE {table} ALTER COLUMN {column} SET DEFAULT '{default}'")
     await connection.execute(f"DROP TYPE {temp_name}")
+
+
+class ConnectionMaybeInTransaction(abc.ABC):
+    """A connection that is perhaps in a transaction"""
+
+    def __init__(self, connection: Optional[Connection] = None) -> None:
+        self.connection = connection
+
+    @abc.abstractmethod
+    def call_after_tx(self, finalizer: Callable[[], object]) -> None:
+        """Add a method to be called after the transaction has committed successfully."""
+        ...
+
+    def __enter__(self) -> "ConnectionMaybeInTransaction":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        return None
+
+
+class ConnectionNotInTransaction(ConnectionMaybeInTransaction):
+    """Connection that is not in a transaction or absent"""
+
+    def call_after_tx(self, finalizer: Callable[[], object]) -> None:
+        finalizer()
+
+
+class ConnectionInTransaction(ConnectionMaybeInTransaction):
+    def __init__(self, connection: Connection) -> None:
+        super().__init__(connection)
+        self.finished_callbacks: list[Callable[[], object]] = []
+
+    def call_after_tx(self, finalizer: Callable[[], object]) -> None:
+        self.finished_callbacks.append(finalizer)
+
+    def __enter__(self) -> "ConnectionInTransaction":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        if exc_type is None:
+            for callback in self.finished_callbacks:
+                callback()
+        return None

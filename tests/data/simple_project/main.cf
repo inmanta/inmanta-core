@@ -1,3 +1,7 @@
 agent = std::AgentConfig(agentname=host.name, autostart=true)
 host = std::Host(name="localhost", os=std::linux, requires=agent)
 file = std::ConfigFile(host=host, path="/tmp/test", content="1234", requires=agent)
+val = std::get_env(name="add_one_resource",default_value="false")
+if val == "true":
+    file2 = std::ConfigFile(host=host, path="/tmp/test_orphan", content="test", requires=agent)
+end

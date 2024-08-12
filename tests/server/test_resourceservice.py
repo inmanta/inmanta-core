@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import uuid
 from datetime import timezone
@@ -80,14 +81,14 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     rid = r"""exec::Run[agent1,command=sh -c "git _%\/ clone \"https://codis.git\"  && chown -R centos:centos "]"""
     rid_r1_v1 = ResourceIdStr(rid)
     rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1_v1},v={version}")
-    rid_r2_v1 = ResourceIdStr("std::File[agent1,path=/etc/file2]")
+    rid_r2_v1 = ResourceIdStr("std::testing::NullResource[agent1,name=file2]")
     rvid_r2_v1 = ResourceVersionIdStr(f"{rid_r2_v1},v={version}")
-    rid_r3_v1 = ResourceIdStr("std::File[agent1,path=/etc/file3]")
+    rid_r3_v1 = ResourceIdStr("std::testing::NullResource[agent1,name=file3]")
     rvid_r3_v1 = ResourceVersionIdStr(f"{rid_r3_v1},v={version}")
     resources = [
-        {"path": "/etc/file1", "id": rvid_r1_v1, "requires": [rvid_r2_v1, rvid_r3_v1], "purged": False, "send_event": False},
-        {"path": "/etc/file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": False},
-        {"path": "/etc/file3", "id": rvid_r3_v1, "requires": [], "purged": False, "send_event": False},
+        {"name": "file1", "id": rvid_r1_v1, "requires": [rvid_r2_v1, rvid_r3_v1], "purged": False, "send_event": False},
+        {"name": "file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": False},
+        {"name": "file3", "id": rvid_r3_v1, "requires": [], "purged": False, "send_event": False},
     ]
 
     await clienthelper.put_version_simple(resources, version)
@@ -161,6 +162,29 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     # Finish deployment r1
     await resource_deployer.deployment_finished(rvid=rvid_r1_v1, action_id=action_id)
 
+    # request 3
+    # only two exist
+    result = await agent._client.resources_status(
+        tid=environment,
+        version=version,
+        rids=[
+            "std::testing::NullResource[agent1,name=file2]",
+            "std::testing::NullResource[agent1,name=file3]",
+            "std::testing::NullResource[agent1,name=file4]",
+        ],
+    )
+    assert result.code == 200
+    assert result.result["data"] == {
+        "std::testing::NullResource[agent1,name=file2]": "deployed",
+        "std::testing::NullResource[agent1,name=file3]": "deployed",
+    }
+
+    result = await agent._client.resources_status(
+        tid=environment, version=version, rids=["std::testing::NullResource[agent1,name=file2]", "Resource WITH invalid id"]
+    )
+    assert result.code == 400
+    assert result.result["message"] == "Invalid request: Invalid id for resource Resource WITH invalid id"
+
 
 async def test_events_api_endpoints_increment(server, client, environment, clienthelper, agent, resource_deployer):
     """
@@ -169,8 +193,8 @@ async def test_events_api_endpoints_increment(server, client, environment, clien
     """
     rid = r"""exec::Run[agent1,command=sh -c "git _%\/ clone \"https://codis.git\"  && chown -R centos:centos "]"""
     rid_r1 = ResourceIdStr(rid)
-    rid_r2 = ResourceIdStr("std::File[agent1,path=/etc/file2]")
-    rid_r3 = ResourceIdStr("std::File[agent1,path=/etc/file3]")
+    rid_r2 = ResourceIdStr("std::testing::NullResource[agent1,name=file2]")
+    rid_r3 = ResourceIdStr("std::testing::NullResource[agent1,name=file3]")
 
     async def put_version() -> tuple[ResourceVersionIdStr, ResourceVersionIdStr, ResourceVersionIdStr]:
         version = await clienthelper.get_version()
@@ -179,9 +203,9 @@ async def test_events_api_endpoints_increment(server, client, environment, clien
         rvid_r2_v1 = ResourceVersionIdStr(f"{rid_r2},v={version}")
         rvid_r3_v1 = ResourceVersionIdStr(f"{rid_r3},v={version}")
         resources = [
-            {"path": "/etc/file1", "id": rvid_r1_v1, "requires": [rvid_r2_v1, rvid_r3_v1], "purged": False, "send_event": True},
-            {"path": "/etc/file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": True},
-            {"path": "/etc/file3", "id": rvid_r3_v1, "requires": [], "purged": False, "send_event": True},
+            {"name": "file1", "id": rvid_r1_v1, "requires": [rvid_r2_v1, rvid_r3_v1], "purged": False, "send_event": True},
+            {"name": "file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": True},
+            {"name": "file3", "id": rvid_r3_v1, "requires": [], "purged": False, "send_event": True},
         ]
 
         await clienthelper.put_version_simple(resources, version)
@@ -277,11 +301,11 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
     """
     # Version 1
     version = await clienthelper.get_version()
-    rvid_r1_v1 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
-    rvid_r2_v1 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file2],v={version}")
+    rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={version}")
+    rvid_r2_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file2],v={version}")
     resources = [
-        {"path": "/etc/file1", "id": rvid_r1_v1, "requires": [rvid_r2_v1], "purged": False, "send_event": False},
-        {"path": "/etc/file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": False},
+        {"name": "file1", "id": rvid_r1_v1, "requires": [rvid_r2_v1], "purged": False, "send_event": False},
+        {"name": "file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": False},
     ]
     await clienthelper.put_version_simple(resources, version)
 
@@ -290,13 +314,13 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
 
     # Version 2
     version = await clienthelper.get_version()
-    rvid_r1_v2 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
-    rvid_r2_v2 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file2],v={version}")
-    rvid_r3_v2 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file3],v={version}")
+    rvid_r1_v2 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={version}")
+    rvid_r2_v2 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file2],v={version}")
+    rvid_r3_v2 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file3],v={version}")
     resources = [
-        {"path": "/etc/file1", "id": rvid_r1_v2, "requires": [rvid_r2_v2, rvid_r3_v2], "purged": False, "send_event": False},
-        {"path": "/etc/file2", "id": rvid_r2_v2, "requires": [], "purged": False, "send_event": False},
-        {"path": "/etc/file3", "id": rvid_r3_v2, "requires": [], "purged": False, "send_event": False},
+        {"name": "file1", "id": rvid_r1_v2, "requires": [rvid_r2_v2, rvid_r3_v2], "purged": False, "send_event": False},
+        {"name": "file2", "id": rvid_r2_v2, "requires": [], "purged": False, "send_event": False},
+        {"name": "file3", "id": rvid_r3_v2, "requires": [], "purged": False, "send_event": False},
     ]
     await clienthelper.put_version_simple(resources, version)
 
@@ -306,12 +330,12 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
 
     # Version 3
     version = await clienthelper.get_version()
-    rvid_r1_v3 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
-    rid_v3_v3 = ResourceIdStr("std::File[agent1,path=/etc/file3]")
+    rvid_r1_v3 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={version}")
+    rid_v3_v3 = ResourceIdStr("std::testing::NullResource[agent1,name=file3]")
     rvid_r3_v3 = ResourceVersionIdStr(f"{rid_v3_v3},v={version}")
     resources = [
-        {"path": "/etc/file1", "id": rvid_r1_v3, "requires": [rvid_r3_v3], "purged": False, "send_event": False},
-        {"path": "/etc/file3", "id": rvid_r3_v3, "requires": [], "purged": False, "send_event": False},
+        {"name": "file1", "id": rvid_r1_v3, "requires": [rvid_r3_v3], "purged": False, "send_event": False},
+        {"name": "file3", "id": rvid_r3_v3, "requires": [], "purged": False, "send_event": False},
     ]
     await clienthelper.put_version_simple(resources, version)
 
@@ -354,9 +378,9 @@ async def test_events_resource_without_dependencies(server, client, environment,
     """
     # Version 1
     version = await clienthelper.get_version()
-    rvid_r1_v1 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
+    rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={version}")
     resources = [
-        {"path": "/etc/file1", "id": rvid_r1_v1, "requires": [], "purged": False, "send_event": False},
+        {"name": "file1", "id": rvid_r1_v1, "requires": [], "purged": False, "send_event": False},
     ]
     await clienthelper.put_version_simple(resources, version)
 
@@ -382,11 +406,13 @@ async def test_last_non_deploying_status_field_on_resource(
                             The old one (resource_action_update) or the new one (deployment_endpoint).
     """
     version = await clienthelper.get_version()
-    rvid_r1_v1 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
-    rvid_r2_v1 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file2],v={version}")
+    rid_r1 = "std::testing::NullResource[agent1,name=file1]"
+    rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1},v={version}")
+    rid_r2 = "std::testing::NullResource[agent1,name=file2]"
+    rvid_r2_v1 = ResourceVersionIdStr(f"{rid_r2},v={version}")
     resources = [
-        {"path": "/etc/file1", "id": rvid_r1_v1, "requires": [], "purged": False, "send_event": False},
-        {"path": "/etc/file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": False},
+        {"name": "file1", "id": rvid_r1_v1, "requires": [], "purged": False, "send_event": False},
+        {"name": "file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": False},
     ]
     await clienthelper.put_version_simple(resources, version)
 
@@ -398,10 +424,14 @@ async def test_last_non_deploying_status_field_on_resource(
     ) -> None:
         db_resources = await data.Resource.get_list(environment=environment)
         rvid_to_resources = {res.resource_version_id: res for res in db_resources}
+
+        db_resource_state = await data.ResourcePersistentState.get_list(environment=environment)
+        rid_to_resource_state = {res.resource_id: res for res in db_resource_state}
+
         assert rvid_to_resources[rvid_r1_v1].status is r1_status
-        assert rvid_to_resources[rvid_r1_v1].last_non_deploying_status is r1_last_non_deploying_status
+        assert rid_to_resource_state[rid_r1].last_non_deploying_status is r1_last_non_deploying_status
         assert rvid_to_resources[rvid_r2_v1].status is r2_status
-        assert rvid_to_resources[rvid_r2_v1].last_non_deploying_status is r2_last_non_deploying_status
+        assert rid_to_resource_state[rid_r2].last_non_deploying_status is r2_last_non_deploying_status
 
     async def start_deployment(rvid: ResourceVersionIdStr) -> uuid.UUID:
         if endpoint_to_use == "deployment_endpoint":
@@ -489,10 +519,10 @@ async def test_log_deploy_start(server, client, environment, clienthelper, agent
     """
     # Version 1
     version = await clienthelper.get_version()
-    rid_r1 = ResourceIdStr("std::File[agent1,path=/etc/file1]")
+    rid_r1 = ResourceIdStr("std::testing::NullResource[agent1,name=file1]")
     rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1},v={version}")
     resources = [
-        {"path": "/etc/file1", "id": rvid_r1_v1, "requires": [], "purged": False, "send_event": False},
+        {"name": "file1", "id": rvid_r1_v1, "requires": [], "purged": False, "send_event": False},
     ]
     await clienthelper.put_version_simple(resources, version)
 

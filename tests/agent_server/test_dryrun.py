@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-import asyncio
+
 import json
 import logging
 import uuid
@@ -134,9 +134,11 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(environment, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 10)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(environment, dry_run_id)
@@ -229,9 +231,11 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(env_id, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 10)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(env_id, dry_run_id)
@@ -261,7 +265,7 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     log_entry = result["logs"][0]
     assert log_entry["action"] == "dryrun"
     assert log_entry["status"] == "unavailable"
-    assert "Failed to load" in log_entry["messages"][0]["msg"]
+    assert "Unable to deserialize" in log_entry["messages"][0]["msg"]
 
     await agent.stop()
 
@@ -299,15 +303,64 @@ async def test_dryrun_scale(resource_container, server, client, environment, age
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(env_id, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 10)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
 
     await agent.stop()
+
+
+async def test_dryrun_code_loading_failure(server, client, resource_container, environment, clienthelper, autostarted_agent):
+    """
+    Test running a dryrun when there is no handler code available. We use an autostarted agent, these
+    do not have access to the handler code for the resource_container.
+    """
+    resource_container.Provider.reset()
+    resource_container.Provider.set("agent1", "key", "value")
+
+    version = await clienthelper.get_version()
+
+    resource_id_wov = "test::Resource[agent1,key=key]"
+    resource_id = "%s,v=%d" % (resource_id_wov, version)
+
+    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+
+    await clienthelper.put_version_simple(resources, version)
+
+    await _wait_until_deployment_finishes(client, environment, version, timeout=10)
+
+    result = await client.dryrun_trigger(environment, version)
+    assert result.code == 200
+    dry_run_id = result.result["data"]
+
+    result = await client.list_dryruns(environment, version)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+
+    async def dryrun_finished():
+        result = await client.list_dryruns(environment, version)
+        logger.info("%s", result.result)
+        return result.result["data"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 10)
+
+    result = await client.get_dryrun_diff(environment, version, dry_run_id)
+    assert result.code == 200
+    assert len(result.result["data"]["diff"]) == len(resources)
+    changes = result.result["data"]["diff"]
+
+    assert changes[0]["attributes"]["handler"] == {
+        "from_value": "FAILED",
+        "from_value_compare": "FAILED",
+        "to_value": "Resource is in an undeployable state",
+        "to_value_compare": "Resource is in an undeployable state",
+    }
 
 
 async def test_dryrun_v2(server, client, resource_container, environment, agent_factory):
@@ -454,6 +507,7 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
 
     async def dryrun_finished():
         result = await client.list_dryruns(environment, version)
+        logger.info("%s", result.result)
         return result.result["data"][0]["todo"] == 0
 
     await retry_limited(dryrun_finished, 10)

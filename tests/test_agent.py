@@ -50,7 +50,7 @@ async def test_agent_get_status(server, environment, agent):
 
 def test_context_changes():
     """Test registering changes in the handler context"""
-    resource = PurgeableResource(Id.parse_id("std::File[agent,path=/test],v=1"))
+    resource = PurgeableResource(Id.parse_id("std::testing::NullResource[agent,name=test],v=1"))
     ctx = HandlerContext(resource)
 
     # use attribute change attributes
@@ -108,7 +108,7 @@ async def startable_server(server_config):
     """
     This fixture returns the bootloader of a server which is not yet started.
     """
-    bootloader = InmantaBootloader()
+    bootloader = InmantaBootloader(configure_logging=True)
     yield bootloader
     try:
         await bootloader.stop(timeout=15)
@@ -200,20 +200,3 @@ async def test_hostname(server, environment, agent_factory):
     # When both are set, the constructor takes precedence
     agent3 = await agent_factory(hostname="node3", environment=env_id)
     assert list(agent3.get_end_point_names()) == ["node3"]
-
-
-async def test_update_agent_map(server, environment, agent_factory):
-    """
-    If the URI of an enabled agent changes, it should still be enabled after the change
-    """
-    env_id = uuid.UUID(environment)
-    agent_map = {"node1": "localhost"}
-
-    agent1 = await agent_factory(hostname="node1", environment=env_id, agent_map=agent_map)
-    assert agent1.agent_map == agent_map
-
-    agent1.unpause("node1")
-
-    await agent1._update_agent_map({"node1": "localhost2"})
-
-    assert agent1._instances["node1"].is_enabled()

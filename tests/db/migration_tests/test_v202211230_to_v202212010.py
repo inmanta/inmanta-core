@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import os
 from collections.abc import AsyncIterator, Awaitable
 from typing import Callable
@@ -37,7 +38,7 @@ async def migrate_v202211230_to_v202212010(
     with open(os.path.join(os.path.dirname(__file__), "dumps/v202211230.sql")) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
 
     # When the bootloader is started, it also executes the migration to v202212010
     yield ibl.start

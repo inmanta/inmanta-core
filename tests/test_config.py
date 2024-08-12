@@ -15,12 +15,14 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import os
 import random
 import socket
 
 import netifaces
+import pytest
 from tornado import netutil
 
 import inmanta.agent.config as cfg
@@ -55,9 +57,12 @@ def test_environment_deprecated_options(caplog):
         assert f"Config option {deprecated_option.name} is deprecated. Use {new_option.name} instead." not in caplog.text
 
 
-def test_options():
+def test_options(monkeypatch):
     configa = Option("test", "a", "markerA", "test a docs")
     configb = Option("test", "B", option_as_default(configa), "test b docs")
+    configc = Option("test", "c", "defaultc", "docstringc")
+
+    monkeypatch.setenv("INMANTA_TEST_C", "environ_c")
 
     assert "test.a" in configb.get_default_desc()
 
@@ -68,6 +73,7 @@ def test_options():
     assert configb.get() == "MA2"
     configb.set("MB2")
     assert configb.get() == "MB2"
+    assert configc.get() == "environ_c"
 
 
 def test_configfile_hierarchy(monkeypatch, tmpdir):
@@ -342,3 +348,16 @@ def test_option_is_list_empty():
     option: Option = Option("test", "list", "default,values", "documentation", cfg.is_list)
     option.set("")
     assert option.get() == []
+
+
+def test_option_is_lower_bounded_int():
+    lower_bound = 1
+    option: Option = Option("test", "lb_int", lower_bound, "documentation", cfg.is_lower_bounded_int(lower_bound))
+    option.set("2")
+    assert option.get() == 2
+
+    option.set("0")
+    with pytest.raises(ValueError) as exc_info:
+        option.get()
+
+    assert f"Value can not be lower than {lower_bound}" in str(exc_info.value)

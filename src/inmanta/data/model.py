@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import typing
 import uuid
@@ -30,6 +31,7 @@ from pydantic import ConfigDict, Field, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
+import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
@@ -127,6 +129,14 @@ class CompileData(BaseModel):
 
 
 class CompileRunBase(BaseModel):
+    """
+    :param requested_environment_variables: environment variables requested to be passed to the compiler
+    :param mergeable_environment_variables: environment variables to be passed to the compiler.
+            These env vars can be compacted over multiple compiles.
+            If multiple values are compacted, they will be joined using spaces.
+    :param environment_variables: environment variables passed to the compiler
+    """
+
     id: uuid.UUID
     remote_id: Optional[uuid.UUID] = None
     environment: uuid.UUID
@@ -136,6 +146,8 @@ class CompileRunBase(BaseModel):
     do_export: bool
     force_update: bool
     metadata: JsonType
+    mergeable_environment_variables: dict[str, str]
+    requested_environment_variables: dict[str, str]
     environment_variables: dict[str, str]
 
     partial: bool
@@ -145,6 +157,22 @@ class CompileRunBase(BaseModel):
 
     notify_failed_compile: Optional[bool] = None
     failed_compile_message: Optional[str] = None
+
+    @pydantic.field_validator("environment_variables", mode="before")
+    @classmethod
+    def validate_environment_variables(cls, v: typing.Any, info: pydantic_core.core_schema.ValidationInfo) -> typing.Any:
+        """
+        Default the environment_variables to requested_environment_variables + mergeable_environment_variables
+
+        This relies on the fact that fields are validated in the order they are declared!
+        """
+        if v is None:
+            out = {}
+            out.update(info.data["requested_environment_variables"])
+            out.update(info.data["mergeable_environment_variables"])
+            return out
+        else:
+            return v
 
 
 class CompileRun(CompileRunBase):
@@ -232,13 +260,14 @@ class Environment(BaseModel):
     repo_branch: str
     settings: dict[str, EnvSettingType]
     halted: bool
+    is_marked_for_deletion: bool = False
     description: Optional[str] = None
     icon: Optional[str] = None
 
 
 class Project(BaseModel):
     """
-    An inmanta environment.
+    An inmanta project.
     """
 
     id: uuid.UUID
@@ -310,7 +339,6 @@ class Resource(BaseModel):
     resource_version_id: ResourceVersionIdStr
     resource_id_value: str
     agent: str
-    last_deploy: Optional[datetime.datetime] = None
     attributes: JsonType
     status: const.ResourceState
     resource_set: Optional[str] = None
@@ -426,8 +454,15 @@ class LatestReleasedResource(VersionedResource):
 
 
 class PagingBoundaries:
-    """Represents the lower and upper bounds that should be used for the next and previous pages
-    when listing domain entities"""
+    """
+    Represents the lower and upper bounds that should be used for the next and previous pages
+    when listing domain entities.
+
+    :param start: largest value of the page for the primary sort column.
+    :param end: smallest value of the page for the primary sort column.
+    :param first_id: largest value of the page for the secondary sort column, if there is one.
+    :param last_id: smallest value of the page for the secondary sort column, if there is one.
+    """
 
     def __init__(
         self,
@@ -648,7 +683,7 @@ class Notification(BaseModel):
     title: str
     message: str
     severity: const.NotificationSeverity
-    uri: str
+    uri: Optional[str] = None
     read: bool
     cleared: bool
 
@@ -694,6 +729,12 @@ class User(BaseModel):
     auth_method: AuthMethod
 
 
+class CurrentUser(BaseModel):
+    """Information about the current logged in user"""
+
+    username: str
+
+
 class LoginReturn(BaseModel):
     """
     Login information
@@ -710,10 +751,13 @@ class DiscoveredResource(BaseModel):
     """
     :param discovered_resource_id: The name of the resource
     :param values: The actual resource
+    :param managed_resource_uri: URI of the resource with the same ID that is already
+        managed by the orchestrator e.g. "/api/v2/resource/<rid>". Or None if the resource is not managed.
     """
 
     discovered_resource_id: ResourceIdStr
     values: dict[str, object]
+    managed_resource_uri: Optional[str] = None
 
     @field_validator("discovered_resource_id")
     @classmethod

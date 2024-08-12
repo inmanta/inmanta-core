@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import math
 
 from inmanta.plugins import PluginException, plugin

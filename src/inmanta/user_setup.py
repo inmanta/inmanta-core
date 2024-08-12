@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import secrets
 import socket
@@ -26,7 +27,8 @@ from asyncpg import PostgresError
 import nacl.pwhash
 from inmanta import config, data
 from inmanta.const import MIN_PASSWORD_LENGTH
-from inmanta.data import AuthMethod
+from inmanta.data.model import AuthMethod
+from inmanta.protocol import auth
 from inmanta.server import config as server_config
 
 
@@ -75,7 +77,7 @@ def validate_server_setup() -> None:
         click.echo(f"{'Server authentication method: ' : <50}{click.style('database', fg='green')}")
 
         # make sure there is auth config that supports signing tokens
-        cfg = config.AuthJWTConfig.get_sign_config()
+        cfg = auth.AuthJWTConfig.get_sign_config()
         if cfg is None:
             click.echo("Error: No signing config available in the configuration.")
             click.echo("To use a new config, add the following to the configuration in /etc/inmanta/inmanta.d/auth.cfg:\n")
@@ -124,7 +126,7 @@ async def do_user_setup() -> None:
     try:
         click.echo(
             f"{'Trying to connect to DB:': <50}"
-            f"{('%s (%s:%s)' % ( server_config.db_name.get(), server_config.db_host.get(), server_config.db_port.get()))}"
+            f"{('%s (%s:%s)' % (server_config.db_name.get(), server_config.db_host.get(), server_config.db_port.get()))}"
         )
         connection = await get_connection_pool()
         click.echo(f"{'Connection to database' : <50}{click.style('success', fg='green')}")
@@ -151,7 +153,7 @@ async def do_user_setup() -> None:
         )
         await user.insert()
 
-        click.echo(f"{'User %s: ' %username : <50}{click.style('created', fg='green')}")
+        click.echo(f"{'User %s: ' % username : <50}{click.style('created', fg='green')}")
     except ConnectionPoolException as e:
         click.echo(f"{f'Connection to database {server_config.db_host.get()}' : <50}" f"{click.style('failed', fg='red')}")
         raise e
