@@ -28,7 +28,7 @@
 
     The solution is a combination of pool manager/pool members that can:
     1. can perform invalidation according to various stategies
-    2. has fairly accurate membership tracking (for requirements 4  and 5) through events/listeners \
+    2. has fairly accurate membership tracking (for requirements 4  and 5) through events/listeners
         (cache responds correctly to crashes)
     3. members can be contained in multiple cache
 
