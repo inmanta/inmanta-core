@@ -19,7 +19,7 @@
 import asyncio
 import itertools
 
-from inmanta.agent.resourcepool import PoolManager, PoolMember, TimeBasedPoolManager
+from inmanta.agent.resourcepool import PoolManager, PoolMember, SingleIdPoolManager, TimeBasedPoolManager
 
 
 async def test_resource_pool():
@@ -39,7 +39,7 @@ async def test_resource_pool():
             await super().close()
             await self.closed()
 
-    class SimplePoolManager(PoolManager[SimplePoolMember, str]):
+    class SimplePoolManager(SingleIdPoolManager[str, SimplePoolMember]):
         async def create_member(self, executor_id: str) -> SimplePoolMember:
             return SimplePoolMember(my_id=executor_id)
 
@@ -83,9 +83,12 @@ async def test_timed_resource_pool():
             await self.closed()
             self.anchor.set()
 
-    class SimplePoolManager(TimeBasedPoolManager[SimplePoolMember, str]):
+    class SimplePoolManager(TimeBasedPoolManager[str, str, SimplePoolMember]):
         async def create_member(self, executor_id: str) -> SimplePoolMember:
             return SimplePoolMember(my_id=executor_id)
+
+        def _id_to_internal(self, ext_id: str) -> str:
+            return ext_id
 
     manager = SimplePoolManager(0.02)
     await manager.start()
@@ -120,9 +123,12 @@ async def test_resource_pool_stacking():
             await super().close()
             await self.closed()
 
+        def _id_to_internal(self, ext_id: str) -> str:
+            return ext_id
+
     dcounter = itertools.count()
 
-    class DoublePoolManager(PoolManager[SimplePoolMember, str], PoolMember[str]):
+    class DoublePoolManager(PoolManager[str, str, SimplePoolMember], PoolMember[str]):
         async def create_member(self, executor_id: str) -> SimplePoolMember:
             return SimplePoolMember(my_id=executor_id)
 
@@ -130,6 +136,9 @@ async def test_resource_pool_stacking():
             PoolMember.__init__(self, my_id)
             PoolManager.__init__(self)
             self.count = next(dcounter)
+
+        def _id_to_internal(self, ext_id: str) -> str:
+            return ext_id
 
         def __repr__(self):
             return "M" + self.id + str(self.count)
@@ -144,7 +153,10 @@ async def test_resource_pool_stacking():
             if len(self.pool) == 0:
                 await self.close()
 
-    class UpperManager(PoolManager[DoublePoolManager, str]):
+    class UpperManager(PoolManager[str, str, DoublePoolManager]):
+
+        def _id_to_internal(self, ext_id: str) -> str:
+            return ext_id
 
         async def create_member(self, executor_id: str) -> SimplePoolMember:
             dpm = DoublePoolManager(my_id=executor_id)
@@ -169,7 +181,7 @@ async def test_resource_pool_stacking():
     b1_a1 = await b1.get("A")
     assert a1_a1.count != b1_a1.count
 
-    class OverManager(PoolManager[SimplePoolMember, str]):
+    class OverManager(PoolManager[str, str, SimplePoolMember]):
 
         def __init__(self):
             super().__init__()
@@ -183,6 +195,9 @@ async def test_resource_pool_stacking():
             pre = executor_id.split(".")[0]
             producer = await self.sub_manager.get(pre)
             return await producer.get(executor_id)
+
+        def _id_to_internal(self, ext_id: str) -> str:
+            return ext_id
 
     om = OverManager()
     await om.start()

@@ -516,7 +516,7 @@ def mp_worker_entrypoint(
     exit(0)
 
 
-class MPProcess(PoolManager[executor.ExecutorId, "MPExecutor"], PoolMember[executor.ExecutorBlueprint]):
+class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecutor"], PoolMember[executor.ExecutorBlueprint]):
     """
 
     Physical process proxy, hands out child executors
@@ -567,6 +567,9 @@ class MPProcess(PoolManager[executor.ExecutorId, "MPExecutor"], PoolMember[execu
 
     def get_lock_name_for(self, member_id: executor.ExecutorId) -> str:
         return member_id.identity()
+
+    def _id_to_internal(self, ext_id: executor.ExecutorBlueprint) -> executor.ExecutorBlueprint:
+        return ext_id
 
     async def connection_lost(self) -> None:
         # Setting is_stopping causes us not to send out stop commands
@@ -759,7 +762,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         await self.stop_task
 
 
-class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, MPProcess]):
+class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.ExecutorBlueprint, MPProcess]):
 
     def __init__(
         self,
@@ -829,14 +832,15 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, MPProcess]):
     async def close(self) -> None:
         await super().close()
         await asyncio.gather(*(self.request_close(child) for child in self.pool.values()))
-        await self.environment_manager.stop()
+        await self.environment_manager.close()
 
     async def join(self) -> None:
         await super().join()
-        thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor] = []
-        await self.environment_manager.join(thread_pool_finalizer, 1)  # TODO
-        await join_threadpools(thread_pool_finalizer)
+        await self.environment_manager.join()
         await asyncio.gather(*(child.join() for child in self.pool.values()))
+
+    def _id_to_internal(self, ext_id: executor.ExecutorBlueprint) -> executor.ExecutorBlueprint:
+        return ext_id
 
     async def create_member(self, blueprint: executor.ExecutorBlueprint) -> MPProcess:
         # TODO: logging
@@ -909,7 +913,10 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, MPProcess]):
 
 
 # `executor.PoolManager` needs to be before `executor.ExecutorManager` as it defines the start and stop methods (MRO order)
-class MPManager(resourcepool.TimeBasedPoolManager[executor.ExecutorId, MPExecutor], executor.ExecutorManager[MPExecutor]):
+class MPManager(
+    resourcepool.TimeBasedPoolManager[executor.ExecutorId, executor.ExecutorId, MPExecutor],
+    executor.ExecutorManager[MPExecutor],
+):
     """
     This is the executor that provides the new behavior (ISO8+),
     where the agent forks executors in specific venvs to prevent code reloading.
@@ -955,6 +962,9 @@ class MPManager(resourcepool.TimeBasedPoolManager[executor.ExecutorId, MPExecuto
 
     def get_lock_name_for(self, member_id: executor.ExecutorId) -> str:
         return member_id.identity()
+
+    def _id_to_internal(self, ext_id: executor.ExecutorBlueprint) -> executor.ExecutorBlueprint:
+        return ext_id
 
     def member_name(self, member: "MPExecutor") -> str:
         return f"Executor for {member.get_id().agent_name}"

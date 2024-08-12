@@ -58,6 +58,7 @@ from inmanta.const import LOG_LEVEL_TRACE
 LOGGER = logging.getLogger(__name__)
 
 TPoolID = TypeVar("TPoolID")
+TIntPoolID = TypeVar("TPoolID")
 
 
 class PoolMember(abc.ABC, Generic[TPoolID]):
@@ -66,7 +67,7 @@ class PoolMember(abc.ABC, Generic[TPoolID]):
         self.id = my_id
 
         # Time based expiry
-        self.last_used: datetime.datetime = datetime.datetime.now().astimezone()
+        self._last_used: datetime.datetime = datetime.datetime.now().astimezone()
 
         # state tracking
         self.is_stopping = False
@@ -79,9 +80,13 @@ class PoolMember(abc.ABC, Generic[TPoolID]):
     def running(self) -> bool:
         return not self.is_stopping and not self.is_stopped
 
+    @property
+    def last_used(self) -> datetime.datetime:
+        return self._last_used
+
     def touch(self) -> None:
         """Update time last used"""
-        self.last_used = datetime.datetime.now().astimezone()
+        self._last_used = datetime.datetime.now().astimezone()
 
     def can_be_cleaned_up(self) -> bool:
         """
@@ -123,7 +128,7 @@ class PoolMember(abc.ABC, Generic[TPoolID]):
 TPoolMember = TypeVar("TPoolMember", bound=PoolMember)
 
 
-class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
+class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
     """
     A pool of slow objects
 
@@ -137,13 +142,17 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
         self.is_stopping = False
 
         self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
-        self.pool: dict[TPoolID, TPoolMember] = {}
+        self.pool: dict[TIntPoolID, TPoolMember] = {}
 
         self.closing_children: set[TPoolMember] = set()
 
     @property
     def running(self) -> bool:
         return not self.is_stopping and not self.is_stopped
+
+    @abc.abstractmethod
+    def _id_to_internal(self, ext_id: TPoolID) -> TIntPoolID:
+        pass
 
     async def start(self) -> None:
         """
@@ -209,16 +218,17 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
             self.pool.pop(theid)
             return True
 
-    def get_lock_name_for(self, member_id: TPoolID) -> str:
+    def get_lock_name_for(self, member_id: TIntPoolID) -> str:
         return str(member_id)
 
     async def get(self, member_id: TPoolID) -> TPoolMember:
         """
         Returns a new pool member
         """
+        internal_id = self._id_to_internal(member_id)
         # Acquire a lock based on the executor's pool id
-        async with self._locks.get(self.get_lock_name_for(member_id)):
-            it = self.pool.get(member_id, None)
+        async with self._locks.get(self.get_lock_name_for(internal_id)):
+            it = self.pool.get(internal_id, None)
             if it is not None:
                 if not it.is_stopping:
                     LOGGER.debug("Found existing %s for %s with id %s", self.my_name(), self.member_name(it), member_id)
@@ -226,16 +236,17 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
                     return it
                 else:
                     await self.pre_replace(it)
-            return await self._create_or_replace(member_id)
+            return await self._create_or_replace(member_id, internal_id)
 
-    async def _create_or_replace(self, member_id: TPoolID) -> TPoolMember:
+    async def _create_or_replace(self, member_id: TPoolID, interal_id: TIntPoolID) -> TPoolMember:
         """
         MUST BE CALLED UNDER LOCK!
         """
         await self.pre_create_capacity_check(member_id)
 
         my_executor = await self.create_member(member_id)
-        self.pool[member_id] = my_executor
+        assert my_executor.id == interal_id
+        self.pool[interal_id] = my_executor
         my_executor.termination_listeners.append(self.child_closed)
 
         return my_executor
@@ -257,7 +268,13 @@ class PoolManager(abc.ABC, Generic[TPoolID, TPoolMember]):
         pass
 
 
-class TimeBasedPoolManager(PoolManager[TPoolID, TPoolMember]):
+class SingleIdPoolManager(PoolManager[TPoolID, TPoolID, TPoolMember]):
+
+    def _id_to_internal(self, ext_id: TPoolID) -> TPoolID:
+        return ext_id
+
+
+class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
 
     def __init__(self, retention_time: int) -> None:
         super().__init__()

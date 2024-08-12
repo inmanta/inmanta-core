@@ -338,6 +338,11 @@ class LogShipper(logging.Handler):
     def _send_frame(self, record: IPCLogRecord) -> None:
         try:
             self.protocol.send_frame(record)
+        except ConnectionLost:
+            # Stop exception here
+            # Log in own logger to prevent loops
+            self.logger.debug("Could not send log line, connection lost %s", record.msg, exc_info=True)
+            return
         except Exception:
             # Stop exception here
             # Log in own logger to prevent loops
