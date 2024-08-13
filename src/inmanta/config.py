@@ -58,6 +58,7 @@ class LenientConfigParser(ConfigParser):
             raise TypeError(f"option keys must be strings, instead received {option} of type {type(option)}")
         if not isinstance(value, str):
             raise TypeError(f"option values must be strings, instead received {value} of type {type(value)}")
+        super()._validate_value_types(section=section, option=option, value=value)
 
 
 class Config:
