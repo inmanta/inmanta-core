@@ -62,6 +62,23 @@ TIntPoolID = TypeVar("TPoolID")
 
 
 class PoolMember(abc.ABC, Generic[TPoolID]):
+    """
+    Item that can live in a pool
+
+    The lifecycle if this item is:
+    - running (after construction_
+    - shutting down (after call to request_shutdown)
+    - shutdown (after call to set_shutdown)
+
+    Implementors of sub-classes are expected to
+    - override request_shutdown to start the shutdown of the underlying resource
+    - at the end of request_shutdown, call set_shutdown to indicate we are down
+
+    After request_shutdown is called, this member will be considered invalid.
+        When checked out of any pool a replacement will be produced.
+    When set_shutdown is called, the shutdown event will be sent to all pools containing this member.
+        This will cause it to be evicted
+    """
 
     def __init__(self, my_id: TPoolID):
         self.id = my_id
@@ -132,9 +149,18 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
     """
     A pool of slow objects
 
-    We pool by key, however, when a pool member is shutting down, we allow it to be replaced in the pool
-    As such, the pool id does not necessarily identify the correct object
+    Items are stored by id.
 
+    We have internal id, that is used internally (storage, cleanup)
+    We have pool id, that is used to request new instances
+    Most often these are the same
+
+    When a pool member is shutting down, it is considered to be invalid and we allow it to be replaced in the pool
+    As such, the pool id does not necessarily uniquely identify an object.
+
+    When the member signals it is down, we drop it from the pool.
+
+    The natural ID  (member.get_id()) of a member is assumed to be the internal id of the member
     """
 
     def __init__(self) -> None:
@@ -144,35 +170,13 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
         self.pool: dict[TIntPoolID, TPoolMember] = {}
 
-        self.closing_children: set[TPoolMember] = set()
-
     @property
     def running(self) -> bool:
         return not self.shutting_down and not self.shut_down
 
     @abc.abstractmethod
     def _id_to_internal(self, ext_id: TPoolID) -> TIntPoolID:
-        pass
-
-    async def start(self) -> None:
-        """
-        Start the cleaning job of the Pool Manager
-        """
-        pass
-
-    async def request_shutdown(self) -> None:
-        """
-        Stop the cleaning job of the Pool Manager.
-        """
-        # We don't want to cancel the task because it could lead to an inconsistent state (e.g. Venv half removed). Therefore,
-        # we need to wait for the completion of the task
-        self.shut_down = True
-        self.shutting_down = True
-
-    async def join(self) -> None:
-        """
-        Wait for the cleaning job to terminate.
-        """
+        """Convert an external id to an internal id"""
         pass
 
     def my_name(self) -> str:
@@ -180,20 +184,48 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         return "PoolManager"
 
     def render_id(self, member: TPoolID) -> str:
+        """Method to improve logging output by naming external ids"""
         return "PoolMember"
 
     def member_name(self, member: TPoolMember) -> str:
+        """Method to improve logging output by naming the members, best kept consitent with render_id"""
         return self.render_id(member.get_id())
+
+    def get_lock_name_for(self, member_id: TIntPoolID) -> str:
+        """Convert the id into a string to obtain a lock"""
+        return str(member_id)
+
+    async def start(self) -> None:
+        """
+        Start the Pool Manager
+        """
+        pass
+
+    async def request_shutdown(self) -> None:
+        """
+        Stop the Pool Manager.
+
+        This implies nothing about the children
+        """
+        self.shut_down = True
+        self.shutting_down = True
+
+    async def join(self) -> None:
+        """
+        Wait for shutdown to be completed
+        """
+        pass
 
     async def request_member_shutdown(self, pool_member: TPoolMember) -> None:
         """
-        Additional cleanup operation(s) that need to be performed by the Manager regarding the pool member being cleaned.
+        Request a member to be closed
 
         This method assumes to be in a lock to prevent other operations to overlap with the cleanup.
+
+        Members can also be shutdown via other means, one can not assume this allows to track closes!
         """
         if pool_member.shutting_down:
             return
-        self.closing_children.add(pool_member)
         await pool_member.request_shutdown()
 
     async def notify_member_shutdown(self, pool_member: TPoolMember) -> bool:
@@ -206,8 +238,6 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
 
         :return: if we effectively removed it from the pool
         """
-        self.closing_children.discard(pool_member)
-
         theid = pool_member.get_id()
         registered_for_id = self.pool.get(theid)
         if registered_for_id is None:
@@ -221,12 +251,9 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
             self.pool.pop(theid)
             return True
 
-    def get_lock_name_for(self, member_id: TIntPoolID) -> str:
-        return str(member_id)
-
     async def get(self, member_id: TPoolID) -> TPoolMember:
         """
-        Returns a new pool member
+        Returns a valid pool member for the given id
         """
         LOGGER.debug("%s: requesting %s", self.my_name(), self.render_id(member_id))
         internal_id = self._id_to_internal(member_id)
@@ -257,7 +284,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         return my_executor
 
     async def pre_replace(self, member: PoolMember) -> None:
-        """Hook method to join items being replaced, called under lock"""
+        """Hook method to join/handle items being replaced, called under lock"""
         pass
 
     async def pre_create_capacity_check(self, member_id: TPoolID) -> None:
@@ -270,16 +297,23 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
 
     @abc.abstractmethod
     async def create_member(self, executor_id: TPoolID) -> TPoolMember:
+        """Produce a fresh member for the given id"""
         pass
 
 
 class SingleIdPoolManager(PoolManager[TPoolID, TPoolID, TPoolMember]):
+    """Pool where internal and external id are the same"""
 
     def _id_to_internal(self, ext_id: TPoolID) -> TPoolID:
         return ext_id
 
 
 class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
+    """
+    Pool that will discard items after a specific period of not being used.
+
+    Getting a member from the pool is considered use
+    """
 
     def __init__(self, retention_time: int) -> None:
         super().__init__()

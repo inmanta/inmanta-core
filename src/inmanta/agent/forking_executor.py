@@ -14,6 +14,46 @@
     limitations under the License.
 
     Contact: code@inmanta.com
+
+
+    Remote executor framework:
+    - spawns executor processes, each for a specific set of code
+    - each executor process can run several executors
+
+    Major components:
+    - IPC mechanism based on inmanta.protocol.ipc_light
+       - ExecutorContext is the remote state store, keeps track of the different executors and connection to the server
+       - ExecutorServer main driver of the remote process:
+            - handles IPC,
+            - manages the connection
+             - controls the remote process shutdown
+       - ExecutorClient agent side handle of the IPC connection, also receives logs from the remote side
+       - Commands: every IPC command has its own class
+
+    - Client side pool management, based on inmanta.agent.resourcepool
+        - MPExecutor: agent side representation of
+            - an execturor
+            - dispaches calls and ensure it inhibits shutdown if calls are in flight
+            - implements the external executor.Executor interface
+        - MPProcess: agent side representation of
+            - it handles a multi-processing process that runs an ExecutorServer
+            - it handles the ExecutorClient that connects to the ExecutorServer
+            - it ensure proper shutdown and cleanup of the process
+            - it handles a pool of MPExecutor
+            - if the pool becomes empty, it shuts itself down
+            - if the connection drops, it closes all MPExecutors
+        - MPPool: agent side representation of
+            - pool of MPProcess
+            - handles the integration with multi-processing
+            - handles the boot-up of MPProcess
+            - boots the process into the IPC
+        - MPManager: agent side representation of
+            - uses a MPPool to hand out MPExecutors
+            - implements the external interface executor.ExecutorManager
+            - it shuts down old MPExecutors
+            - it keeps the number of executor per agent below a certain number
+
+      A mock up of this structure is in `test_resource_pool_stacking`
 """
 
 import asyncio
@@ -66,8 +106,6 @@ from inmanta.util import join_threadpools
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(__name__)
-
-# TODO: strip URI, it is too complex
 
 
 class ExecutorContext:
@@ -293,11 +331,14 @@ class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
 
 
 class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+    """Stop the executor process"""
+
     async def call(self, context: ExecutorContext) -> None:
         await context.stop()
 
 
 class StopCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+    """Stop one specific executor"""
 
     def __init__(self, name: str) -> None:
         self.name = name
@@ -308,7 +349,7 @@ class StopCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
 
 class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.FailedModuleSource]]):
     """
-    Initialize the executor:
+    Initialize the executor process:
     1. setup the client, using the session id of the agent
     2. activate the venv created for this executor
     3. load additional source files
@@ -393,6 +434,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
 
 
 class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+    """Initialize one executor"""
 
     def __init__(self, name: str, uri: str) -> None:
         self.name = name
@@ -403,6 +445,7 @@ class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
 
 
 class OpenVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+    """Open a cache version in an executor"""
 
     def __init__(self, agent_name: str, version: int) -> None:
         self.version = version
@@ -413,6 +456,7 @@ class OpenVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, N
 
 
 class CloseVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+    """Close a cache version in an executor"""
 
     def __init__(self, agent_name: str, version: int) -> None:
         self.version = version
@@ -423,6 +467,7 @@ class CloseVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, 
 
 
 class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+    """Run a dryrun in an executor"""
 
     def __init__(
         self,
@@ -439,6 +484,7 @@ class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None])
 
 
 class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+    """Run a deploy in an executor"""
 
     def __init__(
         self,
@@ -457,6 +503,7 @@ class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
 
 
 class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta.types.Apireturn]):
+    """Get facts from in an executor"""
 
     def __init__(self, agent_name: str, resource: "inmanta.agent.executor.ResourceDetails") -> None:
         self.agent_name = agent_name

@@ -59,10 +59,8 @@ async def test_resource_pool():
     assert a1.count != a3.count
 
     await manager.request_member_shutdown(a1)
-    assert len(manager.closing_children) == 0
 
     await manager.request_member_shutdown(a3)
-    assert len(manager.closing_children) == 0
 
 
 async def test_timed_resource_pool():
@@ -104,7 +102,6 @@ async def test_timed_resource_pool():
     assert not a1.running
     assert not b1.running
     assert not manager.pool
-    assert not manager.closing_children
 
 
 async def test_resource_pool_stacking():
