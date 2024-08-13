@@ -809,6 +809,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         # logging
         self.log_level = log_level
         self.cli_log = cli_log
+
     def my_name(self) -> str:
         return "Process pool"
 
