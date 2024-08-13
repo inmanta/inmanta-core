@@ -1005,7 +1005,7 @@ def get_status():
 # Methods to allow the server to set the agents state
 
 
-@method(path="/agentstate", operation="POST", server_agent=True, enforce_auth=False, timeout=5, client_types=[])
+@method(path="/agentstate", operation="POST", server_agent=True, enforce_auth=False, timeout=5, client_types=[], reply=False)
 def set_state(agent: str, enabled: bool):
     """
     Set the state of the agent.

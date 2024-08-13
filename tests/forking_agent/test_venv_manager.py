@@ -127,3 +127,15 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
 
     assert env_same_1 is env_same_2, "Expected the same instance for the same blueprint"
     assert env_same_1 is not env_diff_1, "Expected different instances for different blueprints"
+
+    # Start another one, to see they initialize well
+    venv_manager_2 = executor.VirtualEnvironmentManager(
+        envs_dir=tmpdir,
+        thread_pool=concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+        ),
+    )
+
+    await venv_manager_2.start()
+    assert manager.pool.keys() == venv_manager_2.pool.keys()
+    await venv_manager_2.close()

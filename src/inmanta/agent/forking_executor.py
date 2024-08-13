@@ -51,7 +51,7 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.resourcepool import PoolManager, PoolMember
+from inmanta.agent.resourcepool import PoolManager, PoolMember, TPoolID
 from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
@@ -562,8 +562,8 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
     def my_name(self) -> str:
         return f"Executor Process {self.name} for PID {self.process.pid}"  # TODO: align with PS listing name
 
-    def member_name(self, member: "MPExecutor") -> str:
-        return f"Executor for {member.get_id().agent_name}"
+    def render_id(self, member_id: "ExecutorId") -> str:
+        return f"Executor for {member_id.agent_name}"
 
     def get_lock_name_for(self, member_id: executor.ExecutorId) -> str:
         return member_id.identity()
@@ -809,6 +809,11 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         # logging
         self.log_level = log_level
         self.cli_log = cli_log
+    def my_name(self) -> str:
+        return "Process pool"
+
+    def render_id(self, member: executor.ExecutorBlueprint) -> str:
+        return "Process for code hash: " + member.blueprint_hash()
 
     @classmethod
     def init_once(cls) -> None:
@@ -966,8 +971,11 @@ class MPManager(
     def _id_to_internal(self, ext_id: executor.ExecutorBlueprint) -> executor.ExecutorBlueprint:
         return ext_id
 
-    def member_name(self, member: "MPExecutor") -> str:
-        return f"Executor for {member.get_id().agent_name}"
+    def render_id(self, member: executor.ExecutorId) -> str:
+        return f"Executor for {member.agent_name}"
+
+    def my_name(self) -> str:
+        return "Executor Manager"
 
     async def get_executor(
         self,

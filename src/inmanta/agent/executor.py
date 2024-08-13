@@ -42,6 +42,7 @@ import inmanta.util
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
+from inmanta.agent.resourcepool import TPoolID
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
@@ -375,6 +376,10 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
     def member_name(self, member: ExecutorVirtualEnvironment) -> str:
         return f"venv with hash: {member.get_id()}"
 
+    def render_id(self, member: EnvBlueprint) -> str:
+        return f"venv with hash: {member.blueprint_hash() }"
+
+
     def _id_to_internal(self, ext_id: EnvBlueprint) -> str:
         return ext_id.blueprint_hash()
 
@@ -390,7 +395,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         for folder in folders:
             # No lock here, singe shot prior to start
             current_folder = self.envs_dir / folder
-            self.pool[folder] = ExecutorVirtualEnvironment(env_path=str(current_folder))
+            self.pool[folder.name] = ExecutorVirtualEnvironment(env_path=str(current_folder), io_threadpool=self.thread_pool)
 
     async def get_environment(self, blueprint: EnvBlueprint) -> ExecutorVirtualEnvironment:
         """

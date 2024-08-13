@@ -179,8 +179,11 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         """Method to improve logging output by naming this executor"""
         return "PoolManager"
 
-    def member_name(self, member: TPoolMember) -> str:
+    def render_id(self, member: TPoolID) -> str:
         return "PoolMember"
+
+    def member_name(self, member: TPoolMember) -> str:
+        return self.render_id(member.get_id())
 
     async def request_close(self, pool_member: TPoolMember) -> None:
         """
@@ -225,17 +228,19 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         """
         Returns a new pool member
         """
+        LOGGER.debug("%s: requesting %s", self.my_name(), self.render_id(member_id))
         internal_id = self._id_to_internal(member_id)
         # Acquire a lock based on the executor's pool id
         async with self._locks.get(self.get_lock_name_for(internal_id)):
             it = self.pool.get(internal_id, None)
             if it is not None:
                 if not it.is_stopping:
-                    LOGGER.debug("Found existing %s for %s with id %s", self.my_name(), self.member_name(it), member_id)
+                    LOGGER.debug("%s: found existing %s", self.my_name(), self.render_id(member_id))
                     it.touch()
                     return it
                 else:
                     await self.pre_replace(it)
+            LOGGER.debug("%s: creating %s", self.my_name(), self.render_id(member_id))
             return await self._create_or_replace(member_id, internal_id)
 
     async def _create_or_replace(self, member_id: TPoolID, interal_id: TIntPoolID) -> TPoolMember:
