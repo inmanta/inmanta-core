@@ -1,0 +1,2 @@
+description: Improve output of the config parser
+destination-branches: [master, iso6, iso7]
