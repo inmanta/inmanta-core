@@ -48,7 +48,7 @@ class LenientConfigParser(ConfigParser):
         name = _normalize_name(name)
         return super().optionxform(name)
 
-    def _validate_value_types(self, *, section="", option="", value=""):
+    def _validate_value_types(self, *, section: str = "", option: str = "", value: str = "") -> None:
         """
         Override parent class to get clear exceptions
         """
@@ -56,9 +56,8 @@ class LenientConfigParser(ConfigParser):
             raise TypeError(f"section names must be strings, instead received {section} of type {type(section)}")
         if not isinstance(option, str):
             raise TypeError(f"option keys must be strings, instead received {option} of type {type(option)}")
-        if not self._allow_no_value or value:
-            if not isinstance(value, str):
-                raise TypeError(f"option values must be strings, instead received {value} of type {type(value)}")
+        if not isinstance(value, str):
+            raise TypeError(f"option values must be strings, instead received {value} of type {type(value)}")
 
 
 class Config:
