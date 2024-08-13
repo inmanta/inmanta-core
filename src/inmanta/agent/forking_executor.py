@@ -579,7 +579,7 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         # This may loop back here via the child_closed callback when the last child is removed
         # Cycle will be broken on self.close()
         for child in list(self.pool.values()):
-            await child.closed()
+            await child.set_shutdown()
         # wait for close
         await self.join_process()
 
@@ -590,10 +590,10 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         This method will never raise an exeption, but log it instead.
         """
         self.is_stopping = True
-        if not self.is_stopped:
+        if not self.shut_down:
             await asyncio.get_running_loop().run_in_executor(None, functools.partial(self._join_process, grace_time))
             # todo: manage threadpool
-        await self.closed()
+        await self.set_shutdown()
 
     def _join_process(self, grace_time: float) -> None:
         """
@@ -601,12 +601,12 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
 
         Should be called from the async variant above
         """
-        if self.is_stopped:
+        if self.shut_down:
             return
         with self.termination_lock:
             # This code doesn't work when two threads go through it
             # Multiprocessing it too brittle for that
-            if self.is_stopped:
+            if self.shut_down:
                 return
             try:
 
@@ -644,22 +644,22 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
                     exc_info=True,
                 )
 
-    async def close(self) -> None:
-        if not self.is_stopping:
-            self.is_stopping = True
-            await PoolMember.close(self)
+    async def request_shutdown(self) -> None:
+        if not self.shutting_down:
+            self.shutting_down = True
+            await PoolMember.request_shutdown(self)
             self.connection.call(StopCommand(), False)
 
         # At the moment, we don't eagery terminate the children here yet, we wait for connection to drop
 
-    async def child_closed(self, pool_member: "MPExecutor") -> bool:
-        result = await super().child_closed(pool_member)
+    async def notify_member_shutdown(self, pool_member: "MPExecutor") -> bool:
+        result = await super().notify_member_shutdown(pool_member)
         if len(self.pool) == 0:
-            await self.close()
+            await self.request_shutdown()
         return result
 
     async def join(self, timeout: float = inmanta.const.EXECUTOR_GRACE_HARD) -> None:
-        if self.is_stopped:
+        if self.shut_down:
             return
         await self.join_process()
 
@@ -714,11 +714,11 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
     async def start(self):
         await self.call(InitCommandFor(self.name, self.id.agent_uri))
 
-    async def close(self) -> None:
+    async def request_shutdown(self) -> None:
         """Stop by shutdown"""
-        if self.is_stopping:
+        if self.shutting_down:
             return
-        await super().close()
+        await super().request_shutdown()
 
         async def inner_close() -> None:
             try:
@@ -726,7 +726,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
             except inmanta.protocol.ipc_light.ConnectionLost:
                 # Already gone
                 pass
-            await self.closed()
+            await self.set_shutdown()
 
         self.stop_task = asyncio.create_task(inner_close())
 
@@ -758,7 +758,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         return await self.call(FactsCommand(self.id.agent_name, resource))
 
     async def join(self) -> None:
-        assert self.is_stopping
+        assert self.shutting_down
         await self.stop_task
 
 
@@ -833,12 +833,12 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         await self.environment_manager.start()
 
     async def stop(self) -> None:
-        await self.close()
+        await self.request_shutdown()
 
-    async def close(self) -> None:
-        await super().close()
-        await asyncio.gather(*(self.request_close(child) for child in self.pool.values()))
-        await self.environment_manager.close()
+    async def request_shutdown(self) -> None:
+        await super().request_shutdown()
+        await asyncio.gather(*(self.request_member_shutdown(child) for child in self.pool.values()))
+        await self.environment_manager.request_shutdown()
 
     async def join(self) -> None:
         await super().join()
@@ -1026,9 +1026,9 @@ class MPManager(
         self.agent_map.get(executor_id.agent_name).add(result)
         return result
 
-    async def child_closed(self, pool_member: MPExecutor) -> bool:
+    async def notify_member_shutdown(self, pool_member: MPExecutor) -> bool:
         self.agent_map.get(pool_member.get_id().agent_name).discard(pool_member)
-        return await super().child_closed(pool_member)
+        return await super().notify_member_shutdown(pool_member)
 
     async def pre_create_capacity_check(self, member_id: executor.ExecutorId) -> None:
         executors = [executor for executor in self.agent_map[member_id.agent_name] if executor.running]
@@ -1042,7 +1042,7 @@ class MPManager(
                 f"{member_id.identity()} to make room for a new one."
             )
 
-            await self.request_close(oldest_executor)
+            await self.request_member_shutdown(oldest_executor)
 
     async def start(self) -> None:
         await super().start()
@@ -1050,11 +1050,11 @@ class MPManager(
         await self.process_pool.start()
 
     async def stop(self) -> None:
-        await self.close()
+        await self.request_shutdown()
 
-    async def close(self) -> None:
-        await self.process_pool.close()
-        await super().close()
+    async def request_shutdown(self) -> None:
+        await self.process_pool.request_shutdown()
+        await super().request_shutdown()
 
     async def join(self) -> None:
         await super().join()
@@ -1062,5 +1062,5 @@ class MPManager(
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children = list(self.agent_map[agent_name])
-        await asyncio.gather(*(self.request_close(child) for child in children))
+        await asyncio.gather(*(self.request_member_shutdown(child) for child in children))
         return children

@@ -35,9 +35,9 @@ async def test_resource_pool():
         def __repr__(self):
             return self.id + str(self.count)
 
-        async def close(self) -> None:
-            await super().close()
-            await self.closed()
+        async def request_shutdown(self) -> None:
+            await super().request_shutdown()
+            await self.set_shutdown()
 
     class SimplePoolManager(SingleIdPoolManager[str, SimplePoolMember]):
         async def create_member(self, executor_id: str) -> SimplePoolMember:
@@ -53,15 +53,15 @@ async def test_resource_pool():
     assert a1.count == a2.count
     assert a1.id != b.id
 
-    await a2.close()
+    await a2.request_shutdown()
 
     a3 = await manager.get("a")
     assert a1.count != a3.count
 
-    await manager.request_close(a1)
+    await manager.request_member_shutdown(a1)
     assert len(manager.closing_children) == 0
 
-    await manager.request_close(a3)
+    await manager.request_member_shutdown(a3)
     assert len(manager.closing_children) == 0
 
 
@@ -78,9 +78,9 @@ async def test_timed_resource_pool():
         def __repr__(self):
             return self.id + str(self.count)
 
-        async def close(self) -> None:
-            await super().close()
-            await self.closed()
+        async def request_shutdown(self) -> None:
+            await super().request_shutdown()
+            await self.set_shutdown()
             self.anchor.set()
 
     class SimplePoolManager(TimeBasedPoolManager[str, str, SimplePoolMember]):
@@ -119,9 +119,9 @@ async def test_resource_pool_stacking():
         def __repr__(self):
             return self.id + str(self.count)
 
-        async def close(self) -> None:
-            await super().close()
-            await self.closed()
+        async def request_shutdown(self) -> None:
+            await super().request_shutdown()
+            await self.set_shutdown()
 
         def _id_to_internal(self, ext_id: str) -> str:
             return ext_id
@@ -143,15 +143,15 @@ async def test_resource_pool_stacking():
         def __repr__(self):
             return "M" + self.id + str(self.count)
 
-        async def close(self) -> None:
-            await PoolMember.close(self)
-            await PoolManager.close(self)
-            await self.closed()
+        async def request_shutdown(self) -> None:
+            await PoolMember.request_shutdown(self)
+            await PoolManager.request_shutdown(self)
+            await self.set_shutdown()
 
-        async def child_closed(self, pool_member: SimplePoolMember) -> bool:
-            await super().child_closed(pool_member)
+        async def notify_member_shutdown(self, pool_member: SimplePoolMember) -> bool:
+            await super().notify_member_shutdown(pool_member)
             if len(self.pool) == 0:
-                await self.close()
+                await self.request_shutdown()
 
     class UpperManager(PoolManager[str, str, DoublePoolManager]):
 
@@ -205,7 +205,7 @@ async def test_resource_pool_stacking():
     aa2 = await om.get("a.a")
     assert aa.count == aa2.count
 
-    await aa.close()
+    await aa.request_shutdown()
 
     assert len(om.pool) == 0
     assert len(om.sub_manager.pool) == 0

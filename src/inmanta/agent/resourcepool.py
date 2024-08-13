@@ -70,15 +70,15 @@ class PoolMember(abc.ABC, Generic[TPoolID]):
         self._last_used: datetime.datetime = datetime.datetime.now().astimezone()
 
         # state tracking
-        self.is_stopping = False
-        self.is_stopped = False
+        self.shutting_down = False
+        self.shut_down = False
 
         # event propagation
         self.termination_listeners: list[Callable[[PoolMember[TPoolID]], Coroutine[Any, Any, Any]]] = []
 
     @property
     def running(self) -> bool:
-        return not self.is_stopping and not self.is_stopped
+        return not self.shutting_down and not self.shut_down
 
     @property
     def last_used(self) -> datetime.datetime:
@@ -107,20 +107,20 @@ class PoolMember(abc.ABC, Generic[TPoolID]):
         """
         return self.id
 
-    async def close(self) -> None:
+    async def request_shutdown(self) -> None:
         """
         Close the pool member.
 
         This should eventually cause a call to closed
         """
-        self.is_stopping = True
+        self.shutting_down = True
 
-    async def closed(self) -> None:
+    async def set_shutdown(self) -> None:
         """
         This pool member is now closed
         """
-        self.is_stopped = True
-        self.is_stopping = True
+        self.shut_down = True
+        self.shutting_down = True
         for listener in self.termination_listeners:
             await listener(self)
 
@@ -138,8 +138,8 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
     """
 
     def __init__(self) -> None:
-        self.is_stopped = False
-        self.is_stopping = False
+        self.shut_down = False
+        self.shutting_down = False
 
         self._locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
         self.pool: dict[TIntPoolID, TPoolMember] = {}
@@ -148,7 +148,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
 
     @property
     def running(self) -> bool:
-        return not self.is_stopping and not self.is_stopped
+        return not self.shutting_down and not self.shut_down
 
     @abc.abstractmethod
     def _id_to_internal(self, ext_id: TPoolID) -> TIntPoolID:
@@ -160,14 +160,14 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         """
         pass
 
-    async def close(self) -> None:
+    async def request_shutdown(self) -> None:
         """
         Stop the cleaning job of the Pool Manager.
         """
         # We don't want to cancel the task because it could lead to an inconsistent state (e.g. Venv half removed). Therefore,
         # we need to wait for the completion of the task
-        self.is_stopped = True
-        self.is_stopping = True
+        self.shut_down = True
+        self.shutting_down = True
 
     async def join(self) -> None:
         """
@@ -185,18 +185,18 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
     def member_name(self, member: TPoolMember) -> str:
         return self.render_id(member.get_id())
 
-    async def request_close(self, pool_member: TPoolMember) -> None:
+    async def request_member_shutdown(self, pool_member: TPoolMember) -> None:
         """
         Additional cleanup operation(s) that need to be performed by the Manager regarding the pool member being cleaned.
 
         This method assumes to be in a lock to prevent other operations to overlap with the cleanup.
         """
-        if pool_member.is_stopping:
+        if pool_member.shutting_down:
             return
         self.closing_children.add(pool_member)
-        await pool_member.close()
+        await pool_member.request_shutdown()
 
-    async def child_closed(self, pool_member: TPoolMember) -> bool:
+    async def notify_member_shutdown(self, pool_member: TPoolMember) -> bool:
         """
         a child has notified us that it is completely closed
 
@@ -234,7 +234,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         async with self._locks.get(self.get_lock_name_for(internal_id)):
             it = self.pool.get(internal_id, None)
             if it is not None:
-                if not it.is_stopping:
+                if not it.shutting_down:
                     LOGGER.debug("%s: found existing %s", self.my_name(), self.render_id(member_id))
                     it.touch()
                     return it
@@ -252,7 +252,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         my_executor = await self.create_member(member_id)
         assert my_executor.id == interal_id
         self.pool[interal_id] = my_executor
-        my_executor.termination_listeners.append(self.child_closed)
+        my_executor.termination_listeners.append(self.notify_member_shutdown)
 
         return my_executor
 
@@ -342,7 +342,7 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
                                 (cleanup_start - pool_member.last_used).total_seconds(),
                                 self.retention_time,
                             )
-                            await self.request_close(pool_member)
+                            await self.request_member_shutdown(pool_member)
                 else:
                     # If this pool member expires sooner than the cleanup interval, schedule the next cleanup on that
                     # timestamp.

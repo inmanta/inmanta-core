@@ -307,14 +307,14 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
             return const.DATETIME_MIN_UTC
         return datetime.datetime.fromtimestamp(self.inmanta_venv_status_file.stat().st_mtime).astimezone()
 
-    async def close(self) -> None:
+    async def request_shutdown(self) -> None:
         """
         Remove the venv of the executor through the thread pool.
         This method is supposed to be used by the VirtualEnvironmentManager with the lock associated to this executor!
         """
-        await super().close()
+        await super().request_shutdown()
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.remove_venv)
-        await self.closed()
+        await self.set_shutdown()
 
     def remove_venv(self) -> None:
         """

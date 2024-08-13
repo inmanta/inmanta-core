@@ -138,4 +138,4 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
 
     await venv_manager_2.start()
     assert manager.pool.keys() == venv_manager_2.pool.keys()
-    await venv_manager_2.close()
+    await venv_manager_2.request_shutdown()
