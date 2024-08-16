@@ -48,7 +48,7 @@ class ValueReferenceModel(pydantic.BaseModel):
     """ A uuid to be able to refere to this reference.
     """
 
-    reference_type: str
+    ref_type: str
     """ A type key that can be used to correctly select the correct pydantic resource
 
     # TODO: validate that it matches the name of an entity (for consistency)
@@ -65,6 +65,9 @@ class ValueReferenceModel(pydantic.BaseModel):
 class ValueReference(str):
     """This object holds the information required to resolve references. This is currently represented as a string
     so that in the model it has a valid inmanta DSL value.
+
+    The static create method is required because it is not possible to change the constructor of string without causing
+    errors. When real references are support this is no longer required.
     """
 
     _value_reference: ValueReferenceModel
