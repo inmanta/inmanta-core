@@ -42,7 +42,6 @@ import inmanta.util
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
-from inmanta.agent.resourcepool import TPoolID
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource

@@ -58,15 +58,15 @@ from inmanta.const import LOG_LEVEL_TRACE
 LOGGER = logging.getLogger(__name__)
 
 TPoolID = TypeVar("TPoolID")
-TIntPoolID = TypeVar("TPoolID")
+TIntPoolID = TypeVar("TIntPoolID")
 
 
-class PoolMember(abc.ABC, Generic[TPoolID]):
+class PoolMember(abc.ABC, Generic[TIntPoolID]):
     """
     Item that can live in a pool
 
     The lifecycle if this item is:
-    - running (after construction_
+    - running (after construction)
     - shutting down (after call to request_shutdown)
     - shutdown (after call to set_shutdown)
 
@@ -80,7 +80,7 @@ class PoolMember(abc.ABC, Generic[TPoolID]):
         This will cause it to be evicted
     """
 
-    def __init__(self, my_id: TPoolID):
+    def __init__(self, my_id: TIntPoolID):
         self.id = my_id
 
         # Time based expiry
@@ -117,7 +117,7 @@ class PoolMember(abc.ABC, Generic[TPoolID]):
         """
         return datetime.datetime.now().astimezone() - self.last_used
 
-    def get_id(self) -> TPoolID:
+    def get_id(self) -> TIntPoolID:
         """
         Returns the ID of the pool member that will be used to lock the pool member. This ensures that no operations will
         overlap while this pool member is being created, modified, or cleaned.
@@ -215,18 +215,6 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         Wait for shutdown to be completed
         """
         pass
-
-    async def request_member_shutdown(self, pool_member: TPoolMember) -> None:
-        """
-        Request a member to be closed
-
-        This method assumes to be in a lock to prevent other operations to overlap with the cleanup.
-
-        Members can also be shutdown via other means, one can not assume this allows to track closes!
-        """
-        if pool_member.shutting_down:
-            return
-        await pool_member.request_shutdown()
 
     async def notify_member_shutdown(self, pool_member: TPoolMember) -> bool:
         """
@@ -376,7 +364,7 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
                                 (cleanup_start - pool_member.last_used).total_seconds(),
                                 self.retention_time,
                             )
-                            await self.request_member_shutdown(pool_member)
+                            await pool_member.request_shutdown()
                 else:
                     # If this pool member expires sooner than the cleanup interval, schedule the next cleanup on that
                     # timestamp.
@@ -392,4 +380,5 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
 
         cleanup_end = datetime.datetime.now().astimezone()
 
-        return max(0.0, run_next_cleanup_job_in - (cleanup_end - cleanup_start).total_seconds())
+        minimal_waiting_time: float = 0.5  # enforce minimal wait time to prevent bussy polling when can_be_cleaned_up == False
+        return max(minimal_waiting_time, run_next_cleanup_job_in - (cleanup_end - cleanup_start).total_seconds())

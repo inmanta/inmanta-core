@@ -30,27 +30,30 @@
        - ExecutorClient agent side handle of the IPC connection, also receives logs from the remote side
        - Commands: every IPC command has its own class
 
-    - Client side pool management, based on inmanta.agent.resourcepool
+    - Client/agent side pool management, based on inmanta.agent.resourcepool
         - MPExecutor: agent side representation of
-            - an execturor
-            - dispaches calls and ensure it inhibits shutdown if calls are in flight
+            - an executor
             - implements the external executor.Executor interface
+            - dispaches calls to the actual executor on the remote side (via the MPProcess)
+            - inhibits shutdown if calls are in flight
         - MPProcess: agent side representation of
-            - it handles a multi-processing process that runs an ExecutorServer
-            - it handles the ExecutorClient that connects to the ExecutorServer
-            - it ensure proper shutdown and cleanup of the process
+            - an executor process
+            - contains a multi-processing process that runs an ExecutorServer
+                - it ensure proper shutdown and cleanup of the process
+            - contains the ExecutorClient that connects to the ExecutorServer
             - it handles a pool of MPExecutor
-            - if the pool becomes empty, it shuts itself down
-            - if the connection drops, it closes all MPExecutors
+                - if the pool becomes empty, it shuts itself down
+                - if the connection drops, it closes all MPExecutors
         - MPPool: agent side representation of
             - pool of MPProcess
-            - handles the integration with multi-processing
-            - handles the boot-up of MPProcess
-            - boots the process into the IPC
-        - MPManager: agent side representation of
+            - handles the creation of executor processes via multi-processing fork-server
+                - boots the process into the IPC
+                - sends IPC commands to load code
+            - wrap result in an MPProcess
+        - MPManager: agent side
+            - implementation of the external interface executor.ExecutorManager-
             - uses a MPPool to hand out MPExecutors
-            - implements the external interface executor.ExecutorManager
-            - it shuts down old MPExecutors
+            - it shuts down old MPExecutors (expiry timer)
             - it keeps the number of executor per agent below a certain number
 
       A mock up of this structure is in `test_resource_pool_stacking`
@@ -91,7 +94,7 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.resourcepool import PoolManager, PoolMember, TPoolID
+from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.data.model import ResourceType
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
@@ -127,10 +130,11 @@ class ExecutorContext:
 
     # We have no join here yet, don't know if we need it
     async def init_for(self, name: str, uri: str) -> None:
+        """Initialize a new executor in this proces"""
         LOGGER.info("Starting for %s", name)
         if name in self.executors:
-            LOGGER.info("Waiting for old executor %s to shutdown", name)
             # We existed before
+            LOGGER.info("Waiting for old executor %s to shutdown", name)
             old_one = self.executors[name]
             # But were stopped
             assert old_one.is_stopped()
@@ -154,6 +158,7 @@ class ExecutorContext:
         self.executors[name] = executor
 
     async def stop_for(self, name: str) -> None:
+        """Stop an executor in this proces, returns before shutdown is completed"""
         try:
             LOGGER.info("Stopping for %s", name)
             self.get(name).stop()
@@ -161,10 +166,9 @@ class ExecutorContext:
             LOGGER.exception("Stop failed for %s", name)
 
     async def stop(self) -> None:
-        """Request the executor to stop"""
+        """Request the process to stop"""
         for my_executor in self.executors.values():
             my_executor.stop()
-        # TODO: no join here either
         # threadpool finalizer is not used, we expect threadpools to be terminated with the process
         # self.executor.join([])
         await self.server.stop()
@@ -246,19 +250,29 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         # Once connection is lost, we want to detach asap to keep the logging clean and efficient
         if self.log_transport:
             logging.getLogger().removeHandler(self.log_transport)
+            self.log_transport = None
 
     def get_context(self) -> ExecutorContext:
         return self.ctx
 
     async def stop(self) -> None:
-        """Perform shutdown"""
-        # shutdown children
+        """Perform shutdown
+
+        children are not gracefully terminated, if this is required, this is done from the remote side
+        this just takes down the entire process
+        """
         self._sync_stop()
 
     def _sync_stop(self) -> None:
-        """Actual shutdown, not async"""
+        """Actual shutdown,
+
+        Not async, expected to be called only on the ioloop thread
+        Non-blocking
+
+        Leads to a call to connection_lost
+        """
         if not self.stopping:
-            # detach logger
+            # detach logger early as we are about to lose the connection
             self._detach_log_shipper()
             self.logger.info("Stopping")
             self.stopping = True
@@ -587,6 +601,7 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         connection: ExecutorClient,
         executor_blueprint: executor.ExecutorBlueprint,
         venv: executor.ExecutorVirtualEnvironment,
+        worker_threadpool: ThreadPoolExecutor,
     ):
         PoolMember.__init__(self, executor_blueprint)
         PoolManager.__init__(self)
@@ -600,22 +615,25 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         self.termination_lock = threading.Lock()
 
         # Pure for debugging purpose
-        self.executor_blueprint = executor_blueprint  # TODO: duplicates my_id
         self.executor_virtual_env = venv
 
-        # Set by init and parent class that const
+        # Set by init, keeps state for the underlying executors
         self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = list()
 
-    def my_name(self) -> str:
-        return f"Executor Process {self.name} for PID {self.process.pid}"  # TODO: align with PS listing name
+        # threadpool for cleanup jobs
+        self.worker_threadpool = worker_threadpool
 
-    def render_id(self, member_id: "ExecutorId") -> str:
+    def my_name(self) -> str:
+        # FIXME: align with PS listing name https://github.com/inmanta/inmanta-core/issues/7692
+        return f"Executor Process {self.name} for PID {self.process.pid}"
+
+    def render_id(self, member_id: executor.ExecutorId) -> str:
         return f"Executor for {member_id.agent_name}"
 
     def get_lock_name_for(self, member_id: executor.ExecutorId) -> str:
         return member_id.identity()
 
-    def _id_to_internal(self, ext_id: executor.ExecutorBlueprint) -> executor.ExecutorBlueprint:
+    def _id_to_internal(self, ext_id: executor.ExecutorId) -> executor.ExecutorId:
         return ext_id
 
     async def connection_lost(self) -> None:
@@ -638,8 +656,9 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         """
         self.is_stopping = True
         if not self.shut_down:
-            await asyncio.get_running_loop().run_in_executor(None, functools.partial(self._join_process, grace_time))
-            # todo: manage threadpool
+            await asyncio.get_running_loop().run_in_executor(
+                self.worker_threadpool, functools.partial(self._join_process, grace_time)
+            )
         await self.set_shutdown()
 
     def _join_process(self, grace_time: float) -> None:
@@ -694,13 +713,13 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
     async def request_shutdown(self) -> None:
         if not self.shutting_down:
             self.shutting_down = True
-            await PoolMember.request_shutdown(self)
             self.connection.call(StopCommand(), False)
-
-        # At the moment, we don't eagery terminate the children here yet, we wait for connection to drop
+            # At the moment, we don't eagery terminate the children here, we wait for connection to drop
+            # The common case is that they are already down
 
     async def notify_member_shutdown(self, pool_member: "MPExecutor") -> bool:
         result = await super().notify_member_shutdown(pool_member)
+        # Shutdown if we become empty
         if len(self.pool) == 0:
             await self.request_shutdown()
         return result
@@ -745,20 +764,26 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         # close_task
         self.stop_task: Awaitable[None]
 
-        # Set by init and parent class that const
+        # Set by init and parent class
         self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = process.failed_resource_results
         self.failed_resources: executor.FailedResources = {}
 
     async def call(self, method: IPCMethod[ExecutorContext, ReturnType]) -> ReturnType:
         try:
+            # This inhbitis cleanup, so we keep the process alive as long as we are working
             self.in_flight += 1
             out = await self.process.connection.call(method)
-            self.last_used_at = datetime.datetime.now().astimezone()
             return out
         finally:
+            # Set last_used to keep us alive.
+            # We do it after the call, because calls can take a long time
+            # if we set the time before the call, we can get expiry of executors under high load,
+            # simply because their task is longer than the expiry time
+            self.last_used_at = datetime.datetime.now().astimezone()
+            # Re-enabled normal cleanup
             self.in_flight -= 1
 
-    async def start(self):
+    async def start(self) -> None:
         await self.call(InitCommandFor(self.name, self.id.agent_uri))
 
     async def request_shutdown(self) -> None:
@@ -767,6 +792,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
             return
         await super().request_shutdown()
 
+        # Don't make the parent wait this prevents wait cycles
         async def inner_close() -> None:
             try:
                 self.process.connection.call(StopCommandFor(self.name))
@@ -775,9 +801,12 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
                 pass
             await self.set_shutdown()
 
+        # Keep task reference to inhbit garbage collection
+        # Gives us something to join
         self.stop_task = asyncio.create_task(inner_close())
 
     def can_be_cleaned_up(self) -> bool:
+        """Inhibit close if the are active"""
         return self.in_flight == 0
 
     async def close_version(self, version: int) -> None:
@@ -876,7 +905,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
 
     async def start(self) -> None:
         await super().start()
-        # We need to do this here, otherwise, the scheduler would crash because no event loop would be running
         await self.environment_manager.start()
 
     async def stop(self) -> None:
@@ -884,7 +912,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
 
     async def request_shutdown(self) -> None:
         await super().request_shutdown()
-        await asyncio.gather(*(self.request_member_shutdown(child) for child in self.pool.values()))
+        await asyncio.gather(*(child.request_shutdown() for child in self.pool.values()))
         await self.environment_manager.request_shutdown()
 
     async def join(self) -> None:
@@ -896,16 +924,13 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         return ext_id
 
     async def create_member(self, blueprint: executor.ExecutorBlueprint) -> MPProcess:
-        # TODO: logging
-        # LOGGER.info("Creating executor for agent %s with id %s", executor_id.agent_name, executor_id.identity())
         venv = await self.environment_manager.get_environment(blueprint.to_env_blueprint())
         executor = await self.make_child_and_connect(blueprint, venv)
-        # LOGGER.debug(
-        #     "Child forked (pid: %s) for executor for agent %s with id %s",
-        #     executor.process.pid,
-        #     executor_id.agent_name,
-        #     executor_id.identity(),
-        # )
+        LOGGER.debug(
+            "Child forked (pid: %s) for %s",
+            executor.process.pid,
+            self.render_id(blueprint),
+        )
         storage_for_blueprint = os.path.join(self.storage_folder, "code", blueprint.blueprint_hash())
         os.makedirs(storage_for_blueprint, exist_ok=True)
         failed_types = await executor.connection.call(
@@ -917,12 +942,11 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                 self.venv_checkup_interval,
             )
         )
-        # LOGGER.debug(
-        #     "Child initialized (pid: %s) for executor for agent %s with id %s",
-        #     executor.process.pid,
-        #     executor_id.agent_name,
-        #     executor_id.identity(),
-        # )
+        LOGGER.debug(
+            "Child initialized (pid: %s) for %s",
+            executor.process.pid,
+            self.render_id(blueprint),
+        )
         executor.failed_resource_results = failed_types
         return executor
 
@@ -931,7 +955,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
     ) -> MPProcess:
         """Async code to make a child process and share a socket with it"""
         loop = asyncio.get_running_loop()
-        name = executor_id.blueprint_hash()  # TODO
+        name = executor_id.blueprint_hash()  # FIXME: improve naming https://github.com/inmanta/inmanta-core/issues/7692
 
         # Start child
         process, parent_conn = await loop.run_in_executor(
@@ -942,7 +966,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
             functools.partial(ExecutorClient, f"executor.{name}"), parent_conn
         )
 
-        child_handle = MPProcess(name, process, protocol, executor_id, venv)
+        child_handle = MPProcess(name, process, protocol, executor_id, venv, self.thread_pool)
         return child_handle
 
     def _make_child(
@@ -965,7 +989,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         return member_id.blueprint_hash()
 
 
-# `executor.PoolManager` needs to be before `executor.ExecutorManager` as it defines the start and stop methods (MRO order)
 class MPManager(
     resourcepool.TimeBasedPoolManager[executor.ExecutorId, executor.ExecutorId, MPExecutor],
     executor.ExecutorManager[MPExecutor],
@@ -973,10 +996,6 @@ class MPManager(
     """
     This is the executor that provides the new behavior (ISO8+),
     where the agent forks executors in specific venvs to prevent code reloading.
-
-    This class has a two layer cache:
-      blueprint -> process
-      executor_id -> executor
 
     Executors are co-hosted on processes if they share a blueprint
     """
@@ -1009,14 +1028,14 @@ class MPManager(
 
         self.environment = environment
 
+        # cleanup book keeping
         self.agent_map: dict[str, set[MPExecutor]] = collections.defaultdict(set)
-        # cleanup
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
 
     def get_lock_name_for(self, member_id: executor.ExecutorId) -> str:
         return member_id.identity()
 
-    def _id_to_internal(self, ext_id: executor.ExecutorBlueprint) -> executor.ExecutorBlueprint:
+    def _id_to_internal(self, ext_id: executor.ExecutorId) -> executor.ExecutorId:
         return ext_id
 
     def render_id(self, member: executor.ExecutorId) -> str:
@@ -1048,8 +1067,10 @@ class MPManager(
         blueprint = executor.ExecutorBlueprint.from_specs(code)
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
 
+        # Use pool manager
         my_executor = await self.get(executor_id)
 
+        # translation from code to type can only be done here
         if my_executor.failed_resource_results and not my_executor.failed_resources:
             # If some code loading failed, resolve here
             # reverse index
@@ -1068,7 +1089,8 @@ class MPManager(
 
     async def create_member(self, executor_id: executor.ExecutorId) -> MPExecutor:
         process = await self.process_pool.get(executor_id.blueprint)
-        # TODO: we have a race here: the process can become empty between these two calls
+        # FIXME: we have a race here: the process can become empty between these two calls
+        # Current thinking is that this race is unlikely
         result = await process.get(executor_id)
         self.agent_map.get(executor_id.agent_name).add(result)
         return result
@@ -1078,6 +1100,7 @@ class MPManager(
         return await super().notify_member_shutdown(pool_member)
 
     async def pre_create_capacity_check(self, member_id: executor.ExecutorId) -> None:
+        """Ensure max nr of executors per agent"""
         executors = [executor for executor in self.agent_map[member_id.agent_name] if executor.running]
 
         n_executors_for_agent = len(executors)
@@ -1089,11 +1112,10 @@ class MPManager(
                 f"{member_id.identity()} to make room for a new one."
             )
 
-            await self.request_member_shutdown(oldest_executor)
+            await oldest_executor.request_shutdown()
 
     async def start(self) -> None:
         await super().start()
-        # We need to do this here, otherwise, the scheduler would crash because no event loop would be running
         await self.process_pool.start()
 
     async def stop(self) -> None:
@@ -1103,11 +1125,12 @@ class MPManager(
         await self.process_pool.request_shutdown()
         await super().request_shutdown()
 
-    async def join(self) -> None:
+    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor] = [], timeout: float = 0.0) -> None:
+        # the last two parameters are there to glue the signatures of the join methods in the two super classes
         await super().join()
         await self.process_pool.join()
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children = list(self.agent_map[agent_name])
-        await asyncio.gather(*(self.request_member_shutdown(child) for child in children))
+        await asyncio.gather(*(child.request_shutdown() for child in children))
         return children

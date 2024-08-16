@@ -58,9 +58,9 @@ async def test_resource_pool():
     a3 = await manager.get("a")
     assert a1.count != a3.count
 
-    await manager.request_member_shutdown(a1)
+    await a1.request_shutdown()
 
-    await manager.request_member_shutdown(a3)
+    await a3.request_shutdown()
 
 
 async def test_timed_resource_pool():
