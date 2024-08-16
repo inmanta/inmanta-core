@@ -36,7 +36,7 @@ from inmanta.agent.executor import ExecutorBlueprint
 from inmanta.agent.forking_executor import MPManager
 from inmanta.data import PipConfig
 from inmanta.protocol.ipc_light import ConnectionLost
-from utils import log_contains, retry_limited
+from utils import NOISY_LOGGERS, log_contains, retry_limited
 
 
 class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
@@ -78,7 +78,7 @@ class TestLoader(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
 
 
 @pytest.fixture
-def set_custom_executor_policy():
+def set_custom_executor_policy(server_config):
     """
     Fixture to temporarily set the policy for executor management.
     """
@@ -162,14 +162,14 @@ def test():
     dummy = executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct]
     )
-
-    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
-
     # Full config: 2 source files, one python dependency
     full = executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct, via_server]
     )
+
+    # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
     full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
+    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
 
     assert oldest_executor.executor_id in manager.agent_map["agent2"]
     # assert loaded
@@ -222,10 +222,18 @@ def test():
         await retry_limited(check_automatic_clean_up, 10)
         log_contains(
             caplog,
-            "inmanta.agent.forking_executor",
+            "inmanta.agent.executor",
             logging.DEBUG,
-            (f"Stopping executor {full_runner.executor_id.identity()} because it was inactive for"),
+            (
+                f"Stopping PoolMember {full_runner.executor_id.identity()} of type {type(full_runner).__name__} "
+                "because it was inactive for"
+            ),
         )
+
+    # We can get `Caught subprocess termination from unknown pid: %d -> %d`
+    # When we capture signals from the pip installs
+    # Can't happen in real deployment as these things happen in different processes
+    utils.assert_no_warning(caplog, NOISY_LOGGERS + ["asyncio"])
 
 
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):

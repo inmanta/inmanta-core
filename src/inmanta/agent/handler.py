@@ -31,6 +31,7 @@ from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overl
 from tornado import concurrent
 
 import inmanta
+import logfire
 from inmanta import const, data, protocol, resources
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
@@ -763,16 +764,20 @@ class ResourceHandler(HandlerAPI[TResource]):
         """
         raise NotImplementedError()
 
+    @logfire.instrument("ResourceHandler.execute", extract_args=True)
     def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
         try:
-            self.pre(ctx, resource)
+            with logfire.span("pre"):
+                self.pre(ctx, resource)
 
-            changes = self.list_changes(ctx, resource)
-            ctx.update_changes(changes)
+            with logfire.span("list_changes"):
+                changes = self.list_changes(ctx, resource)
+                ctx.update_changes(changes)
 
             if not dry_run:
-                self.do_changes(ctx, resource, changes)
-                ctx.set_status(const.ResourceState.deployed)
+                with logfire.span("do_changes"):
+                    self.do_changes(ctx, resource, changes)
+                    ctx.set_status(const.ResourceState.deployed)
             else:
                 ctx.set_status(const.ResourceState.dry)
         except SkipResource as e:
@@ -795,6 +800,7 @@ class ResourceHandler(HandlerAPI[TResource]):
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
+    @logfire.instrument("ResourceHandler.check_facts", extract_args=True)
     def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
         """
         This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.HandlerAPI.pre`
@@ -892,6 +898,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
         """
         return self._diff(current, desired)
 
+    @logfire.instrument("CRUDHandler.execute", extract_args=True)
     def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
         try:
             self.pre(ctx, resource)
@@ -903,8 +910,11 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             changes: dict[str, dict[str, typing.Any]] = {}
             try:
                 ctx.debug("Calling read_resource")
-                self.read_resource(ctx, current)
-                changes = self.calculate_diff(ctx, current, desired)
+                with logfire.span("read_resource"):
+                    self.read_resource(ctx, current)
+
+                with logfire.span("calculate_diff"):
+                    changes = self.calculate_diff(ctx, current, desired)
 
             except ResourcePurged:
                 if not desired.purged:
@@ -917,14 +927,17 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                 if "purged" in changes:
                     if not changes["purged"]["desired"]:
                         ctx.debug("Calling create_resource")
-                        self.create_resource(ctx, desired)
+                        with logfire.span("create_resource"):
+                            self.create_resource(ctx, desired)
                     else:
                         ctx.debug("Calling delete_resource")
-                        self.delete_resource(ctx, desired)
+                        with logfire.span("delete_resource"):
+                            self.delete_resource(ctx, desired)
 
                 elif not desired.purged and len(changes) > 0:
                     ctx.debug("Calling update_resource", changes=changes)
-                    self.update_resource(ctx, dict(changes), desired)
+                    with logfire.span("update_resource"):
+                        self.update_resource(ctx, dict(changes), desired)
 
                 ctx.set_status(const.ResourceState.deployed)
             else:
