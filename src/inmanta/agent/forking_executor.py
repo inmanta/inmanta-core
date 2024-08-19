@@ -221,7 +221,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
         self.venv_cleanup_task: typing.Optional[asyncio.Task[None]] = None
 
-    def ainit(self, timer_venv_scheduler_interval: float) -> None:
+    def post_init(self, timer_venv_scheduler_interval: float) -> None:
         """Second stage init, once the eventloop is present"""
         self.timer_venv_scheduler_interval = timer_venv_scheduler_interval
         self.venv_cleanup_task = asyncio.create_task(self.start_timer_venv_checkup())
@@ -397,7 +397,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         parent_logger = logging.getLogger("agent.executor")
         logger = parent_logger.getChild(context.name)
 
-        context.server.ainit(self._venv_touch_interval)
+        context.server.post_init(self._venv_touch_interval)
 
         # setup client
         context.client = inmanta.protocol.SessionClient("agent", self.gid)
@@ -637,10 +637,10 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         return ext_id
 
     async def connection_lost(self) -> None:
-        # Setting is_stopping causes us not to send out stop commands
-        self.is_stopping = True
+        # Setting shutting_down causes us not to send out stop commands
+        self.shutting_down = True
         # eagerly terminate children
-        # Setting is_stopping on the children shortcuts their normal termination
+        # Setting shutting_down on the children shortcuts their normal termination
         # This may loop back here via the child_closed callback when the last child is removed
         # Cycle will be broken on self.close()
         for child in list(self.pool.values()):
@@ -654,7 +654,7 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
 
         This method will never raise an exeption, but log it instead.
         """
-        self.is_stopping = True
+        self.shutting_down = True
         if not self.shut_down:
             await asyncio.get_running_loop().run_in_executor(
                 self.worker_threadpool, functools.partial(self._join_process, grace_time)
@@ -1028,8 +1028,9 @@ class MPManager(
 
         self.environment = environment
 
+        typing.DefaultDict
         # cleanup book keeping
-        self.agent_map: dict[str, set[MPExecutor]] = collections.defaultdict(set)
+        self.agent_map: collections.defaultdict[str, set[MPExecutor]] = collections.defaultdict(set)
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
 
     def get_lock_name_for(self, member_id: executor.ExecutorId) -> str:

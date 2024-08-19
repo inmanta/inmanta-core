@@ -41,7 +41,6 @@ async def test_blueprint_hash_consistency(tmpdir):
 
     hash1 = blueprint1.blueprint_hash()
     hash2 = blueprint2.blueprint_hash()
-    print(hash1)
 
     assert hash1 == hash2, "Blueprint hashes should be identical regardless of the order of requirements"
 

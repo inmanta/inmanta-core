@@ -185,6 +185,8 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
 
     def render_id(self, member: TPoolID) -> str:
         """Method to improve logging output by naming external ids"""
+        # This method is not abstract to allow this class to be integrated with minimal effort
+        # The default is not very informative, to force implementors to eventually override it
         return "PoolMember"
 
     def member_name(self, member: TPoolMember) -> str:
@@ -359,7 +361,7 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up() and pool_member.last_used < oldest_time and pool_member.running:
                             LOGGER.debug(
-                                "%s with %.2f >= %d is about to expire",
+                                "%s will be shutdown becuase is inactive for %.2f, which is more than %d",
                                 self.member_name(pool_member),
                                 (cleanup_start - pool_member.last_used).total_seconds(),
                                 self.retention_time,

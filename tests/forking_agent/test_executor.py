@@ -222,18 +222,16 @@ def test():
     async def check_automatic_clean_up() -> bool:
         return len(manager.agent_map["agent2"]) == 0
 
+    assert len(manager.agent_map["agent2"]) != 0
+
     with caplog.at_level(logging.DEBUG):
         await retry_limited(check_automatic_clean_up, 10)
-        # log_contains(
-        #     caplog,
-        #     "inmanta.agent.executor",
-        #     logging.DEBUG,
-        #     (
-        #         f"Stopping PoolMember {full_runner.executor_id.identity()} of type {type(full_runner).__name__} "
-        #         "because it was inactive for"
-        #     ),
-        # )
-        # todo: improve very crappy logging
+        log_contains(
+            caplog,
+            "inmanta.agent.resourcepool",
+            logging.DEBUG,
+            ("Executor for agent2 will be shutdown becuase is inactive for "),
+        )
 
     # We can get `Caught subprocess termination from unknown pid: %d -> %d`
     # When we capture signals from the pip installs
