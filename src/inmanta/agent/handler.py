@@ -1093,9 +1093,7 @@ class Commander:
         :param name: the name of the handler itself (not required anymore)
         :param provider: the handler function
         """
-        if resource in cls.__command_functions:
-            raise RuntimeError(f"A handler has already been registered for resource {name}")
-
+        # When a new version of a handler is available, it will register and should replace the existing one.
         cls.__command_functions[resource] = provider
 
     @classmethod
