@@ -67,15 +67,15 @@ class provider:  # noqa: N801
     :param name: A name to reference this provider.
     """
 
-    def __init__(self, resource_type: str, name: str) -> None:
+    def __init__(self, resource_type: str, name: Optional[str] = None) -> None:
         self._resource_type = resource_type
-        self._name = name
+        # name is no longer used but deprecating it would create a lot warnings for little gain
 
     def __call__(self, function: type["ResourceHandler[TResource]"]) -> "type[ResourceHandler[TResource]]":
         """
         The wrapping
         """
-        Commander.add_provider(self._resource_type, self._name, function)
+        Commander.add_provider(self._resource_type, function)
         return function
 
 
@@ -1085,15 +1085,14 @@ class Commander:
         return cls.__command_functions[resource_type](agent)
 
     @classmethod
-    def add_provider(cls, resource: str, name: str, provider: type[ResourceHandler[Any]]) -> None:
+    def add_provider(cls, resource: str, provider: type[ResourceHandler[Any]]) -> None:
         """
         Register a new provider
 
         :param resource: the name of the resource this handler applies to
-        :param name: the name of the handler itself (not required anymore)
         :param provider: the handler function
         """
-        # When a new version of a handler is available, it will register and should replace the existing one.
+        # When a new version of a handler is available, it will register and should replace the existing one. 
         cls.__command_functions[resource] = provider
 
     @classmethod

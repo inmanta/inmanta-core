@@ -44,10 +44,6 @@ if typing.TYPE_CHECKING:
     import inmanta.agent.agent as agent
 
 
-class ChannelClosedException(Exception):
-    """Raised if execnet's remote_exec throws an OSError"""
-
-
 class InProcessExecutor(executor.Executor, executor.AgentInstance):
     """
     This is an executor that executes in the process it is started in
@@ -142,10 +138,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         provider: Optional[HandlerAPI[Any]] = None
         try:
             provider = await self.get_provider(resource)
-        except ChannelClosedException as e:
-            ctx.set_status(const.ResourceState.unavailable)
-            ctx.exception(str(e))
-            return
         except Exception:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=resource.id.resource_version_str())
@@ -162,9 +154,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 )
                 if ctx.status is None:
                     ctx.set_status(const.ResourceState.deployed)
-            except ChannelClosedException as e:
-                ctx.set_status(const.ResourceState.failed)
-                ctx.exception(str(e))
             except SkipResource as e:
                 ctx.set_status(const.ResourceState.skipped)
                 ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
