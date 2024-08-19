@@ -23,7 +23,7 @@ import traceback
 import typing
 import uuid
 from abc import ABC, abstractmethod
-from collections import abc, defaultdict
+from collections import abc
 from concurrent.futures import Future
 from functools import partial
 from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overload
