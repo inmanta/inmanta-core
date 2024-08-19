@@ -1092,7 +1092,7 @@ class Commander:
         :param resource: the name of the resource this handler applies to
         :param provider: the handler function
         """
-        # When a new version of a handler is available, it will register and should replace the existing one. 
+        # When a new version of a handler is available, it will register and should replace the existing one.
         cls.__command_functions[resource] = provider
 
     @classmethod
