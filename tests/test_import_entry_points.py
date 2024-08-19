@@ -61,7 +61,6 @@ def test_import_resources(import_entry_point) -> None:
 
 def test_import_handlers(import_entry_point) -> None:
     assert import_entry_point("inmanta.agent.handler") == 0
-    assert import_entry_point("inmanta.agent.io.local") == 0
 
 
 def test_import_export(import_entry_point) -> None:
