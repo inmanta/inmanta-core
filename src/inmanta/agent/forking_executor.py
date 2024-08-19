@@ -130,7 +130,7 @@ class ExecutorContext:
 
     # We have no join here yet, don't know if we need it
     async def init_for(self, name: str, uri: str) -> None:
-        """Initialize a new executor in this proces"""
+        """Initialize a new executor in this process"""
         LOGGER.info("Starting for %s", name)
         if name in self.executors:
             # We existed before

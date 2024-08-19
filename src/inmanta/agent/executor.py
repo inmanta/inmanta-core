@@ -415,12 +415,11 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         interal_id = member_id.blueprint_hash()
         env_dir_name: str = interal_id
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
-        is_new = True
 
         # Check if the directory already exists and create it if not
         if not os.path.exists(env_dir):
             os.makedirs(env_dir)
-            is_new = False
+            is_new = True
         else:
             LOGGER.debug(
                 "Found existing venv for content %s at %s, content hash: %s",
