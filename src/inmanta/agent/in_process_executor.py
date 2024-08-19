@@ -67,8 +67,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self.sessionid = client._sid
         self.environment = environment
 
-        # threads to setup _io ssh connections
-        self.provider_thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="ProviderPool_%s" % self.name)
         # threads to work
         self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="Pool_%s" % self.name)
 
@@ -83,7 +81,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
     def stop(self) -> None:
         self._stopped = True
         self._cache.close()
-        self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
 
     def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
@@ -93,7 +90,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param thread_pool_finalizer: all threadpools that should be joined should be added here.
         """
         assert self._stopped
-        thread_pool_finalizer.append(self.provider_thread_pool)
         thread_pool_finalizer.append(self.thread_pool)
 
     def is_stopped(self) -> bool:
