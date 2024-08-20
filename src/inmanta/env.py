@@ -39,6 +39,8 @@ from subprocess import CalledProcessError
 from textwrap import indent
 from typing import NamedTuple, Optional, TypeVar, cast
 
+import pkg_resources
+
 from inmanta import const
 from inmanta.ast import CompilerException
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
@@ -268,6 +270,10 @@ class PythonWorkingSet:
             for dist_info in importlib.metadata.distributions()
             if not inmanta_modules_only or dist_info.name.startswith(const.MODULE_PKG_NAME_PREFIX)
         }
+
+    @classmethod
+    def rebuild_working_set(cls) -> None:
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
     @classmethod
     def get_dependency_tree(cls, dists: abc.Iterable[str]) -> abc.Set[str]:
@@ -1208,7 +1214,7 @@ class ActiveEnv(PythonEnvironment):
                            are executed in a subprocess.
                     """
                     importlib.reload(mod)
-
+        PythonWorkingSet.rebuild_working_set()
 
 process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)
 """

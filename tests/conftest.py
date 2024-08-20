@@ -20,6 +20,7 @@ import importlib.metadata
 import logging.config
 import warnings
 
+import pkg_resources
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
@@ -509,6 +510,7 @@ def deactive_venv():
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
+    old_working_set = pkg_resources.working_set
     old_available_extensions = (
         dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
     )
@@ -525,6 +527,7 @@ def deactive_venv():
     sys.path_hooks.extend(old_path_hooks)
     # Clear cache for sys.path_hooks
     sys.path_importer_cache.clear()
+    pkg_resources.working_set = old_working_set
     # Restore PYTHONPATH
     if old_pythonpath is not None:
         os.environ["PYTHONPATH"] = old_pythonpath
@@ -1087,7 +1090,7 @@ class ReentrantVirtualEnv(VirtualEnv):
     def deactivate(self):
         if self._using_venv:
             self._using_venv = False
-            self.working_set = importlib.metadata.distributions()
+            self.working_set = pkg_resources.working_set
 
     def use_virtual_env(self) -> None:
         """
@@ -1104,7 +1107,7 @@ class ReentrantVirtualEnv(VirtualEnv):
             # Later run
             self._activate_that()
             mock_process_env(python_path=self.python_path)
-            self.working_set = importlib.metadata.distributions()
+            pkg_resources.working_set = self.working_set
             self._using_venv = True
 
 
