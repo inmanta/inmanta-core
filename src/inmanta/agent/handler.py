@@ -22,6 +22,7 @@ import logging
 import traceback
 import typing
 import uuid
+import warnings
 from abc import ABC, abstractmethod
 from collections import abc
 from concurrent.futures import Future
@@ -442,7 +443,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param io: Parameter for backwards compatibility
         """
         if io:
-            raise DeprecationWarning("The io parameter is no longer used and is deprecated.")
+            warnings.warn("The io parameter is no longer used and is deprecated.", DeprecationWarning, stacklevel=2)
 
         self._agent = agent
         self._client: Optional[protocol.SessionClient] = None
