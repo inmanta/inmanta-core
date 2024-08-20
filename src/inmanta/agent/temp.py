@@ -19,12 +19,17 @@
 # TODO: file name and location
 
 import abc
+import asyncio
 import dataclasses
 import enum
-from collections.abc import Mapping, Set
+import functools
+import itertools
+import typing
+import uuid
+from collections.abc import Iterator, Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Optional, TypeAlias
+from typing import Generic, Optional, TypeAlias, TypeVar
 
 from inmanta.data.model import ResourceIdStr
 from inmanta.util.collections import BidirectionalManyToManyMapping
@@ -131,7 +136,6 @@ class ModelState:
 class _Task(abc.ABC):
     agent: str
     resource: ResourceIdStr
-    priority: int
 
 
 class Deploy(_Task): pass
@@ -151,24 +155,43 @@ Task: TypeAlias = Deploy | DryRun | RefreshFact
 Type alias for the union of all task types. Allows exhaustive case matches.
 """
 
-@dataclass
-class BlockedDeploy:
-    # TODO: docstring: deploy blocked on requires -> blocked_on is subset of requires or None when not yet calculated
-    #   + mention that only deploys (never other tasks) are ever blocked
-    task: Deploy
-    blocked_on: Optional[Set[ResourceIdStr]] = None
+
+T = TypeVar("T", bound=Task)
 
 
-@dataclass(frozen=True, order=True, kw_only=True)
-class TaskQueueItem:
+# TODO: does it make sense for this to remain Generic?
+@dataclass(frozen=True, kw_only=True)
+class PrioritizedTask(Generic[T]):
+    task: T
+    # TODO: document lower value is higher priority
     priority: int
-    task: Task = dataclasses.field(compare=False)
-    # TODO: better name. Purpose is to uniquely identify a task item, even if an identical task happens to be added later
-    item_id: Task = dataclasses.field(compare=False)
+
+
+@functools.total_ordering
+@dataclass(frozen=True, kw_only=True)
+class TaskQueueItem:
+    """
+    Task item for the task queue. Adds unique id to each item and implements full ordering based purely on priority. Do not rely
+    on == for task equality.
+    """
+
+    task: PrioritizedTask[Task]
+    # TODO: Document. Purpose is to uniquely identify a task item, even if an identical task happens to be added later
+    item_id: uuid.UUID = dataclasses.field(default_factory=uuid.uuid4)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, TaskQueueItem):
+            return NotImplemented
+        return self.task.priority == other.task.priority
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, TaskQueueItem):
+            return NotImplemented
+        return self.task.priority < other.task.priority
 
 
 # TODO: style uniformity: dataclass vs normal class
-class AgentQueues:
+class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
     """
     Per-agent priority queue for ready-to-execute tasks.
     """
@@ -179,38 +202,106 @@ class AgentQueues:
     def __init__(self) -> None:
         # TODO: document that queue must not be used directly by class users
         self._agent_queues: dict[str, asyncio.PriorityQueue[TaskQueueItem]] = {}
-        self._tasks_by_resource: dict[ResourceIdStr, list[Task]] = {}
         # can not drop tasks from queue without breaking the heap invariant, or potentially breaking asyncio.Queue invariants
-        # => take approach suggested in heapq docs: simply mark as deleted
-        self._dropped_tasks: set[TaskQueueItem] = set()
+        # => take approach suggested in heapq docs: simply mark as deleted.
+        # => Keep view on all active tasks for a given resource, which also doubles as lookup for client operations
+        self._tasks_by_resource: dict[ResourceIdStr, dict[Task, TaskQueueItem]] = {}
 
-    def put_nowait(task: Task, priority: int) -> None:
-        # TODO: current implementation is only PoC grade, notable item_id is missing, and dict presence is never checked
-        item: TaskQueueItem = TaskQueueItem(priority=priority, task=task, item_id=0)
-        self._tasks_by_resource[task.resource].append(task)
-        self._agent_queues[agent].put_nowait(item)
+    def _queue_item_for_task(self, task: Task) -> Optional[TaskQueueItem]:
+        return self._tasks_by_resource.get(task.resource, {}).get(task, None)
+        # TODO: document invariant somehwere: each task exists at most once (unless deleted)
+        # TODO: document invariant somehwere:
 
-    # TODO: current interface and implementation is only PoC grade
-    def drop(self, task: Task) -> None:
-        self._dropped_tasks.add(task)
-        # TODO: also drop from _tasks_by_resource
+    def _is_active(self, item: TaskQueueItem) -> bool:
+        """
+        Returns true iff this item is still active, i.e. it has not been removed from the queue.
+        """
+        return item == self._queue_item_for_task(item.task.task)
 
-    def sorted(self, agent: str) -> list[Task]:
+    ##################
+    # User interface #
+    ##################
+
+    def get_tasks_for_resource(self, resource: ResourceIdStr) -> set[Task]:
+        return set(self._tasks_by_resource.get(resource, {}).keys())
+
+    def remove(self, task: Task) -> int:
+        """
+        Removes the given task from its associated agent queue. Raises KeyError if it is not in the queue.
+        Returns the priority at which the deleted task was queued.
+        """
+        tasks: dict[Task, TaskQueueItem] = self._tasks_by_resource.get(task.resource, {})
+        queue_item: TaskQueueItem = tasks[task]
+        del tasks[task]
+        if not tasks:
+            del self._tasks_by_resource[task.resource]
+        return queue_item.task.priority
+
+    def discard(self, task: Task) -> Optional[int]:
+        """
+        Removes the given task from its associated agent queue if it is present.
+        Returns the priority at which the deleted task was queued, if it was at all.
+        """
+        try:
+            return self.remove(task)
+        except KeyError:
+            return None
+
+    def sorted(self, agent: str) -> list[PrioritizedTask[Task]]:
         # TODO: remove this method: it's only a PoC to hightlight how to achieve a sorted view
-        queue: asyncio.PriorityQueue = self._agent_queues[agent]
-        queue._queue.sort()
-        return [item.task for item in queue._queue if item not in self._dropped_tasks]
+        queue: asyncio.PriorityQueue[TaskQueueItem] = self._agent_queues[agent]
+        backing_heapq: list[TaskQueueItem] = queue._queue  # type: ignore [attr-defined]
+        backing_heapq.sort()
+        return [item.task for item in backing_heapq if self._is_active(item)]
 
-    async def get(self, agent: str) -> Task:
-        # TODO: current implementation is only PoC grade
-        queue: asyncio.PriorityQueue = self._agent_queues[agent]
+    ########################################
+    # asyncio.PriorityQueue-like interface #
+    ########################################
+
+    def queue_put_nowait(self, prioritized_task: PrioritizedTask[Task]) -> None:
+        task: Task = prioritized_task.task
+        priority: int = prioritized_task.priority
+        already_queued: Optional[TaskQueueItem] = self._queue_item_for_task(task)
+        if already_queued is not None and already_queued.task.priority <= priority:
+            return
+        # reschedule with new priority, no need to explicitly remove, this is achieved by setting self._tasks_by_resource
+        item: TaskQueueItem = TaskQueueItem(task=prioritized_task)
+        if task.resource not in self._tasks_by_resource:
+            self._tasks_by_resource[task.resource] = {}
+        self._tasks_by_resource[task.resource][task] = item
+        self._agent_queues[task.agent].put_nowait(item)
+
+    async def queue_get(self, agent: str) -> Task:
+        queue: asyncio.PriorityQueue[TaskQueueItem] = self._agent_queues[agent]
         while True:
             item: TaskQueueItem = await queue.get()
-            if item in self._dropped_tasks:
-                deleted.discard(item)
+            if not self._is_active(item):
                 continue
-            # TODO: drop from _tasks_by_resource
-            return item.task
+            # remove from the queue since it's been picked up
+            # TODO: may need to keep track of running tasks as well, but seperately because a user might want to requeue it while running
+            self.discard(item.task.task)
+            return item.task.task
+
+    #########################
+    # Mapping implementation#
+    #########################
+
+    def __getitem__(self, key: Task) -> PrioritizedTask[Task]:
+        return self._tasks_by_resource.get(key.resource, {})[key].task
+
+    def __iter__(self) -> Iterator[Task]:
+        return itertools.chain.from_iterable(self._tasks_by_resource.values())
+
+    def __len__(self) -> int:
+        return sum(len(items) for items in self._tasks_by_resource.values())
+
+
+@dataclass
+class BlockedDeploy:
+    # TODO: docstring: deploy blocked on requires -> blocked_on is subset of requires or None when not yet calculated
+    #   + mention that only deploys (never other tasks) are ever blocked
+    task: PrioritizedTask[Deploy]
+    blocked_on: Optional[Set[ResourceIdStr]] = None
 
 
 @dataclass
@@ -218,8 +309,11 @@ class ScheduledWork:
     # TODO: keep track of in_progress tasks?
     # TODO: make this a data type with bidirectional read+remove access (ResourceIdStr -> list[Task]), so reset_requires can access it
     #       See Wouter's PR for a base?
-    agent_queues: dict[str, list[Task]] = dataclasses.field(default_factory=dict)
+    agent_queues: AgentQueues = dataclasses.field(default_factory=AgentQueues)
     waiting: dict[ResourceIdStr, BlockedDeploy] = dataclasses.field(default_factory=dict)
+    # TODO: mention that this class will never modify state. Or alternatively, pass Scheduler instead and add methods on it to
+    #       inspect required state (requires-provides + update_pending?)
+    model_state: ModelState
 
     # TODO: task runner for the agent queues + when done:
     #   - update model state
@@ -230,17 +324,80 @@ class ScheduledWork:
         Drop tasks for a given resource when it's deleted from the model. Does not affect dry-run tasks because they
         do not act on the latest desired state.
         """
-        # TODO: delete from agent_queues if in there
+        # delete from waiting collection if deploy task is waiting to be queued
         if resource in self.waiting:
             del self.waiting[resource]
+        # additionally delete from agent_queues if a task is already queued
+        task: Task
+        for task in self.agent_queues.get_tasks_for_resource(resource):
+            delete: bool
+            match task:
+                case Deploy():
+                    delete = True
+                case DryRun():
+                    delete = False
+                case RefreshFact():
+                    delete = True
+                case _ as _never:
+                    typing.assert_never(_never)
+            if delete:
+                self.agent_queues.discard(task)
 
-    def reset_requires(self, resource: ResourceIdStr) -> None:
+    # TODO: name
+    # TODO: added and dropped may become optional for other use cases
+    def reset_requires(self, resource: ResourceIdStr, *, added: Set[ResourceIdStr], dropped: Set[ResourceIdStr]) -> None:
+        # TODO: document that this must only be called when state's requires is up to date?
         """
         Resets metadata calculated from a resource's requires, i.e. when its requires changes.
         """
-        # TODO: need to move out of agent_queues to waiting iff it's in there
-        if resource in self.waiting:
-            self.waiting[resource].blocked_on = None
+        # TODO: this implementation is very complex. Can it be simplified?
+        #       CONSIDER LESS LAZY CALCULATION UNLESS IT TURNS OUT TO BE REQUIRED
+        # requires is only relevant for deploy tasks => if one is queued already, recalculate its requires and move it back to
+        # waiting iff appropriate
+        # TODO: parse agent from resource id
+        deploy_task: Deploy = Deploy(agent="test", resource=resource)
+        # TODO: only move back iff recalculated blocked_on is non-empty + populate 'blocked_on' field
+        #       => requires us to access ModelState here!
+        if deploy_task in self.agent_queues:
+            priority: int = self.agent_queues.discard(deploy_task)
+            self.waiting[resource] = BlockedDeploy(task=PrioritizedTask(task=deploy_task, priority=priority))
+        elif resource in self.waiting:
+            blocked_deploy: BlockedDeploy = self.waiting[resource]
+            if dropped:
+                # dependency we're currently waiting for may have been dropped => check now whether we're still waiting for
+                # anything and respond appropriately
+                old_blocked_on: Set[ResourceIdStr]
+                to_add: Set[ResourceIdStr]
+                if blocked_deploy.blocked_on is None:
+                    # start fresh and consider all requires as "added"
+                    old_blocked_on = {}
+                    to_add = self.state.requires[resource]
+                else:
+                    old_blocked_on = blocked_deploy.blocked_on
+                    to_add = added
+
+                if old_blocked_on - dropped:
+                    # definitely still waiting for something => lazily recalculate when we're notified
+                    blocked_deploy.blocked_on = None
+                else:
+                    # Everything we were blocked on before has been dropped. Anything new we need to block on?
+                    for dependency in to_add:
+                        # TODO: consider currently running as well
+                        # TODO: parse agent from resource id
+                        if dependency in self.waiting or Deploy(agent="test", resource=dependency) in self.agent_queues:
+                            # definitely still waiting for something => lazily recalculate when we're notified
+                            blocked_deploy.blocked_on = None
+                            break
+                    else:
+                        # TODO: queue task because we're not waiting for anything anymore
+                        pass
+            else
+                # we have a strict superset of what we were waiting on before so we'll be notified of a dependency
+                # finishing at some point => recalculate lazily
+                blocked_deploy.blocked_on = None
+        else:
+            # TODO: nothing?
+            pass
 
 
 # TODO: name
@@ -251,8 +408,8 @@ class Scheduler:
     server. Schedules these requests as tasks according to priorities and, in case of deploy tasks, requires-provides edges.
     """
     def __init__(self) -> None:
-        self._state: Optional[ModelState] = None
-        self._work: ScheduledWork = ScheduledWork()
+        self._state: ModelState = ModelState(version=0)
+        self._work: ScheduledWork = ScheduledWork(model_state=self._state)
 
         # The scheduler continuously processes work in the scheduled work's queues and processes results of executed tasks,
         # which may update both the resource state and the scheduled work (e.g. move unblocked tasks to the queue).
@@ -270,14 +427,7 @@ class Scheduler:
 
     def start(self) -> None:
         # TODO (ticket): read from DB instead
-        self._state = ModelState(version=0)
-
-    @property
-    def state(self) -> ModelState:
-        if self._state is None:
-            # TODO
-            raise Exception("Call start first")
-        return self._state
+        pass
 
     # TODO: name
     # TODO (ticket): design step 2: read new state from DB instead of accepting as parameter (method should be notification only, i.e. 0 parameters)
@@ -287,35 +437,42 @@ class Scheduler:
         resources: Mapping[ResourceIdStr, ResourceDetails],
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
     ) -> None:
-        async with self._update_lock.acquire():
+        async with self._update_lock:
             # Inspect new state and mark resources as "update pending" where appropriate. Since this method is the only writer
             # for "update pending", and a stale read is acceptable, we can do this part before acquiring the exclusive scheduler
             # lock.
             # TODO: what to do when an export changes handler code without changing attributes? Consider in deployed state? What
             #   does current implementation do?
-            deleted_resources: Set[ResourceIdStr] = self.state.resources.keys() - resources.keys()
-            # TODO: drop deleted resources from scheduled work
+            deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
+            for resource in deleted_resources:
+                self._work.delete_resource(resource)
 
             # TODO: make sure this part (before scheduler lock is acquired) doesn't block queue until lock is acquired: either
             # run on thread or make sure to regularly pass control to IO loop (preferred)
             new_desired_state: list[ResourceIdStr] = []
-            changed_requires: list[ResourceIdStr] = []
+            RequiresAdded: typing.TypeAlias = Set[ResourceIdStr]
+            RequiresDropped: typing.TypeAlias = Set[ResourceIdStr]
+            changed_requires: list[tuple[ResourceIdStr, RequiresAdded, RequiresDropped]] = []
             for resource, details in resources.items():
-                if resource not in self.state.resources or details.attribute_hash != self.state.resources[resource].attribute_hash:
-                    self.state.update_pending.add(resource)
+                if resource not in self._state.resources or details.attribute_hash != self._state.resources[resource].attribute_hash:
+                    self._state.update_pending.add(resource)
                     new_desired_state.append(resource)
-                if requires.get(resource, set()) != self.state.requires.get(resource, set()):
-                    self.state.update_pending.add(resource)
-                    changed_requires.append(resource)
+                old_requires: Set[ResourceIdStr] = requires.get(resource, set())
+                new_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
+                added: Set[ResourceIdStr] = new_requires - old_requires
+                dropped: Set[ResourceIdStr] = old_requires - new_requires
+                if added or dropped:
+                    self._state.update_pending.add(resource)
+                    changed_requires.append(resource, added, dropped)
 
             #
-            async with self._scheduler_lock.acquire():
-                self.state.version = version
+            async with self._scheduler_lock:
+                self._state.version = version
                 for resource in new_desired_state:
-                    self.state.update_desired_state(resource, resources[resource])
-                for resource in changed_requires:
-                    self.state.update_requires(resource, requires[resource])
-                    self._work.reset_requires(resource)
+                    self._state.update_desired_state(resource, resources[resource])
+                for resource, added, dropped in changed_requires:
+                    self._state.update_requires(resource, requires[resource])
+                    self._work.reset_requires(resource, added=added, dropped=dropped)
 
                 # TODO: design step 6: release scheduler lock
                 # TODO: design step 7: drop update_pending
