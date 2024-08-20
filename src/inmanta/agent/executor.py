@@ -172,9 +172,9 @@ class ExecutorBlueprint(EnvBlueprint):
             assert pip_config == base_pip, f"One agent is using multiple pip configs: {base_pip} {pip_config}"
         base_python_version = python_versions[0]
         for python_version in python_versions:
-            assert python_version == base_python_version, (
-                f"One agent is using multiple python versions: {base_python_version} {python_version}"
-            )
+            assert (
+                python_version == base_python_version
+            ), f"One agent is using multiple python versions: {base_python_version} {python_version}"
         return ExecutorBlueprint(
             pip_config=base_pip,
             sources=sources,
