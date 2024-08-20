@@ -238,15 +238,12 @@ class PythonWorkingSet:
                     return False
                 if r.extras:
                     for extra in r.extras:
-                        search_dist = [e for e in importlib.metadata.distributions() if e.name == r.name]
-                        assert len(search_dist) <= 1
-                        distribution: Optional[Distribution] = None if len(search_dist) == 0 else search_dist[0]
+                        distribution: Optional[Distribution] = pkg_resources.working_set.find(r)
                         if distribution is None:
                             return False
 
-                        pkgs_required_by_extra: set[SafeRequirement] = set(
-                            [SafeRequirement(requirement_string=e) for e in distribution.requires or []]
-                        )
+                        pkgs_required_by_extra: set[Requirement] = set(distribution.requires(extras=(extra,))) - set(
+                            distribution.requires(extras=()))
                         if not _are_installed_recursive(
                             reqs=list(pkgs_required_by_extra),
                             seen_requirements=list(seen_requirements) + list(reqs),
@@ -266,9 +263,9 @@ class PythonWorkingSet:
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
         return {
-            canonicalize_name(dist_info.name).lower(): version.Version(dist_info.version)
-            for dist_info in importlib.metadata.distributions()
-            if not inmanta_modules_only or dist_info.name.startswith(const.MODULE_PKG_NAME_PREFIX)
+            dist_info.key: version.Version(dist_info.version)
+            for dist_info in pkg_resources.working_set
+            if not inmanta_modules_only or dist_info.key.startswith(const.MODULE_PKG_NAME_PREFIX)
         }
 
     @classmethod
@@ -287,7 +284,7 @@ class PythonWorkingSet:
         """
         # create dict for O(1) lookup
         installed_distributions: abc.Mapping[str, Distribution] = {
-            dist_info.name: dist_info for dist_info in importlib.metadata.distributions()
+            dist_info.key: dist_info for dist_info in pkg_resources.working_set
         }
 
         def _get_tree_recursive(dists: abc.Iterable[str], acc: abc.Set[str] = frozenset()) -> abc.Set[str]:
@@ -307,7 +304,7 @@ class PythonWorkingSet:
             return _get_tree_recursive(
                 (
                     SafeRequirement(requirement_string=requirement).name
-                    for requirement in installed_distributions[dist].requires or []
+                    for requirement in installed_distributions[dist].requires()
                 ),
                 acc=acc | {dist},
             )
@@ -1034,10 +1031,9 @@ class ActiveEnv(PythonEnvironment):
 
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(SafeRequirement(requirement_string=requirement), canonicalize_name(dist_info.name))
-            for dist_info in importlib.metadata.distributions()
-            for requirement in dist_info.requires or []
-            if SafeRequirement(requirement).marker is None
+            OwnedRequirement(requirement, dist_info.key)
+            for dist_info in pkg_resources.working_set
+            for requirement in dist_info.requires()
         )
 
         inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
@@ -1054,12 +1050,7 @@ class ActiveEnv(PythonEnvironment):
                 (
                     []
                     if strict_scope is None
-                    else (
-                        dist_info.name
-                        for dist_info in importlib.metadata.distributions()
-                        if strict_scope.fullmatch(dist_info.name)
-                    )
-                ),
+                    else (dist_info.key for dist_info in pkg_resources.working_set if strict_scope.fullmatch(dist_info.key))                ),
                 (requirement.requirement.name for requirement in inmanta_constraints),
                 (requirement.requirement.name for requirement in extra_constraints),
             )
