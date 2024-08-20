@@ -439,11 +439,8 @@ class HandlerAPI(ABC, Generic[TResource]):
     def __init__(self, agent: "inmanta.agent.executor.AgentInstance", io: object = None) -> None:
         """
         :param agent: The agent that is executing this handler.
-        :param io: Parameter for backwards compatibility
+        :param io: Parameter for backwards compatibility. It is not used by the handler.
         """
-        if io:
-            raise DeprecationWarning("The io parameter is no longer used and is deprecated.")
-
         self._agent = agent
         self._client: Optional[protocol.SessionClient] = None
 
