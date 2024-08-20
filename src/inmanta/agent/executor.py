@@ -165,6 +165,8 @@ class ExecutorBlueprint(EnvBlueprint):
         python_versions = [cd.blueprint.python_version for cd in code]
         if not pip_configs:
             raise Exception("No Pip config available, aborting")
+        if not python_versions:
+            raise Exception("No Python versions found, aborting")
         base_pip = pip_configs[0]
         python_version = python_versions[0]
         for pip_config in pip_configs:
