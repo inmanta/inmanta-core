@@ -168,14 +168,18 @@ class ExecutorBlueprint(EnvBlueprint):
         if not python_versions:
             raise Exception("No Python versions found, aborting")
         base_pip = pip_configs[0]
-        python_version = python_versions[0]
         for pip_config in pip_configs:
             assert pip_config == base_pip, f"One agent is using multiple pip configs: {base_pip} {pip_config}"
+        base_python_version = python_versions[0]
+        for python_version in python_versions:
+            assert python_version == base_python_version, (
+                f"One agent is using multiple python versions: {base_python_version} " f"{python_version}"
+            )
         return ExecutorBlueprint(
             pip_config=base_pip,
             sources=sources,
             requirements=requirements,
-            python_version=python_version,
+            python_version=base_python_version,
         )
 
     def blueprint_hash(self) -> str:
