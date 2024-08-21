@@ -64,7 +64,9 @@ class PipInstallError(Exception):
 
 class SafeRequirement(Requirement):
     def __init__(self, requirement_string: str) -> None:
-        super().__init__(requirement_string=requirement_string)
+        # Packaging Requirement is not able to parse requirements with comment. Therefore, we need to remove the `comment` part
+        drop_comment = requirement_string.split("#")[0]
+        super().__init__(requirement_string=drop_comment)
         self.name = utils.canonicalize_name(self.name)
 
 
