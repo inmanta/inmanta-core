@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import importlib.metadata
 import logging.config
 import warnings
 

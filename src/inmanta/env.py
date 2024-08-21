@@ -238,12 +238,15 @@ class PythonWorkingSet:
                     return False
                 if r.extras:
                     for extra in r.extras:
-                        distribution: Optional[Distribution] = pkg_resources.working_set.find(r)
+                        distribution: Optional[pkg_resources.Distribution] = pkg_resources.working_set.find(
+                            pkg_resources.Requirement.parse(r.name)
+                        )
                         if distribution is None:
                             return False
 
-                        pkgs_required_by_extra: set[Requirement] = set(distribution.requires(extras=(extra,))) - set(
-                            distribution.requires(extras=()))
+                        pkgs_required_by_extra: set[SafeRequirement] = set(
+                            [SafeRequirement(e.key) for e in distribution.requires(extras=(extra,))]
+                        ) - set([SafeRequirement(e.key) for e in distribution.requires(extras=())])
                         if not _are_installed_recursive(
                             reqs=list(pkgs_required_by_extra),
                             seen_requirements=list(seen_requirements) + list(reqs),
@@ -263,7 +266,7 @@ class PythonWorkingSet:
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
         return {
-            dist_info.key: version.Version(dist_info.version)
+            canonicalize_name(dist_info.key): version.Version(dist_info.version)
             for dist_info in pkg_resources.working_set
             if not inmanta_modules_only or dist_info.key.startswith(const.MODULE_PKG_NAME_PREFIX)
         }
@@ -283,7 +286,7 @@ class PythonWorkingSet:
         :param dists: The keys for the distributions to get the dependency tree for.
         """
         # create dict for O(1) lookup
-        installed_distributions: abc.Mapping[str, Distribution] = {
+        installed_distributions: abc.Mapping[str, pkg_resources.Distribution] = {
             dist_info.key: dist_info for dist_info in pkg_resources.working_set
         }
 
@@ -303,7 +306,7 @@ class PythonWorkingSet:
             # recurse on direct dependencies
             return _get_tree_recursive(
                 (
-                    SafeRequirement(requirement_string=requirement).name
+                    SafeRequirement(requirement_string=requirement.key).name
                     for requirement in installed_distributions[dist].requires()
                 ),
                 acc=acc | {dist},
@@ -1031,7 +1034,7 @@ class ActiveEnv(PythonEnvironment):
 
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(requirement, dist_info.key)
+            OwnedRequirement(SafeRequirement(requirement_string=requirement.key), dist_info.key)
             for dist_info in pkg_resources.working_set
             for requirement in dist_info.requires()
         )
@@ -1050,7 +1053,8 @@ class ActiveEnv(PythonEnvironment):
                 (
                     []
                     if strict_scope is None
-                    else (dist_info.key for dist_info in pkg_resources.working_set if strict_scope.fullmatch(dist_info.key))                ),
+                    else (dist_info.key for dist_info in pkg_resources.working_set if strict_scope.fullmatch(dist_info.key))
+                ),
                 (requirement.requirement.name for requirement in inmanta_constraints),
                 (requirement.requirement.name for requirement in extra_constraints),
             )
@@ -1065,7 +1069,10 @@ class ActiveEnv(PythonEnvironment):
             requirement = c.requirement
             if (
                 requirement.name.lower() not in installed_versions
-                or str(installed_versions[requirement.name.lower()]) not in requirement.specifier
+                or (
+                    len(requirement.specifier) > 0
+                    and str(installed_versions[requirement.name.lower()]) not in requirement.specifier
+                )
             ) and (not requirement.marker or (requirement.marker and requirement.marker.evaluate())):
                 version_conflict = VersionConflict(
                     requirement=requirement,
@@ -1206,6 +1213,7 @@ class ActiveEnv(PythonEnvironment):
                     """
                     importlib.reload(mod)
         PythonWorkingSet.rebuild_working_set()
+
 
 process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)
 """
