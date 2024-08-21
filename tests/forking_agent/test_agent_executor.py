@@ -14,10 +14,12 @@
 
 import asyncio
 import datetime
+import functools
 import hashlib
 import logging
 import os
 import pathlib
+from asyncio import timeout
 
 from inmanta import const
 from inmanta.agent import executor, forking_executor
@@ -186,6 +188,19 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
         log_contains(caplog, "inmanta.agent.executor", logging.DEBUG, f"Found existing venv for content {str(blueprint1)}")
 
 
+def with_timeout(delay):
+    def decorator(func):
+        @functools.wraps(func)
+        async def new_func(*args, **kwargs):
+            async with asyncio.timeout(delay):
+                return await func(*args, **kwargs)
+
+        return new_func
+
+    return decorator
+
+
+@with_timeout(30)
 async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
@@ -236,6 +251,7 @@ def test():
     assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
 
 
+@with_timeout(30)
 async def test_executor_creation_and_venv_usage(
     server_config, pip_index: PipIndex, mpmanager_light: forking_executor.MPManager
 ) -> None:

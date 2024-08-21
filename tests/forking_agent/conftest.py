@@ -77,47 +77,6 @@ async def mpmanager_light(mp_manager_factory) -> typing.Iterator[MPManager]:
     return mp_manager_factory(None)
 
 
-@pytest.fixture
-async def mp_pool_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.UUID], MPManager]]:
-    managers = []
-    threadpools: list[concurrent.futures.thread.ThreadPoolExecutor] = []
-
-    def make_mpmanager(agent_session_id: uuid.UUID) -> MPManager:
-        log_folder = tmp_path / "logs"
-        storage_folder = tmp_path / "executors"
-        threadpool = concurrent.futures.thread.ThreadPoolExecutor()
-        manager = MPPool(
-            threadpool,
-            agent_session_id,
-            uuid.uuid4(),
-            log_folder=str(log_folder),
-            storage_folder=str(storage_folder),
-            cli_log=True,
-        )
-        # We only want to override it in the test suite
-        manager.environment_manager.retention_time = 7
-        managers.append(manager)
-        threadpools.append(threadpool)
-        return manager
-
-    yield make_mpmanager
-    await asyncio.wait_for(asyncio.gather(*(manager.stop() for manager in managers)), 10)
-    await asyncio.wait_for(asyncio.gather(*(manager.join() for manager in managers)), 10)
-    for threadpool in threadpools:
-        threadpool.shutdown(wait=False)
-
-
-@pytest.fixture
-async def mppool(mp_pool_factory, agent: inmanta.agent.Agent) -> MPManager:
-    return mp_pool_factory(agent.sessionid)
-
-
-@pytest.fixture
-async def mppool_light(mp_pool_factory) -> typing.Iterator[MPManager]:
-    """Fake the agent"""
-    return mp_pool_factory(None)
-
-
 @pytest.fixture(scope="session")
 def pip_index(tmp_path_factory) -> utils.PipIndex:
     tmpdir = tmp_path_factory.mktemp("pip_index")

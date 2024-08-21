@@ -23,6 +23,11 @@ from inmanta.agent.resourcepool import PoolManager, PoolMember, SingleIdPoolMana
 
 
 async def test_resource_pool():
+    """Test basic functionality of the resource pool:
+    - produce members
+    - cache them
+    - track membership if members are closed
+    """
 
     counter = itertools.count()
 
@@ -64,6 +69,8 @@ async def test_resource_pool():
 
 
 async def test_timed_resource_pool():
+    """Test time based expiry"""
+
     counter = itertools.count()
 
     class SimplePoolMember(PoolMember[str]):
@@ -71,6 +78,7 @@ async def test_timed_resource_pool():
         def __init__(self, my_id: str) -> None:
             super().__init__(my_id)
             self.count = next(counter)
+            # wait point for shutdown!
             self.anchor = asyncio.Event()
 
         def __repr__(self):
@@ -88,6 +96,7 @@ async def test_timed_resource_pool():
         def _id_to_internal(self, ext_id: str) -> str:
             return ext_id
 
+    # Very short expirey
     manager = SimplePoolManager(0.02)
     await manager.start()
 
@@ -95,16 +104,24 @@ async def test_timed_resource_pool():
     a1_2 = await manager.get("a")
     b1 = await manager.get("b")
 
+    # Caching works
     assert a1.count == a1_2.count
     assert b1.id != a1.id
 
+    # wait for the youngest to be down
     await asyncio.wait_for(b1.anchor.wait(), 2)
+    # all dead
     assert not a1.running
     assert not b1.running
     assert not manager.pool
 
 
 async def test_resource_pool_stacking():
+    """
+    Test the specific setup needed for the forking executor, as described in that file
+
+    Simplified to not have any of the underlying complexity, just test that the pooling works
+    """
     counter = itertools.count()
 
     class SimplePoolMember(PoolMember[str]):

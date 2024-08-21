@@ -126,7 +126,10 @@ class ExecutorContext:
         self.name = server.name
 
     def get(self, name: str) -> "inmanta.agent.in_process_executor.InProcessExecutor":
-        return self.executors[name]
+        try:
+            return self.executors[name]
+        except LookupError:
+            raise LookupError("No executor exists with name %s")
 
     # We have no join here yet, don't know if we need it
     async def init_for(self, name: str, uri: str) -> None:
@@ -1028,7 +1031,6 @@ class MPManager(
 
         self.environment = environment
 
-        typing.DefaultDict
         # cleanup book keeping
         self.agent_map: collections.defaultdict[str, set[MPExecutor]] = collections.defaultdict(set)
         self.max_executors_per_agent = inmanta.agent.config.agent_executor_cap.get()
@@ -1093,11 +1095,16 @@ class MPManager(
         # FIXME: we have a race here: the process can become empty between these two calls
         # Current thinking is that this race is unlikely
         result = await process.get(executor_id)
-        self.agent_map.get(executor_id.agent_name).add(result)
+
+        executors = self.agent_map.get(executor_id.agent_name)
+        assert executors is not None  # make mypy happy
+        executors.add(result)
         return result
 
     async def notify_member_shutdown(self, pool_member: MPExecutor) -> bool:
-        self.agent_map.get(pool_member.get_id().agent_name).discard(pool_member)
+        executors = self.agent_map.get(pool_member.get_id().agent_name)
+        assert executors is not None  # make mypy happy
+        executors.discard(pool_member)
         return await super().notify_member_shutdown(pool_member)
 
     async def pre_create_capacity_check(self, member_id: executor.ExecutorId) -> None:
