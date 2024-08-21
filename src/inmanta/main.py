@@ -182,7 +182,7 @@ def get_table(header: list[str], rows: list[list[str]], data_type: Optional[list
     return table.draw()
 
 
-@with_plugins(importlib_metadata.entry_points(group="inmanta.cli_plugins"))
+@with_plugins(importlib_metadata.entry_points().select(group="inmanta.cli_plugins"))
 @click.group(help="Base command")
 @click.option("--host", help="The server hostname to connect to")
 @click.option("--port", help="The server port to connect to")

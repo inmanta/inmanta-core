@@ -37,7 +37,7 @@ from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import NamedTuple, Optional, TypeVar, cast
+from typing import NamedTuple, Optional, TypeVar
 
 import pkg_resources
 
@@ -47,9 +47,8 @@ from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from inmanta.util import strtobool
-from packaging import version
+from packaging import utils, version
 from packaging.requirements import Requirement
-from packaging.utils import InvalidName, NormalizedName
 
 LOGGER = logging.getLogger(__name__)
 LOGGER_PIP = logging.getLogger("inmanta.pip")  # Use this logger to log pip commands or data related to pip commands.
@@ -63,26 +62,10 @@ class PipInstallError(Exception):
     pass
 
 
-# Core metadata spec for `Name`
-_validate_regex = re.compile(r"^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$", re.IGNORECASE)
-_canonicalize_regex = re.compile(r"[-_.]+")
-_normalized_regex = re.compile(r"^([a-z0-9]|[a-z0-9]([a-z0-9-](?!--))*[a-z0-9])$")
-# PEP 427: The build number must start with a digit.
-_build_tag_regex = re.compile(r"(\d+)(.*)")
-
-
-def canonicalize_name(name: str, *, validate: bool = False) -> NormalizedName:
-    if validate and not _validate_regex.match(name):
-        raise InvalidName(f"name is invalid: {name!r}")
-    # This is taken from PEP 503.
-    value = _canonicalize_regex.sub("-", name)
-    return cast(NormalizedName, value)
-
-
 class SafeRequirement(Requirement):
     def __init__(self, requirement_string: str) -> None:
         super().__init__(requirement_string=requirement_string)
-        self.name = canonicalize_name(self.name)
+        self.name = utils.canonicalize_name(self.name)
 
 
 @dataclass(eq=True, frozen=True)
@@ -224,7 +207,7 @@ class PythonWorkingSet:
                 if r in seen_requirements:
                     continue
                 # Requirements created by the `Distribution.requires()` method have the extra, the SafeRequirement was created
-                # from, TODO h update this comment
+                # from,
                 # set as a marker. The line below makes sure that the "extra" marker matches. The marker is not set by
                 # `Distribution.requires()` when the package is installed in editable mode, but setting it always doesn't make
                 # the marker evaluation fail.
@@ -232,8 +215,10 @@ class PythonWorkingSet:
                 if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
                     # The marker of the requirement doesn't apply on this environment
                     continue
-                if r.name.lower() not in installed_packages or (
-                    len(r.specifier) > 0 and str(installed_packages[r.name.lower()]) not in r.specifier
+                if (
+                    r.name.lower() not in installed_packages
+                    or (len(r.specifier) > 0 and str(installed_packages[r.name.lower()]) not in r.specifier)
+                    # If no specifiers are provided, the `in` operation will return `False`
                 ):
                     return False
                 if r.extras:
@@ -261,12 +246,12 @@ class PythonWorkingSet:
     @classmethod
     def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> dict[str, version.Version]:
         """
-        Return all packages present in `importlib.metadata.distributions()` together with the version of the package.
+        Return all packages present in `pkg_resources.working_set` together with the version of the package.
 
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
         return {
-            canonicalize_name(dist_info.key): version.Version(dist_info.version)
+            utils.canonicalize_name(dist_info.key): version.Version(dist_info.version)
             for dist_info in pkg_resources.working_set
             if not inmanta_modules_only or dist_info.key.startswith(const.MODULE_PKG_NAME_PREFIX)
         }
@@ -1068,15 +1053,12 @@ class ActiveEnv(PythonEnvironment):
         for c in all_constraints:
             requirement = c.requirement
             if (
-                requirement.name.lower() not in installed_versions
-                or (
-                    len(requirement.specifier) > 0
-                    and str(installed_versions[requirement.name.lower()]) not in requirement.specifier
-                )
+                requirement.name not in installed_versions
+                or (len(requirement.specifier) > 0 and str(installed_versions[requirement.name]) not in requirement.specifier)
             ) and (not requirement.marker or (requirement.marker and requirement.marker.evaluate())):
                 version_conflict = VersionConflict(
                     requirement=requirement,
-                    installed_version=installed_versions.get(requirement.name.lower(), None),  # TODO h do something
+                    installed_version=installed_versions.get(requirement.name, None),
                     owner=c.owner,
                 )
                 if c.is_owned_by(full_strict_scope):
@@ -1268,6 +1250,7 @@ class VirtualEnv(ActiveEnv):
         self._activate_that()
         mock_process_env(python_path=self.python_path)
 
+        # patch up pkg
         self.notify_change()
 
         self._using_venv = True
