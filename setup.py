@@ -14,7 +14,6 @@ requires = [
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.17",
     "email-validator>=1,<3",
-    "execnet>=1,<2",
     "jinja2~=3.0",
     "logfire~=0.46",
     "more-itertools>=8,<11",
@@ -48,7 +47,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "13.1.0"
+version = "14.0.0"
 
 setup(
     version=version,

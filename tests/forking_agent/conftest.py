@@ -32,7 +32,7 @@ import inmanta.loader
 import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
-from inmanta.agent.forking_executor import MPManager, MPPool
+from inmanta.agent.forking_executor import MPManager
 from packaging import version
 
 

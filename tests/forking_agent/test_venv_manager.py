@@ -16,6 +16,7 @@ import asyncio
 import concurrent.futures
 import json
 import subprocess
+import sys
 
 import pytest
 
@@ -36,8 +37,8 @@ async def test_blueprint_hash_consistency(tmpdir):
     requirements1 = ("pkg1", "pkg2")
     requirements2 = ("pkg2", "pkg1")
 
-    blueprint1 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements1)
-    blueprint2 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements2)
+    blueprint1 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements1, python_version=sys.version_info[:2])
+    blueprint2 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements2, python_version=sys.version_info[:2])
 
     hash1 = blueprint1.blueprint_hash()
     hash2 = blueprint2.blueprint_hash()
@@ -68,22 +69,25 @@ def test_hash_consistency_across_sessions():
 
     # Python code to execute in subprocess
     python_code = f"""
-import json
-from inmanta.agent.executor import EnvBlueprint, PipConfig
+    import json
+    import sys
+    from inmanta.agent.executor import EnvBlueprint, PipConfig
 
-config_str = '''{config_str}'''
-config = json.loads(config_str)
+    config_str = '''{config_str}'''
+    config = json.loads(config_str)
 
-pip_config = PipConfig(**config["pip_config"])
-blueprint = EnvBlueprint(pip_config=pip_config, requirements=config["requirements"])
+    pip_config = PipConfig(**config["pip_config"])
+    blueprint = EnvBlueprint(pip_config=pip_config, requirements=config["requirements"], python_version=sys.version_info[:2])
 
-# Generate and print the hash
-print(blueprint.blueprint_hash())
-"""
+    # Generate and print the hash
+    print(blueprint.blueprint_hash())
+    """
 
     # Generate hash in the current session for comparison
     pip_config = PipConfig(**pip_config_dict)
-    current_session_blueprint = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements)
+    current_session_blueprint = executor.EnvBlueprint(
+        pip_config=pip_config, requirements=requirements, python_version=sys.version_info[:2]
+    )
     current_hash = current_session_blueprint.blueprint_hash()
 
     # Generate hash in a new interpreter session

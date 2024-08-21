@@ -19,7 +19,7 @@ import hashlib
 import logging
 import os
 import pathlib
-from asyncio import timeout
+import sys
 
 from inmanta import const
 from inmanta.agent import executor, forking_executor
@@ -78,11 +78,21 @@ assert inmanta_plugins.sub.a == 1""",
     sources2 = [module_source1, module_source2]
 
     # Define blueprints for executors and environments
-    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
-    env_blueprint1 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements1)
-    blueprint2 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources2)
-    blueprint3 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
-    env_blueprint2 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements2)
+    blueprint1 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements1, sources=sources1, python_version=sys.version_info[:2]
+    )
+    env_blueprint1 = executor.EnvBlueprint(
+        pip_config=pip_config, requirements=requirements1, python_version=sys.version_info[:2]
+    )
+    blueprint2 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements1, sources=sources2, python_version=sys.version_info[:2]
+    )
+    blueprint3 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements2, sources=sources2, python_version=sys.version_info[:2]
+    )
+    env_blueprint2 = executor.EnvBlueprint(
+        pip_config=pip_config, requirements=requirements2, python_version=sys.version_info[:2]
+    )
 
     executor_manager = mpmanager_light
     venv_manager = mpmanager_light.process_pool.environment_manager
@@ -159,7 +169,9 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     sources = ()
 
     # Create a blueprint with no requirements and no sources
-    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements, sources=sources)
+    blueprint1 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements, sources=sources, python_version=sys.version_info[:2]
+    )
     env_bp_hash1 = blueprint1.to_env_blueprint().blueprint_hash()
 
     with caplog.at_level(logging.DEBUG):
@@ -230,9 +242,15 @@ def test():
     sources1 = ()
     sources2 = (module_source1,)
 
-    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
-    blueprint2 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources2)
-    blueprint3 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
+    blueprint1 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements1, sources=sources1, python_version=sys.version_info[:2]
+    )
+    blueprint2 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements1, sources=sources2, python_version=sys.version_info[:2]
+    )
+    blueprint3 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements2, sources=sources2, python_version=sys.version_info[:2]
+    )
 
     executor_manager = mpmanager_light
     executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.wait_for(
@@ -262,6 +280,7 @@ async def test_executor_creation_and_venv_usage(
     mpmanager_light.process_pool.venv_checkup_interval = 0.1
     requirements1 = ()
     requirements2 = ("pkg1",)
+    requirements3 = ("pkg2",)
     pip_config = PipConfig(index_url=pip_index.url)
 
     # Prepare a source module and its hash
@@ -280,14 +299,28 @@ def test():
     )
     sources1 = ()
     sources2 = (module_source1,)
+    sources3 = (module_source1,)
 
-    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
-    blueprint2 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
+    initial_version: tuple[int, int] = (3, 11)
+
+    blueprint1 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements1, sources=sources1, python_version=initial_version
+    )
+    blueprint2 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements2, sources=sources2, python_version=initial_version
+    )
+    blueprint3 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements3, sources=sources3, python_version=initial_version
+    )
+    blueprint3_updated = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements3, sources=sources3, python_version=initial_version
+    )
 
     executor_manager = mpmanager_light
-    executor_1, executor_2 = await asyncio.gather(
+    executor_1, executor_2, executor_3 = await asyncio.gather(
         executor_manager.get_executor("agent1", "local:", code_for(blueprint1)),
         executor_manager.get_executor("agent2", "local:", code_for(blueprint2)),
+        executor_manager.get_executor("agent3", "local:", code_for(blueprint3)),
     )
 
     executor_1_venv_status_file = (
@@ -295,6 +328,9 @@ def test():
     )
     executor_2_venv_status_file = (
         pathlib.Path(executor_2.process.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+    )
+    executor_3_venv_status_file = (
+        pathlib.Path(executor_3.process.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
     )
 
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
@@ -333,15 +369,15 @@ def test():
     )
     environment_manager = mpmanager_light.process_pool.environment_manager
     venv_dir = pathlib.Path(environment_manager.envs_dir)
-    assert len([e for e in venv_dir.iterdir()]) == 2, "We should have two Virtual Environments for our 2 executors!"
+    assert len([e for e in venv_dir.iterdir()]) == 3, "We should have two Virtual Environments for our 2 executors!"
     # We remove the old VirtualEnvironment
     logger.debug("Calling cleanup_virtual_environments")
     await environment_manager.cleanup_inactive_pool_members()
     logger.debug("cleanup_virtual_environments ended")
 
     venvs = [str(e) for e in venv_dir.iterdir()]
-    assert len(venvs) == 1, "Only one Virtual Environment should exist!"
-    assert [executor_2.process.executor_virtual_env.env_path] == venvs
+    assert len(venvs) == 2, "Only two Virtual Environment should exist!"
+    assert [executor_2.process.executor_virtual_env.env_path, executor_3.process.executor_virtual_env.env_path] == venvs
 
     # Let's stop the other agent and pretend that the venv is broken
     await executor_manager.stop_for_agent("agent2")
@@ -350,4 +386,23 @@ def test():
 
     await environment_manager.cleanup_inactive_pool_members()
     venvs = [str(e) for e in venv_dir.iterdir()]
-    assert len(venvs) == 0, "No Virtual Environment should exist!"
+    assert len(venvs) == 1, "Only one Virtual Environment should exist!"
+
+    # Let's stop the other agent and pretend that the venv is outdated
+    await executor_manager.stop_for_agent("agent3")
+    await retry_limited(wait_for_agent_stop_running, executor=executor_3, timeout=10)
+    # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
+    # modification override of the inmanta file and the retrieval of the last modification of the file
+    os.utime(
+        executor_3_venv_status_file,
+        (datetime.datetime.now().timestamp(), old_datetime.timestamp()),
+    )
+    # A new version would run
+    blueprint3_updated.python_version = (3, 12)
+    await executor_manager.get_executor("agent3", "local:", code_for(blueprint3_updated))
+    venvs = [str(e) for e in venv_dir.iterdir()]
+    assert len(venvs) == 2, "Only two Virtual Environment should exist!"
+
+    await mpmanager_light.process_pool.environment_manager.cleanup_inactive_pool_members()
+    venvs = [str(e) for e in venv_dir.iterdir()]
+    assert len(venvs) == 1, "Only one Environment should exist!"

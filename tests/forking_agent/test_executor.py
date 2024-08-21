@@ -19,6 +19,7 @@
 import asyncio
 import base64
 import logging
+import sys
 
 import psutil
 import pytest
@@ -122,7 +123,9 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
     # Simple empty venv
-    simplest_blueprint = executor.ExecutorBlueprint(pip_config=inmanta.data.PipConfig(), requirements=[], sources=[])  # No pip
+    simplest_blueprint = executor.ExecutorBlueprint(
+        pip_config=inmanta.data.PipConfig(), requirements=[], sources=[], python_version=sys.version_info[:2]
+    )  # No pip
     simplest = await manager.get_executor("agent1", "test", [executor.ResourceInstallSpec("test::Test", 5, simplest_blueprint)])
 
     # check communications
@@ -160,11 +163,17 @@ def test():
     # Create this one first to make sure this is the one being stopped
     # when the cap is reached
     dummy = executor.ExecutorBlueprint(
-        pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct]
+        pip_config=inmanta.data.PipConfig(use_system_config=True),
+        requirements=["lorem"],
+        sources=[direct],
+        python_version=sys.version_info[:2],
     )
     # Full config: 2 source files, one python dependency
     full = executor.ExecutorBlueprint(
-        pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct, via_server]
+        pip_config=inmanta.data.PipConfig(use_system_config=True),
+        requirements=["lorem"],
+        sources=[direct, via_server],
+        python_version=sys.version_info[:2],
     )
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
@@ -184,7 +193,10 @@ def test():
     # Request a third executor:
     # The executor cap is reached -> check that the oldest executor got correctly stopped
     dummy = executor.ExecutorBlueprint(
-        pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[via_server]
+        pip_config=inmanta.data.PipConfig(use_system_config=True),
+        requirements=["lorem"],
+        sources=[via_server],
+        python_version=sys.version_info[:2],
     )
 
     async def oldest_gone():
@@ -243,7 +255,10 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     manager = mpmanager
 
     blueprint = executor.ExecutorBlueprint(
-        pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=[], sources=[]
+        pip_config=inmanta.data.PipConfig(use_system_config=True),
+        requirements=[],
+        sources=[],
+        python_version=sys.version_info[:2],
     )
     child1 = await manager.get(executor.ExecutorId("test", "Test", blueprint))
 
@@ -269,7 +284,14 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
 def test_hash_with_duplicates():
     source = inmanta.loader.ModuleSource("test", "aaaaa", False, None, None)
     requirement = "setuptools"
-    simple = ExecutorBlueprint(pip_config=PipConfig(), requirements=[requirement], sources=[source])
-    duplicated = ExecutorBlueprint(pip_config=PipConfig(), requirements=[requirement, requirement], sources=[source, source])
+    simple = ExecutorBlueprint(
+        pip_config=PipConfig(), requirements=[requirement], sources=[source], python_version=sys.version_info[:2]
+    )
+    duplicated = ExecutorBlueprint(
+        pip_config=PipConfig(),
+        requirements=[requirement, requirement],
+        sources=[source, source],
+        python_version=sys.version_info[:2],
+    )
     assert duplicated == simple
     assert duplicated.blueprint_hash() == simple.blueprint_hash()
