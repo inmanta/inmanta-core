@@ -1062,9 +1062,6 @@ class MPManager(
         :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv.
-        :param venv_checkup_interval: The time interval after which the virtual environment must be touched. Only used for
-            testing. The default value is set to 60.0. It should not be used except for testing purposes. It can be
-            It can be overridden to speed up the tests
         :return: An Executor instance
         """
         blueprint = executor.ExecutorBlueprint.from_specs(code)
