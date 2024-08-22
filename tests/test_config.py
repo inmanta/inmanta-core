@@ -22,7 +22,6 @@ import random
 import socket
 
 import psutil
-import pytest
 from tornado import netutil
 
 import inmanta.agent.config as cfg
