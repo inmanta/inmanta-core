@@ -66,7 +66,8 @@ class ResourceStatus(StrEnum):
         reported a diff since. Is not affected by later deploy failures, i.e. the last known operational status is assumed to
         hold until observed otherwise.
     HAS_UPDATE: Resource's operational state does not match latest desired state, as far as we know. Either the resource
-        has never been deployed, or was deployed for a different desired state or a compliance check revealed a diff.
+        has never been (successfully) deployed, or was deployed for a different desired state or a compliance check revealed a
+        diff.
     """
     UP_TO_DATE = enum.auto()
     HAS_UPDATE = enum.auto()
@@ -301,7 +302,7 @@ class BlockedDeploy:
     # TODO: docstring: deploy blocked on requires -> blocked_on is subset of requires or None when not yet calculated
     #   + mention that only deploys (never other tasks) are ever blocked
     task: PrioritizedTask[Deploy]
-    blocked_on: Optional[Set[ResourceIdStr]] = None
+    blocked_on: set[ResourceIdStr]
 
 
 @dataclass
@@ -314,10 +315,197 @@ class ScheduledWork:
     # TODO: mention that this class will never modify state. Or alternatively, pass Scheduler instead and add methods on it to
     #       inspect required state (requires-provides + update_pending?)
     model_state: ModelState
+    # set of resources for which the blocked_on field was updated without checking whether it has become blocked / unblocked
+    # TODO: invariant: transient field that's always empty during normal operation, only non-empty during the update process
+    # TODO: not required here anymore?
+    _dirty_requires: set[ResourceIdStr] = dataclasses.field(default_factory=dict)
 
     # TODO: task runner for the agent queues + when done:
     #   - update model state
     #   - follow provides edge to notify waiting tasks and move them to agent_queues
+
+    # TODO: remove
+    def is_scheduled(self, task: Task) -> bool:
+        """
+        Returns true iff a task is currently scheduled for this resource. This includes a task that is already running, provided
+        that we know it to be idempotent, e.g. an active deploy task when its attributes are up to date with the current state.
+        """
+        return (
+            task.resource in self.waiting
+            or task in self.agent_queues
+            # TODO: check if
+            #   - DEPLOY currently running and attr hash equals self.model_state.resources[resource].attribute_hash
+            or False
+        )
+
+    # TODO: remove
+    def schedule(self, task: Task) -> None:
+        # TODO: docstring. Make sure to mention that it must be executed under lock and that requires must be refreshed before
+        #       releasing lock? Only if effectively scheduled => return bool?
+        if self.is_scheduled(resource):
+            return
+        self.waiting[resource] = BlockedDeploy(
+            # TODO: priority
+            task=PrioritizedTask(task=task, priority=0),
+            blocked_on=None,
+        )
+        for dependant in self.model_state.requires.provides()[task.resource]:
+            self.waiting[
+
+    # TODO: docstring + name
+    def update_state(
+        self,
+        *,
+        ensure_scheduled: Set[ResourceIdStr],
+        new_requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
+        dropped_requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
+    ) -> None:
+        # set of resources for which the blocked_on field was updated without checking whether it has become unblocked
+        maybe_runnable: set[ResourceIdStr] = dataclasses.field(default_factory=dict)
+
+        # lookup caches for visited nodes
+        queued: dict[ResourceIdStr, Deploy] = {}
+        not_scheduled: set[ResourceIdStr] = set()
+
+        # First drop all dropped requires so that we work on the smallest possible set for this operation.
+        for resource, dropped in dropped_requires.items():
+            if not dropped:
+                # empty set, nothing to do
+                continue
+            if resource not in self.waiting:
+                # this resource is not currently waiting for anything => nothing to do
+                continue
+            self.waiting[resource].blocked_on.difference_update(dropped)
+            maybe_runnable.add(resource)
+
+        def is_scheduled(resource: ResourceIdStr) -> bool:
+            """
+            Returns whether the resource is currently scheduled, caching the results.
+            """
+            # start with cheap checks: check waiting and cached sets
+            if resource in self.waiting or resource in queued:
+                # definitely scheduled
+                return True
+            if resource in not_scheduled:
+                # definitely not scheduled
+                return False
+            # finally, check more expensive agent queue
+            # TODO: parse agent
+            task: Deploy = Deploy(agent="test", resource=resource)
+            # TODO: check if
+            #   - DEPLOY currently running and attr hash equals self.model_state.resources[resource].attribute_hash
+            if task in self.agent_queues or False:
+                # populate cache
+                queued[resource] = task
+                return True
+            # populate cache
+            not_scheduled.add(resource)
+            return False
+
+        # TODO: rename new_requires -> added_requires for ambiguity reasons
+        def extend_requires(resource: ResourceIdStr, new_requires: set[ResourceIdStr]) -> None:
+            # TODO: docstring: new_requires should only contain scheduled subset of requires relation
+            #   + takes ownership of set
+            if not new_requires:
+                # empty set, nothing to do
+                return
+            if not is_scheduled(resource):
+                # resource is not scheduled => nothing to do
+                return
+            if resource in queued:
+                # we're adding a dependency so it's definitely not ready to execute anymore
+                # move from agent queue to waiting
+                task: Deploy = queued[resource]
+                del self.queued[resource]
+                # discard rather than remove because task may already be running, in which case we leave it run its course
+                # and simply add a new one
+                priority: Optional[int] = self.agent_queues.discard(task)
+                self.waiting[resource] = BlockedDeploy(
+                    # TODO: default priority
+                    task=PrioritizedTask(task=task, priority=priority if priority is not None else 0),
+                    # task was previously ready to execute => assume no other blockers than this one
+                    blocked_on=new_requires,
+                )
+            else:
+                self.waiting[resource].blocked_on.extend(new_requires)
+                maybe_runnable.discard(resource)
+
+        for resource in ensure_scheduled:
+            if is_scheduled(resource)
+                continue
+            # task is not yet scheduled, schedule it now
+            blocked_on: set[ResourceIdStr] = {
+                dependency
+                for dependency in self.model_state.requires.get(resource, ())
+                if is_scheduled(dependency)
+            }
+            self.waiting[resource] = BlockedDeploy(
+                # TODO: priority
+                task=PrioritizedTask(task=task, priority=0),
+                blocked_on=blocked_on,
+            )
+            not_scheduled.discard(resource)
+            if not blocked_on:
+                # not currently blocked on anything but new dependencies may still be scheduled => mark for later check
+                maybe_runnable.add(resource)
+
+            # inform along provides relation that this task has been scheduled, deferring already scheduled provides
+            for dependant in self.model_state.requires.provides().get(resource, ()):
+                extend_requires(dependant, {resource})
+
+        for resource, new in new_requires.items():
+            extend_requires(resource, {r for r in new if is_scheduled(r)})
+
+        for resource in maybe_runnable:
+            blocked: BlockedDeploy = waiting[resource]
+            if blocked.blocked_on:
+                # actually waiting for something, nothing to do
+                continue
+            # ready to execute, move to agent queue
+            agent_queues.queue_put_nowait(blocked.task)
+            del self.waiting[resource]
+            # no more need to update cache entries
+
+
+
+    # TODO: remove
+    # TODO: name + docstring + make sure to mention that in_scope must all be scheduled
+    def _requires_subtree(self, in_scope: Set[ResourceIdStr]) -> tuple[dict[ResourceIdStr, set[ResourceIdStr]], set[ResourceIdStr]]:
+        full_requires: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.mode_state.requires
+        requires_subtree: dict[ResourceIdStr, set[ResourceIdStr]] = {}
+
+        # lookup caches for visited nodes
+        scheduled: set[ResourceIdStr] = set(in_scope)
+        not_scheduled: set[ResourceIdStr] = set()
+
+        for resource in in_scope:
+            requires: set[ResourceIdStr] = set()
+            for dependency in full_requires[resource]:
+                if dependency in known_not_scheduled:
+                    continue
+                # TODO: parse agent
+                if dependency in scheduled:
+                    requires.add(resource)
+                elif self.is_scheduled(Deploy(agent="test", resource=resource)):
+                    scheduled.add(resource)
+                    requires.add(resource)
+                else:
+                    known_not_scheduled.add(resource)
+            # TODO: add empty set to dict vs add nothing?
+            requires_subtree[resource] = requires
+
+
+    # TODO: remove
+    def refresh_requires(self) -> None:
+        # TODO: implement reset logic
+        # TODO: refine docstring
+        """
+        Refreshes requires information for all tasks for which it has been reset.
+        """
+        # start by building up full subtree
+        for resource in self._dirty_requires:
+            known_
+        self._dirty_requires = set()
 
     def delete_resource(self, resource: ResourceIdStr) -> None:
         """
@@ -343,6 +531,7 @@ class ScheduledWork:
             if delete:
                 self.agent_queues.discard(task)
 
+    # TODO: remove
     # TODO: name
     # TODO: added and dropped may become optional for other use cases
     def reset_requires(self, resource: ResourceIdStr, *, added: Set[ResourceIdStr], dropped: Set[ResourceIdStr]) -> None:
@@ -429,6 +618,17 @@ class Scheduler:
         # TODO (ticket): read from DB instead
         pass
 
+    # TODO: DROP THE IDEA OF LAZY REQUIRES RECALCULATION -> SIMPLY COLLECT INVALID AND RECALCULATE AT END.
+    #       INVESTIGATE AND DOCUMENT RESULTING INVARIANTS DURING UPDATE
+
+    async def deploy(self) -> None:
+        async with self._scheduler_lock:
+            # TODO: more efficient access to dirty set by caching it on the ModelState
+            dirty: Set[ResourceIdStr] = {
+                r for r, details in self._state.resource_state if details.status == ResourceStatus.HAS_UPDATE
+            }
+            self._work.update_state(ensure_scheduled=dirty)
+
     # TODO: name
     # TODO (ticket): design step 2: read new state from DB instead of accepting as parameter (method should be notification only, i.e. 0 parameters)
     async def new_version(
@@ -450,9 +650,8 @@ class Scheduler:
             # TODO: make sure this part (before scheduler lock is acquired) doesn't block queue until lock is acquired: either
             # run on thread or make sure to regularly pass control to IO loop (preferred)
             new_desired_state: list[ResourceIdStr] = []
-            RequiresAdded: typing.TypeAlias = Set[ResourceIdStr]
-            RequiresDropped: typing.TypeAlias = Set[ResourceIdStr]
-            changed_requires: list[tuple[ResourceIdStr, RequiresAdded, RequiresDropped]] = []
+            added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
+            dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             for resource, details in resources.items():
                 if resource not in self._state.resources or details.attribute_hash != self._state.resources[resource].attribute_hash:
                     self._state.update_pending.add(resource)
@@ -461,22 +660,31 @@ class Scheduler:
                 new_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 added: Set[ResourceIdStr] = new_requires - old_requires
                 dropped: Set[ResourceIdStr] = old_requires - new_requires
-                if added or dropped:
+                if added:
                     self._state.update_pending.add(resource)
-                    changed_requires.append(resource, added, dropped)
+                    added_requires[resource] = added
+                if dropped:
+                    self._state.update_pending.add(resource)
+                    dropped_requires[resource] = dropped
 
-            #
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in new_desired_state:
                     self._state.update_desired_state(resource, resources[resource])
-                for resource, added, dropped in changed_requires:
+                for resource in added_requires.keys().union(dropped_requires.keys()):
                     self._state.update_requires(resource, requires[resource])
-                    self._work.reset_requires(resource, added=added, dropped=dropped)
-
-                # TODO: design step 6: release scheduler lock
+                self._work.update_state(
+                    # ensure deploy for ALL dirty resources, not just the new ones
+                    # TODO: this is copy-pasted, make into a method?
+                    dirty: Set[ResourceIdStr] = {
+                        r for r, details in self._state.resource_state if details.status == ResourceStatus.HAS_UPDATE
+                    }
+                    self._work.update_state(
+                        ensure_scheduled=dirty,
+                        new_requires=added_requires,
+                        dropped_requires=dropped_requires,
+                    )
                 # TODO: design step 7: drop update_pending
-            # TODO: design step 9: call into normal deploy flow's part after the lock (step 4)
             # TODO: design step 10: Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added again by a deploy trigger
 
 
