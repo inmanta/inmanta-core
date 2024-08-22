@@ -68,19 +68,18 @@ def test_hash_consistency_across_sessions():
     config_str = json.dumps({"pip_config": pip_config_dict, "requirements": requirements})
 
     # Python code to execute in subprocess
-    python_code = f"""
-    import json
-    import sys
-    from inmanta.agent.executor import EnvBlueprint, PipConfig
+    python_code = f"""import json
+import sys
+from inmanta.agent.executor import EnvBlueprint, PipConfig
 
-    config_str = '''{config_str}'''
-    config = json.loads(config_str)
+config_str = '''{config_str}'''
+config = json.loads(config_str)
 
-    pip_config = PipConfig(**config["pip_config"])
-    blueprint = EnvBlueprint(pip_config=pip_config, requirements=config["requirements"], python_version=sys.version_info[:2])
+pip_config = PipConfig(**config["pip_config"])
+blueprint = EnvBlueprint(pip_config=pip_config, requirements=config["requirements"], python_version=sys.version_info[:2])
 
-    # Generate and print the hash
-    print(blueprint.blueprint_hash())
+# Generate and print the hash
+print(blueprint.blueprint_hash())
     """
 
     # Generate hash in the current session for comparison
