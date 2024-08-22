@@ -85,6 +85,7 @@ class RequirementsTxtParser:
         if not os.path.exists(filename):
             raise Exception(f"File {filename} doesn't exist")
 
+        removed_dependency = SafeRequirement(requirement_string=remove_dep_on_pkg)
         result = ""
         line_continuation_buffer = ""
         with open(filename, encoding="utf-8") as fd:
@@ -92,14 +93,14 @@ class RequirementsTxtParser:
                 if line_continuation_buffer:
                     line_continuation_buffer += line
                     if not line.endswith("\\"):
-                        if SafeRequirement(requirement_string=line_continuation_buffer.split("#")[0]).name != remove_dep_on_pkg:
+                        if SafeRequirement(requirement_string=line_continuation_buffer).name != removed_dependency.name:
                             result += line_continuation_buffer
                         line_continuation_buffer = ""
                 elif not line.strip() or line.strip().startswith("#"):
                     result += line
                 elif line.endswith("\\"):
                     line_continuation_buffer = line
-                elif SafeRequirement(requirement_string=line.split("#")[0]).name != remove_dep_on_pkg:  # .lower()
+                elif SafeRequirement(requirement_string=line).name != removed_dependency.name:
                     result += line
                 else:
                     # Dependency matches `remove_dep_on_pkg` => Remove line from result

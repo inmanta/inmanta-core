@@ -151,7 +151,6 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     subprocess.check_output([os.path.join(venv.env_path, "bin/pip"), "list"])
 
 
-# TODO h FROM Requirement.parse( TO Requirement(requirement_string=
 def test_gen_req_file():
     """
     These are all examples used in older testcases that did not work correctly before

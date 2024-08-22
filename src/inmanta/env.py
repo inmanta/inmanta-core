@@ -37,7 +37,7 @@ from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import NamedTuple, Optional, TypeVar, cast
+from typing import NamedTuple, Optional, TypeVar
 
 from inmanta import const
 from inmanta.ast import CompilerException
@@ -45,9 +45,8 @@ from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from inmanta.util import strtobool
-from packaging import version
+from packaging import utils, version
 from packaging.requirements import Requirement
-from packaging.utils import InvalidName, NormalizedName
 
 LOGGER = logging.getLogger(__name__)
 LOGGER_PIP = logging.getLogger("inmanta.pip")  # Use this logger to log pip commands or data related to pip commands.
@@ -61,26 +60,12 @@ class PipInstallError(Exception):
     pass
 
 
-# Core metadata spec for `Name`
-_validate_regex = re.compile(r"^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$", re.IGNORECASE)
-_canonicalize_regex = re.compile(r"[-_.]+")
-_normalized_regex = re.compile(r"^([a-z0-9]|[a-z0-9]([a-z0-9-](?!--))*[a-z0-9])$")
-# PEP 427: The build number must start with a digit.
-_build_tag_regex = re.compile(r"(\d+)(.*)")
-
-
-def canonicalize_name(name: str, *, validate: bool = False) -> NormalizedName:
-    if validate and not _validate_regex.match(name):
-        raise InvalidName(f"name is invalid: {name!r}")
-    # This is taken from PEP 503.
-    value = _canonicalize_regex.sub("-", name)
-    return cast(NormalizedName, value)
-
-
 class SafeRequirement(Requirement):
     def __init__(self, requirement_string: str) -> None:
-        super().__init__(requirement_string=requirement_string)
-        self.name = canonicalize_name(self.name)
+        # Packaging Requirement is not able to parse requirements with comment. Therefore, we need to remove the `comment` part
+        drop_comment = requirement_string.split("#")[0]
+        super().__init__(requirement_string=drop_comment)
+        self.name = utils.canonicalize_name(self.name)
 
 
 @dataclass(eq=True, frozen=True)
@@ -230,8 +215,10 @@ class PythonWorkingSet:
                 if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
                     # The marker of the requirement doesn't apply on this environment
                     continue
-                if r.name.lower() not in installed_packages or (
-                    len(r.specifier) > 0 and str(installed_packages[r.name.lower()]) not in r.specifier
+                if (
+                    r.name.lower() not in installed_packages
+                    or (len(r.specifier) > 0 and str(installed_packages[r.name.lower()]) not in r.specifier)
+                    # If no specifiers are provided, the `in` operation will return `False`
                 ):
                     return False
                 if r.extras:
@@ -264,7 +251,7 @@ class PythonWorkingSet:
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
         return {
-            canonicalize_name(dist_info.name).lower(): version.Version(dist_info.version)
+            SafeRequirement(requirement_string=dist_info.name).name: version.Version(dist_info.version)
             for dist_info in importlib.metadata.distributions()
             if not inmanta_modules_only or dist_info.name.startswith(const.MODULE_PKG_NAME_PREFIX)
         }
@@ -1028,7 +1015,9 @@ class ActiveEnv(PythonEnvironment):
 
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(SafeRequirement(requirement_string=requirement), canonicalize_name(dist_info.name))
+            OwnedRequirement(
+                SafeRequirement(requirement_string=requirement), SafeRequirement(requirement_string=dist_info.name).name
+            )
             for dist_info in importlib.metadata.distributions()
             for requirement in dist_info.requires or []
             if SafeRequirement(requirement).marker is None
@@ -1067,12 +1056,12 @@ class ActiveEnv(PythonEnvironment):
         for c in all_constraints:
             requirement = c.requirement
             if (
-                requirement.name.lower() not in installed_versions
-                or str(installed_versions[requirement.name.lower()]) not in requirement.specifier
+                requirement.name not in installed_versions
+                or (len(requirement.specifier) > 0 and str(installed_versions[requirement.name]) not in requirement.specifier)
             ) and (not requirement.marker or (requirement.marker and requirement.marker.evaluate())):
                 version_conflict = VersionConflict(
                     requirement=requirement,
-                    installed_version=installed_versions.get(requirement.name.lower(), None),  # TODO h do something
+                    installed_version=installed_versions.get(requirement.name, None),
                     owner=c.owner,
                 )
                 if c.is_owned_by(full_strict_scope):

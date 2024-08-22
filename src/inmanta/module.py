@@ -1177,7 +1177,7 @@ class RequirementsTxtFile:
         Returns True iff this requirements.txt file contains the given package name. The given `pkg_name` is matched
         case insensitive against the requirements in this RequirementsTxtFile.
         """
-        return any(r.name == pkg_name for r in self._requirements)  # .lower()
+        return any(r.name == pkg_name for r in self._requirements)
 
     def set_requirement_and_write(self, requirement: SafeRequirement) -> None:
         """
@@ -2679,10 +2679,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # filter on import stmt
         reqs = []
         for spec in self._metadata.requires:
-            if isinstance(spec, list):
-                req = [SafeRequirement(requirement_string=e) for e in spec]
-            else:
-                req = [SafeRequirement(requirement_string=spec)]
+            req = [SafeRequirement(requirement_string=spec)]
             if len(req) > 1:
                 print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
@@ -2819,10 +2816,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         reqs = []
         for spec in self.get_module_requirements():
-            if isinstance(spec, list):
-                req = [SafeRequirement(requirement_string=e) for e in spec]
-            else:
-                req = [SafeRequirement(requirement_string=spec)]
+            req = [SafeRequirement(requirement_string=spec)]
             if len(req) > 1:
                 print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
