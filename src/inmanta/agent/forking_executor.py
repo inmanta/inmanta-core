@@ -533,7 +533,7 @@ class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta
 def set_executor_status(name: str, status: str) -> None:
     """Update the process name to reflect the identity and status of the executor"""
     # Lives outside the ExecutorServer class, so we can set status early in the boot process
-    setproctitle(f"inmanta: executor {name} - {status}")
+    setproctitle(f"inmanta: executor process {name} - {status}")
 
 
 def mp_worker_entrypoint(
@@ -895,6 +895,9 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
     def render_id(self, member: executor.ExecutorBlueprint) -> str:
         return "Process for code hash: " + member.blueprint_hash()
 
+    def get_lock_name_for(self, member_id: executor.ExecutorBlueprint) -> str:
+        return member_id.blueprint_hash()
+
     @classmethod
     def init_once(cls) -> None:
         try:
@@ -958,7 +961,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
     ) -> MPProcess:
         """Async code to make a child process and share a socket with it"""
         loop = asyncio.get_running_loop()
-        name = executor_id.blueprint_hash()  # FIXME: improve naming https://github.com/inmanta/inmanta-core/issues/7692
+        name = executor_id.blueprint_hash()  # FIXME: improve naming https://github.com/inmanta/inmanta-core/issues/7999
 
         # Start child
         process, parent_conn = await loop.run_in_executor(
@@ -987,9 +990,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         child_conn.close()
 
         return p, parent_conn
-
-    def get_lock_name_for(self, member_id: executor.ExecutorBlueprint) -> str:
-        return member_id.blueprint_hash()
 
 
 class MPManager(
