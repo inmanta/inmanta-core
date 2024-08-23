@@ -16,13 +16,17 @@
     Contact: code@inmanta.com
 """
 
+import contextlib
 import logging
 import os
+from typing import Any, Callable, ContextManager, LiteralString, Mapping, ParamSpec, Sequence, TypeVar
 
-import inmanta.logfire
 import logfire
 import logfire.integrations
 import logfire.integrations.pydantic
+from logfire import LevelName, LogfireSpan
+from logfire._internal.main import NoopSpan
+from logfire.propagate import ContextCarrier
 from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
 
 LOGGER = logging.getLogger("inmanta")
@@ -44,7 +48,7 @@ def configure_logfire(service: str) -> None:
 
     if os.getenv("LOGFIRE_TOKEN", None):
         LOGGER.info("Setting up telemetry")
-        inmanta.logfire.enable()
+        enable()
 
         detailed_reporting = bool(os.environ.get("OTEL_DETAILED_REPORTING"))
 
@@ -58,3 +62,63 @@ def configure_logfire(service: str) -> None:
         )
     else:
         LOGGER.info("Not setting up telemetry")
+
+
+enabled = False
+no_span = NoopSpan()
+no_context = contextlib.nullcontext(None)
+
+
+def span(
+    msg_template: str,
+    /,
+    *,
+    _tags: Sequence[str] | None = None,
+    _span_name: str | None = None,
+    _level: LevelName | None = None,
+    **attributes: Any,
+) -> LogfireSpan:
+    if enabled:
+        return logfire.span(msg_template, _tags=_tags, _span_name=_span_name, _level=_level, **attributes)
+    else:
+        return no_span
+
+
+def attach_context(carrier: ContextCarrier) -> ContextManager[None]:
+    if enabled:
+        return logfire.propagate.attach_context(carrier)
+    else:
+        return no_context
+
+
+def get_context() -> Mapping[str, Any]:
+    if enabled:
+        return logfire.propagate.get_context()
+    else:
+        return {}
+
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def no_method(it: Callable[P, R]) -> Callable[P, R]:
+    return it
+
+
+def instrument(
+    msg_template: LiteralString | None = None,
+    *,
+    span_name: str | None = None,
+    extract_args: bool = True,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    if enabled:
+        return logfire.instrument(msg_template, span_name=span_name, extract_args=extract_args)
+    else:
+        return no_method
+
+
+def enable() -> None:
+    """Replace dummy instrumentation with the real deal"""
+    global enabled
+    enabled = True

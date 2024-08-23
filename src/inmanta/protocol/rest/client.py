@@ -26,7 +26,7 @@ import tornado.simple_httpclient
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
 from inmanta import config as inmanta_config
-from inmanta import logfire
+from inmanta import tracing
 from inmanta.protocol import common
 from inmanta.protocol.rest import RESTBase
 
@@ -119,8 +119,8 @@ class RESTClient(RESTBase):
         ca_certs = inmanta_config.Config.get(self.id, "ssl_ca_cert_file", None)
         LOGGER.debug("Calling server %s %s", properties.operation, url)
 
-        with logfire.span("rpc." + str(properties.function.__name__)):
-            headers.update(logfire.get_context())
+        with tracing.span("rpc." + str(properties.function.__name__)):
+            headers.update(tracing.get_context())
             try:
                 request = HTTPRequest(
                     url=url,

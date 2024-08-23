@@ -27,7 +27,7 @@ import pydantic
 import typing_inspect
 from tornado import escape
 
-from inmanta import const, logfire, util
+from inmanta import const, tracing, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol import auth, common, exceptions
 from inmanta.protocol.common import ReturnValue
@@ -630,7 +630,7 @@ class RESTBase(util.TaskHandler[None]):
                 arguments.auth_username if arguments.auth_username else "<>",
             )
 
-            with logfire.span("Calling method " + config.method_name, **arguments.call_args):
+            with tracing.span("Calling method " + config.method_name, **arguments.call_args):
                 result = await config.handler(**arguments.call_args)
 
             return await arguments.process_return(result)

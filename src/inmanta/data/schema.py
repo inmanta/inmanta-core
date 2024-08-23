@@ -26,7 +26,7 @@ from typing import Any, Callable, Optional
 from asyncpg import Connection, UndefinedTableError
 from asyncpg.protocol import Record
 
-from inmanta import logfire
+from inmanta import tracing
 
 # Name of core schema in the DB schema verions
 CORE_SCHEMA_NAME = "core"
@@ -86,7 +86,7 @@ class DBSchema:
         self.connection = connection
         self.logger = LOGGER.getChild(f"schema:{self.name}")
 
-    @logfire.instrument("ensure_db_schema")
+    @tracing.instrument("ensure_db_schema")
     async def ensure_db_schema(self) -> None:
         await self.ensure_self_update()
         await self._update_db_schema()

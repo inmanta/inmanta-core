@@ -31,7 +31,7 @@ from urllib import parse
 import pydantic
 
 from inmanta import config as inmanta_config
-from inmanta import const, logfire, types, util
+from inmanta import const, tracing, types, util
 from inmanta.protocol import common, exceptions
 from inmanta.util import TaskHandler
 
@@ -299,7 +299,7 @@ class SessionEndpoint(Endpoint, CallTarget):
 
         body.update(kwargs)
 
-        with logfire.attach_context(
+        with tracing.attach_context(
             {const.TRACEPARENT: method_call.headers[const.TRACEPARENT]} if const.TRACEPARENT in method_call.headers else {}
         ):
             response: common.Response = await transport._execute_call(config, body, method_call.headers)
