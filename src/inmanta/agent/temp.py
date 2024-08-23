@@ -315,42 +315,10 @@ class ScheduledWork:
     # TODO: mention that this class will never modify state. Or alternatively, pass Scheduler instead and add methods on it to
     #       inspect required state (requires-provides + update_pending?)
     model_state: ModelState
-    # set of resources for which the blocked_on field was updated without checking whether it has become blocked / unblocked
-    # TODO: invariant: transient field that's always empty during normal operation, only non-empty during the update process
-    # TODO: not required here anymore?
-    _dirty_requires: set[ResourceIdStr] = dataclasses.field(default_factory=dict)
 
     # TODO: task runner for the agent queues + when done:
     #   - update model state
     #   - follow provides edge to notify waiting tasks and move them to agent_queues
-
-    # TODO: remove
-    def is_scheduled(self, task: Task) -> bool:
-        """
-        Returns true iff a task is currently scheduled for this resource. This includes a task that is already running, provided
-        that we know it to be idempotent, e.g. an active deploy task when its attributes are up to date with the current state.
-        """
-        return (
-            task.resource in self.waiting
-            or task in self.agent_queues
-            # TODO: check if
-            #   - DEPLOY currently running and attr hash equals self.model_state.resources[resource].attribute_hash
-            or False
-        )
-
-    # TODO: remove
-    def schedule(self, task: Task) -> None:
-        # TODO: docstring. Make sure to mention that it must be executed under lock and that requires must be refreshed before
-        #       releasing lock? Only if effectively scheduled => return bool?
-        if self.is_scheduled(resource):
-            return
-        self.waiting[resource] = BlockedDeploy(
-            # TODO: priority
-            task=PrioritizedTask(task=task, priority=0),
-            blocked_on=None,
-        )
-        for dependant in self.model_state.requires.provides()[task.resource]:
-            self.waiting[
 
     # TODO: docstring + name
     def update_state(
@@ -466,47 +434,6 @@ class ScheduledWork:
             del self.waiting[resource]
             # no more need to update cache entries
 
-
-
-    # TODO: remove
-    # TODO: name + docstring + make sure to mention that in_scope must all be scheduled
-    def _requires_subtree(self, in_scope: Set[ResourceIdStr]) -> tuple[dict[ResourceIdStr, set[ResourceIdStr]], set[ResourceIdStr]]:
-        full_requires: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.mode_state.requires
-        requires_subtree: dict[ResourceIdStr, set[ResourceIdStr]] = {}
-
-        # lookup caches for visited nodes
-        scheduled: set[ResourceIdStr] = set(in_scope)
-        not_scheduled: set[ResourceIdStr] = set()
-
-        for resource in in_scope:
-            requires: set[ResourceIdStr] = set()
-            for dependency in full_requires[resource]:
-                if dependency in known_not_scheduled:
-                    continue
-                # TODO: parse agent
-                if dependency in scheduled:
-                    requires.add(resource)
-                elif self.is_scheduled(Deploy(agent="test", resource=resource)):
-                    scheduled.add(resource)
-                    requires.add(resource)
-                else:
-                    known_not_scheduled.add(resource)
-            # TODO: add empty set to dict vs add nothing?
-            requires_subtree[resource] = requires
-
-
-    # TODO: remove
-    def refresh_requires(self) -> None:
-        # TODO: implement reset logic
-        # TODO: refine docstring
-        """
-        Refreshes requires information for all tasks for which it has been reset.
-        """
-        # start by building up full subtree
-        for resource in self._dirty_requires:
-            known_
-        self._dirty_requires = set()
-
     def delete_resource(self, resource: ResourceIdStr) -> None:
         """
         Drop tasks for a given resource when it's deleted from the model. Does not affect dry-run tasks because they
@@ -530,63 +457,6 @@ class ScheduledWork:
                     typing.assert_never(_never)
             if delete:
                 self.agent_queues.discard(task)
-
-    # TODO: remove
-    # TODO: name
-    # TODO: added and dropped may become optional for other use cases
-    def reset_requires(self, resource: ResourceIdStr, *, added: Set[ResourceIdStr], dropped: Set[ResourceIdStr]) -> None:
-        # TODO: document that this must only be called when state's requires is up to date?
-        """
-        Resets metadata calculated from a resource's requires, i.e. when its requires changes.
-        """
-        # TODO: this implementation is very complex. Can it be simplified?
-        #       CONSIDER LESS LAZY CALCULATION UNLESS IT TURNS OUT TO BE REQUIRED
-        # requires is only relevant for deploy tasks => if one is queued already, recalculate its requires and move it back to
-        # waiting iff appropriate
-        # TODO: parse agent from resource id
-        deploy_task: Deploy = Deploy(agent="test", resource=resource)
-        # TODO: only move back iff recalculated blocked_on is non-empty + populate 'blocked_on' field
-        #       => requires us to access ModelState here!
-        if deploy_task in self.agent_queues:
-            priority: int = self.agent_queues.discard(deploy_task)
-            self.waiting[resource] = BlockedDeploy(task=PrioritizedTask(task=deploy_task, priority=priority))
-        elif resource in self.waiting:
-            blocked_deploy: BlockedDeploy = self.waiting[resource]
-            if dropped:
-                # dependency we're currently waiting for may have been dropped => check now whether we're still waiting for
-                # anything and respond appropriately
-                old_blocked_on: Set[ResourceIdStr]
-                to_add: Set[ResourceIdStr]
-                if blocked_deploy.blocked_on is None:
-                    # start fresh and consider all requires as "added"
-                    old_blocked_on = {}
-                    to_add = self.state.requires[resource]
-                else:
-                    old_blocked_on = blocked_deploy.blocked_on
-                    to_add = added
-
-                if old_blocked_on - dropped:
-                    # definitely still waiting for something => lazily recalculate when we're notified
-                    blocked_deploy.blocked_on = None
-                else:
-                    # Everything we were blocked on before has been dropped. Anything new we need to block on?
-                    for dependency in to_add:
-                        # TODO: consider currently running as well
-                        # TODO: parse agent from resource id
-                        if dependency in self.waiting or Deploy(agent="test", resource=dependency) in self.agent_queues:
-                            # definitely still waiting for something => lazily recalculate when we're notified
-                            blocked_deploy.blocked_on = None
-                            break
-                    else:
-                        # TODO: queue task because we're not waiting for anything anymore
-                        pass
-            else
-                # we have a strict superset of what we were waiting on before so we'll be notified of a dependency
-                # finishing at some point => recalculate lazily
-                blocked_deploy.blocked_on = None
-        else:
-            # TODO: nothing?
-            pass
 
 
 # TODO: name
@@ -617,9 +487,6 @@ class Scheduler:
     def start(self) -> None:
         # TODO (ticket): read from DB instead
         pass
-
-    # TODO: DROP THE IDEA OF LAZY REQUIRES RECALCULATION -> SIMPLY COLLECT INVALID AND RECALCULATE AT END.
-    #       INVESTIGATE AND DOCUMENT RESULTING INVARIANTS DURING UPDATE
 
     async def deploy(self) -> None:
         async with self._scheduler_lock:
