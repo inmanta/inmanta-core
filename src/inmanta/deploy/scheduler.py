@@ -16,8 +16,6 @@
     Contact: code@inmanta.com
 """
 
-# TODO: file name and location
-
 import abc
 import asyncio
 import dataclasses
