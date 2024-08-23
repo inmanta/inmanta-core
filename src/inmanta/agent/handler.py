@@ -31,8 +31,7 @@ from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overl
 from tornado import concurrent
 
 import inmanta
-import logfire
-from inmanta import const, data, protocol, resources
+from inmanta import const, data, logfire, protocol, resources
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, ResourceIdStr

@@ -33,10 +33,8 @@ from uuid import UUID
 import asyncpg.connection
 
 import inmanta.config
-import logfire
-import logfire.propagate
 from inmanta import config as global_config
-from inmanta import const, data
+from inmanta import const, data, logfire
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
 from inmanta.const import UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
@@ -1303,7 +1301,7 @@ ssl=True
                 errhandle = open(errfile, "wb+")
 
             env = os.environ.copy()
-            env.update(logfire.propagate.get_context())
+            env.update(logfire.get_context())
             return await asyncio.create_subprocess_exec(
                 sys.executable, *full_args, cwd=cwd, env=env, stdout=outhandle, stderr=errhandle
             )

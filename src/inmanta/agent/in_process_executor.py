@@ -28,8 +28,7 @@ import pkg_resources
 import inmanta.agent.cache
 import inmanta.protocol
 import inmanta.util
-import logfire
-from inmanta import const, data, env
+from inmanta import const, data, env, logfire
 from inmanta.agent import executor, handler
 from inmanta.agent.executor import FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource

@@ -29,8 +29,7 @@ import asyncpg.exceptions
 import pydantic
 
 import inmanta.util
-import logfire
-from inmanta import const, data
+from inmanta import const, data, logfire
 from inmanta.const import ResourceState
 from inmanta.data import (
     APILIMIT,

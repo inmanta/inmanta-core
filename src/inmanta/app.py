@@ -54,9 +54,7 @@ from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
 
 import inmanta.compiler as compiler
-import logfire
-import logfire.propagate
-from inmanta import const, module, moduletool, protocol, tracing, util
+from inmanta import const, logfire, module, moduletool, protocol, tracing, util
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -894,9 +892,7 @@ def app() -> None:
                 print(helpmsg)
 
     # if a traceparent is provided, restore the context
-    with logfire.propagate.attach_context(
-        {const.TRACEPARENT: os.environ[const.TRACEPARENT]} if const.TRACEPARENT in os.environ else {}
-    ):
+    with logfire.attach_context({const.TRACEPARENT: os.environ[const.TRACEPARENT]} if const.TRACEPARENT in os.environ else {}):
         try:
             options.func(options)
         except ShowUsageException as e:

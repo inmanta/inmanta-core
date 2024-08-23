@@ -19,6 +19,7 @@
 import logging
 import os
 
+import inmanta.logfire
 import logfire
 import logfire.integrations
 import logfire.integrations.pydantic
@@ -40,15 +41,20 @@ def configure_logfire(service: str) -> None:
       collectors. Either to aggregate before shipping them to logfire or to sent them to entirely different systems.
     - OTEL_DETAILED_REPORTING: When set detailed parameters are logged such as asyncpg parameters and pydantic objects
     """
-    LOGGER.info("Setting up telemetry")
 
-    detailed_reporting = bool(os.environ.get("OTEL_DETAILED_REPORTING"))
+    if os.getenv("LOGFIRE_TOKEN", None):
+        LOGGER.info("Setting up telemetry")
+        inmanta.logfire.enable()
 
-    AsyncPGInstrumentor(capture_parameters=detailed_reporting).instrument()
+        detailed_reporting = bool(os.environ.get("OTEL_DETAILED_REPORTING"))
 
-    logfire.configure(
-        service_name=service,
-        send_to_logfire="if-token-present",
-        console=False,
-        pydantic_plugin=logfire.integrations.pydantic.PydanticPlugin(record="all") if detailed_reporting else None,
-    )
+        AsyncPGInstrumentor(capture_parameters=detailed_reporting).instrument()
+
+        logfire.configure(
+            service_name=service,
+            send_to_logfire="if-token-present",
+            console=False,
+            pydantic_plugin=logfire.integrations.pydantic.PydanticPlugin(record="all") if detailed_reporting else None,
+        )
+    else:
+        LOGGER.info("Not setting up telemetry")

@@ -26,7 +26,7 @@ from typing import Any, Callable, Optional
 from asyncpg import Connection, UndefinedTableError
 from asyncpg.protocol import Record
 
-import logfire
+from inmanta import logfire
 
 # Name of core schema in the DB schema verions
 CORE_SCHEMA_NAME = "core"

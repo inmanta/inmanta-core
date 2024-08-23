@@ -31,8 +31,7 @@ from typing import TYPE_CHECKING, Callable, Optional, Union
 from tornado import gen, queues, routing, web
 
 import inmanta.protocol.endpoints
-import logfire
-import logfire.propagate
+from inmanta import logfire
 from inmanta.data.model import ExtensionStatus
 from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods
 from inmanta.protocol.exceptions import ShutdownInProgress
@@ -86,7 +85,7 @@ class ReturnClient(Client):
     ) -> common.Result:
         with logfire.span(f"return_rpc.{method_properties.function.__name__}"):
             call_spec = method_properties.build_call(args, kwargs)
-            call_spec.headers.update(logfire.propagate.get_context())
+            call_spec.headers.update(logfire.get_context())
             expect_reply = method_properties.reply
             try:
                 if method_properties.timeout:

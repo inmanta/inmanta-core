@@ -25,9 +25,8 @@ from urllib.parse import unquote
 import tornado.simple_httpclient
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
-import logfire
-import logfire.propagate
 from inmanta import config as inmanta_config
+from inmanta import logfire
 from inmanta.protocol import common
 from inmanta.protocol.rest import RESTBase
 
@@ -121,7 +120,7 @@ class RESTClient(RESTBase):
         LOGGER.debug("Calling server %s %s", properties.operation, url)
 
         with logfire.span("rpc." + str(properties.function.__name__)):
-            headers.update(logfire.propagate.get_context())
+            headers.update(logfire.get_context())
             try:
                 request = HTTPRequest(
                     url=url,

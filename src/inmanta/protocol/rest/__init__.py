@@ -27,8 +27,7 @@ import pydantic
 import typing_inspect
 from tornado import escape
 
-import logfire
-from inmanta import const, util
+from inmanta import const, logfire, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol import auth, common, exceptions
 from inmanta.protocol.common import ReturnValue
