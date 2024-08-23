@@ -34,20 +34,17 @@ class Scheduler:
     """
     def __init__(self) -> None:
         self._state: ModelState = ModelState(version=0)
-        self._work: work.ScheduledWork = work.ScheduledWork(model_state=self._state)
+        self._work: work.ScheduledWork = work.ScheduledWork(requires=model_state.requires)
 
-        # The scheduler continuously processes work in the scheduled work's queues and processes results of executed tasks,
-        # which may update both the resource state and the scheduled work (e.g. move unblocked tasks to the queue).
-        # TODO: below might not be accurate: will we really use a single worker, or one per agent queue?
-        # Since we use a single worker to process the queue, little concurrency control is required there. We only need to lock
-        # out state read/write when external events require us update scheduler state from outside this continuous process.
-        # To this end we uphold two locks:
-        # lock to block scheduler state access during scheduler-wide state updates (e.g. trigger deploy)
-        # TODO: does this lock need to allow shared access or can we make the queue worker access it serially without blocking
-        #   concurrent tasks (e.g. acqurie only when reading / writing, let go while waiting for agent to do work).
-        #   IF SO, document that the lock must only be acquired in very short bursts, except during thses state updates
+        # We uphold two locks to prevent concurrency conflicts between external events (e.g. new version or deploy request)
+        # and the task executor background tasks.
+        #
+        # - lock to block scheduler state access (both model state and scheduled work) during scheduler-wide state updates
+        #   (e.g. trigger deploy). A single lock suffices since all state accesses (both read and write) by the task runners are
+        #   short, synchronous operations (and therefore we wouldn't gain anything by allowing multiple readers).
+        # TODO: this lock may have little value left now. Consider.
         self._scheduler_lock: asyncio.Lock = asyncio.Lock()
-        # lock to serialize scheduler state updates (i.e. process new version)
+        # - lock to serialize scheduler state updates (i.e. process new version)
         self._update_lock: asyncio.Lock = asyncio.Lock()
 
     def start(self) -> None:
@@ -60,7 +57,8 @@ class Scheduler:
             dirty: Set[ResourceIdStr] = {
                 r for r, details in self._state.resource_state.items() if details.status == ResourceStatus.HAS_UPDATE
             }
-            self._work.update_state(ensure_scheduled=dirty)
+            # TODO: pass in running deploys
+            self._work.update_state(ensure_scheduled=dirty, running_deploys={})
 
     # TODO: name
     # TODO (ticket): design step 2: read new state from DB instead of accepting as parameter (method should be notification only, i.e. 0 parameters)
@@ -113,11 +111,16 @@ class Scheduler:
                 }
                 self._work.update_state(
                     ensure_scheduled=dirty,
-                    new_requires=added_requires,
+                    # TODO: pass in running deploys
+                    running_deploys={},
+                    added_requires=added_requires,
                     dropped_requires=dropped_requires,
                 )
                 # TODO: design step 7: drop update_pending
             # TODO: design step 10: Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added again by a deploy trigger
+
+    # TODO(ticket): set up background workers for each agent, calling _run_for_agent(). Make sure to somehow respond to new
+    #           agents or removed ones
 
     async def _run_for_agent(self, agent: str) -> None:
         # TODO: end condition
@@ -148,15 +151,13 @@ class Scheduler:
             self._work.agent_queues.task_done(agent)
 
 
-# TODO: what needs to be refined before hand-off?
-#   - where will this component go to start with?
-#
-# TODO: opportunities for work hand-off:
-# - connection to DB
-# - connection to agent
-
-
-# Draft PR:
-# - restructure modules
+# TODO for Draft PR:
+# - review code structure and add docstrings
 # - open draft PR
-# - create refinement tickets
+# - consider follow-up tasks and create refinement tickets
+#   - read from DB
+#     - back up state to DB
+#   - communication with agent (Wouter's PR?)
+#   - refine scheduler algorithm (self)
+#   - TODO's in code
+#   - implement repair

@@ -21,21 +21,13 @@ import enum
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Optional
+from typing import Optional, TypeAlias
 
 from inmanta.data.model import ResourceIdStr
 from inmanta.util.collections import BidirectionalManyToManyMapping
 
 
 class RequiresProvidesMapping(BidirectionalManyToManyMapping[ResourceIdStr, ResourceIdStr]):
-    def get_requires(self, resource: ResourceIdStr) -> Optional[Set[ResourceIdStr]]:
-        return self.get_primary(resource)
-
-    def get_provides(self, resource: ResourceIdStr) -> Optional[Set[ResourceIdStr]]:
-        return self.get_reverse(resource)
-
-    # TODO: methods for updating requires-provides
-
     def requires(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
         return self
 
@@ -43,9 +35,12 @@ class RequiresProvidesMapping(BidirectionalManyToManyMapping[ResourceIdStr, Reso
         return self.reverse_mapping()
 
 
+AttributeHash: TypeAlias = str
+
+
 @dataclass(frozen=True)
 class ResourceDetails:
-    attribute_hash: str
+    attribute_hash: AttributeHash
     attributes: Mapping[str, object]
     # TODO: consider adding a read-only view on the requires relation?
 

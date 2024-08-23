@@ -31,10 +31,11 @@ from inmanta.data.model import ResourceIdStr
 from inmanta.deploy.state import ModelState
 
 
-# TODO: move these classes and type alias to inmanta.data.model? Or inmanta.deploy.model?
 @dataclass(frozen=True, kw_only=True)
 class _Task(abc.ABC):
-    agent: str
+    """
+    Resource action task. Represents the execution of a specific resource action for a given resource.
+    """
     resource: ResourceIdStr
 
 
@@ -43,8 +44,7 @@ class Deploy(_Task): pass
 
 @dataclass(frozen=True, kw_only=True)
 class DryRun(_Task):
-    # TODO: requires more attributes
-    pass
+    version: int
 
 
 class RefreshFact(_Task): pass
@@ -61,8 +61,10 @@ T = TypeVar("T", bound=Task, covariant=True)
 
 @dataclass(frozen=True, kw_only=True)
 class PrioritizedTask(Generic[T]):
+    """
+    Resource action task with a priority attached. Lower values represent a higher priority.
+    """
     task: T
-    # TODO: document lower value is higher priority
     priority: int
 
 
@@ -70,59 +72,54 @@ class PrioritizedTask(Generic[T]):
 @dataclass(frozen=True, kw_only=True)
 class TaskQueueItem:
     """
-    Task item for the task queue. Adds unique id to each item and implements full ordering based purely on priority. Do not rely
-    on == for task equality.
+    Task item for the task queue. Adds insert order field to each item and implements full ordering based purely on priority
+    and insert order (tiebreaker). Do not rely on == for task equality.
+
+    The insert order field is a simple mechanic to maintain insert order for equal-priority tasks, as suggested in the
+    heapq (collection type used by the agent queues) docs. The value should be monotonically rising within a queue. Gaps are
+    allowed.
     """
 
     task: PrioritizedTask[Task]
-    # TODO: Document. Purpose is to uniquely identify a task item, even if an identical task happens to be added later
-    item_id: uuid.UUID = dataclasses.field(default_factory=uuid.uuid4)
+    insert_order: int
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
             return NotImplemented
-        return self.task.priority == other.task.priority
+        return (self.task.priority, self.insert_order) == (other.task.priority, other.insert_order)
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
             return NotImplemented
-        return self.task.priority < other.task.priority
+        return (self.task.priority, self.insert_order) < (other.task.priority, other.insert_order)
 
 
-# TODO: style uniformity: dataclass vs normal class
 class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
     """
-    Per-agent priority queue for ready-to-execute tasks.
+    Per-agent priority queue for ready-to-execute tasks. Clients must not interact with the underlying priority queues directly,
+    only through the queue manipulation methods offered by this class.
+
+    Each Task will be queued at most once. If an identical Task is queued later on, it will not be queued separately. It may
+    however affect the current task's priority, causing it to be executed earlier than it would have otherwise.
     """
-    # TODO: relies on undocumented asyncio.PriorityQueue._queue field and the fact that it's a heapq -> refinement ticket
 
-    # TODO: make sure to signal new agents to worker somehow, unless round-robin worker is used
-
-    # TODO: implement queue worker, but where to put it? This class or scheduler? Or separate worker class with self.lock?
+    # TODO(ticket): relies on undocumented asyncio.PriorityQueue._queue field and the fact that it's a heapq, can we do something about that?
 
     def __init__(self) -> None:
-        # TODO: document that queue must not be used directly by class users
         self._agent_queues: dict[str, asyncio.PriorityQueue[TaskQueueItem]] = {}
         # can not drop tasks from queue without breaking the heap invariant, or potentially breaking asyncio.Queue invariants
         # => take approach suggested in heapq docs: simply mark as deleted.
         # => Keep view on all active tasks for a given resource, which also doubles as lookup for client operations
+        # Only tasks in this collection are considered queued, as far as this class' client interface is concerned.
         self._tasks_by_resource: dict[ResourceIdStr, dict[Task, TaskQueueItem]] = {}
-
-    def _queue_item_for_task(self, task: Task) -> Optional[TaskQueueItem]:
-        return self._tasks_by_resource.get(task.resource, {}).get(task, None)
-        # TODO: document invariant somehwere: each task exists at most once (unless deleted)
-
-    def _is_active(self, item: TaskQueueItem) -> bool:
-        """
-        Returns true iff this item is still active, i.e. it has not been removed from the queue.
-        """
-        return item == self._queue_item_for_task(item.task.task)
-
-    ##################
-    # User interface #
-    ##################
+        # monotonically rising value for item insert order
+        # use simple counter rather than time.monotonic_ns() for performance reasons
+        self._entry_count: int = 0
 
     def get_tasks_for_resource(self, resource: ResourceIdStr) -> set[Task]:
+        """
+        Returns all queued tasks for a given resource id.
+        """
         return set(self._tasks_by_resource.get(resource, {}).keys())
 
     def remove(self, task: Task) -> int:
@@ -147,6 +144,15 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         except KeyError:
             return None
 
+    def _queue_item_for_task(self, task: Task) -> Optional[TaskQueueItem]:
+        return self._tasks_by_resource.get(task.resource, {}).get(task, None)
+
+    def _is_active(self, item: TaskQueueItem) -> bool:
+        """
+        Returns true iff this item is still active, i.e. it has not been removed from the queue.
+        """
+        return item == self._queue_item_for_task(item.task.task)
+
     def sorted(self, agent: str) -> list[PrioritizedTask[Task]]:
         # TODO: remove this method: it's only a PoC to hightlight how to achieve a sorted view
         queue: asyncio.PriorityQueue[TaskQueueItem] = self._agent_queues[agent]
@@ -166,13 +172,16 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         priority: int = prioritized_task.priority
         already_queued: Optional[TaskQueueItem] = self._queue_item_for_task(task)
         if already_queued is not None and already_queued.task.priority <= priority:
+            # task is already queued with equal or higher priority
             return
         # reschedule with new priority, no need to explicitly remove, this is achieved by setting self._tasks_by_resource
-        item: TaskQueueItem = TaskQueueItem(task=prioritized_task)
+        item: TaskQueueItem = TaskQueueItem(task=prioritized_task, insert_order=self._entry_count)
+        self._entry_count += 1
         if task.resource not in self._tasks_by_resource:
             self._tasks_by_resource[task.resource] = {}
         self._tasks_by_resource[task.resource][task] = item
-        self._agent_queues[task.agent].put_nowait(item)
+        # TODO: parse agent
+        self._agent_queues["TODO"].put_nowait(item)
 
     async def queue_get(self, agent: str) -> Task:
         """
@@ -191,9 +200,13 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
             return item.task.task
 
     def task_done(self, agent: str) -> None:
-        self._agent_queues[agent].task_done()
+        """
+        Indicate that a formerly enqueued task for a given agent is complete.
 
-    # TODO: implement task_done. Requires careful consideration of task lifetime, e.g. an identical Task may be added and consumed before the first calls task_done(), so Task is not a good identity
+        Used by queue consumers. For each get() used to fetch a task, a subsequent call to task_done() tells the corresponding
+        agent queue that the processing on the task is complete.
+        """
+        self._agent_queues[agent].task_done()
 
     #########################
     # Mapping implementation#
@@ -211,38 +224,62 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
 
 @dataclass
 class BlockedDeploy:
-    # TODO: docstring: deploy blocked on requires -> blocked_on is subset of requires or None when not yet calculated
-    #   + mention that only deploys (never other tasks) are ever blocked
+    """
+    Deploy task that is blocked on one or more of its dependencies (subset of its requires relation).
+    """
     task: PrioritizedTask[Deploy]
     blocked_on: set[ResourceIdStr]
 
 
 class ScheduledWork:
-    def __init__(self, model_state: ModelState) -> None:
-        # TODO TODO TODO TODO TODO
-        # TODO: keep track of in_progress tasks?
-        # TODO: mention that this class will never modify state. Or alternatively, pass Scheduler instead and add methods on it to
-        #       inspect required state (requires-provides + update_pending?)
-        self.model_state: ModelState = model_state
+    """
+    Collection of deploy tasks that should be executed. Manages a priority queue of ready-to-execute tasks per agent
+    (AgentQueues), as well as an unordered collection of waiting deploy tasks (across agents). Maintains the following
+invariants in between method calls:
+    - Each task exists at most once in the scheduled work. It is however possible for an identical task to be executing.
+    - A resource's requires relation is enforced within the set of scheduled work, i.e. for any two deploy tasks in the
+        scheduled work, they will be processed in requires order. Only direct requires are considered. It is the responsibility
+        of the scheduler to include in-between resources as scheduled work if/when transitive requires ordering is desired.
+
+    Expects to be informed by the scheduler of deploy requests and/or state changes through update_state() and
+    delete_resource().
+
+    Expects to be informed by task runners of finished tasks through notify_provides().
+
+    :param requires: Live, read-only view on requires-provides mapping for the latest model state.
+    """
+
+    def __init__(self, requires: state.RequiresProvidesMapping) -> None:
+        self.requires: state.RequiresProvidesMapping = requires
         self.agent_queues: AgentQueues = AgentQueues()
         self.waiting: dict[ResourceIdStr, BlockedDeploy] = {}
 
-    # TODO: docstring + name
+    # TODO: name
     def update_state(
         self,
         *,
         ensure_scheduled: Set[ResourceIdStr],
-        new_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
+        running_deploys: Set[ResourceIdStr],
+        added_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
         dropped_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
     ) -> None:
-        new_requires = new_requires if new_requires is not None else {}
+        """
+        Update the scheduled work state to reflect the new model state and scheduler intent. May defer tasks that were
+previously considered ready to execute if any of their dependencies are added to the scheduled work.
+
+        :param ensure_scheduled: Set of resources that should be deployed. Adds a deploy task to the scheduled work for each
+            of these, unless it is already scheduled.
+        :param running_deploys: Set of resources for which a deploy is currently running, for the latest desired state, i.e.
+            stale deploys should be excluded.
+        """
+        added_requires = added_requires if added_requires is not None else {}
         dropped_requires = dropped_requires if dropped_requires is not None else {}
 
         # set of resources for which the blocked_on field was updated without checking whether it has become unblocked
         maybe_runnable: set[ResourceIdStr] = set()
 
         # lookup caches for visited nodes
-        queued: dict[ResourceIdStr, Deploy] = {}
+        queued: dict[ResourceIdStr, Deploy] = set(running_deploys)  # queued or running
         not_scheduled: set[ResourceIdStr] = set()
 
         # First drop all dropped requires so that we work on the smallest possible set for this operation.
@@ -268,12 +305,8 @@ class ScheduledWork:
                 # definitely not scheduled
                 return False
             # finally, check more expensive agent queue
-            # TODO: parse agent
-            task: Deploy = Deploy(agent="test", resource=resource)
-            # TODO TODO TODO TODO
-            # TODO: check if
-            #   - DEPLOY currently running and attr hash equals self.model_state.resources[resource].attribute_hash
-            if task in self.agent_queues or False:
+            task: Deploy = Deploy(resource=resource)
+            if task in self.agent_queues:
                 # populate cache
                 queued[resource] = task
                 return True
@@ -281,11 +314,10 @@ class ScheduledWork:
             not_scheduled.add(resource)
             return False
 
-        # TODO: rename new_requires -> added_requires for ambiguity reasons
-        def extend_requires(resource: ResourceIdStr, new_requires: set[ResourceIdStr]) -> None:
-            # TODO: docstring: new_requires should only contain scheduled subset of requires relation
+        def extend_requires(resource: ResourceIdStr, added_requires: set[ResourceIdStr]) -> None:
+            # TODO: docstring: added_requires should only contain scheduled subset of requires relation
             #   + takes ownership of set
-            if not new_requires:
+            if not added_requires:
                 # empty set, nothing to do
                 return
             if not is_scheduled(resource):
@@ -303,26 +335,27 @@ class ScheduledWork:
                     # TODO(ticket): default priority
                     task=PrioritizedTask(task=task, priority=priority if priority is not None else 0),
                     # task was previously ready to execute => assume no other blockers than this one
-                    blocked_on=new_requires,
+                    blocked_on=added_requires,
                 )
             else:
-                self.waiting[resource].blocked_on.update(new_requires)
+                self.waiting[resource].blocked_on.update(added_requires)
                 maybe_runnable.discard(resource)
 
         # ensure desired resource deploys are scheduled
         for resource in ensure_scheduled:
             if is_scheduled(resource):
+                # Deploy is already scheduled / running. No need to do anything here. If any of its dependencies are to be
+                # scheduled as well, they will follow the provides relation to ensure this deploy waits its turn.
                 continue
             # task is not yet scheduled, schedule it now
             blocked_on: set[ResourceIdStr] = {
                 dependency
-                for dependency in self.model_state.requires.get(resource, ())
+                for dependency in self.requires.get(resource, ())
                 if is_scheduled(dependency)
             }
             self.waiting[resource] = BlockedDeploy(
                 # TODO(ticket): priority
-                # TODO: parse agent
-                task=PrioritizedTask(task=Deploy(agent="test", resource=resource), priority=0),
+                task=PrioritizedTask(task=Deploy(resource=resource), priority=0),
                 blocked_on=blocked_on,
             )
             not_scheduled.discard(resource)
@@ -331,11 +364,11 @@ class ScheduledWork:
                 maybe_runnable.add(resource)
 
             # inform along provides relation that this task has been scheduled, deferring already scheduled provides
-            for dependant in self.model_state.requires.provides().get(resource, ()):
+            for dependant in self.requires.provides().get(resource, ()):
                 extend_requires(dependant, {resource})
 
         # update state for added requires
-        for resource, new in new_requires.items():
+        for resource, new in added_requires.items():
             extend_requires(resource, {r for r in new if is_scheduled(r)})
 
         # finally check if any tasks have become ready to run
@@ -378,9 +411,10 @@ class ScheduledWork:
                 self.agent_queues.discard(task)
 
     def notify_provides(self, finished_deploy: Deploy) -> None:
+        # TODO: consider error scenarios
         # TODO: docstring + mention under lock + mention only iff not stale
         resource: ResourceIdStr = finished_deploy.resource
-        for dependant in self.model_state.requires.provides()[resource]:
+        for dependant in self.requires.provides()[resource]:
             blocked_deploy: Optional[BlockedDeploy] = self.waiting.get(dependant, None)
             if blocked_deploy is None:
                 # dependant is not currently scheduled
