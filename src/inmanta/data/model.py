@@ -778,7 +778,7 @@ class DiscoveredResource(BaseModel):
     def discovery_resource_uri(self) -> str | None:
         if self.discovery_resource_id is None:
             return None
-        return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id)}"
+        return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id, safe='')}"
 
     def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
         return data.DiscoveredResource(
@@ -798,7 +798,8 @@ class LinkedDiscoveredResource(DiscoveredResource):
     """
 
     # This class is used as API input. Its behaviour can be directly incorporated into the DiscoveredResource parent class
-    # when providing the id of the discovery resource is mandatory for all discovered resource. TODO: <Ticket Ref>
+    # when providing the id of the discovery resource is mandatory for all discovered resource. Ticket link:
+    # https://github.com/inmanta/inmanta-core/issues/8004
 
     discovery_resource_id: ResourceId
 

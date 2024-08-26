@@ -23,7 +23,6 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Generic, Mapping, Optional, TypeVar, Union, cast
 from urllib import parse
-from urllib.parse import quote
 from uuid import UUID
 
 from asyncpg import Record
@@ -832,7 +831,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
         return {}
 
     def get_base_url(self) -> str:
-        return f"/api/v2/resource/{quote(self.rid, safe='')}/history"
+        return f"/api/v2/resource/{parse.quote(self.rid, safe='')}/history"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
@@ -1314,34 +1313,14 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         )
         return query_builder
 
-    # def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
-    #     out = []
-    #     for res in records:
-    #         if res["discovery_resource_id"]:
-    #             out.append(
-    #                 model.LinkedDiscoveredResource(
-    #                     discovered_resource_id=res["discovered_resource_id"],
-    #                     values=json.loads(res["values"]),
-    #                     managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
-    #                     discovery_resource_id=res["discovery_resource_id"],
-    #                 ).model_dump()
-    #             )
-    #         else:
-    #             out.append(
-    #                 model.DiscoveredResource(
-    #                     discovered_resource_id=res["discovered_resource_id"],
-    #                     values=json.loads(res["values"]),
-    #                     managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
-    #                 ).model_dump()
-    #             )
-    #     return out
-
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
         return [
             model.DiscoveredResource(
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
-                managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
+                managed_resource_uri=(
+                    f"/api/v2/resource/{parse.quote(str(res['discovered_resource_id']), safe='')}" if res["managed"] else None
+                ),
                 discovery_resource_id=res["discovery_resource_id"] if res["discovery_resource_id"] else None,
             ).model_dump()
             for res in records
