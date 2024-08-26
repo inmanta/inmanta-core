@@ -291,13 +291,6 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
         values={"value1": "test1", "value2": "test2"},
         discovery_resource_id="test::DiscoveryResource[agent1,key=key]",
     )
-    # expected_error_message = (
-    #     "Invalid request: Failed to validate argument\n"
-    #     "1 validation error for LinkedDiscoveredResource\n"
-    #     "discovered_resource_id\n"
-    #     "  Value error, Validation failed for discovered_resource_id "
-    #     "[type=value_error, input_value='invalid_rid', input_type=str]\n"
-    # )
 
     expected_error_message = (
         "Invalid request: Failed to validate argument\n"

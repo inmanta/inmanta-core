@@ -762,6 +762,8 @@ class DiscoveredResource(BaseModel):
     :param values: The actual resource
     :param managed_resource_uri: URI of the resource with the same ID that is already
         managed by the orchestrator e.g. "/api/v2/resource/<rid>". Or None if the resource is not managed.
+    :param discovery_resource_id: Resource id of the (managed) discovery resource that reported this
+        discovered resource.
     """
 
     discovered_resource_id: ResourceId

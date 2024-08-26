@@ -18,11 +18,11 @@
 
 import abc
 import json
+import urllib
 from abc import ABC
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Generic, Mapping, Optional, TypeVar, Union, cast
-from urllib import parse
 from uuid import UUID
 
 from asyncpg import Record
@@ -412,7 +412,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:
                 params = url_query_params.copy()
                 params.update({k: value_to_string(v) for k, v in args.items() if v is not None})
-                return f"{base_url}?{parse.urlencode(params, doseq=True)}"
+                return f"{base_url}?{urllib.parse.urlencode(params, doseq=True)}"
 
             link_with_end = make_link(
                 end=paging_boundaries.end,
@@ -831,7 +831,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
         return {}
 
     def get_base_url(self) -> str:
-        return f"/api/v2/resource/{parse.quote(self.rid, safe='')}/history"
+        return f"/api/v2/resource/{urllib.parse.quote(self.rid, safe='')}/history"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
@@ -937,7 +937,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
         return query
 
     def get_base_url(self) -> str:
-        return f"/api/v2/resource/{parse.quote(self.rid, safe='')}/logs"
+        return f"/api/v2/resource/{urllib.parse.quote(self.rid, safe='')}/logs"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
@@ -1319,7 +1319,9 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
                 managed_resource_uri=(
-                    f"/api/v2/resource/{parse.quote(str(res['discovered_resource_id']), safe='')}" if res["managed"] else None
+                    f"/api/v2/resource/{urllib.parse.quote(str(res['discovered_resource_id']), safe='')}"
+                    if res["managed"]
+                    else None
                 ),
                 discovery_resource_id=res["discovery_resource_id"] if res["discovery_resource_id"] else None,
             ).model_dump()
