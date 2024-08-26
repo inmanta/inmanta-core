@@ -31,9 +31,8 @@ import inmanta.util
 import logfire
 from inmanta import const, data, env
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import FailedResourcesSet, ResourceDetails
+from inmanta.agent.executor import FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
-from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.const import ParameterSource
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader
@@ -68,8 +67,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self.sessionid = client._sid
         self.environment = environment
 
-        # threads to setup _io ssh connections
-        self.provider_thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="ProviderPool_%s" % self.name)
         # threads to work
         self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="Pool_%s" % self.name)
 
@@ -79,12 +76,11 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self._stopped = False
 
-        self.failed_resource_types: FailedResourcesSet = set()
+        self.failed_resources: FailedResources = dict()
 
     def stop(self) -> None:
         self._stopped = True
         self._cache.close()
-        self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
 
     def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
@@ -94,16 +90,13 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param thread_pool_finalizer: all threadpools that should be joined should be added here.
         """
         assert self._stopped
-        thread_pool_finalizer.append(self.provider_thread_pool)
         thread_pool_finalizer.append(self.thread_pool)
 
     def is_stopped(self) -> bool:
         return self._stopped
 
     async def get_provider(self, resource: Resource) -> HandlerAPI[Any]:
-        provider = await asyncio.get_running_loop().run_in_executor(
-            self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
-        )
+        provider = handler.Commander.get_provider(agent=self, resource=resource)
         provider.set_cache(self._cache)
         return provider
 
@@ -141,10 +134,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         provider: Optional[HandlerAPI[Any]] = None
         try:
             provider = await self.get_provider(resource)
-        except ChannelClosedException as e:
-            ctx.set_status(const.ResourceState.unavailable)
-            ctx.exception(str(e))
-            return
         except Exception:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=resource.id.resource_version_str())
@@ -161,9 +150,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 )
                 if ctx.status is None:
                     ctx.set_status(const.ResourceState.deployed)
-            except ChannelClosedException as e:
-                ctx.set_status(const.ResourceState.failed)
-                ctx.exception(str(e))
             except SkipResource as e:
                 ctx.set_status(const.ResourceState.skipped)
                 ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
@@ -522,15 +508,14 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     out = InProcessExecutor(agent_name, agent_uri, self.environment, self.client, self.eventloop, self.logger)
                     self.executors[agent_name] = out
         assert out.uri == agent_uri
-        failed_resource_types: FailedResourcesSet = await self.ensure_code(code)
-        out.failed_resource_types = failed_resource_types
+        out.failed_resources = await self.ensure_code(code)
 
         return out
 
-    async def ensure_code(self, code: typing.Collection[executor.ResourceInstallSpec]) -> executor.FailedResourcesSet:
+    async def ensure_code(self, code: typing.Collection[executor.ResourceInstallSpec]) -> executor.FailedResources:
         """Ensure that the code for the given environment and version is loaded"""
 
-        failed_to_load: executor.FailedResourcesSet = set()
+        failed_to_load: executor.FailedResources = {}
 
         if self._loader is None:
             return failed_to_load
@@ -563,13 +548,17 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     )
 
                     self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
-                except Exception:
+                except Exception as e:
                     self.logger.exception(
                         "Failed to install handler %s version=%d",
                         resource_install_spec.resource_type,
                         resource_install_spec.model_version,
                     )
-                    failed_to_load.add(resource_install_spec.resource_type)
+                    if resource_install_spec.resource_type not in failed_to_load:
+                        failed_to_load[resource_install_spec.resource_type] = Exception(
+                            f"Failed to install handler {resource_install_spec.resource_type} "
+                            f"version={resource_install_spec.model_version}: {e}"
+                        ).with_traceback(e.__traceback__)
                     self._last_loaded_version[resource_install_spec.resource_type] = None
 
         return failed_to_load
