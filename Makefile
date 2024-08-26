@@ -32,7 +32,7 @@ mypy:
 
 .PHONY: mypy-sync
 mypy-sync:
-	$(RUN_MYPY) | mypy-baseline filter
+	$(RUN_MYPY) | mypy-baseline sync
 
 .PHONY: mypy-full
 mypy-full:
