@@ -17,7 +17,6 @@
 """
 
 import datetime
-import functools
 import typing
 import urllib
 import uuid
@@ -749,11 +748,11 @@ class LoginReturn(BaseModel):
     user: User
 
 
-def is_resource_id(v: ResourceIdStr, info: pydantic.ValidationInfo) -> str:
-    try:
-        return resources.Id.parse_id(v).resource_str()
-    except Exception:
-        raise ValueError(f"Validation failed for {info.field_name}")
+def is_resource_id(v: ResourceIdStr) -> str:
+    """
+    Relies on the parse_id method's ValueError for validation.
+    """
+    return resources.Id.parse_id(v).resource_str()
 
 
 ResourceId: typing.TypeAlias = typing.Annotated[ResourceIdStr, pydantic.AfterValidator(is_resource_id)]
@@ -772,6 +771,14 @@ class DiscoveredResource(BaseModel):
     managed_resource_uri: Optional[str] = None
 
     _validate_discovered_rid = field_validator("discovered_resource_id")(is_resource_id)
+    discovery_resource_id: Optional[ResourceId]
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def discovery_resource_uri(self) -> str | None:
+        if self.discovery_resource_id is None:
+            return None
+        return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id)}"
 
     def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
         return data.DiscoveredResource(
@@ -790,13 +797,10 @@ class LinkedDiscoveredResource(DiscoveredResource):
            discovered resource.
     """
 
-    discovery_resource_id: ResourceId
-    _validate_discovery_rid = field_validator("discovery_resource_id")(functools.partial(is_resource_id))
+    # This class is used as API input. Its behaviour can be directly incorporated into the DiscoveredResource parent class
+    # when providing the id of the discovery resource is mandatory for all discovered resource. TODO: <Ticket Ref>
 
-    @computed_field  # type: ignore[misc]
-    @property
-    def discovery_resource_uri(self) -> str | None:
-        return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id)}"
+    discovery_resource_id: ResourceId
 
     def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
         return data.DiscoveredResource(

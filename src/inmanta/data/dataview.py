@@ -1314,27 +1314,38 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         )
         return query_builder
 
+    # def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
+    #     out = []
+    #     for res in records:
+    #         if res["discovery_resource_id"]:
+    #             out.append(
+    #                 model.LinkedDiscoveredResource(
+    #                     discovered_resource_id=res["discovered_resource_id"],
+    #                     values=json.loads(res["values"]),
+    #                     managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
+    #                     discovery_resource_id=res["discovery_resource_id"],
+    #                 ).model_dump()
+    #             )
+    #         else:
+    #             out.append(
+    #                 model.DiscoveredResource(
+    #                     discovered_resource_id=res["discovered_resource_id"],
+    #                     values=json.loads(res["values"]),
+    #                     managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
+    #                 ).model_dump()
+    #             )
+    #     return out
+
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
-        out = []
-        for res in records:
-            if res["discovery_resource_id"]:
-                out.append(
-                    model.LinkedDiscoveredResource(
-                        discovered_resource_id=res["discovered_resource_id"],
-                        values=json.loads(res["values"]),
-                        managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
-                        discovery_resource_id=res["discovery_resource_id"],
-                    ).model_dump()
-                )
-            else:
-                out.append(
-                    model.DiscoveredResource(
-                        discovered_resource_id=res["discovered_resource_id"],
-                        values=json.loads(res["values"]),
-                        managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
-                    ).model_dump()
-                )
-        return out
+        return [
+            model.DiscoveredResource(
+                discovered_resource_id=res["discovered_resource_id"],
+                values=json.loads(res["values"]),
+                managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
+                discovery_resource_id=res["discovery_resource_id"] if res["discovery_resource_id"] else None,
+            ).model_dump()
+            for res in records
+        ]
 
 
 class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
