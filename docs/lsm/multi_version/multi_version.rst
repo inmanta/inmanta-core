@@ -53,13 +53,35 @@ and recompile and export the new model.
 
 NOTE: We cannot remove service entity versions that have active instances.
 
+API endpoints
+=======================
+The following API endpoints were added in order to manage versioned services:
+
+* `GET lsm/v2/service_catalog` : List all service entity versions of each defined services entity type in the service catalog
+* `POST lsm/v2/service_catalog`: Create a new service entity type in the service catalog and assign a default version to it.
+* `GET lsm/v2/service_catalog/<service_entity>/<version>/schema`: Get the json schema for a service entity version.
+* `GET lsm/v2/service_catalog/<service_entity>`: Get all versions of the service entity type from the service catalog.
+* `GET lsm/v2/service_catalog/<service_entity>/<version>`: Get one service entity version from the service catalog.
+* `PATCH lsm/v2/service_catalog/<service_entity>`: Update an existing service entity type in the service catalog or add a new one.
+* `DELETE lsm/v2/service_catalog/<service_entity>/<version>`: Delete an existing service entity version from the service catalog.
+* `GET lsm/v2/service_catalog/<service_entity>/<version>/config`: Get the config settings for a service entity version.
+* `POST lsm/v2/service_catalog/<service_entity>/<version>/config`: Set the config for a service entity version.
+* `PATCH lsm/v1/service_inventory/<service_entity>/<service_id>/update_entity_version`: Migrate a service instance from one service entity version to another.
+
+The older v1 endpoints are still supported.
+When we use the v1 endpoints to make operations on a service (i.e. get, create, update), we always target the default
+version of the service entity. (i.e. `GET lsm/v1/service_catalog/<service_entity>` will return the default version of this service entity).
+
+Updating a service entity version is not supported for versioned entities. The new workflow is to create a new version
+with the required changes. However, updates to a version 0 of a service entity are allowed, if it is the only version
+of that service.
 
 
 Migrating instances between service entity version
 ==================================================
 
 With the introduction of versions to service entities we might want to migrate existing instances to newer versions.
-This can only be done with the `http://<host>:<port>/lsm/v1/service_inventory/<service_entity>/<service_id>/update_entity_version` endpoint
+This can only be done with the `/lsm/v1/service_inventory/<service_entity>/<service_id>/update_entity_version` endpoint
 or by calling the `lsm_services_update_entity_version` API method on the Inmanta client.
 
 To do this we need to provide all 3 attribute sets that we want the instance to have on the new entity version.
@@ -69,22 +91,7 @@ We also need to provide the target state that we want to set the instance to.
 NOTE: This change is impossible to rollback since we override each attribute set. And each attribute set needs to be
 compatible with the target entity version.
 
-Backwards compatibility
-=======================
 
-In order to keep backwards compatibility with the v1 endpoints we introduced the concept of a default version.
-When we use the v1 endpoints to make operations on a service (i.e. get, create, update), we always target the default
-version of the service entity.
-Every service entity now has a version. The existing service entities and each new one created with the
-``lsm::ServiceEntityBinding`` or ``lsm::ServiceEntityBindingV2`` will have one version numbered 0 (which will be the
-default version for this service).
-
-Additionally we can provide a default version to ``lsm::ServiceBinding`` to change which version will be accessible
-through the v1 endpoints.
-
-Updating a service entity version is not supported for versioned entities. The new workflow is to create a new version
-with the required changes. However, updates to a version 0 of a service entity are allowed, if it is the only version
-of that service.
 
 
 
