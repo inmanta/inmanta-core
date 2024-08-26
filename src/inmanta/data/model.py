@@ -749,9 +749,7 @@ class LoginReturn(BaseModel):
 
 
 def is_resource_id(v: ResourceIdStr) -> str:
-    """
-    Relies on the parse_id method's ValueError for validation.
-    """
+    # For validation, we rely on the parse_id method raising a ValueError for invalid resource ids.
     return resources.Id.parse_id(v).resource_str()
 
 
@@ -770,7 +768,6 @@ class DiscoveredResource(BaseModel):
     values: dict[str, object]
     managed_resource_uri: Optional[str] = None
 
-    _validate_discovered_rid = field_validator("discovered_resource_id")(is_resource_id)
     discovery_resource_id: Optional[ResourceId]
 
     @computed_field  # type: ignore[misc]
