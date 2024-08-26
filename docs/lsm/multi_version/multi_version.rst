@@ -2,45 +2,25 @@
 Multi-version
 **************
 
-The goal of multi-version lsm is to have versioning as a way to introduce changes to service entities while
-supporting the older behaviour and remaining backwards compatible.
-Each service entity will now have versions, which can introduce breaking changes while maintaining support for older
-versions.
+Multi-version lsm allows you to have multiple api versions for the same service.
 
-Why do we want to use  multi-version LSM and not different services?
-====================================================================
-A service represents a high level desired state. With a new version we want to introduce some changes to a service
-(i.e. add a new option, or change how some minor things are done), but overall, keep the same intent.
-We want to be able to let a service evolve over time while maintaining backwards compatibility and be able to upgrade
-from one version to another without drastically changing the intent of the service.
+Why use multi-version LSM?
+===========================
 
-Backwards compatibility
-=======================
+You should use mutli-version LSM when you want to:
 
-In order to keep backwards compatibility with the v1 endpoints we introduced the concept of a default version.
-When we use the v1 endpoints to make operations on a service (i.e. get, create, update), we always target the default
-version of the service entity.
-Every service entity now has a version. The existing service entities and each new one created with the
-``lsm::ServiceEntityBinding`` or ``lsm::ServiceEntityBindingV2`` will have one version numbered 0 (which will be the
-default version for this service).
+* Offer multiple api schema versions to the same service
+* Upgrade a service in a way that is not supported by the :ref:`automated upgrade mechanism <operational_procedures_upgrade>`
 
-Additionally we can provide a default version to ``lsm::ServiceBinding`` to change which version will be accessible
-through the v1 endpoints.
-
-Updating a service entity version is not supported for versioned entities. The new workflow is to create a new version
-with the required changes. However, updates to a version 0 of a service entity are allowed, if it is the only version
-of that service.
-
-
-Migrating from an existing unversioned model
-============================================
+Using multi-version LSM
+========================
 
 Using the :ref:`model to create InterfaceIPAssignments <intro_example>` as an example, we will see how we can turn this
-entity into a versioned one.
+entity into a versioned one. We just need to:
 
-We just need to change our existing ``lsm::ServiceEntityBinding`` into a ``lsm::ServiceBinding``. Set the
-``default_version`` to 0 and create a ``lsm::ServiceBindingVersion`` with the information that we had on our previous
-binding.
+* Change our existing ``lsm::ServiceEntityBinding`` into a ``lsm::ServiceBinding``.
+* Set the ``default_version`` to 0.
+* Create a ``lsm::ServiceBindingVersion`` with the information that we had on our previous binding.
 
 When unrolling using lsm::all, we use ``lsm::get_service_binding_version`` to fetch the correct entity binding version
 for each instance.
@@ -88,5 +68,25 @@ We also need to provide the target state that we want to set the instance to.
 
 NOTE: This change is impossible to rollback since we override each attribute set. And each attribute set needs to be
 compatible with the target entity version.
+
+Backwards compatibility
+=======================
+
+In order to keep backwards compatibility with the v1 endpoints we introduced the concept of a default version.
+When we use the v1 endpoints to make operations on a service (i.e. get, create, update), we always target the default
+version of the service entity.
+Every service entity now has a version. The existing service entities and each new one created with the
+``lsm::ServiceEntityBinding`` or ``lsm::ServiceEntityBindingV2`` will have one version numbered 0 (which will be the
+default version for this service).
+
+Additionally we can provide a default version to ``lsm::ServiceBinding`` to change which version will be accessible
+through the v1 endpoints.
+
+Updating a service entity version is not supported for versioned entities. The new workflow is to create a new version
+with the required changes. However, updates to a version 0 of a service entity are allowed, if it is the only version
+of that service.
+
+
+
 
 
