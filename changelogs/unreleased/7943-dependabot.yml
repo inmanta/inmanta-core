@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump logfire from 0.49.0 to 0.49.1
+destination-branches:
+- master
+sections: {}

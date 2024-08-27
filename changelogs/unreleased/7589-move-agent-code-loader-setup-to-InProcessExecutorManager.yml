@@ -1,0 +1,4 @@
+description: Move agent code loader setup to InProcessExecutorManager
+change-type: patch
+issue-nr: 7589
+destination-branches: [master]

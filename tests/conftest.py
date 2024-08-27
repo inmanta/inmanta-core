@@ -698,7 +698,9 @@ async def agent(server, environment):
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server):
+async def agent_factory(
+    server,
+) -> Callable[[uuid.UUID, Optional[str], Optional[dict[str, str]], bool, list[str]], Awaitable[Agent]]:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     config.Config.set("config", "agent-deploy-interval", "0")
@@ -815,6 +817,8 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
         config.Config.set("agent", "executor-mode", "forking")
+        config.Config.set("agent", "executor-venv-retention-time", "60")
+        config.Config.set("agent", "executor-retention-time", "10")
         yield config
 
 
@@ -888,6 +892,8 @@ async def server_multi(
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
         config.Config.set("agent", "executor-mode", "forking")
+        config.Config.set("agent", "executor-venv-retention-time", "60")
+        config.Config.set("agent", "executor-retention-time", "10")
 
         ibl = InmantaBootloader(configure_logging=True)
 
