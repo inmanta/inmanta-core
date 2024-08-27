@@ -748,12 +748,12 @@ class LoginReturn(BaseModel):
     user: User
 
 
-def is_resource_id(v: ResourceIdStr) -> str:
+def check_resource_id_str(v: str) -> ResourceIdStr:
     # For validation, we rely on the parse_id method raising a ValueError for invalid resource ids.
     return resources.Id.parse_id(v).resource_str()
 
 
-ResourceId: typing.TypeAlias = typing.Annotated[ResourceIdStr, pydantic.AfterValidator(is_resource_id)]
+ResourceId: typing.TypeAlias = typing.Annotated[ResourceIdStr, pydantic.AfterValidator(check_resource_id_str)]
 
 
 class DiscoveredResource(BaseModel):
@@ -778,14 +778,6 @@ class DiscoveredResource(BaseModel):
         if self.discovery_resource_id is None:
             return None
         return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id, safe='')}"
-
-    def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
-        return data.DiscoveredResource(
-            discovered_resource_id=self.discovered_resource_id,
-            values=self.values,
-            discovered_at=datetime.datetime.now(),
-            environment=env,
-        )
 
 
 class LinkedDiscoveredResource(DiscoveredResource):
