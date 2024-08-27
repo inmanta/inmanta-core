@@ -158,6 +158,10 @@ source state, a target state and an error state. The following events can trigge
 - ``on_delete``: Transfers marked as on_delete are executed when a DELETE is performed on a service instance.
 - resource based: This transfer is triggered when the orchestrator finishes deploying the resources that this service instance consists off.
 
+It is important to note that a service instance can only be updated (through either the API or the frontend)
+if it is in a lifecycle state that supports updates (i.e. the state has a transfer marked as ``on_update``). In the same
+way, a service instance can only be deleted in a state that has a lifecycle transfer marked as ``on_delete``.
+
 The auto and api set state call can set the validation attribute to true. When this attribute is true,
 the orchestration engine refines the model in validation mode. When the validation succeeds the state transfers to the target
 state, if the validation fails the state transfers to the error state.
