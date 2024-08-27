@@ -37,13 +37,12 @@ class Scope:
     Scope of the lifetime of CacheItem.
     """
 
-    def __init__(self, timeout: float = 24 * 3600, version: int = 0) -> None:
+    def __init__(self, timeout: float = 24 * 3600) -> None:
         """
         :param timeout: How long (in seconds) before the associated cache item is considered expired.
         :param version: The version to which this cache item belongs.
         """
         self.timeout = timeout
-        self.version = version
 
 
 class CacheItem:
@@ -119,6 +118,11 @@ class AgentCache:
         self.addLock = Lock()
         self.addLocks: dict[str, Lock] = {}
         self._agent_instance = agent_instance
+
+        # Consistency mechanism: before the agent performs a resource action (deploy / repair / fact retrieval / dry run)
+        # - we clean up stale entries
+        # - we freeze the cache (to prevent the background cleanup job to trigger while the agent is working)
+        self._frozen: bool = False
 
     def close(self) -> None:
         """
@@ -212,9 +216,9 @@ class AgentCache:
         key: str,
         value: Any,
         resource: Optional[Resource] = None,
-        version: int = 0,
         timeout: int = 5000,
         call_on_delete: Optional[Callable[[Any], None]] = None,
+        for_version: bool=True
     ) -> None:
         """
         add a value to the cache with the given key
@@ -227,8 +231,8 @@ class AgentCache:
         """
         self._cache(
             CacheItem(
-                self._get_key(key, resource, version),
-                Scope(timeout, version),
+                self._get_key(key, resource),
+                Scope(timeout),
                 value,
                 call_on_delete,
             )
@@ -268,14 +272,17 @@ class AgentCache:
 
         all kwargs are prepended to the key
 
-        if a kwarg named version is found and forVersion is true, the value is cached only for that particular version
-
-        :param forVersion: whether to use the version attribute to attach this value to the resource
+        :param timeout: Use in combination with for_version=False to set a "hard" expiry timeout (in seconds).
+          The cached entry will be evicted from the cache after this period of time.
+          Ignored when for_version=True.
+        :param for_version: This parameter controls when the cached value is considered expired.
+            - for_version=False: the cached value is not tied to any model version. It is
+              considered stale after <timeout> seconds have elapsed since it entered the cache.
+            - for_version=True: the cached value is expected to be reused across multiple versions.
+              It is considered stale if no agent used this entry in the last 60s. TODO -> make this configurable?
 
         """
         acceptable = {"resource"}
-        if for_version:
-            acceptable.add("version")
         args = {k: v for k, v in kwargs.items() if k in acceptable and k not in ignore}
         others = sorted([k for k in kwargs.keys() if k not in acceptable and k not in ignore])
         for k in others:
@@ -295,7 +302,7 @@ class AgentCache:
                 except KeyError:
                     value = function(**kwargs)
                     if cache_none or value is not None:
-                        self.cache_value(key, value, timeout=timeout, call_on_delete=call_on_delete, **args)
+                        self.cache_value(key, value, timeout=timeout, call_on_delete=call_on_delete, for_version=for_version, **args)
             with self.addLock:
                 del self.addLocks[key]
             return value

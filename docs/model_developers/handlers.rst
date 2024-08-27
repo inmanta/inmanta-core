@@ -223,6 +223,8 @@ the actual :class:`~inmanta.agent.handler.HandlerContext` and log appropriately,
 Caching
 """""""
 
+TODO update doc
+
 The agent maintains a cache, that is kept over handler invocations. It can, for example, be used to
 cache a connection, so that multiple resources on the same device can share a connection.
 
