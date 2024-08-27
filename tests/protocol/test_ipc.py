@@ -144,7 +144,7 @@ async def test_log_transport(caplog, request):
     request.addfinalizer(client_transport.close)
     log_shipper = inmanta.protocol.ipc_light.LogShipper(client_protocol, loop)
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         # Test exception capture and transport
         try:
             raise Exception("test the exception capture!")
@@ -194,7 +194,7 @@ async def test_log_transport(caplog, request):
 
         def has_diverted_log() -> bool:
             try:
-                utils.log_contains(caplog, log_shipper.logger_name, logging.INFO, "Could not send log line")
+                utils.log_contains(caplog, log_shipper.logger_name, logging.DEBUG, "Could not send log line")
                 return True
             except AssertionError:
                 return False
@@ -205,6 +205,6 @@ async def test_log_transport(caplog, request):
         utils.log_doesnt_contain(caplog, log_shipper.logger_name, logging.INFO, "Test X")
         # Log line is not repeated
         # Not other log line after it
-        utils.LogSequence(caplog).contains(log_shipper.logger_name, logging.INFO, "Could not send log line").assert_not(
+        utils.LogSequence(caplog).contains(log_shipper.logger_name, logging.DEBUG, "Could not send log line").assert_not(
             loggerpart="", level=-1, msg="", min_level=logging.DEBUG
         )

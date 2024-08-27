@@ -42,7 +42,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class DyrunService(protocol.ServerSlice):
-    """Slice for dryun support"""
+    """Slice for dryrun support"""
 
     agent_manager: AgentManager
     autostarted_agent_manager: AutostartedAgentManager

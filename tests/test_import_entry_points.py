@@ -32,7 +32,7 @@ import pytest
 @pytest.fixture(scope="session")
 def import_entry_point() -> Iterator[Callable[[str], Optional[int]]]:
     """
-    Yields a function that imports a module in a seperate Python process and returns the exit code.
+    Yields a function that imports a module in a separate Python process and returns the exit code.
     """
     context = multiprocessing.get_context("spawn")
 
@@ -61,7 +61,6 @@ def test_import_resources(import_entry_point) -> None:
 
 def test_import_handlers(import_entry_point) -> None:
     assert import_entry_point("inmanta.agent.handler") == 0
-    assert import_entry_point("inmanta.agent.io.local") == 0
 
 
 def test_import_export(import_entry_point) -> None:

@@ -24,19 +24,16 @@ import enum
 import logging
 import os
 import random
+import sys
 import time
+import traceback
 import uuid
-from asyncio import Lock
-from collections import defaultdict
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Collection, Dict, Optional, Union, cast
 
-import pkg_resources
-
-import inmanta.agent.executor
-from inmanta import config, const, data, env, protocol
+from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
@@ -49,20 +46,11 @@ from inmanta.data.model import (
     ResourceType,
     ResourceVersionIdStr,
 )
-from inmanta.loader import CodeLoader, ModuleSource
+from inmanta.loader import ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import (
-    CronSchedule,
-    IntervalSchedule,
-    NamedLock,
-    ScheduledTask,
-    TaskMethod,
-    TaskSchedule,
-    add_future,
-    join_threadpools,
-)
+from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, TaskMethod, TaskSchedule, add_future, join_threadpools
 
 LOGGER = logging.getLogger(__name__)
 
@@ -796,13 +784,15 @@ class AgentInstance:
                 for resource in resource_refs:
                     if resource.rvid in undeployable:
                         self.logger.error(
-                            "Skipping dryrun %s because in undeployable state %s",
+                            "Skipping dryrun for resource %s because it is in undeployable state %s",
                             resource.rvid,
                             undeployable[resource.rvid],
                         )
-                        # TODO: SKIP IS NO CHANGE???? https://github.com/inmanta/inmanta-core/issues/7588
                         await self.get_client().dryrun_update(
-                            tid=resource.env_id, id=dry_run_id, resource=resource.rvid, changes={}
+                            tid=resource.env_id,
+                            id=dry_run_id,
+                            resource=resource.rvid,
+                            changes={"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}},
                         )
                     else:
                         deployable_resources.append(resource)
@@ -830,7 +820,7 @@ class AgentInstance:
 
     async def setup_executor(
         self, model_version: int, resource_types: set[ResourceType]
-    ) -> tuple[Optional[executor.Executor], executor.FailedResourcesSet]:
+    ) -> tuple[Optional[executor.Executor], executor.FailedResources]:
         """
         Set up an executor for a given version of a model. This executor is the interface
         to interact with the resources.
@@ -846,20 +836,25 @@ class AgentInstance:
 
         # Resource types for which no handler code exist for the given model_version
         # or for which the pip config couldn't be retrieved
-        code, invalid_resource_types = await self.process.get_code(self._env_id, model_version, resource_types)
+        code, invalid_resources = await self.process.get_code(self._env_id, model_version, resource_types)
 
         try:
-            executor = await self.executor_manager.get_executor(self.name, self.uri, code)
+            current_executor = await self.executor_manager.get_executor(self.name, self.uri, code)
             # Resource types for which an error occurred during handler code installation
-            failed_resource_types = executor.failed_resource_types
-        except Exception:
+            failed_resources = current_executor.failed_resources
+        except Exception as e:
             logging.warning("Could not set up executor for %s", self.name, exc_info=True)
-            executor = None
-            failed_resource_types = resource_types
+            current_executor = None
+            # If the failed resource type is not present in `failed_resources`, then we add it with the current exception
+            # If it was already present, we only keep the old error
+            failed_resources = {
+                resource_type: Exception(f"Could not set up executor for {self.name}: {e}").with_traceback(e.__traceback__)
+                for resource_type in resource_types.difference(set(invalid_resources.keys()))
+            }
 
-        invalid_resource_types.update(failed_resource_types)
+        invalid_resources.update(failed_resources)
 
-        return executor, invalid_resource_types
+        return current_executor, invalid_resources
 
     async def prepare_resources(
         self,
@@ -887,39 +882,53 @@ class AgentInstance:
         """
         started = datetime.datetime.now().astimezone()
 
-        executor, invalid_resource_types = await self.setup_executor(model_version, resource_types)
+        executor, invalid_resources = await self.setup_executor(model_version, resource_types)
 
         loaded_resources: list[ResourceDetails] = []
-        failed_resources: list[ResourceVersionIdStr] = []
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
+        # {resource_type -> (set{resource_ids}, LogLine)}
+        failed_resources: dict[str, tuple[set[str], data.LogLine]] = dict()
         for res in resource_batch:
-            if res["resource_type"] not in invalid_resource_types:
+            res_id = res["id"]
+            res_type = res["resource_type"]
+
+            if res_type not in invalid_resources:
                 loaded_resources.append(ResourceDetails(res))
 
                 state = const.ResourceState[res["status"]]
                 if state in const.UNDEPLOYABLE_STATES:
-                    undeployable[res["id"]] = state
+                    undeployable[res_id] = state
             else:
-                failed_resources.append(res["id"])
-                undeployable[res["id"]] = const.ResourceState.unavailable
+                if res_type not in failed_resources:
+                    failed_resources[res_type] = (
+                        {res_id},
+                        data.LogLine.log(
+                            logging.ERROR,
+                            "All resources of type `%(res_type)s` failed to load handler code or install handler code "
+                            "dependencies: `%(error)s`\n%(traceback)s",
+                            res_type=res_type,
+                            error=str(invalid_resources[res_type]),
+                            traceback="".join(traceback.format_tb(invalid_resources[res_type].__traceback__)),
+                        ),
+                    )
+                else:
+                    failed_resources[res_type][0].add(res_id)
+                undeployable[res_id] = const.ResourceState.unavailable
                 loaded_resources.append(ResourceDetails(res))
 
         if len(failed_resources) > 0:
-            log = data.LogLine.log(
-                logging.ERROR,
-                "Failed to load handler code or install handler code dependencies. Check the agent log for details.",
-            )
-            await self.get_client().resource_action_update(
-                tid=self._env_id,
-                resource_ids=failed_resources,
-                action_id=uuid.uuid4(),
-                action=action,
-                started=started,
-                finished=datetime.datetime.now().astimezone(),
-                messages=[log],
-                status=const.ResourceState.unavailable,
-            )
+            for resource_type, (failed_resource_ids, log_line) in failed_resources.items():
+                await self.get_client().resource_action_update(
+                    tid=self._env_id,
+                    resource_ids=list(failed_resource_ids),
+                    action_id=uuid.uuid4(),
+                    action=action,
+                    started=started,
+                    finished=datetime.datetime.now().astimezone(),
+                    messages=[log_line],
+                    status=const.ResourceState.unavailable,
+                )
         return undeployable, loaded_resources, executor
 
 
@@ -971,35 +980,24 @@ class Agent(SessionEndpoint):
         self._instances: dict[str, AgentInstance] = {}
         self._instances_lock = asyncio.Lock()
 
-        self._loader: Optional[CodeLoader] = None
-        self._env: Optional[env.VirtualEnv] = None
-        if code_loader:
-            # all of this should go into the executor manager https://github.com/inmanta/inmanta-core/issues/7589
-            self._env = env.VirtualEnv(self._storage["env"])
-            self._env.use_virtual_env()
-            self._loader = CodeLoader(self._storage["code"], clean=True)
-            # Lock to ensure only one actual install runs at a time
-            self._loader_lock = Lock()
-            # Keep track for each resource type of the last loaded version
-            self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] = defaultdict(lambda: None)
-            # Cache to prevent re-fetching the same resource-version
-            self._previously_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
-            # Per-resource lock to serialize all actions per resource
-            self._resource_loader_lock = NamedLock()
+        # Cache to prevent re-fetching the same resource-version
+        self._code_cache: dict[tuple[str, int], ResourceInstallSpec] = {}
 
         self.agent_map: Optional[dict[str, str]] = agent_map
 
         remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExecutorMode.forking
         can_have_remote_executor = code_loader
 
+        # Mechanism to speed up tests using the old (<= iso7) agent mechanism
+        # by avoiding spawning a virtual environment.
+        self._code_loader = code_loader
+
         self.executor_manager: executor.ExecutorManager[executor.Executor]
         if remote_executor and can_have_remote_executor:
             LOGGER.info("Selected forking agent executor mode")
-            env_manager = inmanta.agent.executor.VirtualEnvironmentManager(self._storage["executor"])
             assert self.environment is not None  # Mypy
             self.executor_manager = forking_executor.MPManager(
                 self.thread_pool,
-                env_manager,
                 self.sessionid,
                 self.environment,
                 config.log_dir.get(),
@@ -1015,6 +1013,9 @@ class Agent(SessionEndpoint):
                 asyncio.get_event_loop(),
                 LOGGER,
                 self,
+                self._storage["code"],
+                self._storage["env"],
+                code_loader,
             )
 
     async def _init_agent_map(self) -> None:
@@ -1052,6 +1053,7 @@ class Agent(SessionEndpoint):
         threadpools_to_join = [self.thread_pool]
 
         await self.executor_manager.join(threadpools_to_join, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
+
         self.thread_pool.shutdown(wait=False)
         for instance in self._instances.values():
             await instance.stop()
@@ -1215,7 +1217,7 @@ class Agent(SessionEndpoint):
 
     async def get_code(
         self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
-    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResourcesSet]:
+    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
         """
         Get the collection of installation specifications (i.e. pip config, python package dependencies,
         Inmanta modules sources) required to deploy a given version for the provided resource types.
@@ -1224,16 +1226,16 @@ class Agent(SessionEndpoint):
             - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
-        if self._loader is None:
-            return [], set()
+        if not self._code_loader:
+            return [], {}
 
         # store it outside the loop, but only load when required
         pip_config: Optional[PipConfig] = None
 
         resource_install_specs: list[ResourceInstallSpec] = []
-        invalid_resource_types: executor.FailedResourcesSet = set()
+        invalid_resources: executor.FailedResources = {}
         for resource_type in set(resource_types):
-            cached_spec: Optional[ResourceInstallSpec] = self._previously_loaded.get((resource_type, version))
+            cached_spec: Optional[ResourceInstallSpec] = self._code_cache.get((resource_type, version))
             if cached_spec:
                 LOGGER.debug(
                     "Cache hit, using existing ResourceInstallSpec for resource_type=%s version=%d", resource_type, version
@@ -1260,19 +1262,28 @@ class Agent(SessionEndpoint):
                 if pip_config is None:
                     try:
                         pip_config = await self._get_pip_config(environment, version)
-                    except Exception:
+                    except Exception as e:
                         LOGGER.exception("Failed to load resources due to missing pip config for type %s", resource_type)
-                        invalid_resource_types.add(resource_type)
+                        invalid_resources[resource_type] = Exception(
+                            f"Failed to load resources due to missing pip config for type {resource_type}: {e}"
+                        ).with_traceback(e.__traceback__)
                         continue
 
                 resource_install_spec = ResourceInstallSpec(
-                    resource_type, version, executor.ExecutorBlueprint(pip_config, list(requirements), sources)
+                    resource_type,
+                    version,
+                    executor.ExecutorBlueprint(
+                        pip_config=pip_config,
+                        requirements=list(requirements),
+                        sources=sources,
+                        python_version=sys.version_info[:2],
+                    ),
                 )
                 resource_install_specs.append(resource_install_spec)
-                # Update the ``_previously_loaded`` cache to indicate that the given resource type's ResourceInstallSpec
+                # Update the ``_code_cache`` cache to indicate that the given resource type's ResourceInstallSpec
                 # was constructed successfully at the specified version.
-                # TODO: this cache is a slight memory leak
-                self._previously_loaded[(resource_type, version)] = resource_install_spec
+                # TODO: this cache is a slight memory leak, to be phased out on new executor
+                self._code_cache[(resource_type, version)] = resource_install_spec
             else:
                 LOGGER.error(
                     "Failed to get source code for %s version=%d\n%s",
@@ -1280,70 +1291,11 @@ class Agent(SessionEndpoint):
                     version,
                     result.result,
                 )
-                invalid_resource_types.add(resource_type)
+                invalid_resources[resource_type] = Exception(
+                    f"Failed to get source code for {resource_type} version={version}, result={result.get_result()}"
+                )
 
-        return resource_install_specs, invalid_resource_types
-
-    async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> executor.FailedResourcesSet:
-        """Ensure that the code for the given environment and version is loaded"""
-
-        failed_to_load: executor.FailedResourcesSet = set()
-
-        if self._loader is None:
-            return failed_to_load
-
-        for resource_install_spec in code:
-            # only one logical thread can load a particular resource type at any time
-            async with self._resource_loader_lock.get(resource_install_spec.resource_type):
-                # stop if the last successful load was this one
-                # The combination of the lock and this check causes the reloads to naturally 'batch up'
-                if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.blueprint:
-                    LOGGER.debug(
-                        "Handler code already installed for %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-                    continue
-
-                try:
-                    # Install required python packages and the list of ``ModuleSource`` with the provided pip config
-                    LOGGER.debug(
-                        "Installing handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-                    await self._install(resource_install_spec.blueprint)
-                    LOGGER.debug(
-                        "Installed handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-
-                    self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
-                except Exception:
-                    LOGGER.exception(
-                        "Failed to install handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
-                    )
-                    failed_to_load.add(resource_install_spec.resource_type)
-                    self._last_loaded_version[resource_install_spec.resource_type] = None
-
-        return failed_to_load
-
-    async def _install(self, blueprint: executor.ExecutorBlueprint) -> None:
-        if self._env is None or self._loader is None:
-            raise Exception("Unable to load code when agent is started with code loading disabled.")
-
-        async with self._loader_lock:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                self.thread_pool,
-                self._env.install_for_config,
-                list(pkg_resources.parse_requirements(blueprint.requirements)),
-                blueprint.pip_config,
-            )
-            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
+        return resource_install_specs, invalid_resources
 
     async def _get_pip_config(self, environment: uuid.UUID, version: int) -> PipConfig:
         response = await self._client.get_pip_config(tid=environment, version=version)
@@ -1441,7 +1393,7 @@ class Agent(SessionEndpoint):
         Check if the server storage is configured and ready to use.
         """
 
-        # TODO: review on disk layout: https://github.com/inmanta/inmanta-core/issues/7590
+        # FIXME: review on disk layout: https://github.com/inmanta/inmanta-core/issues/7590
 
         state_dir = cfg.state_dir.get()
 
