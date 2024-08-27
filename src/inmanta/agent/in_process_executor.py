@@ -17,22 +17,28 @@ import datetime
 import logging
 import typing
 import uuid
+from asyncio import Lock
+from collections import defaultdict
 from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Optional
 
+import pkg_resources
+
 import inmanta.agent.cache
 import inmanta.protocol
 import inmanta.util
-from inmanta import const, data
+import logfire
+from inmanta import const, data, env
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import FailedResourcesSet, ResourceDetails
+from inmanta.agent.executor import FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
-from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.const import ParameterSource
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
+from inmanta.loader import CodeLoader
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn
+from inmanta.util import NamedLock
 
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent as agent
@@ -61,8 +67,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self.sessionid = client._sid
         self.environment = environment
 
-        # threads to setup _io ssh connections
-        self.provider_thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="ProviderPool_%s" % self.name)
         # threads to work
         self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="Pool_%s" % self.name)
 
@@ -72,12 +76,11 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self._stopped = False
 
-        self.failed_resource_types: FailedResourcesSet = set()
+        self.failed_resources: FailedResources = dict()
 
     def stop(self) -> None:
         self._stopped = True
         self._cache.close()
-        self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
 
     def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
@@ -87,16 +90,13 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param thread_pool_finalizer: all threadpools that should be joined should be added here.
         """
         assert self._stopped
-        thread_pool_finalizer.append(self.provider_thread_pool)
         thread_pool_finalizer.append(self.thread_pool)
 
     def is_stopped(self) -> bool:
         return self._stopped
 
     async def get_provider(self, resource: Resource) -> HandlerAPI[Any]:
-        provider = await asyncio.get_running_loop().run_in_executor(
-            self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
-        )
+        provider = handler.Commander.get_provider(agent=self, resource=resource)
         provider.set_cache(self._cache)
         return provider
 
@@ -134,10 +134,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         provider: Optional[HandlerAPI[Any]] = None
         try:
             provider = await self.get_provider(resource)
-        except ChannelClosedException as e:
-            ctx.set_status(const.ResourceState.unavailable)
-            ctx.exception(str(e))
-            return
         except Exception:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=resource.id.resource_version_str())
@@ -154,9 +150,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 )
                 if ctx.status is None:
                     ctx.set_status(const.ResourceState.deployed)
-            except ChannelClosedException as e:
-                ctx.set_status(const.ResourceState.failed)
-                ctx.exception(str(e))
             except SkipResource as e:
                 ctx.set_status(const.ResourceState.skipped)
                 ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
@@ -220,6 +213,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             )
             raise
 
+    @logfire.instrument("InProcessExecutor.execute", extract_args=True)
     async def execute(
         self,
         gid: uuid.UUID,
@@ -432,7 +426,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
     """
-    This is the executor that provides the backward compatible behavior, confirming to the agent in ISO7.
+    This is the executor that provides the backward compatible behavior, conforming to the agent in ISO7.
 
     It spawns an InProcessExecutor and makes sure all code is installed and loadable locally.
     """
@@ -444,6 +438,9 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         eventloop: asyncio.AbstractEventLoop,
         parent_logger: logging.Logger,
         process: "agent.Agent",
+        code_dir: str,
+        env_dir: str,
+        code_loader: bool = True,
     ) -> None:
         self.environment = environment
         self.client = client
@@ -454,9 +451,26 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self.executors: dict[str, InProcessExecutor] = {}
         self._creation_locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
 
+        self._loader: CodeLoader | None = None
+        self._env: env.VirtualEnv | None = None
+
+        if code_loader:
+            self._env = env.VirtualEnv(env_dir)
+            self._env.use_virtual_env()
+            self._loader = CodeLoader(code_dir, clean=True)
+            # Lock to ensure only one actual install runs at a time
+            self._loader_lock: asyncio.Lock = Lock()
+            # Keep track for each resource type of the last loaded version
+            self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] = defaultdict(lambda: None)
+            # Per-resource lock to serialize all actions per resource
+            self._resource_loader_lock: NamedLock = NamedLock()
+
     async def stop(self) -> None:
         for child in self.executors.values():
             child.stop()
+
+    async def start(self) -> None:
+        pass
 
     async def stop_for_agent(self, agent_name: str) -> list[InProcessExecutor]:
         if agent_name in self.executors:
@@ -474,10 +488,14 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
     ) -> InProcessExecutor:
         """
-        Creates an Executor based with the specified agent name and blueprint.
-        It ensures the required virtual environment is prepared and source code is loaded.
+        Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
+        If an Executor does not exist for the given configuration, a new one is created.
 
-        :param executor_id: executor identifier containing an agent name and a blueprint configuration.
+        :param agent_name: The name of the agent for which an Executor is being retrieved or created.
+        :param agent_uri: The name of the host on which the agent is running.
+        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
+            which resource types it can act on and all necessary information to install the relevant
+            handler code in its venv.
         :return: An Executor instance
         """
         if agent_name in self.executors:
@@ -490,7 +508,71 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     out = InProcessExecutor(agent_name, agent_uri, self.environment, self.client, self.eventloop, self.logger)
                     self.executors[agent_name] = out
         assert out.uri == agent_uri
-        failed_resource_types: FailedResourcesSet = await self.process.ensure_code(code)
-        out.failed_resource_types = failed_resource_types
+        out.failed_resources = await self.ensure_code(code)
 
         return out
+
+    async def ensure_code(self, code: typing.Collection[executor.ResourceInstallSpec]) -> executor.FailedResources:
+        """Ensure that the code for the given environment and version is loaded"""
+
+        failed_to_load: executor.FailedResources = {}
+
+        if self._loader is None:
+            return failed_to_load
+
+        for resource_install_spec in code:
+            # only one logical thread can load a particular resource type at any time
+            async with self._resource_loader_lock.get(resource_install_spec.resource_type):
+                # stop if the last successful load was this one
+                # The combination of the lock and this check causes the reloads to naturally 'batch up'
+                if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.blueprint:
+                    self.logger.debug(
+                        "Handler code already installed for %s version=%d",
+                        resource_install_spec.resource_type,
+                        resource_install_spec.model_version,
+                    )
+                    continue
+
+                try:
+                    # Install required python packages and the list of ``ModuleSource`` with the provided pip config
+                    self.logger.debug(
+                        "Installing handler %s version=%d",
+                        resource_install_spec.resource_type,
+                        resource_install_spec.model_version,
+                    )
+                    await self._install(resource_install_spec.blueprint)
+                    self.logger.debug(
+                        "Installed handler %s version=%d",
+                        resource_install_spec.resource_type,
+                        resource_install_spec.model_version,
+                    )
+
+                    self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
+                except Exception as e:
+                    self.logger.exception(
+                        "Failed to install handler %s version=%d",
+                        resource_install_spec.resource_type,
+                        resource_install_spec.model_version,
+                    )
+                    if resource_install_spec.resource_type not in failed_to_load:
+                        failed_to_load[resource_install_spec.resource_type] = Exception(
+                            f"Failed to install handler {resource_install_spec.resource_type} "
+                            f"version={resource_install_spec.model_version}: {e}"
+                        ).with_traceback(e.__traceback__)
+                    self._last_loaded_version[resource_install_spec.resource_type] = None
+
+        return failed_to_load
+
+    async def _install(self, blueprint: executor.ExecutorBlueprint) -> None:
+        if self._env is None or self._loader is None:
+            raise Exception("Unable to load code when agent is started with code loading disabled.")
+
+        async with self._loader_lock:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                self.process.thread_pool,
+                self._env.install_for_config,
+                list(pkg_resources.parse_requirements(blueprint.requirements)),
+                blueprint.pip_config,
+            )
+            await loop.run_in_executor(self.process.thread_pool, self._loader.deploy_version, blueprint.sources)

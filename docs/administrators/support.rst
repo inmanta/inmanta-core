@@ -16,16 +16,16 @@ Support Procedure
 
         * if the orchestrator is still running:
 
-            .. code-block:: sh
+        .. code-block:: sh
 
-                inmanta-support-tool collect-from-server
+            inmanta-support-tool collect-from-server
 
 
         * if the orchestrator is not running:
 
-            .. code-block:: sh
+        .. code-block:: sh
 
-                inmanta-support-tool --config-dir /etc/inmanta/inmanta.dir collect-full
+            inmanta-support-tool --config-dir /etc/inmanta/inmanta.dir collect-full
 
     2. Using the web-console:
 

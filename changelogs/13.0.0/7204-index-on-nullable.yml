@@ -1,0 +1,8 @@
+description: Allow indexes on nullable attributes
+issue-nr: 7204
+change-type: minor
+sections:
+  feature: "Compiler: {{description}}"
+destination-branches:
+  - master
+  - iso7

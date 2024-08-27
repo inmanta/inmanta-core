@@ -36,6 +36,7 @@ and change the refinement process based on external events.
     service_identity
     state_transfer_tx
     multi_version
+    transfer_optimization/*
 
 
 Service catalog

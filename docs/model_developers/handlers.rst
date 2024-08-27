@@ -42,6 +42,8 @@ This mapping is done by adding a static method to the resource class with ``get_
 name. This static method has two arguments: a reference to the exporter and the instance of the
 entity it is serializing.
 
+..
+    This uses std::File, which is to be removed, but it re-constructs it, so that is OK
 
 .. code-block:: python
     :linenos:

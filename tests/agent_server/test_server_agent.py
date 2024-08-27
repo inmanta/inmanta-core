@@ -26,7 +26,7 @@ from collections.abc import Mapping
 from functools import partial
 from itertools import groupby
 from logging import DEBUG
-from typing import Any, Optional
+from typing import Any, Collection, Coroutine, Optional
 from uuid import UUID
 
 import psutil
@@ -37,7 +37,9 @@ import utils
 from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent, wait_for_n_deployed_resources
 from inmanta import agent, config, const, data, execute
 from inmanta.agent import config as agent_config
+from inmanta.agent import executor
 from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deploy_response_matrix
+from inmanta.agent.executor import ResourceInstallSpec
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
@@ -45,9 +47,11 @@ from inmanta.data import (
     AUTOSTART_AGENT_DEPLOY_INTERVAL,
     AUTOSTART_AGENT_REPAIR_INTERVAL,
     ENVIRONMENT_AGENT_TRIGGER_METHOD,
+    PipConfig,
     Setting,
     convert_boolean,
 )
+from inmanta.protocol import Client
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -56,6 +60,7 @@ from inmanta.server import (
     SLICE_SESSION_MANAGER,
 )
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.protocol import Server
 from inmanta.server.services.environmentservice import EnvironmentService
 from inmanta.util import get_compiler_version
 from utils import (
@@ -1559,7 +1564,7 @@ async def test_autostart_mapping_overrides_config(server, client, environment, a
 
 
 async def test_autostart_mapping_update_uri(
-    server, client, clienthelper, environment, async_finalizer, resource_container, caplog
+    server, client, clienthelper, environment, async_finalizer, resource_container, caplog, no_agent_backoff
 ):
     caplog.set_level(logging.INFO)
     agent_config.use_autostart_agent_map.set("true")
@@ -3360,7 +3365,7 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     #   [2] Store action
     assert result["logs"][0]["action"] == "deploy"
     assert result["logs"][0]["status"] == "unavailable"
-    assert "Failed to load handler code " in result["logs"][0]["messages"][0]["msg"]
+    assert "failed to load handler code " in result["logs"][0]["messages"][-1]["msg"]
 
 
 async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, async_finalizer):
@@ -3887,3 +3892,226 @@ def test_deploy_response_matrix_invariants():
     for condition, reaction in deploy_response_matrix.items():
         if (reaction in [DeployRequestAction.interrupt, DeployRequestAction.terminate]) and condition[0][0] and condition[0][1]:
             assert not condition[1][1], "Invariant violation, regression on #6202"
+
+
+async def test_logging_failure_when_creating_venv(
+    resource_container,
+    agent: Agent,
+    client: Client,
+    clienthelper: ClientHelper,
+    environment: uuid.UUID,
+    no_agent_backoff: None,
+    caplog,
+    monkeypatch,
+):
+    """
+    Test goal: make sure that failed resources are correctly logged by the `resource_action` logger.
+    """
+
+    caplog.set_level(logging.INFO)
+    resource_container.Provider.reset()
+    agent_name = "agent1"
+    myagent_instance = agent._instances[agent_name]
+
+    resource_container.Provider.set("agent1", "key1", "value1")
+
+    def get_resources(version, value_resource_three):
+        return [
+            {
+                "key": "key1",
+                "value": "value2",
+                "id": "test::Resource[agent1,key=key1],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key2",
+                "value": "value2",
+                "id": "test::AgentConfig[agent1,key=key2],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
+            },
+            {
+                "key": "key3",
+                "value": value_resource_three,
+                "id": "test::Resource[agent1,key=key3],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": ["test::AgentConfig[agent1,key=key2],v=%d" % version],
+            },
+        ]
+
+    version1 = await clienthelper.get_version()
+
+    # Initial deploy
+    await _deploy_resources(client, environment, get_resources(version1, "value2"), version1, push=False)
+
+    async def ensure_code(code: Collection[ResourceInstallSpec]) -> executor.FailedResources:
+        raise RuntimeError(f"Failed to install handler `test` version={version1}")
+
+    monkeypatch.setattr(myagent_instance.executor_manager, "ensure_code", ensure_code)
+
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Deploy 1", is_full_deploy=False, is_periodic=False)
+    )
+
+    monkeypatch.undo()
+
+    expected_error_message_without_tb = (
+        "multiple resources: All resources of type `test::Resource` failed to load handler code or "
+        "install handler code dependencies: `Could not set up executor for agent1: Failed to"
+        " install handler `test` version=1`"
+    )
+
+    idx1 = log_index(
+        caplog,
+        f"resource_action_logger.{environment}",
+        logging.ERROR,
+        expected_error_message_without_tb,
+    )
+    actual_error_message = caplog.record_tuples[idx1][2]
+    expected_location = """, in ensure_code
+    raise RuntimeError(f"Failed to install handler `test` version={version1}")"""
+    assert expected_location in actual_error_message
+
+    # Logs should not appear twice
+    with pytest.raises(AssertionError):
+        log_index(
+            caplog,
+            f"resource_action_logger.{environment}",
+            logging.ERROR,
+            expected_error_message_without_tb,
+            idx1 + 1,
+        )
+
+    def retrieve_relevant_logs(result) -> str:
+        global_logs = result.result["logs"]
+        assert len(global_logs) > 1
+        relevant_logs = [e for e in global_logs if e["action"] == "deploy"]
+        assert len(relevant_logs) == 1
+        return "".join([log["msg"] for log in relevant_logs[0]["messages"]])
+
+    # Now let's check that everything is in the DB as well
+    # Given that everything is linked together, we can only fetch one resource and see what's present in the DB
+    result = await client.get_resource(
+        tid=environment,
+        id="test::Resource[agent1,key=key3],v=%d" % version1,
+        logs=True,
+    )
+
+    # Possible error messages that should be in the DB
+    expected_error_messages = expected_error_message_without_tb.replace("multiple resources: ", "")
+
+    relevant_logs = retrieve_relevant_logs(result)
+    assert expected_error_messages in relevant_logs
+    assert expected_location in relevant_logs
+    # Make sure we don't find the same record multiple times in the resource logs
+    assert relevant_logs.count(expected_error_messages) == 1
+
+
+async def test_agent_code_loading_with_failure(
+    caplog,
+    server: Server,
+    agent_factory: Coroutine[Any, Any, Agent],
+    client: Client,
+    environment: uuid.UUID,
+    monkeypatch,
+    clienthelper: ClientHelper,
+) -> None:
+    """
+    Test goal: make sure that failed resources are correctly returned by `get_code` and `ensure_code` methods.
+    The failed resources should have the right exception contained in the returned object.
+    """
+
+    caplog.set_level(DEBUG)
+
+    sources = {}
+
+    async def get_version() -> int:
+        version = await clienthelper.get_version()
+        res = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=[],
+            pip_config=PipConfig(),
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
+        return version
+
+    version_1 = await get_version()
+
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test": sources})
+    assert res.code == 200
+
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test2": sources})
+    assert res.code == 200
+
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test3": sources})
+    assert res.code == 200
+
+    old_value_config = config.Config.get("agent", "executor-mode")
+    config.Config.set("agent", "executor-mode", "threaded")
+
+    agent: Agent = await agent_factory(
+        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
+    )
+
+    resource_install_specs_1: list[ResourceInstallSpec]
+    resource_install_specs_2: list[ResourceInstallSpec]
+
+    # We want to test
+    nonexistent_version = -1
+    resource_install_specs_1, invalid_resources_1 = await agent.get_code(
+        environment=environment, version=nonexistent_version, resource_types=["test::Test", "test::Test2", "test::Test3"]
+    )
+    assert len(invalid_resources_1.keys()) == 3
+    for resource_type, exception in invalid_resources_1.items():
+        assert (
+            "Failed to get source code for " + resource_type + " version=-1, result={'message': 'Request or "
+            "referenced resource does not exist: The version of the code does not exist. "
+            + resource_type
+            + ", "
+            + str(nonexistent_version)
+            + "'}"
+        ) == str(exception)
+
+    await agent.executor_manager.ensure_code(
+        code=resource_install_specs_1,
+    )
+
+    resource_install_specs_2, _ = await agent.get_code(
+        environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"]
+    )
+
+    async def _install(blueprint: executor.ExecutorBlueprint) -> None:
+        raise Exception("MKPTCH: Unable to load code when agent is started with code loading disabled.")
+
+    monkeypatch.setattr(agent.executor_manager, "_install", _install)
+
+    failed_to_load = await agent.executor_manager.ensure_code(
+        code=resource_install_specs_2,
+    )
+    assert len(failed_to_load) == 2
+    for handler, exception in failed_to_load.items():
+        assert str(exception) == (
+            f"Failed to install handler {handler} version=1: "
+            f"MKPTCH: Unable to load code when agent is started with code loading disabled."
+        )
+
+    monkeypatch.undo()
+
+    idx1 = log_index(
+        caplog,
+        "inmanta.agent.agent",
+        logging.ERROR,
+        "Failed to get source code for test::Test2 version=-1",
+    )
+
+    log_index(caplog, "inmanta.agent.agent", logging.ERROR, "Failed to install handler test::Test version=1", idx1)
+
+    log_index(caplog, "inmanta.agent.agent", logging.ERROR, "Failed to install handler test::Test2 version=1", idx1)
+
+    config.Config.set("agent", "executor-mode", old_value_config)

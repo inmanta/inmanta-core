@@ -1,0 +1,5 @@
+description: Add tracing support
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "Added telemetry support for tracing calls through the orchestrator."

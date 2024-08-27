@@ -465,6 +465,78 @@ def test_dict_path_get_elements(
 
 
 @pytest.mark.parametrize(
+    ("wild_path", "dict_paths", "exception"),
+    [
+        # NullPath should give a NullPath
+        (".", ["."], None),
+        # Any keys should give one path by key
+        (".*", list(str(InDict(str(k))) for k in WILD_PATH_TEST_CONTAINER.keys()), None),
+        # Matching all items of a keyed list should give one path by item
+        ("mylist[k1=*][k2=*]", ["mylist[k1=0][k2=0]", "mylist[k1=0][k2=1]", "mylist[k1=1][k2=0]"], None),
+        (
+            "mylist[k1=*][k2=*].nested.value",
+            ["mylist[k1=0][k2=0].nested.value", "mylist[k1=0][k2=1].nested.value", "mylist[k1=1][k2=0].nested.value"],
+            None,
+        ),
+        # A normal dict path should give a copy of itself
+        ("mylist[k1=0][k2=0].nested.value", ["mylist[k1=0][k2=0].nested.value"], None),
+        # Combine wild keyed list and wild in dict
+        (
+            "mylist[k1=0][k2=*].*",
+            [
+                "mylist[k1=0][k2=0].k1",
+                "mylist[k1=0][k2=0].k2",
+                "mylist[k1=0][k2=0].nested",
+                "mylist[k1=0][k2=1].k1",
+                "mylist[k1=0][k2=1].k2",
+                "mylist[k1=0][k2=1].nested",
+            ],
+            None,
+        ),
+        (
+            "special_list[*=just-a-string][key=*]",
+            [],
+            NotImplementedError,
+        ),
+        # A path which doesn't match the dict should not emit any path
+        (
+            "my_list[k1=0][k2=0].test",
+            [],
+            None,
+        ),
+    ],
+)
+def test_dict_path_get_paths(
+    wild_path: str,
+    dict_paths: list[str],
+    exception: type[Exception] | None,
+) -> None:
+    """
+    Test the get_paths method of the WildDictPath object.
+    """
+    container_copy: object = copy.deepcopy(WILD_PATH_TEST_CONTAINER)
+
+    # Compile the wild path
+    path = to_wild_path(wild_path)
+
+    if exception is not None:
+        with pytest.raises(exception):
+            path.resolve_wild_cards(container_copy)
+        return
+
+    all_paths = path.resolve_wild_cards(container_copy)
+
+    # Assert that all the paths which are resolved match what is expected
+    assert sorted(str(p) for p in all_paths) == sorted(dict_paths)
+
+    # Assert that all the elements we get with the wild path, we also
+    # get with the combination of all the resolved paths
+    assert {id(elem) for elem in path.get_elements(container_copy)} == {
+        id(elem) for path in all_paths for elem in path.get_elements(container_copy)
+    }
+
+
+@pytest.mark.parametrize(
     "container, dict_path, result",
     [
         (None, "three", {**WILD_PATH_TEST_CONTAINER, "three": {}}),
