@@ -71,8 +71,8 @@ for instance in lsm::all(binding, min_version=1, max_version=2):
     InterfaceIPAssignmentV2(
         instance_id=instance["id"],
         entity_binding=lsm::get_service_binding_version(binding, instance["service_entity_version"]),
-        router_ip=instance["attributes"]["router_ip"]
-        interface_name=instance["attributes"]["interface_name"]
+        router_ip=instance["attributes"]["router_ip"],
+        interface_name=instance["attributes"]["interface_name"],
         address=instance["attributes"]["address"]
     )
 end
