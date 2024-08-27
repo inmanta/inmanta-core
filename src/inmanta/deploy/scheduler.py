@@ -25,16 +25,27 @@ from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
 
 
-# TODO: name
-# TODO: expand docstring
-class Scheduler:
+# TODO: polish for first PR
+# - finalize scheduler-agent interface -> Task objects + _run_for_agent
+# - mypy
+
+
+# FIXME[#8008] review code structure + functionality + add docstrings
+
+
+class ResourceScheduler:
     """
     Scheduler for resource actions. Reads resource state from the database and accepts deploy, dry-run, ... requests from the
     server. Schedules these requests as tasks according to priorities and, in case of deploy tasks, requires-provides edges.
+
+    The scheduler expects to be notified by the server whenever a new version is released.
     """
     def __init__(self) -> None:
         self._state: ModelState = ModelState(version=0)
-        self._work: work.ScheduledWork = work.ScheduledWork(requires=model_state.requires)
+        self._work: work.ScheduledWork = work.ScheduledWork(
+            requires=self._state.requires.requires_view(),
+            provides=self._state.requires.provides_view(),
+        )
 
         # We uphold two locks to prevent concurrency conflicts between external events (e.g. new version or deploy request)
         # and the task executor background tasks.
@@ -42,26 +53,28 @@ class Scheduler:
         # - lock to block scheduler state access (both model state and scheduled work) during scheduler-wide state updates
         #   (e.g. trigger deploy). A single lock suffices since all state accesses (both read and write) by the task runners are
         #   short, synchronous operations (and therefore we wouldn't gain anything by allowing multiple readers).
-        # TODO: this lock may have little value left now. Consider.
         self._scheduler_lock: asyncio.Lock = asyncio.Lock()
         # - lock to serialize scheduler state updates (i.e. process new version)
         self._update_lock: asyncio.Lock = asyncio.Lock()
 
-    def start(self) -> None:
-        # TODO (ticket): read from DB instead
+    async def start(self) -> None:
+        # FIXME[#8009]: read from DB instead
         pass
 
     async def deploy(self) -> None:
         async with self._scheduler_lock:
-            # TODO: more efficient access to dirty set by caching it on the ModelState
+            # FIXME[#8008]: more efficient access to dirty set by caching it on the ModelState
             dirty: Set[ResourceIdStr] = {
                 r for r, details in self._state.resource_state.items() if details.status == ResourceStatus.HAS_UPDATE
             }
-            # TODO: pass in running deploys
+            # FIXME[#8008]: pass in running deploys
             self._work.update_state(ensure_scheduled=dirty, running_deploys={})
 
-    # TODO: name
-    # TODO (ticket): design step 2: read new state from DB instead of accepting as parameter (method should be notification only, i.e. 0 parameters)
+    async def repair(self) -> None:
+        # FIXME[#8008]: implement repair
+        pass
+
+    # FIXME[#8009]: design step 2: read new state from DB instead of accepting as parameter (method should be notification only, i.e. 0 parameters)
     async def new_version(
         self,
         version: int,
@@ -72,14 +85,12 @@ class Scheduler:
             # Inspect new state and mark resources as "update pending" where appropriate. Since this method is the only writer
             # for "update pending", and a stale read is acceptable, we can do this part before acquiring the exclusive scheduler
             # lock.
-            # TODO: what to do when an export changes handler code without changing attributes? Consider in deployed state? What
+            # FIXME[#8008]: what to do when an export changes handler code without changing attributes? Consider in deployed state? What
             #   does current implementation do?
             deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
             for resource in deleted_resources:
                 self._work.delete_resource(resource)
 
-            # TODO: make sure this part (before scheduler lock is acquired) doesn't block queue until lock is acquired: either
-            # run on thread or make sure to regularly pass control to IO loop (preferred)
             new_desired_state: list[ResourceIdStr] = []
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
@@ -97,7 +108,15 @@ class Scheduler:
                 if dropped:
                     self._state.update_pending.add(resource)
                     dropped_requires[resource] = dropped
+                # this loop is race-free, potentially slow, and completely synchronous
+                # => regularly pass control to the event loop to not block scheduler operation during update prep
+                await asyncio.sleep(0)
 
+            # in the current implementation everything below the lock is synchronous, so it's not technically required. It is
+            # however kept for two reasons:
+            # 1. pass context once more to event loop before starting on the sync path
+            #   (could be achieved with a simple sleep(0) if desired)
+            # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in new_desired_state:
@@ -105,34 +124,41 @@ class Scheduler:
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
                 # ensure deploy for ALL dirty resources, not just the new ones
-                # TODO: this is copy-pasted, make into a method?
+                # FIXME[#8008]: this is copy-pasted, make into a method?
                 dirty: Set[ResourceIdStr] = {
                     r for r, details in self._state.resource_state.items() if details.status == ResourceStatus.HAS_UPDATE
                 }
                 self._work.update_state(
                     ensure_scheduled=dirty,
-                    # TODO: pass in running deploys
+                    # FIXME[#8008]: pass in running deploys
                     running_deploys={},
                     added_requires=added_requires,
                     dropped_requires=dropped_requires,
                 )
-                # TODO: design step 7: drop update_pending
-            # TODO: design step 10: Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added again by a deploy trigger
+                # FIXME[#8008]: design step 7: drop update_pending
+            # FIXME[#8008]: design step 10: Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added again by a deploy trigger
 
-    # TODO(ticket): set up background workers for each agent, calling _run_for_agent(). Make sure to somehow respond to new
+    # FIXME[#8008]: set up background workers for each agent, calling _run_for_agent(). Make sure to somehow respond to new
     #           agents or removed ones
 
     async def _run_for_agent(self, agent: str) -> None:
-        # TODO: end condition
+        # FIXME[#8008]: end condition
         while True:
             task: work.Task = await self._work.agent_queues.queue_get(agent)
-            # TODO: skip and reschedule deploy / refresh-fact task if resource marked as update pending?
+            # FIXME[#8008]: skip and reschedule deploy / refresh-fact task if resource marked as update pending?
             resource_details: ResourceDetails
             async with self._scheduler_lock:
                 # fetch resource details atomically under lock
-                resource_details = self._state.resources[task.resource]
+                try:
+                    resource_details = self._state.resources[task.resource]
+                except KeyError:
+                    # Stale resource, can simply be dropped.
+                    # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
+                    # because of this check, and an intrinsic part of the locking design because it's preferred over wider
+                    # locking for performance reasons.
+                    continue
 
-            # TODO: send task to agent process (not under lock)
+            # FIXME[#8010]: send task to agent process (not under lock) (separate method?)
 
             match task:
                 case work.Deploy():
@@ -140,7 +166,8 @@ class Scheduler:
                         # refresh resource details for latest model state
                         new_details: Optional[ResourceDetails] = self._state.resources.get(task.resource, None)
                         if new_details is not None and new_details.attribute_hash == resource_details.attribute_hash:
-                            # TODO: iff deploy was successful set resource status and deployment result in self.state.resources
+                            # FIXME[#8010]: pass success/failure to notify_provides()
+                            # FIXME[#8008]: iff deploy was successful set resource status and deployment result in self.state.resources
                             self._work.notify_provides(task)
                         # The deploy that finished has become stale (state has changed since the deploy started).
                         # Nothing to report on a stale deploy.
@@ -149,15 +176,3 @@ class Scheduler:
                     # nothing to do
                     pass
             self._work.agent_queues.task_done(agent)
-
-
-# TODO for Draft PR:
-# - review code structure and add docstrings
-# - open draft PR
-# - consider follow-up tasks and create refinement tickets
-#   - read from DB
-#     - back up state to DB
-#   - communication with agent (Wouter's PR?)
-#   - refine scheduler algorithm (self)
-#   - TODO's in code
-#   - implement repair

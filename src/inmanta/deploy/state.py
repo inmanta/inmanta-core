@@ -28,10 +28,10 @@ from inmanta.util.collections import BidirectionalManyToManyMapping
 
 
 class RequiresProvidesMapping(BidirectionalManyToManyMapping[ResourceIdStr, ResourceIdStr]):
-    def requires(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
+    def requires_view(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
         return self
 
-    def provides(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
+    def provides_view(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
         return self.reverse_mapping()
 
 
@@ -42,7 +42,6 @@ AttributeHash: TypeAlias = str
 class ResourceDetails:
     attribute_hash: AttributeHash
     attributes: Mapping[str, object]
-    # TODO: consider adding a read-only view on the requires relation?
 
 
 class ResourceStatus(StrEnum):
@@ -57,8 +56,10 @@ class ResourceStatus(StrEnum):
         diff.
     """
     UP_TO_DATE = enum.auto()
+    # FIXME[#8008]: HAS_UPDATE name comes from improved resource states design,
+    #       but we're using it both for "it has an update" and "it's dirty", consider splitting it?
     HAS_UPDATE = enum.auto()
-    # TODO: undefined / orphan? Otherwise a simple boolean `has_update` or `dirty` might suffice
+    # FIXME[#8008]: undefined / orphan? Otherwise a simple boolean `has_update` or `dirty` might suffice
 
 
 class DeploymentResult(StrEnum):
@@ -73,23 +74,20 @@ class DeploymentResult(StrEnum):
     NEW = enum.auto()
     DEPLOYED = enum.auto()
     FAILED = enum.auto()
-    # TODO: design also has SKIPPED, do we need it now or add it later?
+    # FIXME[#8008]: design also has SKIPPED, do we need it now or add it later?
 
 
-# TODO: where to link here? directly from ModelState or from ResourceDetails? Probably ResourceDetails
 @dataclass
 class ResourceState:
-    # TODO: remove link, replace with documentation
+    # FIXME[#8008]: remove link, replace with documentation
     # based on https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
     status: ResourceStatus
     deployment_result: DeploymentResult
-    # TODO: add other relevant state fields
 
 
 @dataclass(kw_only=True)
 class ModelState:
-    # TODO: document (or refactor to make more clear) that resource_state should only be updated under lock, and all other
-    #   fields are considered the domain of the scheduler (not the queue executor)
+    # FIXME[#8008]: docstring + mention invariant: all resources in the current model, and only those, are in all mappings
     version: int
     resources: dict[ResourceIdStr, ResourceDetails] = dataclasses.field(default_factory=dict)
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
@@ -106,7 +104,7 @@ class ModelState:
         resource: ResourceIdStr,
         attributes: ResourceDetails,
     ) -> None:
-        # TODO: raise KeyError if already lives in state?
+        # FIXME[#8008]: raise KeyError if already lives in state?
         self.resources[resource] = attributes
         if resource in self.resource_state:
             self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
