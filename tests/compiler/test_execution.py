@@ -39,9 +39,6 @@ host = Host(name="vm1", os=std::linux)
 
 f = std::testing::NullResource(name=host.name)
 
-std::Service(host=host, name="svc", state="running", onboot=true, requires=[f])
-ref = std::Service[host=host, name="svc"]
-
 """
     )
     with pytest.raises(MultiException):
