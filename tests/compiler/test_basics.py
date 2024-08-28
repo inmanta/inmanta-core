@@ -17,14 +17,18 @@
 """
 
 import os
+import pathlib
 import warnings
 from typing import Optional
 
+import py
 import pytest
 
-from inmanta import compiler, const
+from inmanta import compiler, const, module
 from inmanta.ast import DoubleSetException, RuntimeException
+from inmanta.module import InstallMode
 from inmanta.plugins import PluginDeprecationWarning
+from packaging import version
 from utils import module_from_template, v1_module_from_template
 
 
@@ -731,3 +735,53 @@ def test_implementation_import_missing_error(snippetcompiler) -> None:
     assert "could not find type tests::length in namespace __config__" in exception.value.msg
     assert exception.value.location.lnr == 6
     assert exception.value.location.start_char == 20
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("problematic_folder", ["files", "model", "templates"])
+def test_moduletool_failing(
+    capsys,
+    tmpdir: py.path.local,
+    local_module_package_index: str,
+    snippetcompiler_clean,
+    modules_v2_dir: str,
+    problematic_folder: str,
+) -> None:
+    """
+    Verify code is not loaded when python files are stored in `files`, `model` and `template` folders of a V2 module.
+    """
+    # set up venv
+    snippetcompiler_clean.setup_for_snippet("", autostd=False)
+
+    module_template_path: pathlib.Path = pathlib.Path(modules_v2_dir) / "failingminimalv2module"
+    module_from_template(
+        module_template_path,
+        str(tmpdir.join("custom_mod_one")),
+        new_name="custom_mod_one",
+        new_version=version.Version("1.0.0"),
+        install=True,
+        editable=False,
+    )
+
+    # set up project with a v2 module
+    snippetcompiler_clean.setup_for_snippet(
+        """
+import std
+import custom_mod_one
+        """.strip(),
+        python_package_sources=[local_module_package_index],
+        project_requires=[
+            module.InmantaModuleRequirement.parse("std~=4.3.3,<4.3.4"),
+            module.InmantaModuleRequirement.parse("custom_mod_one>0"),
+        ],
+        python_requires=[
+            module.InmantaModuleRequirement.parse("custom_mod_one<999").get_python_package_requirement(),
+        ],
+        install_mode=InstallMode.release,
+        install_project=True,
+        autostd=False,
+    )
+
+    compiler.do_compile()
+
+    (module_template_path / problematic_folder / "afile.py").unlink()
