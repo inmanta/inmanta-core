@@ -1,0 +1,3 @@
+description: Fixed broken tests following the removal of some resources in std
+change-type: patch
+destination-branches: [master]
