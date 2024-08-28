@@ -754,6 +754,8 @@ def test_moduletool_failing(
     snippetcompiler_clean.setup_for_snippet("", autostd=False)
 
     module_template_path: pathlib.Path = pathlib.Path(modules_v2_dir) / "failingminimalv2module"
+    new_file = module_template_path / problematic_folder / "afile.py"
+    new_file.write_text("raise RuntimeError('This file should not be loaded')")
     module_from_template(
         module_template_path,
         str(tmpdir.join("custom_mod_one")),
@@ -784,4 +786,5 @@ import custom_mod_one
 
     compiler.do_compile()
 
-    (module_template_path / problematic_folder / "afile.py").unlink()
+    # We remove the problematic file to be sure to test the other problematic directories
+    new_file.unlink()
