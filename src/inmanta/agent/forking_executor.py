@@ -158,6 +158,8 @@ class ExecutorContext:
             eventloop=loop,
             parent_logger=parent_logger,
         )
+        await executor.start()
+
         self.executors[name] = executor
 
     async def stop_for(self, name: str) -> None:
@@ -445,7 +447,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                     )
                 )
 
-        await context.executor.start()
         return failed
 
 
