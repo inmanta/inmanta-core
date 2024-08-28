@@ -30,7 +30,7 @@ from inmanta.stable_api import stable_api
 if TYPE_CHECKING:
     from inmanta.agent.executor import AgentInstance
 
-LOGGER = logging.getLogger()
+LOGGER = logging.getLogger(__name__)
 
 
 class Scope:
