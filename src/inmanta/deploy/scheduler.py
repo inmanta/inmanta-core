@@ -25,10 +25,6 @@ from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
 
 
-# TODO: polish for first PR
-# - finalize scheduler-agent interface -> Task objects + _run_for_agent
-
-
 # FIXME[#8008] review code structure + functionality + add docstrings
 
 
@@ -140,6 +136,10 @@ class ResourceScheduler:
     # FIXME[#8008]: set up background workers for each agent, calling _run_for_agent(). Make sure to somehow respond to new
     #           agents or removed ones
 
+    async def _run_task(self, agent: str, task: work.Task, resource_details: ResourceDetails) -> None:
+        # FIXME[#8010]: send task to agent process (not under lock)
+        pass
+
     async def _run_for_agent(self, agent: str) -> None:
         # FIXME[#8008]: end condition
         while True:
@@ -157,8 +157,9 @@ class ResourceScheduler:
                     # locking for performance reasons.
                     continue
 
-            # FIXME[#8010]: send task to agent process (not under lock) (separate method?)
+            await self._run_task(agent, task, resource_details)
 
+            # post-processing
             match task:
                 case work.Deploy():
                     async with self._scheduler_lock:

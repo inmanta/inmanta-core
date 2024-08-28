@@ -379,10 +379,10 @@ previously considered ready to execute if any of their dependencies are added to
         # finally check if any tasks have become ready to run
         for resource in maybe_runnable:
             blocked: BlockedDeploy = self.waiting[resource]
-            self._run_if_ready(blocked)
+            self._queue_if_ready(blocked)
             # no more need to update cache entries
 
-    def _run_if_ready(self, blocked_deploy: BlockedDeploy) -> None:
+    def _queue_if_ready(self, blocked_deploy: BlockedDeploy) -> None:
         # FIXME[#8008]: docstring
         if blocked_deploy.blocked_on:
             # still waiting for something, nothing to do
@@ -426,4 +426,4 @@ previously considered ready to execute if any of their dependencies are added to
                 continue
             # remove the finished resource from the blocked on set and check if that unblocks the dependant
             blocked_deploy.blocked_on.discard(resource)
-            self._run_if_ready(blocked_deploy)
+            self._queue_if_ready(blocked_deploy)
