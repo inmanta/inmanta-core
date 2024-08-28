@@ -283,7 +283,7 @@ previously considered ready to execute if any of their dependencies are added to
         maybe_runnable: set[ResourceIdStr] = set()
 
         # lookup caches for visited nodes
-        queued: dict[ResourceIdStr, Deploy] = set(running_deploys)  # queued or running
+        queued: set[ResourceIdStr] = set(running_deploys)  # queued or running
         not_scheduled: set[ResourceIdStr] = set()
 
         # First drop all dropped requires so that we work on the smallest possible set for this operation.
@@ -312,7 +312,7 @@ previously considered ready to execute if any of their dependencies are added to
             task: Deploy = Deploy(resource=resource)
             if task in self.agent_queues:
                 # populate cache
-                queued[resource] = task
+                queued.add(resource)
                 return True
             # populate cache
             not_scheduled.add(resource)
@@ -330,11 +330,12 @@ previously considered ready to execute if any of their dependencies are added to
             if resource in queued:
                 # we're adding a dependency so it's definitely not ready to execute anymore
                 # move from agent queue to waiting
-                task: Deploy = queued[resource]
+                #
                 # discard rather than remove because task may already be running, in which case we leave it run its course
                 # and simply add a new one
+                task: Deploy = Deploy(resource=resource)
                 priority: Optional[int] = self.agent_queues.discard(task)
-                del queued[resource]
+                queued.remove(resource)
                 self.waiting[resource] = BlockedDeploy(
                     # FIXME[#8015]: default priority
                     task=PrioritizedTask(task=task, priority=priority if priority is not None else 0),

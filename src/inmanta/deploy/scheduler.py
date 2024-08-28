@@ -27,7 +27,6 @@ from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
 
 # TODO: polish for first PR
 # - finalize scheduler-agent interface -> Task objects + _run_for_agent
-# - mypy
 
 
 # FIXME[#8008] review code structure + functionality + add docstrings
@@ -68,7 +67,7 @@ class ResourceScheduler:
                 r for r, details in self._state.resource_state.items() if details.status == ResourceStatus.HAS_UPDATE
             }
             # FIXME[#8008]: pass in running deploys
-            self._work.update_state(ensure_scheduled=dirty, running_deploys={})
+            self._work.update_state(ensure_scheduled=dirty, running_deploys=set())
 
     async def repair(self) -> None:
         # FIXME[#8008]: implement repair
@@ -131,7 +130,7 @@ class ResourceScheduler:
                 self._work.update_state(
                     ensure_scheduled=dirty,
                     # FIXME[#8008]: pass in running deploys
-                    running_deploys={},
+                    running_deploys=set(),
                     added_requires=added_requires,
                     dropped_requires=dropped_requires,
                 )
