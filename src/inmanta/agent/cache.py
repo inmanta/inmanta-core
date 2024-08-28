@@ -49,24 +49,32 @@ class CacheItem:
     def __init__(
         self,
         key: str,
-        scope: Scope,
+        timeout: float,
         value: Any,
         call_on_delete: Optional[Callable[[Any], None]],
+        lingering:bool=True,
     ) -> None:
         """
         :param key: The full key identifying this item in the cache.
-        :param scope: Information about the lifetime of the item.
+        :param timeout: Hard timeout for non-lingering cache item.
         :param value: The value being cached associated to the key.
         :param call_on_delete: Optional finalizer to call when the cache item is deleted. This is
             a callable expecting the cached value as an argument.
+        :param lingering: When True, this cache item will linger in the cache for 60s after its last use.
+            When False, this cache item will be evicted from the cache <expiry_time> seconds after
+            entering the cache.
         """
         self.key = key
-        self.scope: Scope = scope
         self.value = value
         self.call_on_delete = call_on_delete
-        self.expiry_time = time.time() + scope.timeout
+
+        if lingering:
+            self.expiry_time = time.time() + 60
+        else:
+            self.expiry_time = time.time() + timeout
         self.finalizer_lock = Lock()
         self.called_finalizer = False
+        self.lingering=lingering
 
     def __lt__(self, other: "CacheItem") -> bool:
         return self.expiry_time < other.expiry_time
@@ -102,11 +110,7 @@ class AgentCache:
 
         # Version-based caching:
         # How long we keep each version after it was last used
-        self.version_expiry_time: float = 60
-        # Keep track of when each version can be deleted
-        self.timer_for_version: dict[int, float] = {}
-        # Keep track of which cache keys belong to which version
-        self.keys_for_version: dict[int, set[str]] = {}
+        self.item_lingering_time: float = 60
 
         # Time-based eviction mechanism
         # Keep track of when is the next earliest cache item expiry time.
@@ -124,6 +128,24 @@ class AgentCache:
         # - we freeze the cache (to prevent the background cleanup job to trigger while the agent is working)
         self._frozen: bool = False
 
+        self.lingering_set: set[CacheItem] = set()
+        self.last_cache_access = time.time()
+
+    def freeze(self) -> None:
+        """
+        TODO
+        """
+        self._frozen = True
+    def unfreeze(self) -> None:
+        """
+        TODO
+        """
+        self.last_cache_access = time.time()
+        for item in self.lingering_set:
+            item.expiry_time = self.last_cache_access + 60
+        self.lingering_set = set()
+        self._frozen = False
+
     def close(self) -> None:
         """
         Cleanly terminate the cache
@@ -133,9 +155,15 @@ class AgentCache:
             self._evict_item(key)
         self.timer_queue.clear()
 
-    def _evict_item(self, key: str) -> None:
+    def _evict_item(self, key: str, cutoff_time: float= 0) -> None:
         try:
             item = self.cache[key]
+
+            if item.lingering:
+                if item.expiry_time > cutoff_time:
+                    heapq.heappush(self.timer_queue, item)
+                    return
+
             item.delete()
             del self.cache[key]
         except KeyError:
@@ -144,26 +172,16 @@ class AgentCache:
 
     def clean_stale_entries(self) -> None:
         """
-        Clean up stale entries from the cache:
-            - individually for time-scoped entries
-            - version-wide for version-scoped entries belonging to a stale version
         """
         now = time.time()
         while now > self.next_action and len(self.timer_queue) > 0:
             item = heapq.heappop(self.timer_queue)
-            self._evict_item(item.key)
+            self._evict_item(item.key, now)
             if len(self.timer_queue) > 0:
                 self.next_action = self.timer_queue[0].expiry_time
             else:
                 self.next_action = sys.maxsize
 
-        expired_versions = [version for version, timer in self.timer_for_version.items() if now > timer]
-        for version in expired_versions:
-            for key in self.keys_for_version[version]:
-                self._evict_item(key)
-
-            del self.timer_for_version[version]
-            del self.keys_for_version[version]
 
     def _get(self, key: str) -> CacheItem:
         """
@@ -175,16 +193,12 @@ class AgentCache:
         :raises KeyError: If the key is not present in the cache
         """
         item = self.cache[key]
+
+        if item.lingering:
+            self.lingering_set.add(item)
         return item
 
-    def _refresh_version_expiry_timestamp(self, version: int) -> None:
-        """
-        Update the expiry time for the given version
-        """
-        self.timer_for_version[version] = time.time() + self.version_expiry_time
-
     def _cache(self, item: CacheItem) -> None:
-        scope = item.scope
         if item.key in self.cache:
             raise Exception("Added same item twice")
 
@@ -192,23 +206,13 @@ class AgentCache:
 
         heapq.heappush(self.timer_queue, item)
 
-        if scope.version != 0:
-            try:
-                self.keys_for_version[scope.version].add(item.key)
-            except KeyError:
-                self.keys_for_version[scope.version] = {item.key}
-
-            self._refresh_version_expiry_timestamp(scope.version)
-
         if item.expiry_time < self.next_action:
             self.next_action = item.expiry_time
 
-    def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
+    def _get_key(self, key: str, resource: Optional[Resource]) -> str:
         key_parts = [key]
         if resource is not None:
             key_parts.append(str(resource.id.resource_str()))
-        if version != 0:
-            key_parts.append(str(version))
         return "__".join(key_parts)
 
     def cache_value(
@@ -223,33 +227,30 @@ class AgentCache:
         """
         add a value to the cache with the given key
 
-        if a resource or version is given, these are appended to the key and expiry is adapted accordingly
+        if a resource is given, it is appended to the key
 
         :param timeout: nr of second before this value is expired
-        :param version: The model version this cache entry belongs to
         :param call_on_delete: A callback function that is called when the value is removed from the cache.
         """
         self._cache(
             CacheItem(
                 self._get_key(key, resource),
-                Scope(timeout),
+                timeout,
                 value,
                 call_on_delete,
+                lingering=for_version,
             )
         )
 
-    def find(self, key: str, resource: Optional[Resource] = None, version: int = 0) -> Any:
+    def find(self, key: str, resource: Optional[Resource] = None) -> Any:
         """
         find a value in the cache with the given key
 
-        if a resource or version is given, these are appended to the key
+        if a resource is given, it is appended to the key
 
         :raise KeyError: if the value is not found
         """
-        item = self._get(self._get_key(key, resource, version)).value
-
-        if version != 0:
-            self._refresh_version_expiry_timestamp(version)
+        item = self._get(self._get_key(key, resource)).value
 
         return item
 
@@ -279,7 +280,7 @@ class AgentCache:
             - for_version=False: the cached value is not tied to any model version. It is
               considered stale after <timeout> seconds have elapsed since it entered the cache.
             - for_version=True: the cached value is expected to be reused across multiple versions.
-              It is considered stale if no agent used this entry in the last 60s. TODO -> make this configurable?
+              It is considered stale if no agent used this entry in the last 60s.
 
         """
         acceptable = {"resource"}
