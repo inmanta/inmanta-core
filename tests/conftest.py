@@ -1210,18 +1210,10 @@ class SnippetCompilationTest(KeepOnFail):
         )
         Project.set(self.project)
         self.project.use_virtual_env()
-        self._patch_process_env()
         self._install_v2_modules(install_v2_modules)
         if install_project:
             self.project.install_modules()
         return self.project
-
-    def _patch_process_env(self) -> None:
-        """
-        Patch env.process_env to accommodate the SnippetCompilationTest's switching between active environments within a single
-        running process.
-        """
-        env.mock_process_env(new_process_env=self.venv)
 
     def _install_v2_modules(self, install_v2_modules: Optional[list[LocalPackagePath]] = None) -> None:
         """Assumes we have a project set"""
@@ -1680,7 +1672,7 @@ def tmpvenv_active(
     sys.prefix = base
 
     # patch env.process_env to recognize this environment as the active one, deactive_venv restores it
-    env.mock_process_env(ActiveEnv(python_path=str(python_path)))
+    env.mock_process_env(python_path=str(python_path))
 
     yield tmpvenv
 

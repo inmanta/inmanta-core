@@ -160,7 +160,7 @@ def test_module_add_v2_module_to_v2_module(tmpdir: py.path.local, monkeypatch, m
         assert not os.path.exists(os.path.join(module_dir, "requirements.txt"))
 
     _assert_module_requirements(expected_requirements=[])
-    installed_packages = process_env.get_installed_packages()
+    installed_packages = env.process_env.get_installed_packages()
 
     name_dependent_module = "a_module"
     ModuleTool().add(module_req="a_module", v2=True, override=False)
@@ -174,7 +174,7 @@ def test_module_add_v2_module_to_v2_module(tmpdir: py.path.local, monkeypatch, m
     _assert_module_requirements(expected_requirements=[f"{ModuleV2Source.get_package_name_for(name_dependent_module)}==1.1.1"])
 
     # Ensure no new packages were installed as a side-effect of `inmanta modules add`
-    assert process_env.get_installed_packages() == installed_packages
+    assert env.process_env.get_installed_packages() == installed_packages
 
 
 def test_module_add_v2_module_to_v1_module(tmpdir: py.path.local, modules_dir: str, monkeypatch) -> None:
@@ -194,7 +194,7 @@ def test_module_add_v2_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
             assert fd.read().strip() == expected_requirement
 
     assert not os.path.exists(requirements_txt_file)
-    installed_packages = process_env.get_installed_packages()
+    installed_packages = env.process_env.get_installed_packages()
 
     name_dependent_module = "a_module"
     ModuleTool().add(module_req=name_dependent_module, v2=True, override=False)
@@ -208,7 +208,7 @@ def test_module_add_v2_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
     _assert_module_requirements(expected_requirement=f"{ModuleV2Source.get_package_name_for(name_dependent_module)}==1.1.1")
 
     # Ensure no new packages were installed as a side-effect of `inmanta modules add`
-    assert process_env.get_installed_packages() == installed_packages
+    assert env.process_env.get_installed_packages() == installed_packages
 
 
 def test_module_add_v1_module_to_v1_module(tmpdir: py.path.local, modules_dir: str, monkeypatch) -> None:

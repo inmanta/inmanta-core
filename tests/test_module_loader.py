@@ -639,7 +639,7 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     but with another version. The requirements of core should not be
     overwritten. The module gets installed from index.
     """
-    if "inmanta-core" in process_env.get_installed_packages(only_editable=True):
+    if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
         pytest.skip(
             "This test would fail if it runs against an inmanta-core installed in editable mode, because the build tag "
             "on the development branch is set to .dev0. The inmanta package protection feature would make pip "
@@ -1389,7 +1389,7 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
     )
     # replace module dir in site-packages with symlink
     rel_path_src: str = os.path.join(const.PLUGINS_PACKAGE, "minimalv2module")
-    module_dir_site_packages: str = os.path.join(process_env.site_packages_dir, rel_path_src)
+    module_dir_site_packages: str = os.path.join(env.process_env.site_packages_dir, rel_path_src)
     shutil.rmtree(module_dir_site_packages)
     os.symlink(os.path.join(module_dir, rel_path_src), module_dir_site_packages)
 

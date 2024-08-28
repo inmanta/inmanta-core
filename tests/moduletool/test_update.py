@@ -253,7 +253,7 @@ def test_module_update_dependencies(
     )
 
     # install b-1.0.0 and c-1.0.0
-    process_env.install_for_config(
+    env.process_env.install_for_config(
         [Requirement.parse(req) for req in ("b==1.0.0", "c==1.0.0")],
         config=PipConfig(
             index_url=index.url,
@@ -277,7 +277,7 @@ def test_module_update_dependencies(
     #   - direct dependency a has been installed
     #   - direct dependency b has been updated but not past the allowed constraint
     #   - transitive dependency c has been updated
-    assert process_env.are_installed(("a==1.0.0", "b==1.0.1", "c==2.0.0"))
+    assert env.process_env.are_installed(("a==1.0.0", "b==1.0.1", "c==2.0.0"))
 
 
 def test_module_update_syntax_error_in_project(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:
