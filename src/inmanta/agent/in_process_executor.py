@@ -118,7 +118,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 pass
         async with self.activity_lock:
             await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.close)
-        self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
