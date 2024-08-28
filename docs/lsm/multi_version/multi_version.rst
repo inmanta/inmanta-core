@@ -1,5 +1,5 @@
 **************
-Multi-version
+Multi-version LSM
 **************
 
 Multi-version lsm allows you to have multiple api versions for the same service.
@@ -58,17 +58,15 @@ API endpoints
 The following API endpoints were added in order to manage versioned services:
 
 * `GET lsm/v2/service_catalog` : List all service entity versions of each defined services entity type in the service catalog
-* `POST lsm/v2/service_catalog`: Create a new service entity type in the service catalog and assign a default version to it.
 * `GET lsm/v2/service_catalog/<service_entity>/<version>/schema`: Get the json schema for a service entity version.
 * `GET lsm/v2/service_catalog/<service_entity>`: Get all versions of the service entity type from the service catalog.
 * `GET lsm/v2/service_catalog/<service_entity>/<version>`: Get one service entity version from the service catalog.
-* `PATCH lsm/v2/service_catalog/<service_entity>`: Update an existing service entity type in the service catalog or add a new one.
 * `DELETE lsm/v2/service_catalog/<service_entity>/<version>`: Delete an existing service entity version from the service catalog.
 * `GET lsm/v2/service_catalog/<service_entity>/<version>/config`: Get the config settings for a service entity version.
 * `POST lsm/v2/service_catalog/<service_entity>/<version>/config`: Set the config for a service entity version.
 * `PATCH lsm/v1/service_inventory/<service_entity>/<service_id>/update_entity_version`: Migrate a service instance from one service entity version to another.
 
-The older v1 endpoints are still supported.
+The  v1 endpoints are still supported.
 When we use the v1 endpoints to make operations on a service (i.e. get, create, update), we always target the default
 version of the service entity. (i.e. `GET lsm/v1/service_catalog/<service_entity>` will return the default version of this service entity).
 
