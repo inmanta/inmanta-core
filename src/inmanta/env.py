@@ -1186,7 +1186,7 @@ def mock_process_env(*, python_path: Optional[str] = None, env_path: Optional[st
     :param python_path: The path to the python binary. Only one of `python_path` and `env_path` should be set.
     :param env_path: The path to the python environment directory. Only one of `python_path` and `env_path` should be set.
 
-    When using this method in a fixture to set an reset virtualenv, it is preferable to use `store_venv()`
+    When using this method in a fixture to set and reset virtualenv, it is preferable to use `store_venv()`
     """
     process_env.__init__(python_path=python_path, env_path=env_path)  # type: ignore
 
