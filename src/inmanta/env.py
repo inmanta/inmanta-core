@@ -30,7 +30,7 @@ from collections import abc
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
-from importlib.abc import Loader
+from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from re import Pattern
@@ -1172,20 +1172,37 @@ class ActiveEnv(PythonEnvironment):
 process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)
 """
 Singleton representing the Python environment this process is running in.
+
+Should not be imported directly, as it can be updated
 """
 
 
 @stable_api
-def mock_process_env(new_process_env: ActiveEnv) -> None:
+def mock_process_env(*, python_path: Optional[str] = None, env_path: Optional[str] = None) -> None:
     """
     Overrides the process environment information. This forcefully sets the environment that is recognized as the outer Python
     environment. This function should only be called when a Python environment has been set up dynamically and this environment
     should be treated as if this process was spawned from it, and even then with great care.
+    :param python_path: The path to the python binary. Only one of `python_path` and `env_path` should be set.
+    :param env_path: The path to the python environment directory. Only one of `python_path` and `env_path` should be set.
 
-    :param new_process_env: new env to use
+    When using this method in a fixture to set an reset virtualenv, it is preferable to use `store_venv()`
+    """
+    process_env.__init__(python_path=python_path, env_path=env_path)  # type: ignore
+
+
+def swap_process_env(env: ActiveEnv) -> ActiveEnv:
+    """
+    Overrides the process environment information.
+
+    Returns the old active env
+
+    For use in testing. Test as expected to swap the old process env back in place
     """
     global process_env
-    process_env = new_process_env
+    old_env = process_env
+    process_env = env
+    return old_env
 
 
 @stable_api
@@ -1220,7 +1237,7 @@ class VirtualEnv(ActiveEnv):
 
         self.init_env()
         self._activate_that()
-        mock_process_env(new_process_env=self)
+        mock_process_env(python_path=self.python_path)
 
         # patch up pkg
         self.notify_change()
@@ -1280,3 +1297,60 @@ class VenvActivationFailedError(Exception):
     def __init__(self, msg: str) -> None:
         super().__init__(msg)
         self.msg = msg
+
+
+@dataclass
+class VenvSnapshot:
+    old_os_path: str
+    old_prefix: str
+    old_path: list[str]
+    old_meta_path: list[Finder]
+    old_path_hooks: list
+    old_pythonpath: str
+    old_os_venv: Optional[str]
+    old_process_env: ActiveEnv
+    old_working_set: PythonWorkingSet
+
+    def restore(self):
+        os.environ["PATH"] = self.old_os_path
+        sys.prefix = self.old_prefix
+        sys.path = self.old_path
+        # reset sys.meta_path because it might contain finders for editable installs, make sure to keep the same object
+        sys.meta_path.clear()
+        sys.meta_path.extend(self.old_meta_path)
+        sys.path_hooks.clear()
+        sys.path_hooks.extend(self.old_path_hooks)
+        # Clear cache for sys.path_hooks
+        sys.path_importer_cache.clear()
+        pkg_resources.working_set = self.old_working_set
+        # Restore PYTHONPATH
+        if self.old_pythonpath is not None:
+            os.environ["PYTHONPATH"] = self.old_pythonpath
+        elif "PYTHONPATH" in os.environ:
+            del os.environ["PYTHONPATH"]
+        # Restore VIRTUAL_ENV
+        if self.old_os_venv is not None:
+            os.environ["VIRTUAL_ENV"] = self.old_os_venv
+        elif "VIRTUAL_ENV" in os.environ:
+            del os.environ["VIRTUAL_ENV"]
+
+        # We reset the process_env both ways: we put the reference back and we do an in_place update
+        swap_process_env(self.old_process_env)
+        mock_process_env(python_path=self.old_process_env.python_path)
+
+
+def store_venv():
+    """
+    Create a snapshot of the venv environment, for use in testing, to resest the test
+    """
+    return VenvSnapshot(
+        old_os_path=os.environ.get("PATH", ""),
+        old_prefix=sys.prefix,
+        old_path=list(sys.path),
+        old_meta_path=sys.meta_path.copy(),
+        old_path_hooks=sys.path_hooks.copy(),
+        old_pythonpath=os.environ.get("PYTHONPATH", None),
+        old_os_venv=os.environ.get("VIRTUAL_ENV", None),
+        old_process_env=process_env,
+        old_working_set=pkg_resources.working_set,
+    )

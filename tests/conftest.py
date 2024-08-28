@@ -121,7 +121,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, mock_process_env
+from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, mock_process_env, swap_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -503,43 +503,12 @@ def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[Optional[str
 
 @pytest.fixture(scope="function")
 def deactive_venv():
-    old_os_path = os.environ.get("PATH", "")
-    old_prefix = sys.prefix
-    old_path = list(sys.path)
-    old_meta_path = sys.meta_path.copy()
-    old_path_hooks = sys.path_hooks.copy()
-    old_pythonpath = os.environ.get("PYTHONPATH", None)
-    old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
-    old_process_env = env.process_env
-    old_working_set = pkg_resources.working_set
+    snapshot = env.store_venv()
     old_available_extensions = (
         dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
     )
-
     yield
-
-    os.environ["PATH"] = old_os_path
-    sys.prefix = old_prefix
-    sys.path = old_path
-    # reset sys.meta_path because it might contain finders for editable installs, make sure to keep the same object
-    sys.meta_path.clear()
-    sys.meta_path.extend(old_meta_path)
-    sys.path_hooks.clear()
-    sys.path_hooks.extend(old_path_hooks)
-    # Clear cache for sys.path_hooks
-    sys.path_importer_cache.clear()
-    pkg_resources.working_set = old_working_set
-    # Restore PYTHONPATH
-    if old_pythonpath is not None:
-        os.environ["PYTHONPATH"] = old_pythonpath
-    elif "PYTHONPATH" in os.environ:
-        del os.environ["PYTHONPATH"]
-    # Restore VIRTUAL_ENV
-    if old_os_venv is not None:
-        os.environ["VIRTUAL_ENV"] = old_os_venv
-    elif "VIRTUAL_ENV" in os.environ:
-        del os.environ["VIRTUAL_ENV"]
-    env.mock_process_env(old_process_env)
+    snapshot.restore()
     loader.PluginModuleFinder.reset()
     InmantaBootloader.AVAILABLE_EXTENSIONS = old_available_extensions
 
@@ -1087,11 +1056,14 @@ class ReentrantVirtualEnv(VirtualEnv):
         self.working_set = None
         self.was_checked = False
         self.re_check = re_check
+        # The venv we replaced when getting activated
+        self.previous_venv: Optional[ActiveEnv] = None
 
     def deactivate(self):
         if self._using_venv:
             self._using_venv = False
             self.working_set = pkg_resources.working_set
+            swap_process_env(self.previous_venv)
 
     def use_virtual_env(self) -> None:
         """
@@ -1104,12 +1076,14 @@ class ReentrantVirtualEnv(VirtualEnv):
         if not self.working_set:
             # First run
             super().use_virtual_env()
+
         else:
             # Later run
             self._activate_that()
-            mock_process_env(new_process_env=self)
             pkg_resources.working_set = self.working_set
             self._using_venv = True
+
+        self.previous_venv = swap_process_env(self)
 
     def check(
         self,

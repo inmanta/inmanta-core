@@ -22,9 +22,10 @@ import py.path
 import pytest
 from pkg_resources import Requirement
 
+from inmanta import env
 from inmanta.config import Config
 from inmanta.data.model import PipConfig
-from inmanta.env import LocalPackagePath, process_env
+from inmanta.env import LocalPackagePath
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2Source
 from inmanta.moduletool import ProjectTool
 from inmanta.parser import ParserException
@@ -108,7 +109,7 @@ def test_module_update_with_v2_module(
 
     def assert_version_installed(module_name: str, version: str) -> None:
         package_name = ModuleV2Source.get_package_name_for(module_name)
-        installed_packages: dict[str, Version] = process_env.get_installed_packages()
+        installed_packages: dict[str, Version] = env.process_env.get_installed_packages()
         assert package_name in installed_packages
         assert str(installed_packages[package_name]) == version
 

@@ -25,8 +25,8 @@ import py
 import pytest
 from pkg_resources import Requirement
 
+from inmanta import env
 from inmanta.command import CLIException
-from inmanta.env import process_env
 from inmanta.module import ModuleV1, ModuleV1Metadata, ModuleV2, ModuleV2Source, Project, ProjectMetadata
 from inmanta.moduletool import ModuleTool
 from packaging.version import Version
@@ -105,7 +105,7 @@ def test_module_add_v2_module_to_project(
         project_requires_constraint: str,
         expected_pkg_from_extra: Optional[str] = None,
     ) -> None:
-        installed_packages = process_env.get_installed_packages()
+        installed_packages = env.process_env.get_installed_packages()
         assert pkg_name in installed_packages
         if expected_pkg_from_extra:
             assert expected_pkg_from_extra in installed_packages
@@ -118,7 +118,7 @@ def test_module_add_v2_module_to_project(
 
     module_name = "elaboratev2module"
     pkg_name = "inmanta-module-elaboratev2module"
-    assert pkg_name not in process_env.get_installed_packages().keys()
+    assert pkg_name not in env.process_env.get_installed_packages().keys()
 
     version_constraint = f"{module_name}==1.2.3"
     ModuleTool().add(module_req=version_constraint, v2=True, override=False)
