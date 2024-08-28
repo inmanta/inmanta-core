@@ -18,6 +18,7 @@
 
 import asyncio
 import datetime
+import sys
 from threading import Lock, Thread
 from time import sleep
 
@@ -76,7 +77,7 @@ def set_custom_cache_cleanup_policy(monkeypatch, server_config):
 async def agent_cache(agent):
     pip_config = PipConfig()
 
-    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=(), sources=[])
+    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=(), sources=[], python_version=sys.version_info[:2])
 
     myagent_instance = await agent.executor_manager.get_executor(
         "agent1", "local:", [executor.ResourceInstallSpec("test::Test", 5, blueprint1)]
@@ -90,7 +91,7 @@ async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent_
     """
     cache = agent_cache
     value = "test too"
-    cache.cache_value("test", value, timeout=0.1)
+    cache.cache_value("test", value, timeout=0.1, for_version=False)
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
@@ -105,7 +106,7 @@ async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent_
 def test_timeout_manual_cleanup():
     cache = AgentCache()
     value = "test too"
-    cache.cache_value("test", value, timeout=0.1)
+    cache.cache_value("test", value, timeout=0.1, for_version=False)
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
@@ -212,14 +213,17 @@ async def test_multi_threaded(agent_cache: AgentCache):
     beta = Spy()
     alpha.lock.acquire()
 
-    t1 = Thread(
-        target=lambda: cache.get_or_else(
-            "test", lambda: alpha.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete()
+    def target_1():
+        cache.get_or_else(
+            "test", lambda: alpha.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete(), for_version=False
         )
+
+    t1 = Thread(
+        target=target_1
     )
     t2 = Thread(
         target=lambda: cache.get_or_else(
-            "test", lambda: beta.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete()
+            "test", lambda: beta.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete(), for_version=False
         )
     )
 
