@@ -18,11 +18,9 @@
 
 import abc
 import asyncio
-import dataclasses
 import functools
 import itertools
 import typing
-import uuid
 from collections.abc import Iterator, Mapping, Set
 from dataclasses import dataclass
 from typing import Generic, Optional, TypeAlias, TypeVar
@@ -35,10 +33,12 @@ class _Task(abc.ABC):
     """
     Resource action task. Represents the execution of a specific resource action for a given resource.
     """
+
     resource: ResourceIdStr
 
 
-class Deploy(_Task): pass
+class Deploy(_Task):
+    pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -46,7 +46,8 @@ class DryRun(_Task):
     version: int
 
 
-class RefreshFact(_Task): pass
+class RefreshFact(_Task):
+    pass
 
 
 Task: TypeAlias = Deploy | DryRun | RefreshFact
@@ -63,6 +64,7 @@ class PrioritizedTask(Generic[T]):
     """
     Resource action task with a priority attached. Lower values represent a higher priority.
     """
+
     # FIXME[#8008]: merge with TaskQueueItem
     task: T
     priority: int
@@ -103,7 +105,8 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
     however affect the current task's priority, causing it to be executed earlier than it would have otherwise.
     """
 
-    # FIXME[#8019]: relies on undocumented asyncio.PriorityQueue._queue field and the fact that it's a heapq, can we do something about that?
+    # FIXME[#8019]: relies on undocumented asyncio.PriorityQueue._queue field and the fact that it's a heapq,
+    #               can we do something about that?
 
     def __init__(self) -> None:
         self._agent_queues: dict[str, asyncio.PriorityQueue[TaskQueueItem]] = {}
@@ -226,6 +229,7 @@ class BlockedDeploy:
     """
     Deploy task that is blocked on one or more of its dependencies (subset of its requires relation).
     """
+
     task: PrioritizedTask[Deploy]
     blocked_on: set[ResourceIdStr]
 
@@ -234,7 +238,7 @@ class ScheduledWork:
     """
     Collection of deploy tasks that should be executed. Manages a priority queue of ready-to-execute tasks per agent
     (AgentQueues), as well as an unordered collection of waiting deploy tasks (across agents). Maintains the following
-invariants in between method calls:
+    invariants in between method calls:
     - Each task exists at most once in the scheduled work. It is however possible for an identical task to be executing.
     - A resource's requires relation is enforced within the set of scheduled work, i.e. for any two deploy tasks in the
         scheduled work, they will be processed in requires order. Only direct requires are considered. It is the responsibility
@@ -269,7 +273,7 @@ invariants in between method calls:
     ) -> None:
         """
         Update the scheduled work state to reflect the new model state and scheduler intent. May defer tasks that were
-previously considered ready to execute if any of their dependencies are added to the scheduled work.
+        previously considered ready to execute if any of their dependencies are added to the scheduled work.
 
         :param ensure_scheduled: Set of resources that should be deployed. Adds a deploy task to the scheduled work for each
             of these, unless it is already scheduled.
@@ -354,9 +358,7 @@ previously considered ready to execute if any of their dependencies are added to
                 continue
             # task is not yet scheduled, schedule it now
             blocked_on: set[ResourceIdStr] = {
-                dependency
-                for dependency in self.requires.get(resource, ())
-                if is_scheduled(dependency)
+                dependency for dependency in self.requires.get(resource, ()) if is_scheduled(dependency)
             }
             self.waiting[resource] = BlockedDeploy(
                 # FIXME[#8015]: priority

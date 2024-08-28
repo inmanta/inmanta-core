@@ -24,7 +24,6 @@ from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
 
-
 # FIXME[#8008] review code structure + functionality + add docstrings
 
 
@@ -35,6 +34,7 @@ class ResourceScheduler:
 
     The scheduler expects to be notified by the server whenever a new version is released.
     """
+
     def __init__(self) -> None:
         self._state: ModelState = ModelState(version=0)
         self._work: work.ScheduledWork = work.ScheduledWork(
@@ -69,7 +69,8 @@ class ResourceScheduler:
         # FIXME[#8008]: implement repair
         pass
 
-    # FIXME[#8009]: design step 2: read new state from DB instead of accepting as parameter (method should be notification only, i.e. 0 parameters)
+    # FIXME[#8009]: design step 2: read new state from DB instead of accepting as parameter
+    #               (method should be notification only, i.e. 0 parameters)
     async def new_version(
         self,
         version: int,
@@ -80,8 +81,6 @@ class ResourceScheduler:
             # Inspect new state and mark resources as "update pending" where appropriate. Since this method is the only writer
             # for "update pending", and a stale read is acceptable, we can do this part before acquiring the exclusive scheduler
             # lock.
-            # FIXME[#8008]: what to do when an export changes handler code without changing attributes? Consider in deployed state? What
-            #   does current implementation do?
             deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
             for resource in deleted_resources:
                 self._work.delete_resource(resource)
@@ -90,7 +89,10 @@ class ResourceScheduler:
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             for resource, details in resources.items():
-                if resource not in self._state.resources or details.attribute_hash != self._state.resources[resource].attribute_hash:
+                if (
+                    resource not in self._state.resources
+                    or details.attribute_hash != self._state.resources[resource].attribute_hash
+                ):
                     self._state.update_pending.add(resource)
                     new_desired_state.append(resource)
                 old_requires: Set[ResourceIdStr] = requires.get(resource, set())
@@ -131,7 +133,8 @@ class ResourceScheduler:
                     dropped_requires=dropped_requires,
                 )
                 # FIXME[#8008]: design step 7: drop update_pending
-            # FIXME[#8008]: design step 10: Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added again by a deploy trigger
+            # FIXME[#8008]: design step 10: Once more, drop all resources that do not exist in this version from the scheduled
+            #               work, in case they got added again by a deploy trigger
 
     # FIXME[#8008]: set up background workers for each agent, calling _run_for_agent(). Make sure to somehow respond to new
     #           agents or removed ones
@@ -167,7 +170,8 @@ class ResourceScheduler:
                         new_details: Optional[ResourceDetails] = self._state.resources.get(task.resource, None)
                         if new_details is not None and new_details.attribute_hash == resource_details.attribute_hash:
                             # FIXME[#8010]: pass success/failure to notify_provides()
-                            # FIXME[#8008]: iff deploy was successful set resource status and deployment result in self.state.resources
+                            # FIXME[#8008]: iff deploy was successful set resource status and deployment result
+                            #               in self.state.resources
                             self._work.notify_provides(task)
                         # The deploy that finished has become stale (state has changed since the deploy started).
                         # Nothing to report on a stale deploy.

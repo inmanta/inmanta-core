@@ -16,9 +16,8 @@
     Contact: code@inmanta.com
 """
 
-from typing import Generic, Optional, Self, TypeVar
 from collections.abc import Hashable, Iterator, Mapping, MutableMapping, Set
-
+from typing import Generic, Optional, TypeVar
 
 P = TypeVar("P", bound=Hashable)
 S = TypeVar("S", bound=Hashable)

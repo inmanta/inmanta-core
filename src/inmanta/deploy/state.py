@@ -21,7 +21,7 @@ import enum
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Optional, TypeAlias
+from typing import TypeAlias
 
 from inmanta.data.model import ResourceIdStr
 from inmanta.util.collections import BidirectionalManyToManyMapping
@@ -55,6 +55,7 @@ class ResourceStatus(StrEnum):
         has never been (successfully) deployed, or was deployed for a different desired state or a compliance check revealed a
         diff.
     """
+
     UP_TO_DATE = enum.auto()
     # FIXME[#8008]: HAS_UPDATE name comes from improved resource states design,
     #       but we're using it both for "it has an update" and "it's dirty", consider splitting it?
@@ -71,6 +72,7 @@ class DeploymentResult(StrEnum):
     DEPLOYED: Last resource deployment was successful.
     FAILED: Last resource deployment was unsuccessful.
     """
+
     NEW = enum.auto()
     DEPLOYED = enum.auto()
     FAILED = enum.auto()
@@ -80,7 +82,8 @@ class DeploymentResult(StrEnum):
 @dataclass
 class ResourceState:
     # FIXME[#8008]: remove link, replace with documentation
-    # based on https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
+    # based on
+    # https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
     status: ResourceStatus
     deployment_result: DeploymentResult
 
@@ -109,7 +112,9 @@ class ModelState:
         if resource in self.resource_state:
             self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
         else:
-            self.resource_state[resource] = ResourceState(status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW)
+            self.resource_state[resource] = ResourceState(
+                status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW
+            )
 
     def update_requires(
         self,
