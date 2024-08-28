@@ -50,6 +50,7 @@ import abc
 import asyncio
 import datetime
 import logging
+from asyncio import FIRST_COMPLETED, CancelledError, Event, Task
 from typing import Any, Callable, Coroutine, Generic, Optional, TypeVar
 
 import inmanta.util
@@ -314,6 +315,9 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
         # from disappearing mid-execution https://docs.python.org/3.11/library/asyncio-task.html#creating-tasks
         self.cleanup_job: Optional[asyncio.Task[None]] = None
         self.retention_time: int = retention_time
+        # We keep track of the sleep function to be able to cancel it on shutdown
+        # Without risking interrupting the cleanup itself
+        self.shutdown_sleep: Optional[Task] = None
 
     async def start(self) -> None:
         """
@@ -321,6 +325,11 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
         """
         await super().start()
         self.cleanup_job = asyncio.create_task(self.cleanup_inactive_pool_members_task())
+
+    async def request_shutdown(self) -> None:
+        await super().request_shutdown()
+        if self.shutdown_sleep is not None and not self.shutdown_sleep.done():
+            self.shutdown_sleep.cancel("Shutting down cleanup task")
 
     async def join(self) -> None:
         """
@@ -337,11 +346,17 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
         We split up `cleanup_inactive_pool_members` and `cleanup_inactive_pool_members_task` in order to be able to call the
         cleanup method in the test without being blocked in a loop.
         """
-        while self.running:
-            sleep_interval = await self.cleanup_inactive_pool_members()
-            if self.running:
-                LOGGER.log(LOG_LEVEL_TRACE, "Manager will clean in %.2f seconds", sleep_interval)
-                await asyncio.sleep(sleep_interval)
+        try:
+            while self.running:
+                sleep_interval = await self.cleanup_inactive_pool_members()
+                if self.running:
+                    LOGGER.log(LOG_LEVEL_TRACE, "Manager will clean in %.2f seconds", sleep_interval)
+                    # Allow wait to be cancelled on shutdown
+                    self.shutdown_sleep = asyncio.create_task(asyncio.sleep(sleep_interval))
+                    await self.shutdown_sleep
+        except CancelledError:
+            # We are woken up by shutdown
+            pass
 
     async def cleanup_inactive_pool_members(self) -> float:
         """
