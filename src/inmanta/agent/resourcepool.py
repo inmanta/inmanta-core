@@ -317,7 +317,7 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
         self.retention_time: int = retention_time
         # We keep track of the sleep function to be able to cancel it on shutdown
         # Without risking interrupting the cleanup itself
-        self.shutdown_sleep: Optional[Task] = None
+        self.shutdown_sleep: Optional[Task[None]] = None
 
     async def start(self) -> None:
         """
