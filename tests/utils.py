@@ -809,22 +809,4 @@ def make_random_file(size: int = 0) -> tuple[str, bytes, str]:
     return hash, content, body
 
 
-def expire_versions_and_cleanup_cache(cache, versions: Optional[Sequence[int]] = None):
-    """
-    Utility function to speed up some tests waiting for some cached versions to expire:
-        - monkey patch the timers to make the versions expire sooner
-        - explicit call to clean_stale_entries() to clean them up.
 
-    The slower alternative would be to wait for the periodic cleanup job to fire (every 1s by default)
-
-    :param cache: The cache for which to clean up some versions
-    :param versions: Optional sequence of versions to clean up. By default, if no version is passed, all
-        versions in the cache will be cleaned up.
-
-    """
-    versions_to_clean_up = versions if versions else cache.timer_for_version.keys()
-
-    for _version in versions_to_clean_up:
-        cache.timer_for_version[_version] -= cache.version_expiry_time
-
-    cache.clean_stale_entries()

@@ -152,14 +152,14 @@ class AgentCache:
         """
         self.next_action = sys.maxsize
         for key in list(self.cache.keys()):
-            self._evict_item(key)
+            self._evict_item(key, shutting_down=True)
         self.timer_queue.clear()
 
-    def _evict_item(self, key: str, cutoff_time: float= 0) -> None:
+    def _evict_item(self, key: str, cutoff_time: Optional[float]=0, shutting_down: Optional[bool]=False) -> None:
         try:
             item = self.cache[key]
 
-            if item.lingering:
+            if not shutting_down and item.lingering:
                 if item.expiry_time > cutoff_time:
                     heapq.heappush(self.timer_queue, item)
                     return
@@ -176,7 +176,7 @@ class AgentCache:
         now = time.time()
         while now > self.next_action and len(self.timer_queue) > 0:
             item = heapq.heappop(self.timer_queue)
-            self._evict_item(item.key, now)
+            self._evict_item(item.key, cutoff_time=now)
             if len(self.timer_queue) > 0:
                 self.next_action = self.timer_queue[0].expiry_time
             else:

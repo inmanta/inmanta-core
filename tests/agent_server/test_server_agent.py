@@ -2591,7 +2591,7 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
-    expire_versions_and_cleanup_cache(executor_instance._cache)
+    executor_instance._cache.cleanup_stale_entries()
 
     # cache has no versions in flight
     # for issue #1883
