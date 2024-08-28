@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import sys
 from threading import Lock, Thread
 from time import sleep
 
@@ -75,7 +76,9 @@ async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent)
     """
     pip_config = PipConfig()
 
-    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=(), sources=[])
+    blueprint1 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=(), sources=[], python_version=sys.version_info[:2]
+    )
 
     myagent_instance = await agent.executor_manager.get_executor(
         "agent1", "local:", [executor.ResourceInstallSpec("test::Test", 5, blueprint1)]
