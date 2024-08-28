@@ -102,10 +102,6 @@ Handlers
     :members:
     :inherited-members:
     :undoc-members:
-.. autoclass:: inmanta.agent.io.local.LocalIO
-    :members:
-    :inherited-members:
-    :undoc-members:
 
 
 Export

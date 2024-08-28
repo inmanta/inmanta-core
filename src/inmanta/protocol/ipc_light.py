@@ -209,6 +209,8 @@ class IPCServer(IPCFrameProtocol, abc.ABC, typing.Generic[ServerContext]):
             return_value = await frame.method.call(self.get_context())
             if frame.id is not None:
                 self.send_frame(IPCReplyFrame(frame.id, return_value, is_exception=False))
+        except ConnectionLost:
+            self.logger.debug("Connection lost", exc_info=True)
         except Exception as e:
             self.logger.debug("Exception on rpc call", exc_info=True)
             if frame.id is not None:
@@ -336,10 +338,15 @@ class LogShipper(logging.Handler):
     def _send_frame(self, record: IPCLogRecord) -> None:
         try:
             self.protocol.send_frame(record)
+        except ConnectionLost:
+            # Stop exception here
+            # Log in own logger to prevent loops
+            self.logger.debug("Could not send log line, connection lost %s", record.msg, exc_info=True)
+            return
         except Exception:
             # Stop exception here
             # Log in own logger to prevent loops
-            self.logger.info("Could not send log line", exc_info=True)
+            self.logger.info("Could not send log line %s", record.msg, exc_info=True)
             return
 
     def emit(self, record: logging.LogRecord) -> None:

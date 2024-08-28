@@ -24,6 +24,7 @@ import enum
 import logging
 import os
 import random
+import sys
 import time
 import traceback
 import uuid
@@ -32,7 +33,6 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Collection, Dict, Optional, Union, cast
 
-import inmanta.agent.executor
 from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
@@ -994,11 +994,9 @@ class Agent(SessionEndpoint):
         self.executor_manager: executor.ExecutorManager[executor.Executor]
         if remote_executor and can_have_remote_executor:
             LOGGER.info("Selected forking agent executor mode")
-            env_manager = inmanta.agent.executor.VirtualEnvironmentManager(self._storage["executor"])
             assert self.environment is not None  # Mypy
             self.executor_manager = forking_executor.MPManager(
                 self.thread_pool,
-                env_manager,
                 self.sessionid,
                 self.environment,
                 config.log_dir.get(),
@@ -1054,6 +1052,7 @@ class Agent(SessionEndpoint):
         threadpools_to_join = [self.thread_pool]
 
         await self.executor_manager.join(threadpools_to_join, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
+
         self.thread_pool.shutdown(wait=False)
         for instance in self._instances.values():
             await instance.stop()
@@ -1270,7 +1269,14 @@ class Agent(SessionEndpoint):
                         continue
 
                 resource_install_spec = ResourceInstallSpec(
-                    resource_type, version, executor.ExecutorBlueprint(pip_config, list(requirements), sources)
+                    resource_type,
+                    version,
+                    executor.ExecutorBlueprint(
+                        pip_config=pip_config,
+                        requirements=list(requirements),
+                        sources=sources,
+                        python_version=sys.version_info[:2],
+                    ),
                 )
                 resource_install_specs.append(resource_install_spec)
                 # Update the ``_code_cache`` cache to indicate that the given resource type's ResourceInstallSpec
