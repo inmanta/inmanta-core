@@ -749,8 +749,9 @@ class LoginReturn(BaseModel):
 
 
 def check_resource_id_str(v: str) -> ResourceIdStr:
-    # For validation, we rely on the parse_id method raising a ValueError for invalid resource ids.
-    return resources.Id.parse_id(ResourceIdStr(v)).resource_str()
+    if resources.Id.is_resource_id(v):
+        return ResourceIdStr(v)
+    raise ValueError("Invalid id for resource %s" % v)
 
 
 ResourceId: typing.TypeAlias = typing.Annotated[ResourceIdStr, pydantic.AfterValidator(check_resource_id_str)]
