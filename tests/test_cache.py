@@ -77,7 +77,9 @@ def set_custom_cache_cleanup_policy(monkeypatch, server_config):
 async def agent_cache(agent):
     pip_config = PipConfig()
 
-    blueprint1 = executor.ExecutorBlueprint(pip_config=pip_config, requirements=(), sources=[], python_version=sys.version_info[:2])
+    blueprint1 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=(), sources=[], python_version=sys.version_info[:2]
+    )
 
     myagent_instance = await agent.executor_manager.get_executor(
         "agent1", "local:", [executor.ResourceInstallSpec("test::Test", 5, blueprint1)]
