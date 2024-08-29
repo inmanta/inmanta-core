@@ -738,14 +738,12 @@ def test_implementation_import_missing_error(snippetcompiler) -> None:
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("problematic_folder", ["files", "model", "templates"])
 def test_moduletool_failing(
     capsys,
     tmpdir: py.path.local,
     local_module_package_index: str,
     snippetcompiler_clean,
     modules_v2_dir: str,
-    problematic_folder: str,
 ) -> None:
     """
     Verify code is not loaded when python files are stored in `files`, `model` and `template` folders of a V2 module.
@@ -753,38 +751,37 @@ def test_moduletool_failing(
     # set up venv
     snippetcompiler_clean.setup_for_snippet("", autostd=False)
 
-    module_template_path: pathlib.Path = pathlib.Path(modules_v2_dir) / "failingminimalv2module"
-    new_file = module_template_path / problematic_folder / "afile.py"
-    new_file.write_text("raise RuntimeError('This file should not be loaded')")
-    module_from_template(
-        module_template_path,
-        str(tmpdir.join("custom_mod_one")),
-        new_name="custom_mod_one",
-        new_version=version.Version("1.0.0"),
-        install=True,
-        editable=False,
-    )
+    for problematic_folder in ["files", "model", "templates"]:
+        module_template_path: pathlib.Path = pathlib.Path(modules_v2_dir) / "failingminimalv2module"
+        new_file = module_template_path / problematic_folder / "afile.py"
+        new_file.write_text("raise RuntimeError('This file should not be loaded')")
+        module_from_template(
+            module_template_path,
+            str(tmpdir.join("custom_mod_one")),
+            new_name="custom_mod_one",
+            new_version=version.Version("1.0.0"),
+            install=True,
+            editable=False,
+        )
 
-    # set up project with a v2 module
-    snippetcompiler_clean.setup_for_snippet(
-        """
-import std
-import custom_mod_one
-        """.strip(),
-        python_package_sources=[local_module_package_index],
-        project_requires=[
-            module.InmantaModuleRequirement.parse("std~=4.3.3,<4.3.4"),
-            module.InmantaModuleRequirement.parse("custom_mod_one>0"),
-        ],
-        python_requires=[
-            module.InmantaModuleRequirement.parse("custom_mod_one<999").get_python_package_requirement(),
-        ],
-        install_mode=InstallMode.release,
-        install_project=True,
-        autostd=False,
-    )
+        # set up project with a v2 module
+        snippetcompiler_clean.setup_for_snippet(
+            """
+    import std
+    import custom_mod_one
+            """.strip(),
+            python_package_sources=[local_module_package_index],
+            project_requires=[
+                module.InmantaModuleRequirement.parse("std"),
+                module.InmantaModuleRequirement.parse("custom_mod_one"),
+            ],
+            python_requires=[],
+            install_mode=InstallMode.release,
+            install_project=True,
+            autostd=False,
+        )
 
-    compiler.do_compile()
+        compiler.do_compile()
 
-    # We remove the problematic file to be sure to test the other problematic directories
-    new_file.unlink()
+        # We remove the problematic file to be sure to test the other problematic directories
+        new_file.unlink()
