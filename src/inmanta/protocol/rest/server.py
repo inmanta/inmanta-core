@@ -113,7 +113,7 @@ class RESTHandler(tornado.web.RequestHandler):
         with tracing.attach_context(
             {const.TRACEPARENT: self.request.headers[const.TRACEPARENT]} if const.TRACEPARENT in self.request.headers else {}
         ):
-            with tracing.span("rpc." + call_config.method_name, _tags={"rpc-call"}):
+            with tracing.span("rpc." + call_config.method_name, _tags=["rpc-call"]):
                 with timer("rpc." + call_config.method_name).time():
                     self._transport.start_request()
                     try:
