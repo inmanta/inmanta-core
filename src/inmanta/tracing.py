@@ -64,7 +64,10 @@ def configure_logfire(service: str) -> None:
         LOGGER.info("Not setting up telemetry")
 
 
-enabled = False
+# We need this early to make @instrument work
+enabled = os.getenv("LOGFIRE_TOKEN", None) is None
+
+
 no_span = NoopSpan()
 no_context = contextlib.nullcontext(None)
 
