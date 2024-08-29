@@ -267,7 +267,7 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     print("Child there")
 
     process_name = psutil.Process(pid=child1.process.process.pid).name()
-    assert process_name == f"inmanta: executor {blueprint.blueprint_hash()} - connected"
+    assert process_name == f"inmanta: executor process {blueprint.blueprint_hash()} - connected"
 
     await asyncio.get_running_loop().run_in_executor(None, child1.process.process.kill)
     print("Kill sent")

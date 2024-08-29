@@ -245,7 +245,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         """
         Returns a valid pool member for the given id
         """
-        LOGGER.debug("%s: requesting %s", self.my_name(), self.render_id(member_id))
+        LOGGER.log(LOG_LEVEL_TRACE, "%s: requesting %s", self.my_name(), self.render_id(member_id))
         internal_id = self._id_to_internal(member_id)
         # Acquire a lock based on the executor's pool id
         async with self._locks.get(self.get_lock_name_for(internal_id)):
@@ -258,7 +258,9 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
                 else:
                     await self.pre_replace(it)
             LOGGER.debug("%s: creating %s", self.my_name(), self.render_id(member_id))
-            return await self._create_or_replace(member_id, internal_id)
+            out = await self._create_or_replace(member_id, internal_id)
+            LOGGER.debug("%s: created %s", self.my_name(), self.render_id(member_id))
+            return out
 
     async def _create_or_replace(self, member_id: TPoolID, interal_id: TIntPoolID) -> TPoolMember:
         """
