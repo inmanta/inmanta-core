@@ -331,7 +331,7 @@ def test():
     )
     executor = await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
 
-    installed_packages = executor.executor_virtual_env.get_installed_packages()
+    installed_packages = executor.process.executor_virtual_env.get_installed_packages()
 
     def check_packages(package_list: Sequence[str], must_contain: set[str], must_not_contain: set[str]) -> None:
         """
