@@ -221,7 +221,7 @@ class PythonWorkingSet:
                     continue
                 if (
                     r.name not in installed_packages
-                    or (str(installed_packages[r.name]) not in r.specifier)  # TODO
+                    or (str(installed_packages[r.name]) not in r.specifier)
                     # If no specifiers are provided, the `in` operation will return `False`
                 ):
                     return False
