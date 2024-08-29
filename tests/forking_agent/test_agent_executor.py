@@ -19,6 +19,7 @@ import hashlib
 import logging
 import os
 import pathlib
+import subprocess
 import sys
 
 from inmanta import const
@@ -212,7 +213,21 @@ def with_timeout(delay):
     return decorator
 
 
+def trace_error_26(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwds):
+        try:
+            return func(*args, **kwds)
+        except OSError as e:
+            if e.errno == 26:
+                out = subprocess.check_output(["lsof", e.filename])
+                raise RuntimeError(f"OSERROR 26 for {e.filename}" + out)
+
+    return wrapper
+
+
 @with_timeout(30)
+@trace_error_26
 async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
@@ -284,6 +299,7 @@ def test():
 
 
 @with_timeout(30)
+@trace_error_26
 async def test_executor_creation_and_venv_usage(
     server_config, pip_index: PipIndex, mpmanager_light: forking_executor.MPManager
 ) -> None:
