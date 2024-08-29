@@ -23,7 +23,7 @@ import pytest
 
 from inmanta.config import Config
 from inmanta.data.model import PipConfig
-from inmanta.env import LocalPackagePath, process_env, safe_parse
+from inmanta.env import LocalPackagePath, process_env, safe_parse_requirement
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2Source
 from inmanta.moduletool import ProjectTool
 from inmanta.parser import ParserException
@@ -125,7 +125,7 @@ def test_module_update_with_v2_module(
                 new_version=Version(current_version),
                 new_name=module_name,
                 new_requirements=(
-                    [InmantaModuleRequirement(safe_parse(requirement_string="module2<3.0.0"))]
+                    [InmantaModuleRequirement(safe_parse_requirement(requirement_string="module2<3.0.0"))]
                     if module_name == "module1"
                     else None
                 ),
@@ -142,7 +142,7 @@ def test_module_update_with_v2_module(
         # Add a dependency on module2, without setting an explicit version constraint. Later version of module1
         # do set a version constraint on the dependency on module2. This way it is verified whether the module update
         # command takes into account the version constraints set in a new version of a module.
-        new_requirements=[InmantaModuleRequirement(safe_parse(requirement_string="module2"))],
+        new_requirements=[InmantaModuleRequirement(safe_parse_requirement(requirement_string="module2"))],
         install=False,
         publish_index=pip_index,
         new_content_init_cf="entity" if corrupt_module else None,  # Introduce syntax error in the module
@@ -242,7 +242,7 @@ def test_module_update_dependencies(
             "b",
             Version(v),
             str(tmpdir.join(f"b-{v}")),
-            requirements=[safe_parse(requirement_string="c")],
+            requirements=[safe_parse_requirement(requirement_string="c")],
             publish_index=index,
         )
     for v in ("1.0.0", "2.0.0"):
@@ -258,7 +258,7 @@ def test_module_update_dependencies(
 
     # install b-1.0.0 and c-1.0.0
     process_env.install_for_config(
-        [safe_parse(requirement_string=req) for req in ("b==1.0.0", "c==1.0.0")],
+        [safe_parse_requirement(requirement_string=req) for req in ("b==1.0.0", "c==1.0.0")],
         config=PipConfig(
             index_url=index.url,
             use_system_config=False,
@@ -270,7 +270,7 @@ def test_module_update_dependencies(
         source_dir=os.path.join(modules_dir, "minimalv1module"),
         dest_dir=str(tmpdir.join("modules", "my_mod")),
         new_name="my_mod",
-        new_requirements=[safe_parse(requirement_string=req) for req in ("a", "b~=1.0.0")],
+        new_requirements=[safe_parse_requirement(requirement_string=req) for req in ("a", "b~=1.0.0")],
     )
 
     # run `inmanta project update` without running install first

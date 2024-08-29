@@ -62,7 +62,7 @@ class PipInstallError(Exception):
     pass
 
 
-def safe_parse(requirement: str) -> Requirement:
+def safe_parse_requirement(requirement: str) -> Requirement:
     # Packaging Requirement is not able to parse requirements with comment. Therefore, we need to remove the `comment` part
     drop_comment = requirement.split("#")[0].strip()
     assert len(drop_comment) > 0, "The name of the requirement cannot be an empty string!"
@@ -179,7 +179,7 @@ class PythonWorkingSet:
         Convert requirements from Union[Sequence[str], Sequence[SafeRequirement]] to Sequence[SafeRequirement]
         """
         if isinstance(requirements[0], str):
-            return [safe_parse(requirement=r) for r in requirements if isinstance(r, str)]
+            return [safe_parse_requirement(requirement=r) for r in requirements if isinstance(r, str)]
         else:
             return requirements
 
@@ -234,8 +234,8 @@ class PythonWorkingSet:
                             return False
 
                         pkgs_required_by_extra: set[Requirement] = set(
-                            [safe_parse(e.key) for e in distribution.requires(extras=(extra,))]
-                        ) - set([safe_parse(e.key) for e in distribution.requires(extras=())])
+                            [safe_parse_requirement(e.key) for e in distribution.requires(extras=(extra,))]
+                        ) - set([safe_parse_requirement(e.key) for e in distribution.requires(extras=())])
                         if not _are_installed_recursive(
                             reqs=list(pkgs_required_by_extra),
                             seen_requirements=list(seen_requirements) + list(reqs),
@@ -255,7 +255,7 @@ class PythonWorkingSet:
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
         return {
-            safe_parse(dist_info.key).name: version.Version(dist_info.version)
+            safe_parse_requirement(dist_info.key).name: version.Version(dist_info.version)
             for dist_info in pkg_resources.working_set
             if not inmanta_modules_only or dist_info.key.startswith(const.MODULE_PKG_NAME_PREFIX)
         }
@@ -294,7 +294,7 @@ class PythonWorkingSet:
 
             # recurse on direct dependencies
             return _get_tree_recursive(
-                (safe_parse(requirement=requirement.key).name for requirement in installed_distributions[dist].requires()),
+                (safe_parse_requirement(requirement=requirement.key).name for requirement in installed_distributions[dist].requires()),
                 acc=acc | {dist},
             )
 
@@ -861,7 +861,7 @@ import sys
         use_pip_config was ignored on ISO6 and it still is
         """
         self.install_from_index(
-            requirements=[safe_parse(requirement=r) for r in requirements_list],
+            requirements=[safe_parse_requirement(requirement=r) for r in requirements_list],
             upgrade=upgrade,
             upgrade_strategy=upgrade_strategy,
             use_pip_config=True,
@@ -888,7 +888,7 @@ import sys
         """
         protected_inmanta_packages: list[str] = cls.get_protected_inmanta_packages()
         workingset: dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        return [safe_parse(requirement=f"{pkg}=={workingset[pkg]}") for pkg in workingset if pkg in protected_inmanta_packages]
+        return [safe_parse_requirement(requirement=f"{pkg}=={workingset[pkg]}") for pkg in workingset if pkg in protected_inmanta_packages]
 
 
 class CommandRunner:
@@ -1016,7 +1016,7 @@ class ActiveEnv(PythonEnvironment):
 
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(safe_parse(requirement=requirement.key), dist_info.key)
+            OwnedRequirement(safe_parse_requirement(requirement=requirement.key), dist_info.key)
             for dist_info in pkg_resources.working_set
             for requirement in dist_info.requires()
         )
@@ -1113,7 +1113,7 @@ class ActiveEnv(PythonEnvironment):
         working_set: abc.Iterable[Distribution] = importlib.metadata.distributions()
         # add all requirements of all in scope packages installed in this environment
         all_constraints: set[Requirement] = set(constraints if constraints is not None else []).union(
-            safe_parse(requirement=requirement)
+            safe_parse_requirement(requirement=requirement)
             for dist_info in working_set
             if in_scope.fullmatch(dist_info.name)
             for requirement in dist_info.requires or []
