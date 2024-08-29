@@ -153,11 +153,18 @@ def test_issue_141(snippetcompiler):
         """
 h = std::Host(name="test", os=std::linux)
 
-entity SpecialService extends std::Service:
+entity A:
 
 end
 
-std::Host.services_list [0:] -- SpecialService.host [1]""",
+A.host [1] -- std::Host
+
+
+entity B extends A:
+
+end
+
+std::Host.services_list [0:] -- B.host [1]""",
         autostd=True,
     )
     with pytest.raises(DuplicateException):
