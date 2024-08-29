@@ -18,9 +18,10 @@
 
 import asyncio
 import datetime
+import math
 import sys
 from threading import Lock, Thread
-from time import sleep
+from time import sleep, time, localtime
 
 import pytest
 from pytest import fixture
@@ -323,6 +324,11 @@ def test_get_or_else_none(my_resource):
 
 
 async def test_decorator():
+    def advance_time_and_cleanup(n_seconds: int):
+        traveller = time_machine.travel(datetime.datetime.now() + datetime.timedelta(seconds=61))
+        traveller.start()
+        xcache.clean_stale_entries()
+
     class Closeable:
         def __init__(self):
             self.closed = False
@@ -331,108 +337,305 @@ async def test_decorator():
             self.closed = True
 
     my_closable = Closeable()
-    my_closable_2 = Closeable()
 
-    # xcache = AgentCache()
+    xcache = AgentCache()
 
     class DT:
         def __init__(self, cache: AgentCache):
             self.cache = cache
-            self.count = 0
-            self.c2 = 0
-            self.c3 = 0
+            self.cache_miss_counters: dict[str, int] = {
+                "basic_test": 0,
+                "test_cacheNone": 0,
+                "test_cache_none": 0
+            }
 
         @cache()
         def test_method(self):
-            self.count += 1
+            self.cache_miss_counters["basic_test"] += 1
             return "x"
 
         @cache
-        def test_method_2(self, version, timeout=100):
-            self.count += 1
+        def test_method_2(self, dummy_arg, timeout=100, for_version=True):
+            self.cache_miss_counters["basic_test"] += 1
             return "x2"
 
         @cache(cacheNone=False)
-        def test_method_3(self):
-            self.c2 += 1
-            if self.c2 < 2:
+        def test_cacheNone(self):
+            self.cache_miss_counters["test_cacheNone"] += 1
+            if self.cache_miss_counters["test_cacheNone"] < 2:
                 return None
             else:
                 return "X"
 
         @cache(cache_none=False)
-        def test_method_4(self):
-            self.c3 += 1
-            if self.c3 < 2:
+        def test_cache_none(self):
+            self.cache_miss_counters["test_cache_none"] += 1
+            if self.cache_miss_counters["test_cache_none"] < 2:
                 return None
             else:
                 return "X"
 
         @cache(call_on_delete=lambda x: x.close())
-        def test_close(self, version):
-            self.count += 1
+        def test_close(self):
+            self.cache_miss_counters["basic_test"] += 1
             return my_closable
 
-        @cache(call_on_delete=lambda x: x.close())
-        def test_close_2(self):
-            self.count += 1
-            return my_closable_2
+    test = DT(xcache)
 
-    # test = DT(xcache)
+    # Test basic caching / retrieval
+
+    # 1 cache miss and 2 hits:
+    assert "x" == test.test_method()
+    assert "x" == test.test_method()
+    assert "x" == test.test_method()
+    assert 1 == test.cache_miss_counters["basic_test"]
+
+    # 1 cache miss and 1 hit:
+    assert "x2" == test.test_method_2(dummy_arg="AAA")
+    assert "x2" == test.test_method_2(dummy_arg="AAA")
+    assert 2 == test.cache_miss_counters["basic_test"]
+    # 1 cache miss :
+    assert "x2" == test.test_method_2(dummy_arg="BBB")
+    assert 3 == test.cache_miss_counters["basic_test"]
+
+    # Wait out lingering time of 60s after last read
+    advance_time_and_cleanup(61)
+
+    # 1 cache miss and 1 hit:
+    assert "x2" == test.test_method_2(dummy_arg="AAA")
+    assert "x2" == test.test_method_2(dummy_arg="AAA")
+    assert 4 == test.cache_miss_counters["basic_test"]
+
+    advance_time_and_cleanup(31)
+
+    # 1 hit:
+    assert "x2" == test.test_method_2(dummy_arg="AAA")
+    assert 4 == test.cache_miss_counters["basic_test"]
+
+    advance_time_and_cleanup(31)
+
+    # 1 hit:
+    assert "x2" == test.test_method_2(dummy_arg="AAA")
+    assert 4 == test.cache_miss_counters["basic_test"]
+
+    # Wait out lingering time of 60s after last read
+    advance_time_and_cleanup(61)
+
+    # 1 cache miss and 1 hit:
+    assert "x2" == test.test_method_2(dummy_arg="AAA")
+    assert "x2" == test.test_method_2(dummy_arg="AAA")
+    assert 5 == test.cache_miss_counters["basic_test"]
+
+    # Test cache_none and cacheNone arguments
+    assert None is test.test_cacheNone()
+    assert 1 == test.cache_miss_counters["test_cacheNone"]
+    assert "X" == test.test_cacheNone()
+    assert 2 == test.cache_miss_counters["test_cacheNone"]
+    assert "X" == test.test_cacheNone()
+    assert 2 == test.cache_miss_counters["test_cacheNone"]
+
+    assert None is test.test_cache_none()
+    assert 1 == test.cache_miss_counters["test_cache_none"]
+    assert "X" == test.test_cache_none()
+    assert 2 == test.cache_miss_counters["test_cache_none"]
+    assert "X" == test.test_cache_none()
+    assert 2 == test.cache_miss_counters["test_cache_none"]
+
+    # Test call_on_delete
+    test.test_close()
+    assert not my_closable.closed
+    xcache.close()
+    assert my_closable.closed
+
+    test.cache_miss_counters["basic_test"] = 0
+    my_closable.closed = False
+
+    test.cache_miss_counters["basic_test"] = 0
+    test.test_close()
+    assert test.cache_miss_counters["basic_test"] == 1
+    test.test_close()
+    assert test.cache_miss_counters["basic_test"] == 1
+    assert not my_closable.closed
+
+    advance_time_and_cleanup(5001)
+
+
+    assert my_closable.closed
+
+async def test_decorator_2():
+    class FrozenCache(object):
+        def __init__(self, cache: AgentCache):
+            self.cache = cache
+
+        def __enter__(self):
+            self.cache.freeze()
+
+        def __exit__(self, type, value, traceback):
+            self.cache.unfreeze()
+
+    def advance_time_and_cleanup(n_seconds: int):
+        traveller = time_machine.travel(datetime.datetime.now() + datetime.timedelta(seconds=n_seconds))
+        traveller.start()
+        xcache.clean_stale_entries()
+
+    xcache = AgentCache()
+    class DT:
+        def __init__(self, cache: AgentCache):
+            self.cache = cache
+            self.cache_miss_counters: dict[str, int] = {
+                "basic_test": 0,
+            }
+
+        @cache
+        def test_method_2(self, dummy_arg, timeout=100, for_version=True):
+            self.cache_miss_counters["basic_test"] += 1
+            return "x2"
+
+
+
+    test = DT(xcache)
+
+    with FrozenCache(xcache):
+        # 1 cache miss and 1 hit:
+        assert "x2" == test.test_method_2(dummy_arg="AAA")
+        assert "x2" == test.test_method_2(dummy_arg="AAA")
+        assert 1 == test.cache_miss_counters["basic_test"]
+        # 1 cache miss :
+        assert "x2" == test.test_method_2(dummy_arg="BBB")
+        assert 2 == test.cache_miss_counters["basic_test"]
+
+    # Wait out lingering time of 60s after last read
+    advance_time_and_cleanup(61)
+
+    with FrozenCache(xcache):
+        # 1 cache miss and 1 hit:
+        assert "x2" == test.test_method_2(dummy_arg="AAA")
+        assert "x2" == test.test_method_2(dummy_arg="AAA")
+        assert 3 == test.cache_miss_counters["basic_test"]
+
+    advance_time_and_cleanup(31)
+
+    with FrozenCache(xcache):
+        # 1 hit:
+        assert "x2" == test.test_method_2(dummy_arg="AAA")
+        assert 3 == test.cache_miss_counters["basic_test"]
+
+    advance_time_and_cleanup(31)
+
+    with FrozenCache(xcache):
+        # 1 hit:
+        assert "x2" == test.test_method_2(dummy_arg="AAA")
+        assert 3 == test.cache_miss_counters["basic_test"]
+
+    # Wait out lingering time of 60s after last read
+    advance_time_and_cleanup(61)
+
+    with FrozenCache(xcache):
+        # 1 cache miss and 1 hit:
+        assert "x2" == test.test_method_2(dummy_arg="AAA")
+        assert "x2" == test.test_method_2(dummy_arg="AAA")
+        assert 4 == test.cache_miss_counters["basic_test"]
+
+
+async def test_decorator_3():
+    class FrozenCache(object):
+        def __init__(self, cache: AgentCache):
+            self.cache = cache
+
+        def __enter__(self):
+            self.cache.freeze()
+
+        def __exit__(self, type, value, traceback):
+            self.cache.unfreeze()
+
+    def advance_time_and_cleanup(traveller, n_seconds: int):
+        traveller.shift(datetime.timedelta(seconds=n_seconds))
+        xcache.clean_stale_entries()
+
+    xcache = AgentCache()
+    class DT:
+        def __init__(self, cache: AgentCache):
+            self.cache = cache
+            self.cache_miss_counters: dict[str, int] = {
+                "basic_test": 0,
+            }
+
+        @cache
+        def test_method_2(self, dummy_arg, timeout=100, for_version=True):
+            self.cache_miss_counters["basic_test"] += 1
+            return "x2"
+
+
+
+    test = DT(xcache)
+
+    with time_machine.travel(datetime.datetime.now().astimezone(), tick=False) as traveller:
+
+        # cache : []  T=0
+        with FrozenCache(xcache):
+            # 1 cache miss
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +60
+            # 1 hit
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +60
+
+        assert 1 == test.cache_miss_counters["basic_test"]
+
+        advance_time_and_cleanup(traveller, 31)
+
+        # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +29
+
+        with FrozenCache(xcache):
+            # 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +60
+
+        assert 1 == test.cache_miss_counters["basic_test"]
+
+        advance_time_and_cleanup(traveller, 31)
+
+        # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +29
+
+        with FrozenCache(xcache):
+            # 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +60
+
+        assert 1 == test.cache_miss_counters["basic_test"]
+
+        # Wait out lingering time of 60s after last read
+        advance_time_and_cleanup(traveller, 61)
+        # cache : []
+
+        with FrozenCache(xcache):
+            # 1 cache miss and 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+
+        assert 2 == test.cache_miss_counters["basic_test"]
+
+
+def test_time_machine():
+    def advance_time_and_cleanup(traveller, n_seconds: int):
+        print("1")
+        print(datetime.datetime.now().astimezone())
+        traveller.shift(datetime.timedelta(seconds=n_seconds))
+        print("22")
+        print(datetime.datetime.now().astimezone())
+        print("333")
+        print(datetime.datetime.now().astimezone())
+
+    with time_machine.travel(datetime.datetime.now().astimezone(), tick=False) as traveller:
+        now = localtime(time())
+        print(now)
+        advance_time_and_cleanup(traveller, 60)
+        now = localtime(time())
+        print(now)
     #
-    # test.test_close(version=3)
-    # test.test_close_2()
-    # xcache.close()
-    # assert my_closable.closed
-    # assert my_closable_2.closed
     #
-    # test.count = 0
-    # my_closable.closed = False
-    #
-    # # 1 cache miss and 2 hits:
-    # assert "x" == test.test_method()
-    # assert "x" == test.test_method()
-    # assert "x" == test.test_method()
-    # assert 1 == test.count
-    #
-    # # 1 cache miss and 1 hit:
-    # assert "x2" == test.test_method_2(version=1)
-    # assert "x2" == test.test_method_2(version=1)
-    # assert 2 == test.count
-    # # 1 cache miss :
-    # assert "x2" == test.test_method_2(version=2)
-    # assert 3 == test.count
-    #
-    # # Wait for version 1 to become stale and get cleaned up
-    # expire_versions_and_cleanup_cache(xcache, versions=[1])
-    #
-    # # 1 cache miss and 1 hit:
-    # assert "x2" == test.test_method_2(version=1)
-    # assert "x2" == test.test_method_2(version=1)
-    # assert 4 == test.count
-    #
-    # assert None is test.test_method_3()
-    # assert 1 == test.c2
-    # assert "X" == test.test_method_3()
-    # assert 2 == test.c2
-    # assert "X" == test.test_method_3()
-    # assert 2 == test.c2
-    #
-    # assert None is test.test_method_4()
-    # assert 1 == test.c3
-    # assert "X" == test.test_method_4()
-    # assert 2 == test.c3
-    # assert "X" == test.test_method_4()
-    # assert 2 == test.c3
-    #
-    # test.count = 0
-    # test.test_close(version=3)
-    # assert test.count == 1
-    # test.test_close(version=3)
-    # assert test.count == 1
-    # assert not my_closable.closed
-    #
-    # # Wait for version 3 to become stale and get cleaned up
-    # expire_versions_and_cleanup_cache(xcache, versions=[3])
-    #
-    # assert my_closable.closed
+    # now = datetime.datetime.now().astimezone()
+    # print(now)
+    # advance_time_and_cleanup(60)
+    # now = datetime.datetime.now().astimezone()
+    # print(now)

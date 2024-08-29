@@ -23,6 +23,8 @@ import time
 from threading import Lock
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
+import math
+
 from inmanta.resources import Resource
 from inmanta.stable_api import stable_api
 
@@ -88,6 +90,9 @@ class CacheItem:
     def __del__(self) -> None:
         self.delete()
 
+    def __repr__(self) -> str:
+        return f'[{self.key} | {self.value}] : {math.floor(self.expiry_time):,}'
+
 
 @stable_api
 class AgentCache:
@@ -136,16 +141,26 @@ class AgentCache:
         TODO
         """
         self._frozen = True
+        LOGGER.error("Freezing...")
+        LOGGER.error(self.cache)
 
     def unfreeze(self) -> None:
         """
         TODO
         """
+        LOGGER.error("*"*100)
+
+        LOGGER.error("UN - Freezing...")
+        LOGGER.error(self.cache)
         self.last_cache_access = time.time()
         for item in self.lingering_set:
             item.expiry_time = self.last_cache_access + 60
+        LOGGER.error(self.lingering_set)
         self.lingering_set = set()
         self._frozen = False
+        LOGGER.error("DONE UN - Freezing")
+        LOGGER.error(self.cache)
+        LOGGER.error("*"*100)
 
     def close(self) -> None:
         """
@@ -173,7 +188,11 @@ class AgentCache:
 
     def clean_stale_entries(self) -> None:
         """ """
+        LOGGER.error("-"*100)
+        LOGGER.error("clean_stale_entries...")
+        LOGGER.error(self.cache)
         now = time.time()
+        LOGGER.error(f'{math.floor(now):,}')
         while now > self.next_action and len(self.timer_queue) > 0:
             item = heapq.heappop(self.timer_queue)
             self._evict_item(item.key, cutoff_time=now)
@@ -181,6 +200,10 @@ class AgentCache:
                 self.next_action = self.timer_queue[0].expiry_time
             else:
                 self.next_action = sys.maxsize
+
+        LOGGER.error("DONE clean_stale_entries")
+        LOGGER.error(self.cache)
+        LOGGER.error("-"*100)
 
     def _get(self, key: str) -> CacheItem:
         """
