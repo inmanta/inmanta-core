@@ -348,7 +348,11 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
         """
         try:
             while self.running:
-                sleep_interval = await self.cleanup_inactive_pool_members()
+                try:
+                    sleep_interval = await self.cleanup_inactive_pool_members()
+                except Exception:
+                    # This should not happen, as the cleanup_inactive_pool_members should handle all exceptions
+                    logging.exception("Unexpected error while cleaning up pool members")
                 if self.running:
                     LOGGER.log(LOG_LEVEL_TRACE, "Manager will clean in %.2f seconds", sleep_interval)
                     # Allow wait to be cancelled on shutdown
