@@ -69,7 +69,7 @@ def configure_logfire(service: str) -> None:
 
 
 # We need this early to make @instrument work
-enabled = os.getenv("LOGFIRE_TOKEN", None) is None
+enabled = os.getenv("LOGFIRE_TOKEN", None) is not None
 
 
 no_span = NoopSpan()
