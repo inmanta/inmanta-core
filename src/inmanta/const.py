@@ -251,6 +251,9 @@ NAME_RESOURCE_ACTION_LOGGER = "resource_action_logger"
 SHUTDOWN_GRACE_IOLOOP = 10
 # Time we give the server/agent to shutdown gracefully, before we execute sys.exit(3)
 SHUTDOWN_GRACE_HARD = 15
+# Time we give the executor to shutdown gracefully, before we execute sys.exit(3)
+EXECUTOR_GRACE_HARD = 3
+
 # Hard shutdown exit code
 EXIT_HARD = 3
 # Startup failed exit code
@@ -340,3 +343,16 @@ MODULE_CHANGELOG_FILE = "CHANGELOG.md"
 DATETIME_MIN_UTC = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
 
 MODULE_PKG_NAME_PREFIX = "inmanta-module-"
+
+TRACEPARENT = "traceparent"
+
+# Resource sets marked for deletion during a partial export can be passed via this env
+# variable as a space separated list of set ids.
+INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"
+
+
+# File present in the root of a virtual environment of an executor.
+# This file is created after the venv is correctly created and touched at regular intervals while it's actively used.
+# It's used to determine whether a venv is only partially created (due to a server crash for example) or to determine when the
+# venv was last used.
+INMANTA_VENV_STATUS_FILENAME = ".inmanta_venv_status"

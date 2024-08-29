@@ -35,6 +35,7 @@ and change the refinement process based on external events.
     validation_types/*
     service_identity
     state_transfer_tx
+    transfer_optimization/*
 
 
 Service catalog

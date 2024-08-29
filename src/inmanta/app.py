@@ -54,7 +54,9 @@ from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
 
 import inmanta.compiler as compiler
-from inmanta import const, module, moduletool, protocol, util
+import logfire
+import logfire.propagate
+from inmanta import const, module, moduletool, protocol, tracing, util
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -92,6 +94,7 @@ def start_server(options: argparse.Namespace) -> None:
     if options.db_wait_time is not None:
         Config.set("database", "wait_time", str(options.db_wait_time))
 
+    tracing.configure_logfire("server")
     util.ensure_event_loop()
 
     ibl = InmantaBootloader()
@@ -131,6 +134,7 @@ def start_agent(options: argparse.Namespace) -> None:
     if max_clients:
         AsyncHTTPClient.configure(None, max_clients=max_clients)
 
+    tracing.configure_logfire("agent")
     util.ensure_event_loop()
     a = agent.Agent()
 
@@ -284,22 +288,23 @@ def compile_project(options: argparse.Namespace) -> None:
         )
         module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
-        summary_reporter = CompileSummaryReporter()
-        if options.profile:
-            import cProfile
-            import pstats
+        with logfire.span("compile"):
+            summary_reporter = CompileSummaryReporter()
+            if options.profile:
+                import cProfile
+                import pstats
 
-            with summary_reporter.compiler_exception.capture():
-                cProfile.runctx("do_compile()", globals(), {}, "run.profile")
-            p = pstats.Stats("run.profile")
-            p.strip_dirs().sort_stats("time").print_stats(20)
-        else:
-            t1 = time.time()
-            with summary_reporter.compiler_exception.capture():
-                do_compile()
-            LOGGER.debug("The entire compile command took %0.03f seconds", time.time() - t1)
+                with summary_reporter.compiler_exception.capture():
+                    cProfile.runctx("do_compile()", globals(), {}, "run.profile")
+                p = pstats.Stats("run.profile")
+                p.strip_dirs().sort_stats("time").print_stats(20)
+            else:
+                t1 = time.time()
+                with summary_reporter.compiler_exception.capture():
+                    do_compile()
+                LOGGER.debug("The entire compile command took %0.03f seconds", time.time() - t1)
 
-        summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
+            summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
 
 
 @command("list-commands", help_msg="Print out an overview of all commands", add_verbose_flag=False)
@@ -442,8 +447,8 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         help=(
             "Execute a partial export. Does not upload new Python code to the server: it is assumed to be unchanged since the"
             " last full export. Multiple partial exports for disjunct resource sets may be performed concurrently but not"
-            " concurrent with a full export. When used in combination with the `--json` option, 0 is used as a placeholder for"
-            " the model version."
+            " concurrent with a full export. When used in combination with the ``--json`` option, 0 is used as a placeholder "
+            "for the model version."
         ),
         action="store_true",
         default=False,
@@ -452,13 +457,15 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "--delete-resource-set",
         dest="delete_resource_set",
         help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
-        "be used together with the --partial option.",
+        "be used together with the --partial option. Sets can also be marked for deletion via the INMANTA_REMOVED_SET_ID "
+        "env variable as a space separated list of set ids to remove.",
         action="append",
     )
     parser.add_argument(
         "--soft-delete",
         dest="soft_delete",
-        help="Use in combination with --delete-resource-set to delete these resource sets only if they are not being exported",
+        help="This flag prevents the deletion of resource sets (marked for deletion via the ``--delete-resource-set`` cli"
+        "option or the INMANTA_REMOVED_SET_ID env variable) that contain resources that are currently being exported.",
         action="store_true",
         default=False,
     )
@@ -469,10 +476,21 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
 def export(options: argparse.Namespace) -> None:
     logger_mode_manager = LoggerModeManager.get_instance()
     with logger_mode_manager.run_in_logger_mode(LoggerMode.COMPILER):
-        if not options.partial_compile and options.delete_resource_set:
+        resource_sets_to_remove: set[str] = set(options.delete_resource_set) if options.delete_resource_set else set()
+
+        if const.INMANTA_REMOVED_SET_ID in os.environ:
+            removed_sets = set(os.environ[const.INMANTA_REMOVED_SET_ID].split())
+
+            resource_sets_to_remove.update(removed_sets)
+
+        if not options.partial_compile and resource_sets_to_remove:
             raise CLIException(
-                "The --delete-resource-set option should always be used together with the --partial option", exitcode=1
+                "A full export was requested but resource sets were marked for deletion (via the --delete-resource-set cli "
+                "option or the INMANTA_REMOVED_SET_ID env variable). Deleting a resource set can only be performed during a "
+                "partial export. To trigger a partial export, use the --partial option.",
+                exitcode=1,
             )
+
         if options.environment is not None:
             Config.set("config", "environment", options.environment)
 
@@ -500,6 +518,8 @@ def export(options: argparse.Namespace) -> None:
         if options.feature_compiler_cache is False:
             Config.set("compiler", "cache", "false")
 
+        tracing.configure_logfire("compiler")
+
         # try to parse the metadata as json. If a normal string, create json for it.
         if options.metadata is not None and len(options.metadata) > 0:
             try:
@@ -525,42 +545,43 @@ def export(options: argparse.Namespace) -> None:
 
         from inmanta.export import Exporter  # noqa: H307
 
-        summary_reporter = CompileSummaryReporter()
+        with logfire.span("compiler"):
+            summary_reporter = CompileSummaryReporter()
 
-        types: Optional[dict[str, inmanta_type.Type]]
-        scopes: Optional[Namespace]
+            types: Optional[dict[str, inmanta_type.Type]]
+            scopes: Optional[Namespace]
 
-        t1 = time.time()
-        with summary_reporter.compiler_exception.capture():
-            try:
-                (types, scopes) = do_compile()
-            except Exception:
-                types, scopes = (None, None)
-                raise
+            t1 = time.time()
+            with summary_reporter.compiler_exception.capture():
+                try:
+                    (types, scopes) = do_compile()
+                except Exception:
+                    types, scopes = (None, None)
+                    raise
 
     with logger_mode_manager.run_in_logger_mode(LoggerMode.EXPORTER):
         # Even if the compile failed we might have collected additional data such as unknowns. So
         # continue the export
+        with logfire.span("exporter"):
+            export = Exporter(options)
+            with summary_reporter.exporter_exception.capture():
+                results = export.run(
+                    types,
+                    scopes,
+                    metadata=metadata,
+                    model_export=options.model_export,
+                    export_plugin=options.export_plugin,
+                    partial_compile=options.partial_compile,
+                    resource_sets_to_remove=list(resource_sets_to_remove),
+                )
 
-        export = Exporter(options)
-        with summary_reporter.exporter_exception.capture():
-            results = export.run(
-                types,
-                scopes,
-                metadata=metadata,
-                model_export=options.model_export,
-                export_plugin=options.export_plugin,
-                partial_compile=options.partial_compile,
-                resource_sets_to_remove=options.delete_resource_set,
-            )
-
-        if not summary_reporter.is_failure() and options.deploy:
-            version = results[0]
-            conn = protocol.SyncClient("compiler")
-            LOGGER.info("Triggering deploy for version %d" % version)
-            tid = cfg_env.get()
-            agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.full_deploy)
-            conn.release_version(tid, version, True, agent_trigger_method)
+            if not summary_reporter.is_failure() and options.deploy:
+                version = results[0]
+                conn = protocol.SyncClient("compiler")
+                LOGGER.info("Triggering deploy for version %d" % version)
+                tid = cfg_env.get()
+                agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.full_deploy)
+                conn.release_version(tid, version, True, agent_trigger_method)
 
         LOGGER.debug("The entire export command took %0.03f seconds", time.time() - t1)
         summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
@@ -822,6 +843,7 @@ def app() -> None:
     Run the compiler
     """
     log_config = InmantaLoggerConfig.get_instance()
+    logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
 
     # do an initial load of known config files to build the libdir path
     Config.load_config()
@@ -871,21 +893,25 @@ def app() -> None:
             if helpmsg is not None:
                 print(helpmsg)
 
-    try:
-        options.func(options)
-    except ShowUsageException as e:
-        print(e.args[0], file=sys.stderr)
-        parser.print_usage()
-    except CLIException as e:
-        report(e)
-        sys.exit(e.exitcode)
-    except Exception as e:
-        report(e)
-        sys.exit(1)
-    except KeyboardInterrupt as e:
-        report(e)
-        sys.exit(1)
-    sys.exit(0)
+    # if a traceparent is provided, restore the context
+    with logfire.propagate.attach_context(
+        {const.TRACEPARENT: os.environ[const.TRACEPARENT]} if const.TRACEPARENT in os.environ else {}
+    ):
+        try:
+            options.func(options)
+        except ShowUsageException as e:
+            print(e.args[0], file=sys.stderr)
+            parser.print_usage()
+        except CLIException as e:
+            report(e)
+            sys.exit(e.exitcode)
+        except Exception as e:
+            report(e)
+            sys.exit(1)
+        except KeyboardInterrupt as e:
+            report(e)
+            sys.exit(1)
+        sys.exit(0)
 
 
 if __name__ == "__main__":

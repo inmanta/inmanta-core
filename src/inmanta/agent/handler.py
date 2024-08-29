@@ -23,7 +23,7 @@ import traceback
 import typing
 import uuid
 from abc import ABC, abstractmethod
-from collections import abc, defaultdict
+from collections import abc
 from concurrent.futures import Future
 from functools import partial
 from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overload
@@ -31,8 +31,8 @@ from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overl
 from tornado import concurrent
 
 import inmanta
+import logfire
 from inmanta import const, data, protocol, resources
-from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, ResourceIdStr
@@ -44,7 +44,6 @@ from inmanta.util import hash_file
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent
     import inmanta.agent.executor
-    from inmanta.agent.io.local import IOBase
 
 
 LOGGER = logging.getLogger(__name__)
@@ -68,15 +67,15 @@ class provider:  # noqa: N801
     :param name: A name to reference this provider.
     """
 
-    def __init__(self, resource_type: str, name: str) -> None:
+    def __init__(self, resource_type: str, name: Optional[str] = None) -> None:
         self._resource_type = resource_type
-        self._name = name
+        # name is no longer used but deprecating it would create a lot warnings for little gain
 
     def __call__(self, function: type["ResourceHandler[TResource]"]) -> "type[ResourceHandler[TResource]]":
         """
         The wrapping
         """
-        Commander.add_provider(self._resource_type, self._name, function)
+        Commander.add_provider(self._resource_type, function)
         return function
 
 
@@ -435,22 +434,16 @@ class HandlerAPI(ABC, Generic[TResource]):
     At the end, it also defines a number of utility methods.
 
     New handlers are registered with the :func:`~inmanta.agent.handler.provider` decorator.
-    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
-    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
-    operations.
     """
 
-    def __init__(self, agent: "inmanta.agent.executor.AgentInstance", io: Optional["IOBase"] = None) -> None:
+    def __init__(self, agent: "inmanta.agent.executor.AgentInstance", io: object = None) -> None:
         """
         :param agent: The agent that is executing this handler.
-        :param io: The io object to use.
+        :param io: Parameter for backwards compatibility. It is not used by the handler.
         """
         self._agent = agent
-        if io is None:
-            raise Exception("Unsupported: no resource mgmt in RH")
-        else:
-            self._io = io
         self._client: Optional[protocol.SessionClient] = None
+
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.eventloop
 
@@ -547,14 +540,6 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param resource: The resource to deploy.
         :param dry_run: If set to true, the intent is not enforced, only the set of changes it would bring is computed.
         """
-
-    def available(self, resource: TResource) -> bool:
-        """
-        Kept for backwards compatibility, new handler implementations should never override this.
-
-        :param resource: Resource for which to check whether this handler is available.
-        """
-        return True
 
     @abstractmethod
     def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
@@ -776,16 +761,20 @@ class ResourceHandler(HandlerAPI[TResource]):
         """
         raise NotImplementedError()
 
+    @logfire.instrument("ResourceHandler.execute", extract_args=True)
     def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
         try:
-            self.pre(ctx, resource)
+            with logfire.span("pre"):
+                self.pre(ctx, resource)
 
-            changes = self.list_changes(ctx, resource)
-            ctx.update_changes(changes)
+            with logfire.span("list_changes"):
+                changes = self.list_changes(ctx, resource)
+                ctx.update_changes(changes)
 
             if not dry_run:
-                self.do_changes(ctx, resource, changes)
-                ctx.set_status(const.ResourceState.deployed)
+                with logfire.span("do_changes"):
+                    self.do_changes(ctx, resource, changes)
+                    ctx.set_status(const.ResourceState.deployed)
             else:
                 ctx.set_status(const.ResourceState.dry)
         except SkipResource as e:
@@ -808,6 +797,7 @@ class ResourceHandler(HandlerAPI[TResource]):
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
+    @logfire.instrument("ResourceHandler.check_facts", extract_args=True)
     def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
         """
         This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.HandlerAPI.pre`
@@ -905,6 +895,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
         """
         return self._diff(current, desired)
 
+    @logfire.instrument("CRUDHandler.execute", extract_args=True)
     def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
         try:
             self.pre(ctx, resource)
@@ -916,8 +907,11 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             changes: dict[str, dict[str, typing.Any]] = {}
             try:
                 ctx.debug("Calling read_resource")
-                self.read_resource(ctx, current)
-                changes = self.calculate_diff(ctx, current, desired)
+                with logfire.span("read_resource"):
+                    self.read_resource(ctx, current)
+
+                with logfire.span("calculate_diff"):
+                    changes = self.calculate_diff(ctx, current, desired)
 
             except ResourcePurged:
                 if not desired.purged:
@@ -930,14 +924,17 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                 if "purged" in changes:
                     if not changes["purged"]["desired"]:
                         ctx.debug("Calling create_resource")
-                        self.create_resource(ctx, desired)
+                        with logfire.span("create_resource"):
+                            self.create_resource(ctx, desired)
                     else:
                         ctx.debug("Calling delete_resource")
-                        self.delete_resource(ctx, desired)
+                        with logfire.span("delete_resource"):
+                            self.delete_resource(ctx, desired)
 
                 elif not desired.purged and len(changes) > 0:
                     ctx.debug("Calling update_resource", changes=changes)
-                    self.update_resource(ctx, dict(changes), desired)
+                    with logfire.span("update_resource"):
+                        self.update_resource(ctx, dict(changes), desired)
 
                 ctx.set_status(const.ResourceState.deployed)
             else:
@@ -1058,100 +1055,53 @@ class Commander:
     This class handles commands
     """
 
-    __command_functions: dict[str, dict[str, type[ResourceHandler[Any]]]] = defaultdict(dict)
+    __command_functions: dict[str, type[ResourceHandler[Any]]] = {}
 
     @classmethod
-    def get_handlers(cls) -> dict[str, dict[str, type[ResourceHandler[Any]]]]:
+    def get_handlers(cls) -> dict[str, type[ResourceHandler[Any]]]:
         return cls.__command_functions
 
     @classmethod
     def reset(cls) -> None:
-        cls.__command_functions = defaultdict(dict)
+        cls.__command_functions = {}
 
     @classmethod
     def close(cls) -> None:
         pass
 
     @classmethod
-    def _get_instance(
-        cls, handler_class: type[ResourceHandler[Any]], agent: "inmanta.agent.executor.AgentInstance", io: "IOBase"
-    ) -> ResourceHandler[Any]:
-        new_instance = handler_class(agent, io)
-        return new_instance
-
-    @classmethod
-    def get_provider(
-        cls, cache: AgentCache, agent: "inmanta.agent.executor.AgentInstance", resource: resources.Resource
-    ) -> HandlerAPI[Any]:
+    def get_provider(cls, agent: "inmanta.agent.executor.AgentInstance", resource: resources.Resource) -> HandlerAPI[Any]:
         """
         Return a provider to handle the given resource
         """
-        resource_id = resource.id
-        resource_type = resource_id.get_entity_type()
-        try:
-            agent_io = io.get_io(cache, agent.uri, resource_id.get_version())
-        except Exception:
-            LOGGER.exception("Exception raised during creation of IO for uri %s", agent.uri)
-            raise Exception("No handler available for %s (no io available)" % resource_id)
+        resource_type = resource.id.get_entity_type()
 
-        if agent_io is None:
-            # Skip this resource
-            raise Exception("No handler available for %s (no io available)" % resource_id)
+        if resource_type not in cls.__command_functions:
+            raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
-        available = []
-        if resource_type in cls.__command_functions:
-            for handlr in cls.__command_functions[resource_type].values():
-                h = cls._get_instance(handlr, agent, agent_io)
-                if h.available(resource):
-                    available.append(h)
-                else:
-                    h.close()
-
-        if len(available) > 1:
-            for h in available:
-                h.close()
-
-            agent_io.close()
-            raise Exception("More than one handler selected for resource %s" % resource.id)
-
-        elif len(available) == 1:
-            return available[0]
-
-        raise Exception("No resource handler registered for resource of type %s" % resource_type)
+        return cls.__command_functions[resource_type](agent)
 
     @classmethod
-    def add_provider(cls, resource: str, name: str, provider: type[ResourceHandler[Any]]) -> None:
+    def add_provider(cls, resource: str, provider: type[ResourceHandler[Any]]) -> None:
         """
         Register a new provider
 
         :param resource: the name of the resource this handler applies to
-        :param name: the name of the handler itself
         :param provider: the handler function
         """
-        if resource in cls.__command_functions and name in cls.__command_functions[resource]:
-            del cls.__command_functions[resource][name]
-
-        cls.__command_functions[resource][name] = provider
+        # When a new version of a handler is available, it will register and should replace the existing one.
+        cls.__command_functions[resource] = provider
 
     @classmethod
     def get_providers(cls) -> typing.Iterator[tuple[str, type[ResourceHandler[Any]]]]:
         """Return an iterator over resource type, handler definition"""
-        for resource_type, handler_map in cls.__command_functions.items():
-            for handle_name, handler_class in handler_map.items():
-                yield (resource_type, handler_class)
+        for resource_type, handler_class in cls.__command_functions.items():
+            yield (resource_type, handler_class)
 
     @classmethod
     def get_provider_class(cls, resource_type: str, name: str) -> Optional[type[ResourceHandler[Any]]]:
-        """
-        Return the class of the handler for the given type and with the given name
-        """
-        if resource_type not in cls.__command_functions:
-            return None
-
-        if name not in cls.__command_functions[resource_type]:
-            return None
-
-        return cls.__command_functions[resource_type][name]
+        """Return the class of the handler for the given type and with the given name"""
+        return cls.__command_functions.get(resource_type, None)
 
 
 class HandlerNotAvailableException(Exception):

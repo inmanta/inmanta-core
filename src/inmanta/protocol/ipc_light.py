@@ -22,10 +22,12 @@ import functools
 import logging
 import pickle
 import struct
+import traceback
 import typing
 import uuid
 from asyncio import Future, Protocol, transports
 from dataclasses import dataclass
+from pickle import PicklingError
 from typing import Optional
 
 
@@ -157,8 +159,8 @@ class IPCFrameProtocol(Protocol):
         try:
             self.frame_received(frame)
         except Exception:
-            # Failed to unpickle, drop connection
-            self.logger.exception("Unexpected exception while handling frame", self.name)
+            # Failed to unpickle, drop frame
+            self.logger.exception("Unexpected exception while handling frame %s", self.name)
 
     def send_frame(self, frame: IPCFrame) -> None:
         """
@@ -166,7 +168,13 @@ class IPCFrameProtocol(Protocol):
         """
         if self.transport.is_closing():
             raise ConnectionLost()
-        buffer = pickle.dumps(frame)
+        try:
+            buffer = pickle.dumps(frame)
+        except PicklingError:
+            raise
+        except Exception as e:
+            # Pickle tends to raise other exceptions as well...
+            raise PicklingError() from e
         size = struct.pack("!L", len(buffer))
         self.transport.write(size + buffer)
 
@@ -201,10 +209,17 @@ class IPCServer(IPCFrameProtocol, abc.ABC, typing.Generic[ServerContext]):
             return_value = await frame.method.call(self.get_context())
             if frame.id is not None:
                 self.send_frame(IPCReplyFrame(frame.id, return_value, is_exception=False))
+        except ConnectionLost:
+            self.logger.debug("Connection lost", exc_info=True)
         except Exception as e:
             self.logger.debug("Exception on rpc call", exc_info=True)
             if frame.id is not None:
-                self.send_frame(IPCReplyFrame(frame.id, e, is_exception=True))
+                try:
+                    self.send_frame(IPCReplyFrame(frame.id, e, is_exception=True))
+                except PicklingError:
+                    # Can't pickle it
+
+                    self.send_frame(IPCReplyFrame(frame.id, traceback.format_exception(e), is_exception=True))
 
 
 class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
@@ -213,8 +228,9 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
     def __init__(self, name: str):
         super().__init__(name)
         # TODO timeouts
-        self.requests: dict[uuid.UUID, Future[object]] = {}
+
         # All outstanding calls
+        self.requests: dict[uuid.UUID, Future[object]] = {}
 
     @typing.overload
     def call(
@@ -223,6 +239,9 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
 
     @typing.overload
     def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: typing.Literal[False]) -> None: ...
+
+    @typing.overload
+    def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None: ...
 
     def call(self, method: IPCMethod[ServerContext, ReturnType], has_reply: bool = True) -> Future[ReturnType] | None:
         """Call a method with given arguments"""
@@ -248,7 +267,10 @@ class IPCClient(IPCFrameProtocol, typing.Generic[ServerContext]):
 
     def process_reply(self, frame: IPCReplyFrame) -> None:
         if frame.is_exception:
-            self.requests[frame.id].set_exception(frame.returnvalue)
+            if isinstance(frame.returnvalue, Exception):
+                self.requests[frame.id].set_exception(frame.returnvalue)
+            else:
+                self.requests[frame.id].set_exception(Exception(frame.returnvalue))
         else:
             self.requests[frame.id].set_result(frame.returnvalue)
         del self.requests[frame.id]
@@ -268,11 +290,15 @@ class FinalizingIPCClient(IPCClient[ServerContext]):
     def __init__(self, name: str):
         super().__init__(name)
         self.finalizers: list[typing.Callable[[], typing.Coroutine[typing.Any, typing.Any, None]]] = []
+        # Collection to avoid task getting garbage collected
+        self.finalizer_anti_gc: set[asyncio.Task[None]] = set()
 
     def connection_lost(self, exc: Exception | None) -> None:
         super().connection_lost(exc)
         for fin in self.finalizers:
-            asyncio.get_running_loop().create_task(fin())
+            task = asyncio.get_running_loop().create_task(fin())
+            self.finalizer_anti_gc.add(task)
+            task.add_done_callback(self.finalizer_anti_gc.discard)
 
 
 class LogReceiver(IPCFrameProtocol):
@@ -312,10 +338,15 @@ class LogShipper(logging.Handler):
     def _send_frame(self, record: IPCLogRecord) -> None:
         try:
             self.protocol.send_frame(record)
+        except ConnectionLost:
+            # Stop exception here
+            # Log in own logger to prevent loops
+            self.logger.debug("Could not send log line, connection lost %s", record.msg, exc_info=True)
+            return
         except Exception:
             # Stop exception here
             # Log in own logger to prevent loops
-            self.logger.info("Could not send log line", exc_info=True)
+            self.logger.info("Could not send log line %s", record.msg, exc_info=True)
             return
 
     def emit(self, record: logging.LogRecord) -> None:
@@ -329,7 +360,7 @@ class LogShipper(logging.Handler):
                 IPCLogRecord(
                     record.name,
                     record.levelno,
-                    record.getMessage(),
+                    self.format(record),
                 ),
             )
         )
