@@ -50,7 +50,7 @@ import abc
 import asyncio
 import datetime
 import logging
-from asyncio import FIRST_COMPLETED, CancelledError, Event, Task
+from asyncio import CancelledError, Task
 from typing import Any, Callable, Coroutine, Generic, Optional, TypeVar
 
 import inmanta.util
