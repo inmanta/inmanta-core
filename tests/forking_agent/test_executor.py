@@ -123,16 +123,16 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
     # Simple empty venv
-    simplest = executor.ExecutorBlueprint(
+    simplest_blueprint = executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(), requirements=[], sources=[], python_version=sys.version_info[:2]
     )  # No pip
-    simplest = await manager.get_executor("agent1", "test", [executor.ResourceInstallSpec("test::Test", 5, simplest)])
+    simplest = await manager.get_executor("agent1", "test", [executor.ResourceInstallSpec("test::Test", 5, simplest_blueprint)])
 
     # check communications
-    result = await simplest.connection.call(Echo(["aaaa"]))
+    result = await simplest.call(Echo(["aaaa"]))
     assert ["aaaa"] == result
     # check config copying from parent to child
-    result = await simplest.connection.call(GetConfig("test", "aaa"))
+    result = await simplest.call(GetConfig("test", "aaa"))
     assert "bbbb" == result
 
     # Make a more complete venv
@@ -177,17 +177,18 @@ def test():
     )
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
     oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
 
-    assert oldest_executor.executor_id in manager.agent_map["agent2"]
+    assert oldest_executor.id in manager.pool
+
     # assert loaded
-    result2 = await full_runner.connection.call(TestLoader())
+    result2 = await full_runner.call(TestLoader())
     assert ["DIRECT", "server"] == result2
 
     # assert they are distinct
-    assert await simplest.connection.call(GetName()) == "agent1"
-    assert await full_runner.connection.call(GetName()) == "agent2"
+    assert await simplest.call(GetName()) == simplest_blueprint.blueprint_hash()
+    assert await full_runner.call(GetName()) == full.blueprint_hash()
 
     # Request a third executor:
     # The executor cap is reached -> check that the oldest executor got correctly stopped
@@ -197,17 +198,20 @@ def test():
         sources=[via_server],
         python_version=sys.version_info[:2],
     )
+
+    async def oldest_gone():
+        return oldest_executor not in manager.agent_map["agent2"]
+
     with caplog.at_level(logging.DEBUG):
         _ = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
-        assert oldest_executor.executor_id not in manager.agent_map["agent2"]
+        assert not oldest_executor.running
+        assert full_runner.running
+        await retry_limited(oldest_gone, 1)
         log_contains(
             caplog,
             "inmanta.agent.forking_executor",
             logging.DEBUG,
-            (
-                f"Reached executor cap for agent agent2. Stopping oldest executor "
-                f"{oldest_executor.executor_id.identity()} to make room for a new one."
-            ),
+            ("Reached executor cap for agent agent2. Stopping oldest executor "),
         )
 
     # Assert shutdown and back up
@@ -218,10 +222,10 @@ def test():
 
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)
 
-    await simplest.stop()
-    await simplest.join(2)
+    await simplest.request_shutdown()
+    await simplest.join()
     with pytest.raises(ConnectionLost):
-        await simplest.connection.call(GetName())
+        await simplest.call(GetName())
 
     with pytest.raises(ImportError):
         # we aren't leaking into this venv
@@ -230,16 +234,15 @@ def test():
     async def check_automatic_clean_up() -> bool:
         return len(manager.agent_map["agent2"]) == 0
 
+    assert len(manager.agent_map["agent2"]) != 0
+
     with caplog.at_level(logging.DEBUG):
         await retry_limited(check_automatic_clean_up, 10)
         log_contains(
             caplog,
-            "inmanta.agent.executor",
+            "inmanta.agent.resourcepool",
             logging.DEBUG,
-            (
-                f"Stopping PoolMember {full_runner.executor_id.identity()} of type {type(full_runner).__name__} "
-                "because it was inactive for"
-            ),
+            ("Executor for agent2 will be shutdown becuase is inactive for "),
         )
 
     # We can get `Caught subprocess termination from unknown pid: %d -> %d`
@@ -257,23 +260,23 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
         sources=[],
         python_version=sys.version_info[:2],
     )
-    child1 = await manager.make_child_and_connect(executor.ExecutorId("test", "Test", blueprint), None)
+    child1 = await manager.get(executor.ExecutorId("test", "Test", blueprint))
 
-    result = await child1.connection.call(Echo(["aaaa"]))
+    result = await child1.call(Echo(["aaaa"]))
     assert ["aaaa"] == result
     print("Child there")
 
-    process_name = psutil.Process(pid=child1.process.pid).name()
-    assert process_name == "inmanta: executor test - connected"
+    process_name = psutil.Process(pid=child1.process.process.pid).name()
+    assert process_name == f"inmanta: executor process {blueprint.blueprint_hash()} - connected"
 
-    await asyncio.get_running_loop().run_in_executor(None, child1.process.kill)
+    await asyncio.get_running_loop().run_in_executor(None, child1.process.process.kill)
     print("Kill sent")
 
-    await asyncio.get_running_loop().run_in_executor(None, child1.process.join)
+    await asyncio.get_running_loop().run_in_executor(None, child1.process.process.join)
     print("Child gone")
 
     with pytest.raises(ConnectionLost):
-        await child1.connection.call("echo", ["aaaa"])
+        await child1.call(Echo(["aaaa"]))
 
     utils.assert_no_warning(caplog)
 
