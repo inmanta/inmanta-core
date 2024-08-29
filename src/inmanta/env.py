@@ -67,6 +67,8 @@ class SafeRequirement(Requirement):
         # Packaging Requirement is not able to parse requirements with comment. Therefore, we need to remove the `comment` part
         drop_comment = requirement_string.split("#")[0]
         super().__init__(requirement_string=drop_comment)
+        # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
+        # already installed
         self.name = utils.canonicalize_name(self.name)
 
 
@@ -174,7 +176,7 @@ class PythonWorkingSet:
     @classmethod
     def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[SafeRequirement]:
         """
-        Convert requirements from Union[Sequence[str], Sequence[SafeRequirement]] to SequeSafeRequirementment]
+        Convert requirements from Union[Sequence[str], Sequence[SafeRequirement]] to Sequence[SafeRequirement]
         """
         if isinstance(requirements[0], str):
             return [SafeRequirement(requirement_string=r) for r in requirements if isinstance(r, str)]
@@ -218,8 +220,8 @@ class PythonWorkingSet:
                     # The marker of the requirement doesn't apply on this environment
                     continue
                 if (
-                    r.name.lower() not in installed_packages
-                    or (len(r.specifier) > 0 and str(installed_packages[r.name.lower()]) not in r.specifier)
+                    r.name not in installed_packages
+                    or (str(installed_packages[r.name]) not in r.specifier)  # TODO
                     # If no specifiers are provided, the `in` operation will return `False`
                 ):
                     return False
