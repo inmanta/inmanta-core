@@ -153,15 +153,19 @@ def test_index_on_subtype(snippetcompiler):
             string path
         end
 
-        A.host [1] -- std::Host
+        A.host [1] -- std::Host.ases [0:]
 
-        index A(host, path)
+        entity B extends A:
+        end
+
+        index B(host, path)
 
         implement A using std::none
+        implement B using parents
 
-        host = std::Host(name="a",os=std::linux)
-        a=A(host=host,path="/etc")
-        b=A(host=host,path="/etc")
+        host = std::Host(name="ahost",os=std::linux)
+        a=B(host=host,path="/etc")
+        b=B(host=host,path="/etc")
     """
     )
 
