@@ -31,12 +31,15 @@ entity InterfaceIPAssignmentV2 extends lsm::ServiceEntity:
         :attr router_ip: The IP address of the SR linux router that should be configured.
         :attr interface_name: The name of the interface of the router that should be configured.
         :attr address: The IP-address to assign to the given interface.
+        :attr description: A description to associate to this interface.
     """
     string router_ip
     string interface_name
+    string description
 
     string address
     lsm::attribute_modifier address__modifier="rw+"
+
 end
 
 index InterfaceIPAssignmentV2(router_ip, interface_name)
@@ -73,7 +76,8 @@ for instance in lsm::all(binding, min_version=1, max_version=2):
         entity_binding=lsm::get_service_binding_version(binding, instance["service_entity_version"]),
         router_ip=instance["attributes"]["router_ip"],
         interface_name=instance["attributes"]["interface_name"],
-        address=instance["attributes"]["address"]
+        description=instance["service_entity_version"] == 1 ? "old version" : instance["attributes"]["description"],
+        address=instance["attributes"]["address"],
     )
 end
 

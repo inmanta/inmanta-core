@@ -74,22 +74,39 @@ Updating a service entity version is not supported for versioned entities. The n
 with the required changes. However, updates to a version 0 of a service entity are allowed, if it is the only version
 of that service.
 
+The endpoint to create a new service instance (`POST lsm/v1/service_inventory/<service_entity>`) now has an optional
+`service_entity_version` argument. If left empty, the service instance will be created using the default version of the
+service entity. Most of the other endpoints that manage service instances remain unchanged, the only exception being
+the endpoint to list the service instances of a given service entity (`GET lsm/v1/service_inventory/<service_entity>`)
+which received an update to the `filter` argument to make it possible to filter by service entity version
+(i.e. `GET lsm/v1/service_inventory/<service_entity>?filter.service_entity_version=ge:2` to filter for instances
+with service entity version greater than or equal to 2).
 
 Migrating instances between service entity version
 ==================================================
 
 With the introduction of versions to service entities we might want to migrate existing instances to newer versions.
-This can only be done with the `/lsm/v1/service_inventory/<service_entity>/<service_id>/update_entity_version` endpoint
+This can only be done with the `PATCH /lsm/v1/service_inventory/<service_entity>/<service_id>/update_entity_version` endpoint
 or by calling the `lsm_services_update_entity_version` API method on the Inmanta client.
 
-To do this we need to provide all 3 attribute sets that we want the instance to have on the new entity version.
+To do this we need to provide at least 1 of the 3 attribute sets that we want the instance to have on the new entity version.
 These attribute sets are validated against the schema of the new version.
 We also need to provide the target state that we want to set the instance to.
 
 NOTE: This change is impossible to rollback since we override each attribute set. And each attribute set needs to be
 compatible with the target entity version.
 
+Below is a simple script that migrates existing instances of our service that have `service_entity_version` 0 or 1
+and that are on the up or failed states.
 
+We modify the existing active attribute set of each instance that qualifies for migration to add a generic description
+field. We only need to set the candidate set on this example because we are moving each instance to the start state
+where this set will be validated and eventually promoted.
+
+.. literalinclude:: multi_version/multi_version_sources/service_entity_version_migration.py
+    :linenos:
+    :language: inmanta
+    :lines: 1-88
 
 
 
