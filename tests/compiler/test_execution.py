@@ -30,6 +30,28 @@ def test_issue_139_scheduler(snippetcompiler):
 import std
 import std::testing
 
+typedef service_state as string matching self == "running" or self == "stopped"
+
+entity Service:
+    string name
+    service_state state
+    bool onboot
+    bool reload=false
+    bool send_event=false
+end
+
+implement Service using serviceHost
+
+Service.host [1] -- Host.services [0:]
+
+index Service(host, name)
+
+implementation serviceHost for Service:
+    self.requires = self.host.requires
+end
+
+implement Service using serviceHost
+
 entity Host extends std::Host:
     string attr
 end
@@ -38,7 +60,8 @@ implement Host using std::none
 host = Host(name="vm1", os=std::linux)
 
 f = std::testing::NullResource(name=host.name)
-
+Service(host=host, name="svc", state="running", onboot=true, requires=[f])
+ref = Service[host=host, name="svc"]
 """
     )
     with pytest.raises(MultiException):

@@ -155,10 +155,10 @@ def test_index_on_subtype(snippetcompiler):
 
         A.host [1] -- std::Host.ases [0:]
 
+        index A(host, path)
+
         entity B extends A:
         end
-
-        index B(host, path)
 
         implement A using std::none
         implement B using parents
