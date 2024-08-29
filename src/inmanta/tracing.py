@@ -22,6 +22,7 @@ import os
 from typing import Any, Callable, ContextManager, LiteralString, Mapping, ParamSpec, Sequence, TypeVar
 
 import logfire
+import logfire._internal.config
 import logfire.integrations
 import logfire.integrations.pydantic
 from logfire import LevelName, LogfireSpan
@@ -30,6 +31,9 @@ from logfire.propagate import ContextCarrier
 from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
 
 LOGGER = logging.getLogger("inmanta")
+
+# Make sure we don't get warnings when it is off
+logfire._internal.config.GLOBAL_CONFIG.ignore_no_config = True
 
 
 def configure_logfire(service: str) -> None:
