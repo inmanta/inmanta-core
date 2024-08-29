@@ -255,7 +255,7 @@ class PythonWorkingSet:
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
         return {
-            utils.canonicalize_name(dist_info.key): version.Version(dist_info.version)
+            SafeRequirement(dist_info.key).name: version.Version(dist_info.version)
             for dist_info in pkg_resources.working_set
             if not inmanta_modules_only or dist_info.key.startswith(const.MODULE_PKG_NAME_PREFIX)
         }
