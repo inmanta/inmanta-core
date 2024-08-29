@@ -60,7 +60,7 @@ class RequirementsTxtParser:
         """
         Get all the requirements in `filename` as a list of `Requirement` instances.
         """
-        return [safe_parse(requirement_string=r) for r in cls.parse_requirements_as_strs(filename)]
+        return [safe_parse(requirement=r) for r in cls.parse_requirements_as_strs(filename)]
 
     @classmethod
     def parse_requirements_as_strs(cls, filename: str) -> list[str]:

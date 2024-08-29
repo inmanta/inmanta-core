@@ -55,7 +55,7 @@ from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
-from inmanta.env import SafeRequirement, safe_parse
+from inmanta.env import safe_parse
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -76,7 +76,7 @@ from inmanta.module import (
     gitprovider,
 )
 from inmanta.stable_api import stable_api
-from packaging.requirements import InvalidRequirement
+from packaging.requirements import InvalidRequirement, Requirement
 from packaging.version import Version
 
 LOGGER = logging.getLogger(__name__)
@@ -473,7 +473,7 @@ compatible with the dependencies specified by the updated modules.
         def do_update(specs: Mapping[str, Sequence[InmantaModuleRequirement]], modules: list[str]) -> None:
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
-            v2_python_specs: list[SafeRequirement] = [
+            v2_python_specs: list[Requirement] = [
                 module_spec.get_python_package_requirement()
                 for module, module_specs in specs.items()
                 for module_spec in module_specs

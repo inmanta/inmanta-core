@@ -59,7 +59,7 @@ from inmanta.ast import CompilerException, LocatableString, Location, Namespace,
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
-from inmanta.env import SafeRequirement, assert_pip_has_source, safe_parse
+from inmanta.env import assert_pip_has_source, safe_parse
 from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
@@ -154,7 +154,7 @@ class InmantaModuleRequirement:
             raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
         return cls(safe_parse(requirement=spec))
 
-    def get_python_package_requirement(self) -> SafeRequirement:
+    def get_python_package_requirement(self) -> Requirement:
         """
         Return a SafeRequirement with the name of the Python distribution package for this module requirement.
         """
@@ -723,7 +723,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
         assert_pip_has_source(project.metadata.pip, f"a v2 module {module_name}")
 
-        requirements: list[SafeRequirement] = [req.get_python_package_requirement() for req in module_spec]
+        requirements: list[Requirement] = [req.get_python_package_requirement() for req in module_spec]
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
 
         # Get known requires and add them to prevent invalidating constraints through updates
@@ -1180,7 +1180,7 @@ class RequirementsTxtFile:
         """
         return any(r.name == pkg_name for r in self._requirements)
 
-    def set_requirement_and_write(self, requirement: SafeRequirement) -> None:
+    def set_requirement_and_write(self, requirement: Requirement) -> None:
         """
         Add the given requirement to the requirements.txt file and update the file on disk, replacing any existing constraints
         on this package.
@@ -2129,7 +2129,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.verify_module_version_compatibility()
 
         # do python install
-        pyreq: list[SafeRequirement] = [safe_parse(requirement=x) for x in self.collect_python_requirements()]
+        pyreq: list[Requirement] = [safe_parse(requirement=x) for x in self.collect_python_requirements()]
 
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
@@ -2547,7 +2547,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
         if self.strict_deps_check:
-            constraints: list[SafeRequirement] = [safe_parse(requirement=item) for item in self.collect_python_requirements()]
+            constraints: list[Requirement] = [safe_parse(requirement=item) for item in self.collect_python_requirements()]
             env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
             if not env.ActiveEnv.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
@@ -3426,7 +3426,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
         # Parse config file
         config_parser = ConfigParser()
         config_parser.read(self.get_metadata_file_path())
-        python_pkg_requirement: SafeRequirement = requirement.get_python_package_requirement()
+        python_pkg_requirement: Requirement = requirement.get_python_package_requirement()
         if config_parser.has_option("options", "install_requires"):
             new_install_requires = [
                 r
