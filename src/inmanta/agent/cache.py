@@ -21,7 +21,8 @@ import logging
 import sys
 import time
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Callable, Optional, Type
 
 import math
 
@@ -98,10 +99,7 @@ class CacheItem:
 class AgentCache:
     """
     Caching system for the agent:
-
-    cache items are removed from the cache either:
-    1. individually when their expiry_time is up
-    2. as a group when their version is not being used for a while (default 1 min)
+    TODO
 
     """
 
@@ -131,36 +129,19 @@ class AgentCache:
         # Consistency mechanism: before the agent performs a resource action (deploy / repair / fact retrieval / dry run)
         # - we clean up stale entries
         # - we freeze the cache (to prevent the background cleanup job to trigger while the agent is working)
-        self._frozen: bool = False
 
+        # Set of lingering cache items used during a resource action.
         self.lingering_set: set[CacheItem] = set()
-        self.last_cache_access = time.time()
+        self.last_cache_access: float
 
-    def freeze(self) -> None:
+    def touch_used_cache_items(self) -> None:
         """
-        TODO
+        Extend the expiry time of items in the lingering_set by 60s
         """
-        self._frozen = True
-        LOGGER.error("Freezing...")
-        LOGGER.error(self.cache)
-
-    def unfreeze(self) -> None:
-        """
-        TODO
-        """
-        LOGGER.error("*"*100)
-
-        LOGGER.error("UN - Freezing...")
-        LOGGER.error(self.cache)
-        self.last_cache_access = time.time()
+        new_expiry_time = time.time() + 60
         for item in self.lingering_set:
-            item.expiry_time = self.last_cache_access + 60
-        LOGGER.error(self.lingering_set)
+            item.expiry_time = new_expiry_time
         self.lingering_set = set()
-        self._frozen = False
-        LOGGER.error("DONE UN - Freezing")
-        LOGGER.error(self.cache)
-        LOGGER.error("*"*100)
 
     def close(self) -> None:
         """
@@ -188,11 +169,7 @@ class AgentCache:
 
     def clean_stale_entries(self) -> None:
         """ """
-        LOGGER.error("-"*100)
-        LOGGER.error("clean_stale_entries...")
-        LOGGER.error(self.cache)
         now = time.time()
-        LOGGER.error(f'{math.floor(now):,}')
         while now > self.next_action and len(self.timer_queue) > 0:
             item = heapq.heappop(self.timer_queue)
             self._evict_item(item.key, cutoff_time=now)
@@ -201,9 +178,6 @@ class AgentCache:
             else:
                 self.next_action = sys.maxsize
 
-        LOGGER.error("DONE clean_stale_entries")
-        LOGGER.error(self.cache)
-        LOGGER.error("-"*100)
 
     def _get(self, key: str) -> CacheItem:
         """
@@ -218,6 +192,7 @@ class AgentCache:
 
         if item.lingering:
             self.lingering_set.add(item)
+
         return item
 
     def _cache(self, item: CacheItem) -> None:
@@ -227,6 +202,9 @@ class AgentCache:
         self.cache[item.key] = item
 
         heapq.heappush(self.timer_queue, item)
+
+        if item.lingering:
+            self.lingering_set.add(item)
 
         if item.expiry_time < self.next_action:
             self.next_action = item.expiry_time
@@ -331,3 +309,20 @@ class AgentCache:
             with self.addLock:
                 del self.addLocks[key]
             return value
+    def __enter__(self):
+        """
+        Assumed to be called under activity_lock.
+        Clean stale entries before using the cache.
+        """
+        self.clean_stale_entries()
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ):
+        """
+        When done using the cache, update expiry time
+        of all lingering items.
+        """
+        self.touch_used_cache_items()

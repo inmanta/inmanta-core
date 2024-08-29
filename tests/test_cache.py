@@ -538,16 +538,6 @@ async def test_decorator_2():
 
 
 async def test_decorator_3():
-    class FrozenCache(object):
-        def __init__(self, cache: AgentCache):
-            self.cache = cache
-
-        def __enter__(self):
-            self.cache.freeze()
-
-        def __exit__(self, type, value, traceback):
-            self.cache.unfreeze()
-
     def advance_time_and_cleanup(traveller, n_seconds: int):
         traveller.shift(datetime.timedelta(seconds=n_seconds))
         xcache.clean_stale_entries()
@@ -572,7 +562,7 @@ async def test_decorator_3():
     with time_machine.travel(datetime.datetime.now().astimezone(), tick=False) as traveller:
 
         # cache : []  T=0
-        with FrozenCache(xcache):
+        with xcache:
             # 1 cache miss
             assert "x2" == test.test_method_2(dummy_arg="AAA")
             # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +60
@@ -586,7 +576,7 @@ async def test_decorator_3():
 
         # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +29
 
-        with FrozenCache(xcache):
+        with xcache:
             # 1 hit:
             assert "x2" == test.test_method_2(dummy_arg="AAA")
             # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +60
@@ -597,7 +587,7 @@ async def test_decorator_3():
 
         # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +29
 
-        with FrozenCache(xcache):
+        with xcache:
             # 1 hit:
             assert "x2" == test.test_method_2(dummy_arg="AAA")
             # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +60
@@ -608,7 +598,7 @@ async def test_decorator_3():
         advance_time_and_cleanup(traveller, 61)
         # cache : []
 
-        with FrozenCache(xcache):
+        with xcache:
             # 1 cache miss and 1 hit:
             assert "x2" == test.test_method_2(dummy_arg="AAA")
             assert "x2" == test.test_method_2(dummy_arg="AAA")
