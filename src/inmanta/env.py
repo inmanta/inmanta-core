@@ -1308,6 +1308,7 @@ class VenvSnapshot:
     old_path_hooks: list
     old_pythonpath: str
     old_os_venv: Optional[str]
+    old_process_env_path: str
     old_process_env: ActiveEnv
     old_working_set: PythonWorkingSet
 
@@ -1336,14 +1337,15 @@ class VenvSnapshot:
 
         # We reset the process_env both ways: we put the reference back and we do an in_place update
         swap_process_env(self.old_process_env)
-        mock_process_env(python_path=self.old_process_env.python_path)
+        mock_process_env(env_path=self.old_process_env_path)
 
 
 def store_venv():
     """
     Create a snapshot of the venv environment, for use in testing, to resest the test
     """
-    return VenvSnapshot(
+
+    self = VenvSnapshot(
         old_os_path=os.environ.get("PATH", ""),
         old_prefix=sys.prefix,
         old_path=list(sys.path),
@@ -1352,5 +1354,7 @@ def store_venv():
         old_pythonpath=os.environ.get("PYTHONPATH", None),
         old_os_venv=os.environ.get("VIRTUAL_ENV", None),
         old_process_env=process_env,
+        old_process_env_path=process_env.env_path,
         old_working_set=pkg_resources.working_set,
     )
+    return self

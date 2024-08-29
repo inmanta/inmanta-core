@@ -1081,15 +1081,14 @@ class ReentrantVirtualEnv(VirtualEnv):
 
         if not self.working_set:
             # First run
+            self.previous_venv = env.process_env
             super().use_virtual_env()
-
         else:
             # Later run
             self._activate_that()
+            self.previous_venv = swap_process_env(self)
             pkg_resources.working_set = self.working_set
             self._using_venv = True
-
-        self.previous_venv = swap_process_env(self)
 
     def check(
         self,
