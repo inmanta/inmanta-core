@@ -461,7 +461,6 @@ class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
         await context.init_for(self.name, self.uri)
 
 
-
 class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
     """Run a dryrun in an executor"""
 

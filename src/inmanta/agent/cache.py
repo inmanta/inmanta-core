@@ -52,7 +52,7 @@ class CacheItem:
         timeout: float,
         value: Any,
         call_on_delete: Optional[Callable[[Any], None]],
-        lingering:bool=True,
+        lingering: bool = True,
     ) -> None:
         """
         :param key: The full key identifying this item in the cache.
@@ -74,7 +74,7 @@ class CacheItem:
             self.expiry_time = time.time() + timeout
         self.finalizer_lock = Lock()
         self.called_finalizer = False
-        self.lingering=lingering
+        self.lingering = lingering
 
     def __lt__(self, other: "CacheItem") -> bool:
         return self.expiry_time < other.expiry_time
@@ -136,6 +136,7 @@ class AgentCache:
         TODO
         """
         self._frozen = True
+
     def unfreeze(self) -> None:
         """
         TODO
@@ -155,7 +156,7 @@ class AgentCache:
             self._evict_item(key, shutting_down=True)
         self.timer_queue.clear()
 
-    def _evict_item(self, key: str, cutoff_time: Optional[float]=0, shutting_down: Optional[bool]=False) -> None:
+    def _evict_item(self, key: str, cutoff_time: Optional[float] = 0, shutting_down: Optional[bool] = False) -> None:
         try:
             item = self.cache[key]
 
@@ -171,8 +172,7 @@ class AgentCache:
             pass
 
     def clean_stale_entries(self) -> None:
-        """
-        """
+        """ """
         now = time.time()
         while now > self.next_action and len(self.timer_queue) > 0:
             item = heapq.heappop(self.timer_queue)
@@ -181,7 +181,6 @@ class AgentCache:
                 self.next_action = self.timer_queue[0].expiry_time
             else:
                 self.next_action = sys.maxsize
-
 
     def _get(self, key: str) -> CacheItem:
         """
@@ -222,7 +221,7 @@ class AgentCache:
         resource: Optional[Resource] = None,
         timeout: int = 5000,
         call_on_delete: Optional[Callable[[Any], None]] = None,
-        for_version: bool=True
+        for_version: bool = True,
     ) -> None:
         """
         add a value to the cache with the given key
@@ -303,7 +302,9 @@ class AgentCache:
                 except KeyError:
                     value = function(**kwargs)
                     if cache_none or value is not None:
-                        self.cache_value(key, value, timeout=timeout, call_on_delete=call_on_delete, for_version=for_version, **args)
+                        self.cache_value(
+                            key, value, timeout=timeout, call_on_delete=call_on_delete, for_version=for_version, **args
+                        )
             with self.addLock:
                 del self.addLocks[key]
             return value

@@ -220,9 +220,7 @@ async def test_multi_threaded(agent_cache: AgentCache):
             "test", lambda: alpha.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete(), for_version=False
         )
 
-    t1 = Thread(
-        target=target_1
-    )
+    t1 = Thread(target=target_1)
     t2 = Thread(
         target=lambda: cache.get_or_else(
             "test", lambda: beta.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete(), for_version=False
@@ -335,7 +333,7 @@ async def test_decorator():
     my_closable = Closeable()
     my_closable_2 = Closeable()
 
-    xcache = AgentCache()
+    # xcache = AgentCache()
 
     class DT:
         def __init__(self, cache: AgentCache):

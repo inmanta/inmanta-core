@@ -807,6 +807,3 @@ def make_random_file(size: int = 0) -> tuple[str, bytes, str]:
     body = base64.b64encode(content).decode("ascii")
 
     return hash, content, body
-
-
-
