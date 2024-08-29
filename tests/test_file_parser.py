@@ -18,7 +18,7 @@
 
 import os
 
-from inmanta.env import SafeRequirement, safe_parse_requirement
+from inmanta.env import Requirement, safe_parse_requirement
 from inmanta.file_parser import RequirementsTxtParser
 
 
@@ -39,7 +39,7 @@ dep
         fd.write(content)
 
     expected_requirements = ["test==1.2.3", "other-dep~=2.0.0", "third-dep<5.0.0", "splitteddep", "Capital"]
-    requirements: list[SafeRequirement] = RequirementsTxtParser().parse(requirements_txt_file)
+    requirements: list[Requirement] = RequirementsTxtParser().parse(requirements_txt_file)
     assert requirements == [safe_parse_requirement(requirement_string=r) for r in expected_requirements]
     requirements_as_str = RequirementsTxtParser.parse_requirements_as_strs(requirements_txt_file)
     assert requirements_as_str == expected_requirements

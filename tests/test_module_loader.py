@@ -33,7 +33,14 @@ from inmanta import compiler, const, env, loader, plugins, resources
 from inmanta.ast import CompilerException
 from inmanta.const import CF_CACHE_DIR
 from inmanta.data.model import PipConfig
-from inmanta.env import ConflictingRequirements, LocalPackagePath, PackageNotFound, SafeRequirement, process_env, safe_parse_requirement
+from inmanta.env import (
+    ConflictingRequirements,
+    LocalPackagePath,
+    PackageNotFound,
+    Requirement,
+    process_env,
+    safe_parse_requirement,
+)
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,
@@ -396,7 +403,7 @@ def test_load_import_based_v2_project(local_module_package_index: str, snippetco
     """
     module_name: str = "minimalv2module"
 
-    def load(requires: Optional[list[SafeRequirement]] = None) -> None:
+    def load(requires: Optional[list[Requirement]] = None) -> None:
         project: Project = snippetcompiler_clean.setup_for_snippet(
             f"import {module_name}",
             autostd=False,
@@ -468,7 +475,9 @@ def test_load_import_based_v2_module(
         extra_index_url=[index.url],
         # make sure that even listing the requirement in project.yml does not suffice
         project_requires=[InmantaModuleRequirement.parse(dependency_module_name)],
-        python_requires=([] if v1 else [safe_parse_requirement(requirement_string=ModuleV2Source.get_package_name_for(main_module_name))]),
+        python_requires=(
+            [] if v1 else [safe_parse_requirement(requirement_string=ModuleV2Source.get_package_name_for(main_module_name))]
+        ),
     )
 
     if explicit_dependency:
@@ -850,7 +859,7 @@ def test_module_install_extra_on_project_level_v2_dep(
         },
         publish_index=index,
     )
-    package_with_extra: SafeRequirement = InmantaModuleRequirement.parse("mymod[myfeature]").get_python_package_requirement()
+    package_with_extra: Requirement = InmantaModuleRequirement.parse("mymod[myfeature]").get_python_package_requirement()
     package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}mymod"
 
     # project with dependency on mymod with extra
@@ -1006,8 +1015,8 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
         },
         publish_index=index,
     )
-    package_without_extra: SafeRequirement = InmantaModuleRequirement.parse("mymod").get_python_package_requirement()
-    package_with_extra: SafeRequirement = InmantaModuleRequirement.parse("mymod[myfeature]").get_python_package_requirement()
+    package_without_extra: Requirement = InmantaModuleRequirement.parse("mymod").get_python_package_requirement()
+    package_with_extra: Requirement = InmantaModuleRequirement.parse("mymod[myfeature]").get_python_package_requirement()
     package_name: str = str(package_without_extra)
 
     def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
@@ -1075,8 +1084,8 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
         },
         publish_index=index,
     )
-    package_without_extra: SafeRequirement = InmantaModuleRequirement.parse("depmod").get_python_package_requirement()
-    package_with_extra: SafeRequirement = InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()
+    package_without_extra: Requirement = InmantaModuleRequirement.parse("depmod").get_python_package_requirement()
+    package_with_extra: Requirement = InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()
     package_name: str = str(package_without_extra)
 
     def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
@@ -1156,8 +1165,8 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
 
     # Publish dependency of V1 module (depmod) to python package repo
-    package_without_extra: SafeRequirement = InmantaModuleRequirement.parse("depmod").get_python_package_requirement()
-    package_with_extra: SafeRequirement = InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()
+    package_without_extra: Requirement = InmantaModuleRequirement.parse("depmod").get_python_package_requirement()
+    package_with_extra: Requirement = InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()
     package_name: str = str(package_without_extra)
 
     module_from_template(

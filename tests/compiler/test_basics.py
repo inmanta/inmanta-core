@@ -737,7 +737,7 @@ def test_implementation_import_missing_error(snippetcompiler) -> None:
 @pytest.mark.parametrize("name", ["", "#", " # ", "#this is a comment"])
 def test_safe_requirement(name) -> None:
     """
-    Ensure that empty name requirements are not allowed in `SafeRequirement`
+    Ensure that empty name requirements are not allowed in `Requirement`
     """
     with pytest.raises(AssertionError):
         safe_parse_requirement(requirement=name)

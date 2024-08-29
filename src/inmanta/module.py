@@ -156,7 +156,7 @@ class InmantaModuleRequirement:
 
     def get_python_package_requirement(self) -> Requirement:
         """
-        Return a SafeRequirement with the name of the Python distribution package for this module requirement.
+        Return a Requirement with the name of the Python distribution package for this module requirement.
         """
         module_name = self.project_name
         pkg_name = ModuleV2Source.get_package_name_for(module_name)
@@ -2547,7 +2547,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
         if self.strict_deps_check:
-            constraints: list[Requirement] = [safe_parse_requirement(requirement=item) for item in self.collect_python_requirements()]
+            constraints: list[Requirement] = [
+                safe_parse_requirement(requirement=item) for item in self.collect_python_requirements()
+            ]
             env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
             if not env.ActiveEnv.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):

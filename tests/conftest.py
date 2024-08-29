@@ -28,6 +28,7 @@ from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
+from packaging.requirements import Requirement
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -119,7 +120,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import CommandRunner, LocalPackagePath, SafeRequirement, VirtualEnv, mock_process_env, safe_parse_requirement
+from inmanta.env import CommandRunner, LocalPackagePath, VirtualEnv, mock_process_env, safe_parse_requirement
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -1153,7 +1154,7 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path: Optional[list[str]] = None,
         python_package_sources: Optional[list[str]] = None,
         project_requires: Optional[list[InmantaModuleRequirement]] = None,
-        python_requires: Optional[list[SafeRequirement]] = None,
+        python_requires: Optional[list[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
         strict_deps_check: Optional[bool] = None,
@@ -1255,7 +1256,7 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path: Optional[list[str]] = None,
         python_package_sources: Optional[list[str]] = None,
         project_requires: Optional[list[InmantaModuleRequirement]] = None,
-        python_requires: Optional[list[SafeRequirement]] = None,
+        python_requires: Optional[list[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
         use_pip_config_file: bool = False,

@@ -90,7 +90,7 @@ class VersionConflict:
         owner = ""
         if self.owner:
             # Cfr pip
-            # SafeRequirement already satisfied: certifi>=2017.4.17 in /[...]/site-packages
+            # Requirement already satisfied: certifi>=2017.4.17 in /[...]/site-packages
             # (from requests>=2.23.0->cookiecutter<3,>=1->inmanta-core==7.0.0) (2022.6.15)
             owner = f" (from {self.owner})"
         if self.installed_version:
@@ -176,7 +176,7 @@ class PythonWorkingSet:
     @classmethod
     def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
         """
-        Convert requirements from Union[Sequence[str], Sequence[SafeRequirement]] to Sequence[SafeRequirement]
+        Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
         """
         if isinstance(requirements[0], str):
             return [safe_parse_requirement(requirement=r) for r in requirements if isinstance(r, str)]
@@ -210,7 +210,7 @@ class PythonWorkingSet:
             for r in reqs:
                 if r in seen_requirements:
                     continue
-                # Requirements created by the `Distribution.requires()` method have the extra, the SafeRequirement was created
+                # Requirements created by the `Distribution.requires()` method have the extra, the Requirement was created
                 # from,
                 # set as a marker. The line below makes sure that the "extra" marker matches. The marker is not set by
                 # `Distribution.requires()` when the package is installed in editable mode, but setting it always doesn't make
@@ -294,7 +294,10 @@ class PythonWorkingSet:
 
             # recurse on direct dependencies
             return _get_tree_recursive(
-                (safe_parse_requirement(requirement=requirement.key).name for requirement in installed_distributions[dist].requires()),
+                (
+                    safe_parse_requirement(requirement=requirement.key).name
+                    for requirement in installed_distributions[dist].requires()
+                ),
                 acc=acc | {dist},
             )
 
@@ -888,7 +891,11 @@ import sys
         """
         protected_inmanta_packages: list[str] = cls.get_protected_inmanta_packages()
         workingset: dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        return [safe_parse_requirement(requirement=f"{pkg}=={workingset[pkg]}") for pkg in workingset if pkg in protected_inmanta_packages]
+        return [
+            safe_parse_requirement(requirement=f"{pkg}=={workingset[pkg]}")
+            for pkg in workingset
+            if pkg in protected_inmanta_packages
+        ]
 
 
 class CommandRunner:

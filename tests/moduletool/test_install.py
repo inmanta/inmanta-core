@@ -508,7 +508,10 @@ def test_project_install(
         index_url=local_module_package_index,
         # We add tornado, as there is a code path in update for the case where the project has python requires
         python_requires=["tornado"]
-        + [safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names],
+        + [
+            safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod))
+            for mod in install_module_names
+        ],
         install_project=False,
     )
 
@@ -541,7 +544,8 @@ def test_project_install(
         autostd=False,
         python_package_sources=[local_module_package_index],
         python_requires=[
-            safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names
+            safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod))
+            for mod in install_module_names
         ]
         + ["lorem"],
         install_project=False,
@@ -1333,7 +1337,9 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
     )
 
     modules = ["modone", "modtwo"]
-    v2_requirements = [safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod)) for mod in modules]
+    v2_requirements = [
+        safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod)) for mod in modules
+    ]
 
     snippetcompiler_clean.setup_for_snippet(
         f"""
@@ -1419,7 +1425,9 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
             autostd=False,
             index_url=local_module_package_index,
             extra_index_url=[index.url],
-            python_requires=[safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for("parent_module"))],
+            python_requires=[
+                safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for("parent_module"))
+            ],
             install_project=True,
         )
     log_contains(
@@ -1451,7 +1459,9 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
             autostd=False,
             index_url=local_module_package_index,
             extra_index_url=[index.url],
-            python_requires=[safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for("parent_module"))],
+            python_requires=[
+                safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for("parent_module"))
+            ],
             install_project=True,
         )
 
@@ -1484,7 +1494,9 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         autostd=False,
         index_url=local_module_package_index,
         extra_index_url=[index.url],
-        python_requires=[safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for("parent_module"))],
+        python_requires=[
+            safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for("parent_module"))
+        ],
         install_project=True,
     )
     log_contains(
@@ -1650,7 +1662,8 @@ def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_
         index_url=local_module_package_index,
         extra_index_url=[index.url],
         python_requires=[
-            safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod)) for mod in ["module_b", "module_a"]
+            safe_parse_requirement(requirement_string=module.ModuleV2Source.get_package_name_for(mod))
+            for mod in ["module_b", "module_a"]
         ],
         install_project=True,
         project_requires=[

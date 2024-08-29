@@ -44,7 +44,6 @@ from _pytest.mark import MarkDecorator
 from inmanta import config, const, data, env, module, protocol, util
 from inmanta.data import ResourceIdStr
 from inmanta.data.model import PipConfig
-from inmanta.env import SafeRequirement
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
@@ -52,6 +51,7 @@ from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
 from packaging import version
+from packaging.requirements import Requirement
 from packaging.version import Version
 
 T = TypeVar("T")
@@ -488,11 +488,11 @@ def create_python_package(
     pkg_version: version.Version,
     path: str,
     *,
-    requirements: Optional[Sequence[SafeRequirement]] = None,
+    requirements: Optional[Sequence[Requirement]] = None,
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
-    optional_dependencies: Optional[dict[str, Sequence[SafeRequirement]]] = None,
+    optional_dependencies: Optional[dict[str, Sequence[Requirement]]] = None,
 ) -> None:
     """
     Creates an empty Python package.
@@ -577,8 +577,8 @@ def module_from_template(
     *,
     new_version: Optional[version.Version] = None,
     new_name: Optional[str] = None,
-    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, SafeRequirement]]] = None,
-    new_extras: Optional[abc.Mapping[str, abc.Sequence[Union[module.InmantaModuleRequirement, SafeRequirement]]]] = None,
+    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
+    new_extras: Optional[abc.Mapping[str, abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]]] = None,
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
@@ -606,8 +606,8 @@ def module_from_template(
     :param four_digit_version: if the version uses 4 digits (3 by default)
     """
 
-    def to_python_requires(requires: abc.Sequence[Union[module.InmantaModuleRequirement, SafeRequirement]]) -> list[str]:
-        return [str(req if isinstance(req, SafeRequirement) else str(req.get_python_package_requirement())) for req in requires]
+    def to_python_requires(requires: abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]) -> list[str]:
+        return [str(req if isinstance(req, Requirement) else str(req.get_python_package_requirement())) for req in requires]
 
     if (dest_dir is None) != in_place:
         raise ValueError("Either dest_dir or in_place must be set, never both.")
@@ -688,7 +688,7 @@ def v1_module_from_template(
     *,
     new_version: Optional[version.Version] = None,
     new_name: Optional[str] = None,
-    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, SafeRequirement]]] = None,
+    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
     new_content_init_cf: Optional[str] = None,
     new_content_init_py: Optional[str] = None,
 ) -> module.ModuleV2Metadata:
@@ -728,7 +728,7 @@ def v1_module_from_template(
         with open(os.path.join(dest_dir, "requirements.txt"), "w") as fd:
             fd.write(
                 "\n".join(
-                    str(req if isinstance(req, SafeRequirement) else req.get_python_package_requirement())
+                    str(req if isinstance(req, Requirement) else req.get_python_package_requirement())
                     for req in new_requirements
                 )
             )
