@@ -10,7 +10,7 @@ email-validator==2.2.0
 logfire==0.51.0
 jinja2==3.1.4
 more-itertools==10.4.0
-opentelemetry-instrumentation-asyncpg>=0.46b,<0.47
+opentelemetry-instrumentation-asyncpg>=0.46b,<0.49
 packaging==24.1
 pip==24.2
 ply==3.11
