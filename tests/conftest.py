@@ -119,7 +119,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import CommandRunner, LocalPackagePath, SafeRequirement, VirtualEnv, mock_process_env
+from inmanta.env import CommandRunner, LocalPackagePath, SafeRequirement, VirtualEnv, mock_process_env, safe_parse
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -1918,8 +1918,8 @@ def index_with_pkgs_containing_optional_deps() -> str:
             path=os.path.join(tmpdirname, "pkg"),
             publish_index=pip_index,
             optional_dependencies={
-                "optional-a": [SafeRequirement(requirement_string="dep-a")],
-                "optional-b": [SafeRequirement(requirement_string="dep-b"), SafeRequirement(requirement_string="dep-c")],
+                "optional-a": [safe_parse(requirement="dep-a")],
+                "optional-b": [safe_parse(requirement="dep-b"), safe_parse(requirement="dep-c")],
             },
         )
         for pkg_name in ["dep-a", "dep-b", "dep-c"]:

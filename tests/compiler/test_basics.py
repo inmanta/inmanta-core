@@ -24,7 +24,7 @@ import pytest
 
 from inmanta import compiler, const
 from inmanta.ast import DoubleSetException, RuntimeException
-from inmanta.env import SafeRequirement
+from inmanta.env import safe_parse
 from inmanta.plugins import PluginDeprecationWarning
 from utils import module_from_template, v1_module_from_template
 
@@ -740,4 +740,4 @@ def test_safe_requirement(name) -> None:
     Ensure that empty name requirements are not allowed in `SafeRequirement`
     """
     with pytest.raises(AssertionError):
-        SafeRequirement(requirement_string=name)
+        safe_parse(requirement=name)
