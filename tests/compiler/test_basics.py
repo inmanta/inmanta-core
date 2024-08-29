@@ -24,6 +24,7 @@ import pytest
 
 from inmanta import compiler, const
 from inmanta.ast import DoubleSetException, RuntimeException
+from inmanta.env import SafeRequirement
 from inmanta.plugins import PluginDeprecationWarning
 from utils import module_from_template, v1_module_from_template
 
@@ -731,3 +732,12 @@ def test_implementation_import_missing_error(snippetcompiler) -> None:
     assert "could not find type tests::length in namespace __config__" in exception.value.msg
     assert exception.value.location.lnr == 6
     assert exception.value.location.start_char == 20
+
+
+@pytest.mark.parametrize("name", ["", "#", " # ", "#this is a comment"])
+def test_safe_requirement(name) -> None:
+    """
+    Ensure that empty name requirements are not allowed in `SafeRequirement`
+    """
+    with pytest.raises(AssertionError):
+        SafeRequirement(requirement_string=name)
