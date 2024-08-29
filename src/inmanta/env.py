@@ -68,8 +68,9 @@ def safe_parse_requirement(requirement: str) -> Requirement:
     assert len(drop_comment) > 0, "The name of the requirement cannot be an empty string!"
     # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
     # already installed
-    canonicalized_requirement_name = utils.canonicalize_name(drop_comment)
-    return Requirement(requirement_string=canonicalized_requirement_name)
+    requirement = Requirement(requirement_string=drop_comment)
+    requirement.name = utils.canonicalize_name(requirement.name)
+    return requirement
 
 
 @dataclass(eq=True, frozen=True)
