@@ -152,7 +152,7 @@ class InmantaModuleRequirement:
             )
         if "-" in spec:
             raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
-        return cls(safe_parse_requirement(requirement=spec))
+        return cls(safe_parse_requirement(requirement_name=spec))
 
     def get_python_package_requirement(self) -> Requirement:
         """
@@ -161,7 +161,7 @@ class InmantaModuleRequirement:
         module_name = self.project_name
         pkg_name = ModuleV2Source.get_package_name_for(module_name)
         pkg_req_str = str(self).replace(module_name, pkg_name, 1)  # Replace max 1 occurrence
-        return safe_parse_requirement(requirement=pkg_req_str)
+        return safe_parse_requirement(requirement_name=pkg_req_str)
 
 
 class CompilerExceptionWithExtendedTrace(CompilerException):
@@ -730,7 +730,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         # These could be constraints (-c) as well, but that requires additional sanitation
         # Because for pip not every valid -r is a valid -c
         current_requires = project.get_strict_python_requirements_as_list()
-        requirements += [safe_parse_requirement(requirement=r) for r in current_requires]
+        requirements += [safe_parse_requirement(requirement_name=r) for r in current_requires]
 
         if preinstalled is not None:
             # log warning if preinstalled version does not match constraints
@@ -2129,7 +2129,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.verify_module_version_compatibility()
 
         # do python install
-        pyreq: list[Requirement] = [safe_parse_requirement(requirement=x) for x in self.collect_python_requirements()]
+        pyreq: list[Requirement] = [safe_parse_requirement(requirement_name=x) for x in self.collect_python_requirements()]
 
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
@@ -2548,7 +2548,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         if self.strict_deps_check:
             constraints: list[Requirement] = [
-                safe_parse_requirement(requirement=item) for item in self.collect_python_requirements()
+                safe_parse_requirement(requirement_name=item) for item in self.collect_python_requirements()
             ]
             env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
@@ -2680,7 +2680,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # filter on import stmt
         reqs = []
         for spec in self._metadata.requires:
-            req = [safe_parse_requirement(requirement=spec)]
+            req = [safe_parse_requirement(requirement_name=spec)]
             if len(req) > 1:
                 print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
@@ -2817,7 +2817,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         reqs = []
         for spec in self.get_module_requirements():
-            req = [safe_parse_requirement(requirement=spec)]
+            req = [safe_parse_requirement(requirement_name=spec)]
             if len(req) > 1:
                 print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
@@ -3433,7 +3433,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
             new_install_requires = [
                 r
                 for r in config_parser.get("options", "install_requires").split("\n")
-                if r and safe_parse_requirement(requirement=r).name != python_pkg_requirement.name
+                if r and safe_parse_requirement(requirement_name=r).name != python_pkg_requirement.name
             ]
             new_install_requires.append(str(python_pkg_requirement))
         else:

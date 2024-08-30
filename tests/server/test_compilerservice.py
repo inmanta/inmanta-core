@@ -1806,7 +1806,7 @@ async def test_uninstall_python_packages(
     venv = PythonEnvironment(env_path=venv_path)
     assert name_protected_pkg not in venv.get_installed_packages()
     venv.install_for_config(
-        requirements=[safe_parse_requirement(requirement_string=name_protected_pkg)],
+        requirements=[safe_parse_requirement(requirement_name=name_protected_pkg)],
         config=PipConfig(
             index_url=local_module_package_index,
         ),

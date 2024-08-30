@@ -1919,8 +1919,11 @@ def index_with_pkgs_containing_optional_deps() -> str:
             path=os.path.join(tmpdirname, "pkg"),
             publish_index=pip_index,
             optional_dependencies={
-                "optional-a": [safe_parse_requirement(requirement="dep-a")],
-                "optional-b": [safe_parse_requirement(requirement="dep-b"), safe_parse_requirement(requirement="dep-c")],
+                "optional-a": [safe_parse_requirement(requirement_name="dep-a")],
+                "optional-b": [
+                    safe_parse_requirement(requirement_name="dep-b"),
+                    safe_parse_requirement(requirement_name="dep-c"),
+                ],
             },
         )
         for pkg_name in ["dep-a", "dep-b", "dep-c"]:

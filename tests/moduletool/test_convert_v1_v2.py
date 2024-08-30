@@ -115,7 +115,7 @@ def test_issue_3159_conversion_std_module_add_self_to_dependencies(tmpdir):
     parser.read(setup_cfg_file)
     assert parser.has_option("options", "install_requires")
     install_requires = [
-        safe_parse_requirement(requirement=r) for r in parser.get("options", "install_requires").split("\n") if r
+        safe_parse_requirement(requirement_name=r) for r in parser.get("options", "install_requires").split("\n") if r
     ]
     pkg_names = [r.name for r in install_requires]
     assert "inmanta-module-std" not in pkg_names

@@ -571,7 +571,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             await loop.run_in_executor(
                 self.process.thread_pool,
                 self._env.install_for_config,
-                [safe_parse_requirement(requirement=e) for e in blueprint.requirements],
+                [safe_parse_requirement(requirement_name=e) for e in blueprint.requirements],
                 blueprint.pip_config,
             )
             await loop.run_in_executor(self.process.thread_pool, self._loader.deploy_version, blueprint.sources)

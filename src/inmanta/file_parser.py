@@ -60,7 +60,7 @@ class RequirementsTxtParser:
         """
         Get all the requirements in `filename` as a list of `Requirement` instances.
         """
-        return [safe_parse_requirement(requirement=r) for r in cls.parse_requirements_as_strs(filename)]
+        return [safe_parse_requirement(requirement_name=r) for r in cls.parse_requirements_as_strs(filename)]
 
     @classmethod
     def parse_requirements_as_strs(cls, filename: str) -> list[str]:
@@ -86,7 +86,7 @@ class RequirementsTxtParser:
         if not os.path.exists(filename):
             raise Exception(f"File {filename} doesn't exist")
 
-        removed_dependency = safe_parse_requirement(requirement=remove_dep_on_pkg)
+        removed_dependency = safe_parse_requirement(requirement_name=remove_dep_on_pkg)
         result = ""
         line_continuation_buffer = ""
         with open(filename, encoding="utf-8") as fd:
@@ -94,14 +94,14 @@ class RequirementsTxtParser:
                 if line_continuation_buffer:
                     line_continuation_buffer += line
                     if not line.endswith("\\"):
-                        if safe_parse_requirement(requirement=line_continuation_buffer).name != removed_dependency.name:
+                        if safe_parse_requirement(requirement_name=line_continuation_buffer).name != removed_dependency.name:
                             result += line_continuation_buffer
                         line_continuation_buffer = ""
                 elif not line.strip() or line.strip().startswith("#"):
                     result += line
                 elif line.endswith("\\"):
                     line_continuation_buffer = line
-                elif safe_parse_requirement(requirement=line).name != removed_dependency.name:
+                elif safe_parse_requirement(requirement_name=line).name != removed_dependency.name:
                     result += line
                 else:
                     # Dependency matches `remove_dep_on_pkg` => Remove line from result

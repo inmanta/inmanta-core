@@ -88,7 +88,7 @@ def test_module_add_v2_module_to_project(
             dest_dir=os.path.join(tmpdir, f"elaboratev2module-v{version}"),
             new_version=Version(version),
             publish_index=pip_index,
-            new_extras={"optional": [safe_parse_requirement(requirement="inmanta-module-minimalv2module")]},
+            new_extras={"optional": [safe_parse_requirement(requirement_name="inmanta-module-minimalv2module")]},
         )
 
     # Create project
