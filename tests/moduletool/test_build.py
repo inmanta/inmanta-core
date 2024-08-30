@@ -248,7 +248,7 @@ def test_build_with_existing_model_directory(tmpdir, modules_v2_dir: str):
     for problematic_dir, bundling_description in dir_path_bundling_description_mapping:
         problematic_dir_path = os.path.join(python_pkg_dir, problematic_dir)
         os.makedirs(problematic_dir_path)
-        assert os.path.exists(problematic_dir_path)  # Ensure the model directory exists
+        assert os.path.exists(problematic_dir_path)  # Ensure the directory exists to crash the builder
 
         with pytest.raises(
             Exception,
@@ -259,7 +259,7 @@ def test_build_with_existing_model_directory(tmpdir, modules_v2_dir: str):
             V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
 
         os.removedirs(problematic_dir_path)
-        assert not os.path.exists(problematic_dir_path)  # Ensure the model directory doesn't exist
+        assert not os.path.exists(problematic_dir_path)  # Ensure the directory doesn't exist
 
 
 def test_create_dev_build_of_v2_module(tmpdir, modules_v2_dir: str) -> None:
