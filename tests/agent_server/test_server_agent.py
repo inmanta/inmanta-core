@@ -69,7 +69,6 @@ from utils import (
     LogSequence,
     _wait_until_deployment_finishes,
     assert_equal_ish,
-    expire_versions_and_cleanup_cache,
     log_contains,
     log_index,
     resource_action_consistency_check,
@@ -2845,7 +2844,7 @@ async def test_s_periodic_Vs_full(
     # cache has no versions in flight
     # for issue #1883
 
-    expire_versions_and_cleanup_cache(executor_instance._cache)
+    executor_instance._cache.cleanup_stale_entries()
 
     assert not executor_instance._cache.keys_for_version
 
