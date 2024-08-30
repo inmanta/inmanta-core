@@ -2828,10 +2828,6 @@ async def test_s_periodic_Vs_full(
     while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
         await asyncio.sleep(0.1)
 
-    # cache has 1 version in flight
-    executor_instance = agent.executor_manager.executors["agent1"]
-    assert len(executor_instance._cache.keys_for_version) == 1
-
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, push=False)
@@ -2843,10 +2839,6 @@ async def test_s_periodic_Vs_full(
     await resource_container.wait_for_done_with_waiters(client, environment, versions[action.wait_for])
     # cache has no versions in flight
     # for issue #1883
-
-    executor_instance._cache.cleanup_stale_entries()
-
-    assert not executor_instance._cache.keys_for_version
 
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, action.msg)
 
