@@ -78,7 +78,7 @@ class Agent(SessionEndpoint):
         self.scheduler = ResourceScheduler()
         self.working = False
 
-    def create_executor_manager(self):
+    def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
         # To override in testing
         return forking_executor.MPManager(
             self.thread_pool,
@@ -110,14 +110,14 @@ class Agent(SessionEndpoint):
             1) The client transport is required to retrieve the autostart_agent_map from the server.
             2) _init_endpoint_names() needs to be an async method and async calls are not possible in a constructor.
         """
-        await self._add_end_point_name(AGENT_SCHEDULER_ID)
+        await self.add_end_point_name(AGENT_SCHEDULER_ID)
 
     async def start(self) -> None:
         # cache reference to THIS ioloop for handlers to push requests on it
         self._io_loop = asyncio.get_running_loop()
         await super().start()
 
-    async def start_working(self):
+    async def start_working(self) -> None:
         """Start working, once we have a session"""
         # Todo: recycle them when we restart
         if self.working:
@@ -126,7 +126,7 @@ class Agent(SessionEndpoint):
         await self.executor_manager.start()
         await self.scheduler.start()
 
-    async def stop_working(self):
+    async def stop_working(self) -> None:
         """Start working, once we have a session"""
         if not self.working:
             return

@@ -19,7 +19,7 @@
 import asyncio
 import uuid
 from collections.abc import Mapping, Set
-from typing import Optional
+from typing import Any, Optional
 
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
@@ -76,6 +76,10 @@ class ResourceScheduler:
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         # FIXME
+        pass
+
+    async def get_facts(self, resource: dict[str, Any]) -> None:
+        # FIXME, also clean up typing of arguments
         pass
 
     # FIXME[#8009]: design step 2: read new state from DB instead of accepting as parameter
