@@ -26,8 +26,8 @@ import pytest
 
 from inmanta import compiler, const, module
 from inmanta.ast import DoubleSetException, RuntimeException
-from inmanta.module import InstallMode
 from inmanta.env import safe_parse_requirement
+from inmanta.module import InstallMode
 from inmanta.plugins import PluginDeprecationWarning
 from packaging import version
 from utils import module_from_template, v1_module_from_template

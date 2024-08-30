@@ -2127,7 +2127,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.verify_module_version_compatibility()
 
         # do python install
-        pyreq: list[Requirement] = safe_parse_requirement(self.collect_python_requirements())
+        pyreq: Sequence[Requirement] = safe_parse_requirements(self.collect_python_requirements())
 
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
@@ -2545,7 +2545,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
         if self.strict_deps_check:
-            constraints: list[Requirement] = [safe_parse_requirements(self.collect_python_requirements())]
+            constraints: Sequence[Requirement] = safe_parse_requirements(self.collect_python_requirements())
             env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
             if not env.ActiveEnv.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
@@ -2707,7 +2707,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         return {name: get_spec(name) for name in imports}
 
-    def collect_python_requirements(self) -> list[str]:
+    def collect_python_requirements(self) -> Sequence[str]:
         """
         Collect the list of all python requirements of all modules in this project, excluding those on inmanta modules.
         """

@@ -215,7 +215,7 @@ class PythonWorkingSet:
         Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
         """
         if isinstance(requirements[0], str):
-            return safe_parse_requirement(requirements)
+            return safe_parse_requirements(requirements)
         else:
             return requirements
 
@@ -825,7 +825,7 @@ import sys
 
     def install_from_index(
         self,
-        requirements: list[Requirement],
+        requirements: Sequence[Requirement],
         index_urls: Optional[list[str]] = None,
         upgrade: bool = False,
         allow_pre_releases: bool = False,
