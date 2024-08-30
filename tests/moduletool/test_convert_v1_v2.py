@@ -30,7 +30,7 @@ from pytest import MonkeyPatch
 import toml
 from inmanta import moduletool
 from inmanta.command import CLIException
-from inmanta.env import safe_parse_requirement
+from inmanta.env import safe_parse_requirements
 from inmanta.module import DummyProject, ModuleV1, ModuleV2, ModuleV2Metadata
 from inmanta.moduletool import ModuleConverter, ModuleVersionException
 from packaging import version
@@ -114,9 +114,7 @@ def test_issue_3159_conversion_std_module_add_self_to_dependencies(tmpdir):
     parser = configparser.ConfigParser()
     parser.read(setup_cfg_file)
     assert parser.has_option("options", "install_requires")
-    install_requires = [
-        safe_parse_requirement(requirement_name=r) for r in parser.get("options", "install_requires").split("\n") if r
-    ]
+    install_requires = safe_parse_requirements(parser.get("options", "install_requires").split("\n"))
     pkg_names = [r.name for r in install_requires]
     assert "inmanta-module-std" not in pkg_names
 

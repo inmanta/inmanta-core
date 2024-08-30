@@ -40,6 +40,7 @@ import yaml
 
 import build
 import build.env
+import packaging.version
 from _pytest.mark import MarkDecorator
 from inmanta import config, const, data, env, module, protocol, util
 from inmanta.data import ResourceIdStr
@@ -50,7 +51,6 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
-from packaging import version
 from packaging.requirements import Requirement
 from packaging.version import Version
 
@@ -485,7 +485,7 @@ class PipIndex:
 
 def create_python_package(
     name: str,
-    pkg_version: version.Version,
+    pkg_version: packaging.version.Version,
     path: str,
     *,
     requirements: Optional[Sequence[Requirement]] = None,
@@ -575,7 +575,7 @@ def module_from_template(
     source_dir: str,
     dest_dir: Optional[str] = None,
     *,
-    new_version: Optional[version.Version] = None,
+    new_version: Optional[packaging.version.Version] = None,
     new_name: Optional[str] = None,
     new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
     new_extras: Optional[abc.Mapping[str, abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]]] = None,
@@ -686,7 +686,7 @@ def v1_module_from_template(
     source_dir: str,
     dest_dir: str,
     *,
-    new_version: Optional[version.Version] = None,
+    new_version: Optional[packaging.version.Version] = None,
     new_name: Optional[str] = None,
     new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
     new_content_init_cf: Optional[str] = None,

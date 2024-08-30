@@ -17,10 +17,12 @@
 """
 
 import enum
+import importlib.metadata
 import importlib.util
 import json
 import logging
 import os
+import pathlib
 import re
 import site
 import subprocess
@@ -41,13 +43,14 @@ from typing import NamedTuple, Optional, TypeVar
 
 import pkg_resources
 
+import packaging.utils
+import packaging.version
 from inmanta import const
 from inmanta.ast import CompilerException
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from inmanta.util import strtobool
-from packaging import utils, version
 from packaging.requirements import Requirement
 
 LOGGER = logging.getLogger(__name__)
@@ -62,15 +65,49 @@ class PipInstallError(Exception):
     pass
 
 
-def safe_parse_requirement(requirement_name: str) -> Requirement:
+def safe_parse_requirement(requirement: str) -> Requirement:
+    """
+    To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
+    could arise when checking if packages are installed in a particular Venv.
+
+    :param requirement: The requirement's name
+    :return: A new requirement instance
+    """
     # Packaging Requirement is not able to parse requirements with comment. Therefore, we need to remove the `comment` part
-    drop_comment = requirement_name.split("#")[0].strip()
-    assert len(drop_comment) > 0, "The name of the requirement cannot be an empty string!"
+    drop_comment, _, _ = requirement.partition("#")
+    if len(drop_comment) == 0:
+        raise ValueError("The name of the requirement cannot be an empty string!")
     # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
     # already installed
-    requirement = Requirement(requirement_string=drop_comment)
-    requirement.name = utils.canonicalize_name(requirement.name)
-    return requirement
+    requirement_instance = Requirement(requirement_string=drop_comment)
+    requirement_instance.name = packaging.utils.canonicalize_name(requirement_instance.name)
+    return requirement_instance
+
+
+def safe_parse_requirements(requirements: Sequence[str]) -> Sequence[Requirement]:
+    """
+    To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
+    could arise when checking if packages are installed in a particular Venv.
+
+    :param requirements: The names of the different requirements
+    :return: Sequence[Requirement]
+    """
+    return [safe_parse_requirement(requirement=e) for e in requirements]
+
+
+def safe_parse_requirements_from_file(file_path: pathlib.Path) -> Sequence[Requirement]:
+    """
+    To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
+    could arise when checking if packages are installed in a particular Venv.
+
+    :param file_path: The path to the read the requirements from
+    :return: Sequence[Requirement]
+    """
+    requirements = []
+    with open(file_path) as f:
+        for line in f.readlines():
+            requirements.append(safe_parse_requirement(line))
+    return requirements
 
 
 @dataclass(eq=True, frozen=True)
@@ -84,7 +121,7 @@ class VersionConflict:
     """
 
     requirement: Requirement
-    installed_version: Optional[version.Version] = None
+    installed_version: Optional[packaging.version.Version] = None
     owner: Optional[str] = None
 
     def __str__(self) -> str:
@@ -170,8 +207,6 @@ class ConflictingRequirements(CompilerException):
 
 req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
 
-import importlib.metadata
-
 
 class PythonWorkingSet:
     @classmethod
@@ -180,7 +215,7 @@ class PythonWorkingSet:
         Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
         """
         if isinstance(requirements[0], str):
-            return [safe_parse_requirement(requirement_name=r) for r in requirements if isinstance(r, str)]
+            return safe_parse_requirement(requirements)
         else:
             return requirements
 
@@ -191,7 +226,7 @@ class PythonWorkingSet:
         """
         if not requirements:
             return True
-        installed_packages: dict[str, version.Version] = cls.get_packages_in_working_set()
+        installed_packages: dict[str, packaging.version.Version] = cls.get_packages_in_working_set()
 
         def _are_installed_recursive(
             reqs: Sequence[Requirement],
@@ -220,11 +255,7 @@ class PythonWorkingSet:
                 if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
                     # The marker of the requirement doesn't apply on this environment
                     continue
-                if (
-                    r.name not in installed_packages
-                    or (str(installed_packages[r.name]) not in r.specifier)
-                    # If no specifiers are provided, the `in` operation will return `False`
-                ):
+                if r.name not in installed_packages or (installed_packages[r.name] not in r.specifier):
                     return False
                 if r.extras:
                     for extra in r.extras:
@@ -249,14 +280,14 @@ class PythonWorkingSet:
         return _are_installed_recursive(reqs_as_requirements, seen_requirements=[])
 
     @classmethod
-    def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> dict[str, version.Version]:
+    def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> dict[str, packaging.version.Version]:
         """
         Return all packages present in `pkg_resources.working_set` together with the version of the package.
 
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
         return {
-            safe_parse_requirement(dist_info.key).name: version.Version(dist_info.version)
+            packaging.utils.canonicalize_name(dist_info.key): packaging.version.Version(dist_info.version)
             for dist_info in pkg_resources.working_set
             if not inmanta_modules_only or dist_info.key.startswith(const.MODULE_PKG_NAME_PREFIX)
         }
@@ -296,7 +327,7 @@ class PythonWorkingSet:
             # recurse on direct dependencies
             return _get_tree_recursive(
                 (
-                    safe_parse_requirement(requirement_name=requirement.key).name
+                    packaging.utils.canonicalize_name(requirement.key)
                     for requirement in installed_distributions[dist].requires()
                 ),
                 acc=acc | {dist},
@@ -744,7 +775,7 @@ import sys
         with open(self._path_pth_file, "w", encoding="utf-8") as fd:
             fd.write(script_as_oneliner)
 
-    def get_installed_packages(self, only_editable: bool = False) -> dict[str, version.Version]:
+    def get_installed_packages(self, only_editable: bool = False) -> dict[str, packaging.version.Version]:
         """
         Return a list of all installed packages in the site-packages of a python interpreter.
 
@@ -753,7 +784,7 @@ import sys
         """
         cmd = PipCommandBuilder.compose_list_command(self.python_path, format=PipListFormat.json, only_editable=only_editable)
         output = CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
-        return {r["name"]: version.Version(r["version"]) for r in json.loads(output)}
+        return {r["name"]: packaging.version.Version(r["version"]) for r in json.loads(output)}
 
     def install_for_config(
         self,
@@ -865,7 +896,7 @@ import sys
         use_pip_config was ignored on ISO6 and it still is
         """
         self.install_from_index(
-            requirements=[safe_parse_requirement(requirement_name=r) for r in requirements_list],
+            requirements=safe_parse_requirements(requirements_list),
             upgrade=upgrade,
             upgrade_strategy=upgrade_strategy,
             use_pip_config=True,
@@ -891,9 +922,9 @@ import sys
         to make sure that no Inmanta packages gets overridden.
         """
         protected_inmanta_packages: list[str] = cls.get_protected_inmanta_packages()
-        workingset: dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
+        workingset: dict[str, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
         return [
-            safe_parse_requirement(requirement_name=f"{pkg}=={workingset[pkg]}")
+            safe_parse_requirement(requirement=f"{pkg}=={workingset[pkg]}")
             for pkg in workingset
             if pkg in protected_inmanta_packages
         ]
@@ -1024,7 +1055,7 @@ class ActiveEnv(PythonEnvironment):
 
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(safe_parse_requirement(requirement_name=requirement.key), dist_info.key)
+            OwnedRequirement(safe_parse_requirement(requirement=requirement.key), dist_info.key)
             for dist_info in pkg_resources.working_set
             for requirement in dist_info.requires()
         )
@@ -1051,16 +1082,15 @@ class ActiveEnv(PythonEnvironment):
         )
         full_strict_scope: abc.Set[str] = PythonWorkingSet.get_dependency_tree(parameters)
 
-        installed_versions: dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
+        installed_versions: dict[str, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
 
         constraint_violations: set[VersionConflict] = set()
         constraint_violations_strict: set[VersionConflict] = set()
         for c in all_constraints:
             requirement = c.requirement
-            if (
-                requirement.name not in installed_versions
-                or (len(requirement.specifier) > 0 and str(installed_versions[requirement.name]) not in requirement.specifier)
-            ) and (not requirement.marker or (requirement.marker and requirement.marker.evaluate())):
+            if (installed_versions[requirement.name] not in requirement.specifier) and (
+                not requirement.marker or (requirement.marker and requirement.marker.evaluate())
+            ):
                 version_conflict = VersionConflict(
                     requirement=requirement,
                     installed_version=installed_versions.get(requirement.name, None),
@@ -1121,17 +1151,17 @@ class ActiveEnv(PythonEnvironment):
         working_set: abc.Iterable[Distribution] = importlib.metadata.distributions()
         # add all requirements of all in scope packages installed in this environment
         all_constraints: set[Requirement] = set(constraints if constraints is not None else []).union(
-            safe_parse_requirement(requirement_name=requirement)
+            safe_parse_requirement(requirement=requirement)
             for dist_info in working_set
             if in_scope.fullmatch(dist_info.name)
             for requirement in dist_info.requires or []
         )
 
-        installed_versions: dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
+        installed_versions: dict[str, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
         constraint_violations: set[VersionConflict] = {
             VersionConflict(constraint, installed_versions.get(constraint.name, None))
             for constraint in all_constraints
-            if constraint.name not in installed_versions or str(installed_versions[constraint.name]) not in constraint.specifier
+            if constraint.name not in installed_versions or installed_versions[constraint.name] not in constraint.specifier
         }
 
         all_violations = constraint_violations_non_strict | constraint_violations_strict | constraint_violations

@@ -33,7 +33,7 @@ from inmanta.agent.executor import FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.const import ParameterSource
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
-from inmanta.env import safe_parse_requirement
+from inmanta.env import safe_parse_requirements
 from inmanta.loader import CodeLoader
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn
@@ -571,7 +571,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             await loop.run_in_executor(
                 self.process.thread_pool,
                 self._env.install_for_config,
-                [safe_parse_requirement(requirement_name=e) for e in blueprint.requirements],
+                safe_parse_requirements(blueprint.requirements),
                 blueprint.pip_config,
             )
             await loop.run_in_executor(self.process.thread_pool, self._loader.deploy_version, blueprint.sources)
