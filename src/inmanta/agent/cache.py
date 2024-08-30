@@ -18,7 +18,6 @@
 
 import heapq
 import logging
-import math
 import sys
 import time
 from threading import Lock
@@ -63,20 +62,20 @@ class CacheItem:
         :param call_on_delete: Optional finalizer to call when the cache item is deleted. This is
             a callable expecting the cached value as an argument.
         :param lingering: When True, this cache item will linger in the cache for 60s after its last use.
-            When False, this cache item will be evicted from the cache <expiry_time> seconds after
+            When False, this cache item will be evicted from the cache <timeout> seconds after
             entering the cache.
         """
         self.key = key
         self.value = value
         self.call_on_delete = call_on_delete
+        self.lingering = lingering
 
-        if lingering:
-            self.expiry_time = time.time() + 60
-        else:
-            self.expiry_time = time.time() + timeout
+        now = time.time()
+        self.expiry_time = now + 60 if lingering else now + timeout
+
+        # Make sure finalizers are only called once
         self.finalizer_lock = Lock()
         self.called_finalizer = False
-        self.lingering = lingering
 
     def __lt__(self, other: "CacheItem") -> bool:
         return self.expiry_time < other.expiry_time
@@ -90,16 +89,31 @@ class CacheItem:
     def __del__(self) -> None:
         self.delete()
 
-    def __repr__(self) -> str:
-        return f"[{self.key} | {self.value}] : {math.floor(self.expiry_time):,}"
-
 
 @stable_api
 class AgentCache:
     """
-    Caching system for the agent:
-    TODO
+    Caching system for the agent.
 
+    Cached items are of two types:
+
+    1. Lingering items
+
+        These items are expected to be reused across multiple
+        model versions. Their expiry time is reset to 60s any
+        time they're accessed.
+
+    2. Non-lingering items
+
+        These items have a fixed lifetime. Their expiry time
+        is set by the timeout parameter of the @cache decorator.
+
+    To enforce consistency, this cache should be used as a context manager
+    by the agent when performing a resource action (deploy / repair / fact retrieval / dry run).
+
+    This ensures that:
+        - before using the cache: we clean up stale entries.
+        - when done using the cache: we reset the expiry time of lingering items
     """
 
     def __init__(self, agent_instance: Optional["AgentInstance"] = None) -> None:
@@ -110,8 +124,8 @@ class AgentCache:
         # The cache itself
         self.cache: dict[str, CacheItem] = {}
 
-        # Version-based caching:
-        # How long we keep each version after it was last used
+        # Lingering items will remain in the cache for this
+        # many seconds after they were last used.
         self.item_lingering_time: float = 60
 
         # Time-based eviction mechanism
@@ -125,13 +139,8 @@ class AgentCache:
         self.addLocks: dict[str, Lock] = {}
         self._agent_instance = agent_instance
 
-        # Consistency mechanism: before the agent performs a resource action (deploy / repair / fact retrieval / dry run)
-        # - we clean up stale entries
-        # - we freeze the cache (to prevent the background cleanup job to trigger while the agent is working)
-
         # Set of lingering cache items used during a resource action.
         self.lingering_set: set[CacheItem] = set()
-        self.last_cache_access: float
 
     def touch_used_cache_items(self) -> None:
         """
@@ -140,7 +149,12 @@ class AgentCache:
         new_expiry_time = time.time() + 60
         for item in self.lingering_set:
             item.expiry_time = new_expiry_time
+
         self.lingering_set = set()
+
+        # Bad O(N) but unavoidable (?) Since we modify elements above
+        # we have to make sure the heap is still a heap.
+        heapq.heapify(self.timer_queue)
 
     def close(self) -> None:
         """
@@ -148,18 +162,15 @@ class AgentCache:
         """
         self.next_action = sys.maxsize
         for key in list(self.cache.keys()):
-            self._evict_item(key, shutting_down=True)
+            self._evict_item(key)
         self.timer_queue.clear()
 
-    def _evict_item(self, key: str, cutoff_time: float = 0, shutting_down: bool = False) -> None:
+    def _evict_item(self, key: str) -> None:
+        """
+        Evict an item from the cache by key.
+        """
         try:
             item = self.cache[key]
-
-            if not shutting_down and item.lingering:
-                if item.expiry_time > cutoff_time:
-                    heapq.heappush(self.timer_queue, item)
-                    return
-
             item.delete()
             del self.cache[key]
         except KeyError:
@@ -167,11 +178,13 @@ class AgentCache:
             pass
 
     def clean_stale_entries(self) -> None:
-        """ """
+        """
+        Remove stale entries from the cache.
+        """
         now = time.time()
         while now > self.next_action and len(self.timer_queue) > 0:
             item = heapq.heappop(self.timer_queue)
-            self._evict_item(item.key, cutoff_time=now)
+            self._evict_item(item.key)
             if len(self.timer_queue) > 0:
                 self.next_action = self.timer_queue[0].expiry_time
             else:
