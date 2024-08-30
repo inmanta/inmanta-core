@@ -238,21 +238,17 @@ def test_build_with_existing_model_directory(tmpdir, modules_v2_dir: str):
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
 
+    dir_path_bundling_description_mapping = {
+        ("model", "the inmanta model files"),
+        ("files", "inmanta files for managed machines"),
+        ("templates", "inmanta templates that will be used to generate configuration files"),
+    }
     # Simulate the existence of a model directory in inmanta_plugins/<module_name>/
     python_pkg_dir = os.path.join(module_copy_dir, "inmanta_plugins", module_name)
-    for problematic_dir in ["files", "model", "templates"]:
+    for problematic_dir, bundling_description in dir_path_bundling_description_mapping:
         problematic_dir_path = os.path.join(python_pkg_dir, problematic_dir)
         os.makedirs(problematic_dir_path)
         assert os.path.exists(problematic_dir_path)  # Ensure the model directory exists
-
-        if problematic_dir == "model":
-            bundling_description = "the inmanta model files"
-        elif problematic_dir == "files":
-            bundling_description = "inmanta files for managed machines"
-        elif problematic_dir == "templates":
-            bundling_description = "inmanta templates that will be used to generate configuration files"
-        else:
-            raise RuntimeError(f"Unexpected bundling case: {problematic_dir}!")
 
         with pytest.raises(
             Exception,
@@ -263,6 +259,7 @@ def test_build_with_existing_model_directory(tmpdir, modules_v2_dir: str):
             V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
 
         os.removedirs(problematic_dir_path)
+        assert not os.path.exists(problematic_dir_path)  # Ensure the model directory doesn't exist
 
 
 def test_create_dev_build_of_v2_module(tmpdir, modules_v2_dir: str) -> None:

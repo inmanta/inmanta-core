@@ -1750,30 +1750,22 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         Copy all files that have to be packaged into the Python package of the module
         """
         python_pkg_dir: str = os.path.join(build_path, "inmanta_plugins", self._module.name)
-        model_dir: str = os.path.join(python_pkg_dir, "model")
-        files_dir: str = os.path.join(python_pkg_dir, "files")
-        templates_dir: str = os.path.join(python_pkg_dir, "templates")
-        for problematic_dir_path in [model_dir, files_dir, templates_dir]:
-            if os.path.exists(problematic_dir_path):
-                problematic_dir_name = os.path.basename(problematic_dir_path)
-                if problematic_dir_name == "model":
-                    bundling_description = "the inmanta model files"
-                elif problematic_dir_name == "files":
-                    bundling_description = "inmanta files for managed machines"
-                elif problematic_dir_name == "templates":
-                    bundling_description = "inmanta templates that will be used to generate configuration files"
-                else:
-                    raise RuntimeError(f"Unexpected bundling case: {problematic_dir_name}!")
-
+        dir_path_bundling_description_mapping = {
+            ("model", "the inmanta model files"),
+            ("files", "inmanta files for managed machines"),
+            ("templates", "inmanta templates that will be used to generate configuration files"),
+        }
+        for problematic_dir, bundling_description in dir_path_bundling_description_mapping:
+            if os.path.exists(os.path.join(python_pkg_dir, problematic_dir)):
                 raise ModuleBuildFailedError(
                     msg="There is already a `%s` directory in %s. "
                     "The `inmanta_plugins.%s.%s` package is reserved for bundling %s. "
                     "Please use a different name for this Python package."
                     % (
-                        problematic_dir_name,
+                        problematic_dir,
                         os.path.join(self._module.path, "inmanta_plugins", self._module.name),
                         self._module.name,
-                        problematic_dir_name,
+                        problematic_dir,
                         bundling_description,
                     )
                 )
