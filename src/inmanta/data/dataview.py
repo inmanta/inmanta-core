@@ -18,7 +18,7 @@
 
 import abc
 import json
-import urllib
+import urllib.parse
 from abc import ABC
 from collections.abc import Sequence
 from datetime import datetime
