@@ -360,7 +360,9 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                     changes = {}
                                 if ctx.status == const.ResourceState.failed:
                                     changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                                await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
+                                await self.client.dryrun_update(
+                                    tid=env_id, id=dry_run_id, resource=resource_id, changes=changes
+                                )
                             except Exception as e:
                                 ctx.exception(
                                     "Exception during dryrun for %(resource_id)s (exception: %(exception)s",
@@ -371,7 +373,9 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 if changes is None:
                                     changes = {}
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                                await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
+                                await self.client.dryrun_update(
+                                    tid=env_id, id=dry_run_id, resource=resource_id, changes=changes
+                                )
 
                     except Exception:
                         ctx.exception("Unable to process resource for dryrun.")
@@ -393,7 +397,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                             messages=ctx.logs,
                             status=const.ResourceState.dry,
                         )
-
 
     async def get_facts(self, resource: ResourceDetails) -> Apireturn:
         """

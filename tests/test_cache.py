@@ -18,10 +18,9 @@
 
 import asyncio
 import datetime
-import math
 import sys
 from threading import Lock, Thread
-from time import sleep, time, localtime
+from time import sleep
 
 import pytest
 from pytest import fixture
@@ -327,9 +326,11 @@ class CacheDecoratorTest:
     def __init__(self, cache: AgentCache):
         self.cache = cache
         self.cache_miss_counter = 0
+
+
 async def test_cache_decorator_basics():
     """
-        Test basic caching / retrieval functionalities of the @cache decorator
+    Test basic caching / retrieval functionalities of the @cache decorator
     """
 
     class BasicTest(CacheDecoratorTest):
@@ -399,20 +400,20 @@ async def test_cache_decorator_basics():
 
 async def test_cache_decorator_lingering_entries():
     """
-        Test the behaviour of lingering cache entries.
+    Test the behaviour of lingering cache entries.
 
-        Cache entries are considered lingering as long as for_version=True (default).
-        The timeout argument is ignored for lingering entries.
-        Lingering entries are considered stale 60s after their last use.
-        Stale entries are cleaned up on the next call to `clean_stale_entries`.
+    Cache entries are considered lingering as long as for_version=True (default).
+    The timeout argument is ignored for lingering entries.
+    Lingering entries are considered stale 60s after their last use.
+    Stale entries are cleaned up on the next call to `clean_stale_entries`.
 
-        This test checks that this behaviour is consistent for the 4 combinations
-        of (timeout, for_version) via `linger_test_method_1` to `linger_test_method_4`.
+    This test checks that this behaviour is consistent for the 4 combinations
+    of (timeout, for_version) via `linger_test_method_1` to `linger_test_method_4`.
 
-        `linger_test_method_5` is used to test that
-            - a lingering entry is properly cleaned up if it is not being used ("initial_read" entry).
-            - the expiry time of a lingering entry is properly reset to 60s when
-              it is read ("recurring_read" entry).
+    `linger_test_method_5` is used to test that
+        - a lingering entry is properly cleaned up if it is not being used ("initial_read" entry).
+        - the expiry time of a lingering entry is properly reset to 60s when
+          it is read ("recurring_read" entry).
 
     """
 
@@ -426,10 +427,12 @@ async def test_cache_decorator_lingering_entries():
         def linger_test_method_2(self):
             self.cache_miss_counter += 1
             return "x2"
+
         @cache(timeout=1)
         def linger_test_method_3(self):
             self.cache_miss_counter += 1
             return "x3"
+
         @cache(timeout=1, for_version=True)
         def linger_test_method_4(self):
             self.cache_miss_counter += 1
@@ -511,19 +514,19 @@ async def test_cache_decorator_lingering_entries():
 
 async def test_cache_decorator_hard_expiry_entries():
     """
-        Test the behaviour of non-lingering cache entries.
+    Test the behaviour of non-lingering cache entries.
 
-        Cache entries are considered non-lingering when for_version=False.
-        The timeout argument controls the lifetime of the entry since it entered the cache.
-        Stale entries are cleaned up on the next call to `clean_stale_entries`.
+    Cache entries are considered non-lingering when for_version=False.
+    The timeout argument controls the lifetime of the entry since it entered the cache.
+    Stale entries are cleaned up on the next call to `clean_stale_entries`.
 
-        This test checks that this behaviour is consistent for the 4 combinations
-        of (timeout, for_version) via `linger_test_method_1` to `linger_test_method_4`.
+    This test checks that this behaviour is consistent for the 4 combinations
+    of (timeout, for_version) via `linger_test_method_1` to `linger_test_method_4`.
 
-        `linger_test_method_5` is used to test that
-            - a lingering entry is properly cleaned up if it is not being used ("initial_read" entry).
-            - the expiry time of a lingering entry is properly reset to 60s when
-              it is read ("recurring_read" entry).
+    `linger_test_method_5` is used to test that
+        - a lingering entry is properly cleaned up if it is not being used ("initial_read" entry).
+        - the expiry time of a lingering entry is properly reset to 60s when
+          it is read ("recurring_read" entry).
 
     """
 
@@ -613,9 +616,10 @@ async def test_cache_decorator_hard_expiry_entries():
             assert "x1" == test.non_linger_test_method_1()  # +1 miss
             assert 1 == test.cache_miss_counter
 
+
 async def test_cache_decorator_cache_none():
     """
-        Test the cache_none argument of the @cache decorator and the cacheNone legacy variant
+    Test the cache_none argument of the @cache decorator and the cacheNone legacy variant
     """
 
     class CacheNoneTest(CacheDecoratorTest):
@@ -646,6 +650,7 @@ async def test_cache_decorator_cache_none():
                 return None
             else:
                 return "X"
+
     agent_cache = AgentCache()
     test = CacheNoneTestLegacy(agent_cache)
 
@@ -656,6 +661,7 @@ async def test_cache_decorator_cache_none():
         assert 2 == test.cache_miss_counter
         assert "X" == test.test_cacheNone()
         assert 2 == test.cache_miss_counter
+
 
 async def test_cache_decorator_call_on_delete():
     """

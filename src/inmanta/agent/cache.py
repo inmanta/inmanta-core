@@ -18,13 +18,12 @@
 
 import heapq
 import logging
+import math
 import sys
 import time
 from threading import Lock
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Callable, Optional, Type
-
-import math
 
 from inmanta.resources import Resource
 from inmanta.stable_api import stable_api
@@ -92,7 +91,7 @@ class CacheItem:
         self.delete()
 
     def __repr__(self) -> str:
-        return f'[{self.key} | {self.value}] : {math.floor(self.expiry_time):,}'
+        return f"[{self.key} | {self.value}] : {math.floor(self.expiry_time):,}"
 
 
 @stable_api
@@ -177,7 +176,6 @@ class AgentCache:
                 self.next_action = self.timer_queue[0].expiry_time
             else:
                 self.next_action = sys.maxsize
-
 
     def _get(self, key: str) -> CacheItem:
         """
@@ -309,12 +307,14 @@ class AgentCache:
             with self.addLock:
                 del self.addLocks[key]
             return value
+
     def __enter__(self):
         """
         Assumed to be called under activity_lock.
         Clean stale entries before using the cache.
         """
         self.clean_stale_entries()
+
     def __exit__(
         self,
         exc_type: Optional[Type[BaseException]],
