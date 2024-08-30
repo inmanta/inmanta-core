@@ -250,7 +250,7 @@ def test_build_with_existing_model_directory(tmpdir, modules_v2_dir: str):
         elif problematic_dir == "files":
             bundling_description = "inmanta files for managed machines"
         elif problematic_dir == "templates":
-            bundling_description = "templates that will be used to generate configuration files"
+            bundling_description = "inmanta templates that will be used to generate configuration files"
         else:
             raise RuntimeError(f"Unexpected bundling case: {problematic_dir}!")
 

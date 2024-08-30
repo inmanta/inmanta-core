@@ -1761,7 +1761,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
                 elif problematic_dir_name == "files":
                     bundling_description = "inmanta files for managed machines"
                 elif problematic_dir_name == "templates":
-                    bundling_description = "templates that will be used to generate configuration files"
+                    bundling_description = "inmanta templates that will be used to generate configuration files"
                 else:
                     raise RuntimeError(f"Unexpected bundling case: {problematic_dir_name}!")
 
