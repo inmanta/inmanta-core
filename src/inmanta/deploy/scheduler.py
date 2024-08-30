@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import uuid
 from collections.abc import Mapping, Set
 from typing import Optional
 
@@ -57,6 +58,9 @@ class ResourceScheduler:
         # FIXME[#8009]: read from DB instead
         pass
 
+    async def stop(self) -> None:
+        pass
+
     async def deploy(self) -> None:
         async with self._scheduler_lock:
             # FIXME[#8008]: more efficient access to dirty set by caching it on the ModelState
@@ -68,6 +72,10 @@ class ResourceScheduler:
 
     async def repair(self) -> None:
         # FIXME[#8008]: implement repair
+        pass
+
+    async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
+        # FIXME
         pass
 
     # FIXME[#8009]: design step 2: read new state from DB instead of accepting as parameter
