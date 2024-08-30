@@ -71,7 +71,7 @@ class CacheItem:
         self.lingering = lingering
 
         now = time.time()
-        self.expiry_time = now + 60 if lingering else now + timeout
+        self.expiry_time = (now + 60) if lingering else (now + timeout)
 
         # Make sure finalizers are only called once
         self.finalizer_lock = Lock()
@@ -146,15 +146,16 @@ class AgentCache:
         """
         Extend the expiry time of items in the lingering_set by 60s
         """
-        new_expiry_time = time.time() + 60
+        now = time.time()
         for item in self.lingering_set:
-            item.expiry_time = new_expiry_time
+            item.expiry_time = now + 60
 
         self.lingering_set = set()
-
-        # Bad O(N) but unavoidable (?) Since we modify elements above
-        # we have to make sure the heap is still a heap.
-        heapq.heapify(self.timer_queue)
+        if self.timer_queue:
+            # Bad O(N) but unavoidable (?) Since we modify elements above
+            # we have to make sure the heap is still a heap.
+            heapq.heapify(self.timer_queue)
+            self.next_action = self.timer_queue[0].expiry_time
 
     def close(self) -> None:
         """
