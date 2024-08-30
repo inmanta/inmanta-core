@@ -143,7 +143,7 @@ class ExecutorContext:
             assert old_one.is_stopped()
             # Make sure old one is down
             finalizer: list[ThreadPoolExecutor] = []
-            old_one.join(finalizer)
+            await old_one.join(finalizer)
             await join_threadpools(finalizer)
 
         loop = asyncio.get_running_loop()
@@ -166,7 +166,7 @@ class ExecutorContext:
         """Stop an executor in this proces, returns before shutdown is completed"""
         try:
             LOGGER.info("Stopping for %s", name)
-            self.get(name).stop()
+            await self.get(name).stop()
         except Exception:
             LOGGER.exception("Stop failed for %s", name)
 

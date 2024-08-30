@@ -151,7 +151,7 @@ class AgentCache:
             self._evict_item(key, shutting_down=True)
         self.timer_queue.clear()
 
-    def _evict_item(self, key: str, cutoff_time: Optional[float] = 0, shutting_down: Optional[bool] = False) -> None:
+    def _evict_item(self, key: str, cutoff_time: float = 0, shutting_down: bool = False) -> None:
         try:
             item = self.cache[key]
 
@@ -308,7 +308,7 @@ class AgentCache:
                 del self.addLocks[key]
             return value
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         """
         Assumed to be called under activity_lock.
         Clean stale entries before using the cache.
@@ -320,7 +320,7 @@ class AgentCache:
         exc_type: Optional[Type[BaseException]],
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
-    ):
+    ) -> None:
         """
         When done using the cache, update expiry time
         of all lingering items.
