@@ -95,8 +95,8 @@ class ResourceScheduler:
                 ):
                     self._state.update_pending.add(resource)
                     new_desired_state.append(resource)
-                old_requires: Set[ResourceIdStr] = requires.get(resource, set())
-                new_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
+                new_requires: Set[ResourceIdStr] = requires.get(resource, set())
+                old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 added: Set[ResourceIdStr] = new_requires - old_requires
                 dropped: Set[ResourceIdStr] = old_requires - new_requires
                 if added:
