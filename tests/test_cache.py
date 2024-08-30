@@ -323,11 +323,344 @@ def test_get_or_else_none(my_resource):
     assert seq.count == 3
 
 
-async def test_decorator():
-    def advance_time_and_cleanup(n_seconds: int):
-        traveller = time_machine.travel(datetime.datetime.now() + datetime.timedelta(seconds=61))
-        traveller.start()
-        xcache.clean_stale_entries()
+class CacheDecoratorTest:
+    def __init__(self, cache: AgentCache):
+        self.cache = cache
+        self.cache_miss_counter = 0
+async def test_cache_decorator_basics():
+    """
+        Test basic caching / retrieval functionalities of the @cache decorator
+    """
+
+    class BasicTest(CacheDecoratorTest):
+        @cache
+        def test_method(self):
+            self.cache_miss_counter += 1
+            return "x"
+
+        @cache
+        def test_method_2(self, dummy_arg):
+            self.cache_miss_counter += 1
+            return "x2"
+
+    agent_cache = AgentCache()
+    test = BasicTest(agent_cache)
+
+    with time_machine.travel(datetime.datetime.now().astimezone(), tick=False) as traveller:
+        with agent_cache:
+            # 1 cache miss and 2 hits:
+            assert "x" == test.test_method()  # +1 miss
+            assert "x" == test.test_method()
+            assert "x" == test.test_method()
+            assert 1 == test.cache_miss_counter
+
+            # 1 cache miss and 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")  # +1 miss
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            assert 2 == test.cache_miss_counter
+
+            # 1 cache miss :
+            assert "x2" == test.test_method_2(dummy_arg="BBB")  # +1 miss
+            assert 3 == test.cache_miss_counter
+
+        # Wait out lingering time of 60s after last read
+        traveller.shift(datetime.timedelta(seconds=61))
+
+        # The cache cleanup method is called upon entering the AgentCache context manager
+        with agent_cache:
+            # 1 cache miss and 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")  # +1 miss
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            assert 4 == test.cache_miss_counter
+
+        traveller.shift(datetime.timedelta(seconds=31))
+
+        with agent_cache:
+            # 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            assert 4 == test.cache_miss_counter
+
+        traveller.shift(datetime.timedelta(seconds=31))
+
+        with agent_cache:
+            # 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            assert 4 == test.cache_miss_counter
+
+        # Wait out lingering time of 60s after last read
+        traveller.shift(datetime.timedelta(seconds=61))
+
+        with agent_cache:
+            # 1 cache miss and 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")  # +1 miss
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            assert 5 == test.cache_miss_counter
+
+
+async def test_cache_decorator_lingering_entries():
+    """
+        Test the behaviour of lingering cache entries.
+
+        Cache entries are considered lingering as long as for_version=True (default).
+        The timeout argument is ignored for lingering entries.
+        Lingering entries are considered stale 60s after their last use.
+        Stale entries are cleaned up on the next call to `clean_stale_entries`.
+
+        This test checks that this behaviour is consistent for the 4 combinations
+        of (timeout, for_version) via `linger_test_method_1` to `linger_test_method_4`.
+
+        `linger_test_method_5` is used to test that
+            - a lingering entry is properly cleaned up if it is not being used ("initial_read" entry).
+            - the expiry time of a lingering entry is properly reset to 60s when
+              it is read ("recurring_read" entry).
+
+    """
+
+    class LingeringTest(CacheDecoratorTest):
+        @cache
+        def linger_test_method_1(self):
+            self.cache_miss_counter += 1
+            return "x1"
+
+        @cache(for_version=True)
+        def linger_test_method_2(self):
+            self.cache_miss_counter += 1
+            return "x2"
+        @cache(timeout=1)
+        def linger_test_method_3(self):
+            self.cache_miss_counter += 1
+            return "x3"
+        @cache(timeout=1, for_version=True)
+        def linger_test_method_4(self):
+            self.cache_miss_counter += 1
+            return "x4"
+
+        @cache
+        def linger_test_method_5(self, dummy_arg: str):
+            self.cache_miss_counter += 1
+            return dummy_arg
+
+    agent_cache = AgentCache()
+    test = LingeringTest(agent_cache)
+
+    with time_machine.travel(datetime.datetime.now().astimezone(), tick=False) as traveller:
+
+        with agent_cache:
+            assert "initial_read" == test.linger_test_method_5(dummy_arg="initial_read")  # +1 miss
+            assert 1 == test.cache_miss_counter
+
+        test.cache_miss_counter = 0
+
+        with agent_cache:
+            # Populate the cache
+            assert "x1" == test.linger_test_method_1()  # +1 miss
+            assert "x2" == test.linger_test_method_2()  # +1 miss
+            assert "x3" == test.linger_test_method_3()  # +1 miss
+            assert "x4" == test.linger_test_method_4()  # +1 miss
+            assert 4 == test.cache_miss_counter
+
+            assert "recurring_read" == test.linger_test_method_5(dummy_arg="recurring_read")  # +1 miss
+            assert 5 == test.cache_miss_counter
+
+        test.cache_miss_counter = 0
+
+        # Check that the timeout parameter is correctly ignored
+        traveller.shift(datetime.timedelta(seconds=50))
+
+        # The cache cleanup method is called upon entering the AgentCache context manager
+        # All entries are lingering, check that we have 0 miss
+        with agent_cache:
+            assert "x1" == test.linger_test_method_1()  # cache hit
+            assert "x2" == test.linger_test_method_2()  # cache hit
+            assert "x3" == test.linger_test_method_3()  # cache hit
+            assert "x4" == test.linger_test_method_4()  # cache hit
+            assert "recurring_read" == test.linger_test_method_5(dummy_arg="recurring_read")  # cache hit
+            assert 0 == test.cache_miss_counter
+
+        test.cache_miss_counter = 0
+
+        # Check that the "initial_read" entry was properly cleaned up but all other
+        # entries lingered on.
+        traveller.shift(datetime.timedelta(seconds=50))
+
+        with agent_cache:
+            assert "x1" == test.linger_test_method_1()  # cache hit
+            assert "x2" == test.linger_test_method_2()  # cache hit
+            assert "x3" == test.linger_test_method_3()  # cache hit
+            assert "x4" == test.linger_test_method_4()  # cache hit
+            assert "recurring_read" == test.linger_test_method_5(dummy_arg="recurring_read")  # cache hit
+            assert 0 == test.cache_miss_counter
+
+            assert "initial_read" == test.linger_test_method_5(dummy_arg="initial_read")  # +1 miss
+            assert 1 == test.cache_miss_counter
+
+        test.cache_miss_counter = 0
+
+        # Wait out lingering time of 60s after last read, all entries should miss
+        traveller.shift(datetime.timedelta(seconds=61))
+
+        with agent_cache:
+            assert "x1" == test.linger_test_method_1()  # +1 miss
+            assert "x2" == test.linger_test_method_2()  # +1 miss
+            assert "x3" == test.linger_test_method_3()  # +1 miss
+            assert "x4" == test.linger_test_method_4()  # +1 miss
+            assert "recurring_read" == test.linger_test_method_5(dummy_arg="recurring_read")  # +1 miss
+            assert "initial_read" == test.linger_test_method_5(dummy_arg="initial_read")  # +1 miss
+            assert 6 == test.cache_miss_counter
+
+
+async def test_cache_decorator_hard_expiry_entries():
+    """
+        Test the behaviour of non-lingering cache entries.
+
+        Cache entries are considered non-lingering when for_version=False.
+        The timeout argument controls the lifetime of the entry since it entered the cache.
+        Stale entries are cleaned up on the next call to `clean_stale_entries`.
+
+        This test checks that this behaviour is consistent for the 4 combinations
+        of (timeout, for_version) via `linger_test_method_1` to `linger_test_method_4`.
+
+        `linger_test_method_5` is used to test that
+            - a lingering entry is properly cleaned up if it is not being used ("initial_read" entry).
+            - the expiry time of a lingering entry is properly reset to 60s when
+              it is read ("recurring_read" entry).
+
+    """
+
+    class NonLingeringTest(CacheDecoratorTest):
+        @cache(for_version=False)
+        def non_linger_test_method_1(self):
+            self.cache_miss_counter += 1
+            return "x1"
+
+        @cache(timeout=80, for_version=False)
+        def non_linger_test_method_2(self):
+            self.cache_miss_counter += 1
+            return "x2"
+
+        @cache(timeout=80, for_version=False)
+        def non_linger_test_method_3(self, dummy_arg: str):
+            self.cache_miss_counter += 1
+            return dummy_arg
+
+        @cache
+        def linger_test_method(self):
+            self.cache_miss_counter += 1
+            return "x3"
+
+        @cache(timeout=20, for_version=False)
+        def short_lived_non_linger(self):
+            self.cache_miss_counter += 1
+            return "x4"
+
+    agent_cache = AgentCache()
+    test = NonLingeringTest(agent_cache)
+
+    with time_machine.travel(datetime.datetime.now().astimezone(), tick=False) as traveller:
+
+        with agent_cache:
+            assert "initial_read" == test.non_linger_test_method_3(dummy_arg="initial_read")  # +1 miss
+            assert 1 == test.cache_miss_counter
+
+        test.cache_miss_counter = 0
+
+        with agent_cache:
+            # Populate the cache
+            assert "x1" == test.non_linger_test_method_1()  # +1 miss
+            assert "x2" == test.non_linger_test_method_2()  # +1 miss
+            assert "x3" == test.linger_test_method()  # +1 miss
+            assert "x4" == test.short_lived_non_linger()  # +1 miss
+            assert 4 == test.cache_miss_counter
+
+            assert "recurring_read" == test.non_linger_test_method_3(dummy_arg="recurring_read")  # +1 miss
+            assert 5 == test.cache_miss_counter
+
+        test.cache_miss_counter = 0
+
+        # Check that entries are not cleaned up
+        traveller.shift(datetime.timedelta(seconds=61))
+
+        # The cache cleanup method is called upon entering the AgentCache context manager
+        with agent_cache:
+            assert "x1" == test.non_linger_test_method_1()  # cache hit
+            assert "x2" == test.non_linger_test_method_2()  # cache hit
+            assert "recurring_read" == test.non_linger_test_method_3(dummy_arg="recurring_read")  # cache hit
+            assert "x3" == test.linger_test_method()  # +1 miss
+            assert "x4" == test.short_lived_non_linger()  # +1 miss
+            assert 2 == test.cache_miss_counter
+
+        test.cache_miss_counter = 0
+
+        traveller.shift(datetime.timedelta(seconds=20))
+
+        with agent_cache:
+            # Check that non-lingering entries with an 80s timeout got cleaned up:
+            assert "x2" == test.non_linger_test_method_2()  # +1 miss
+            assert "recurring_read" == test.non_linger_test_method_3(dummy_arg="recurring_read")  # +1 miss
+            assert "initial_read" == test.non_linger_test_method_3(dummy_arg="initial_read")  # +1 miss
+            assert 3 == test.cache_miss_counter
+
+            # Check that entry with default timeout of 5000s wasn't cleaned up:
+            assert "x1" == test.non_linger_test_method_1()  # cache hit
+            assert 3 == test.cache_miss_counter
+
+        test.cache_miss_counter = 0
+
+        # Wait out longer than the default timeout and check that the cache entry was cleaned up:
+        traveller.shift(datetime.timedelta(seconds=5000))
+
+        with agent_cache:
+            assert "x1" == test.non_linger_test_method_1()  # +1 miss
+            assert 1 == test.cache_miss_counter
+
+async def test_cache_decorator_cache_none():
+    """
+        Test the cache_none argument of the @cache decorator and the cacheNone legacy variant
+    """
+
+    class CacheNoneTest(CacheDecoratorTest):
+        @cache(cache_none=False)
+        def test_cache_none(self):
+            self.cache_miss_counter += 1
+            if self.cache_miss_counter < 2:
+                return None
+            else:
+                return "X"
+
+    agent_cache = AgentCache()
+    test = CacheNoneTest(agent_cache)
+
+    with agent_cache:
+        assert None is test.test_cache_none()
+        assert 1 == test.cache_miss_counter
+        assert "X" == test.test_cache_none()
+        assert 2 == test.cache_miss_counter
+        assert "X" == test.test_cache_none()
+        assert 2 == test.cache_miss_counter
+
+    class CacheNoneTestLegacy(CacheDecoratorTest):
+        @cache(cacheNone=False)
+        def test_cacheNone(self):
+            self.cache_miss_counter += 1
+            if self.cache_miss_counter < 2:
+                return None
+            else:
+                return "X"
+    agent_cache = AgentCache()
+    test = CacheNoneTestLegacy(agent_cache)
+
+    with agent_cache:
+        assert None is test.test_cacheNone()
+        assert 1 == test.cache_miss_counter
+        assert "X" == test.test_cacheNone()
+        assert 2 == test.cache_miss_counter
+        assert "X" == test.test_cacheNone()
+        assert 2 == test.cache_miss_counter
+
+async def test_cache_decorator_call_on_delete():
+    """
+    Test the call_on_delete argument of the cache decorator
+    """
 
     class Closeable:
         def __init__(self):
@@ -338,294 +671,55 @@ async def test_decorator():
 
     my_closable = Closeable()
 
-    xcache = AgentCache()
+    agent_cache = AgentCache()
 
-    class DT:
-        def __init__(self, cache: AgentCache):
-            self.cache = cache
-            self.cache_miss_counters: dict[str, int] = {
-                "basic_test": 0,
-                "test_cacheNone": 0,
-                "test_cache_none": 0
-            }
-
-        @cache()
-        def test_method(self):
-            self.cache_miss_counters["basic_test"] += 1
-            return "x"
-
-        @cache
-        def test_method_2(self, dummy_arg, timeout=100, for_version=True):
-            self.cache_miss_counters["basic_test"] += 1
-            return "x2"
-
-        @cache(cacheNone=False)
-        def test_cacheNone(self):
-            self.cache_miss_counters["test_cacheNone"] += 1
-            if self.cache_miss_counters["test_cacheNone"] < 2:
-                return None
-            else:
-                return "X"
-
-        @cache(cache_none=False)
-        def test_cache_none(self):
-            self.cache_miss_counters["test_cache_none"] += 1
-            if self.cache_miss_counters["test_cache_none"] < 2:
-                return None
-            else:
-                return "X"
-
+    class CallOnDeleteTest(CacheDecoratorTest):
         @cache(call_on_delete=lambda x: x.close())
         def test_close(self):
-            self.cache_miss_counters["basic_test"] += 1
+            self.cache_miss_counter += 1
             return my_closable
 
-    test = DT(xcache)
-
-    # Test basic caching / retrieval
-
-    # 1 cache miss and 2 hits:
-    assert "x" == test.test_method()
-    assert "x" == test.test_method()
-    assert "x" == test.test_method()
-    assert 1 == test.cache_miss_counters["basic_test"]
-
-    # 1 cache miss and 1 hit:
-    assert "x2" == test.test_method_2(dummy_arg="AAA")
-    assert "x2" == test.test_method_2(dummy_arg="AAA")
-    assert 2 == test.cache_miss_counters["basic_test"]
-    # 1 cache miss :
-    assert "x2" == test.test_method_2(dummy_arg="BBB")
-    assert 3 == test.cache_miss_counters["basic_test"]
-
-    # Wait out lingering time of 60s after last read
-    advance_time_and_cleanup(61)
-
-    # 1 cache miss and 1 hit:
-    assert "x2" == test.test_method_2(dummy_arg="AAA")
-    assert "x2" == test.test_method_2(dummy_arg="AAA")
-    assert 4 == test.cache_miss_counters["basic_test"]
-
-    advance_time_and_cleanup(31)
-
-    # 1 hit:
-    assert "x2" == test.test_method_2(dummy_arg="AAA")
-    assert 4 == test.cache_miss_counters["basic_test"]
-
-    advance_time_and_cleanup(31)
-
-    # 1 hit:
-    assert "x2" == test.test_method_2(dummy_arg="AAA")
-    assert 4 == test.cache_miss_counters["basic_test"]
-
-    # Wait out lingering time of 60s after last read
-    advance_time_and_cleanup(61)
-
-    # 1 cache miss and 1 hit:
-    assert "x2" == test.test_method_2(dummy_arg="AAA")
-    assert "x2" == test.test_method_2(dummy_arg="AAA")
-    assert 5 == test.cache_miss_counters["basic_test"]
-
-    # Test cache_none and cacheNone arguments
-    assert None is test.test_cacheNone()
-    assert 1 == test.cache_miss_counters["test_cacheNone"]
-    assert "X" == test.test_cacheNone()
-    assert 2 == test.cache_miss_counters["test_cacheNone"]
-    assert "X" == test.test_cacheNone()
-    assert 2 == test.cache_miss_counters["test_cacheNone"]
-
-    assert None is test.test_cache_none()
-    assert 1 == test.cache_miss_counters["test_cache_none"]
-    assert "X" == test.test_cache_none()
-    assert 2 == test.cache_miss_counters["test_cache_none"]
-    assert "X" == test.test_cache_none()
-    assert 2 == test.cache_miss_counters["test_cache_none"]
-
-    # Test call_on_delete
-    test.test_close()
-    assert not my_closable.closed
-    xcache.close()
-    assert my_closable.closed
-
-    test.cache_miss_counters["basic_test"] = 0
-    my_closable.closed = False
-
-    test.cache_miss_counters["basic_test"] = 0
-    test.test_close()
-    assert test.cache_miss_counters["basic_test"] == 1
-    test.test_close()
-    assert test.cache_miss_counters["basic_test"] == 1
-    assert not my_closable.closed
-
-    advance_time_and_cleanup(5001)
-
-
-    assert my_closable.closed
-
-async def test_decorator_2():
-    class FrozenCache(object):
-        def __init__(self, cache: AgentCache):
-            self.cache = cache
-
-        def __enter__(self):
-            self.cache.freeze()
-
-        def __exit__(self, type, value, traceback):
-            self.cache.unfreeze()
-
-    def advance_time_and_cleanup(n_seconds: int):
-        traveller = time_machine.travel(datetime.datetime.now() + datetime.timedelta(seconds=n_seconds))
-        traveller.start()
-        xcache.clean_stale_entries()
-
-    xcache = AgentCache()
-    class DT:
-        def __init__(self, cache: AgentCache):
-            self.cache = cache
-            self.cache_miss_counters: dict[str, int] = {
-                "basic_test": 0,
-            }
-
-        @cache
-        def test_method_2(self, dummy_arg, timeout=100, for_version=True):
-            self.cache_miss_counters["basic_test"] += 1
-            return "x2"
-
-
-
-    test = DT(xcache)
-
-    with FrozenCache(xcache):
-        # 1 cache miss and 1 hit:
-        assert "x2" == test.test_method_2(dummy_arg="AAA")
-        assert "x2" == test.test_method_2(dummy_arg="AAA")
-        assert 1 == test.cache_miss_counters["basic_test"]
-        # 1 cache miss :
-        assert "x2" == test.test_method_2(dummy_arg="BBB")
-        assert 2 == test.cache_miss_counters["basic_test"]
-
-    # Wait out lingering time of 60s after last read
-    advance_time_and_cleanup(61)
-
-    with FrozenCache(xcache):
-        # 1 cache miss and 1 hit:
-        assert "x2" == test.test_method_2(dummy_arg="AAA")
-        assert "x2" == test.test_method_2(dummy_arg="AAA")
-        assert 3 == test.cache_miss_counters["basic_test"]
-
-    advance_time_and_cleanup(31)
-
-    with FrozenCache(xcache):
-        # 1 hit:
-        assert "x2" == test.test_method_2(dummy_arg="AAA")
-        assert 3 == test.cache_miss_counters["basic_test"]
-
-    advance_time_and_cleanup(31)
-
-    with FrozenCache(xcache):
-        # 1 hit:
-        assert "x2" == test.test_method_2(dummy_arg="AAA")
-        assert 3 == test.cache_miss_counters["basic_test"]
-
-    # Wait out lingering time of 60s after last read
-    advance_time_and_cleanup(61)
-
-    with FrozenCache(xcache):
-        # 1 cache miss and 1 hit:
-        assert "x2" == test.test_method_2(dummy_arg="AAA")
-        assert "x2" == test.test_method_2(dummy_arg="AAA")
-        assert 4 == test.cache_miss_counters["basic_test"]
-
-
-async def test_decorator_3():
-    def advance_time_and_cleanup(traveller, n_seconds: int):
-        traveller.shift(datetime.timedelta(seconds=n_seconds))
-        xcache.clean_stale_entries()
-
-    xcache = AgentCache()
-    class DT:
-        def __init__(self, cache: AgentCache):
-            self.cache = cache
-            self.cache_miss_counters: dict[str, int] = {
-                "basic_test": 0,
-            }
-
-        @cache
-        def test_method_2(self, dummy_arg, timeout=100, for_version=True):
-            self.cache_miss_counters["basic_test"] += 1
-            return "x2"
-
-
-
-    test = DT(xcache)
+    test = CallOnDeleteTest(agent_cache)
 
     with time_machine.travel(datetime.datetime.now().astimezone(), tick=False) as traveller:
+        # Test call_on_delete
+        with agent_cache:
+            test.test_close()
 
-        # cache : []  T=0
-        with xcache:
-            # 1 cache miss
-            assert "x2" == test.test_method_2(dummy_arg="AAA")
-            # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +60
-            # 1 hit
-            assert "x2" == test.test_method_2(dummy_arg="AAA")
-            # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +60
+        assert not my_closable.closed
+        agent_cache.close()
+        assert my_closable.closed
 
-        assert 1 == test.cache_miss_counters["basic_test"]
+        test.cache_miss_counter = 0
+        my_closable.closed = False
 
-        advance_time_and_cleanup(traveller, 31)
+        test.cache_miss_counter = 0
 
-        # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +29
+        with agent_cache:
+            test.test_close()
+            assert test.cache_miss_counter == 1
+            test.test_close()
+            assert test.cache_miss_counter == 1
+            assert not my_closable.closed
 
-        with xcache:
-            # 1 hit:
-            assert "x2" == test.test_method_2(dummy_arg="AAA")
-            # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +60
+        traveller.shift(datetime.timedelta(seconds=61))
+        agent_cache.clean_stale_entries()
 
-        assert 1 == test.cache_miss_counters["basic_test"]
+        assert my_closable.closed
 
-        advance_time_and_cleanup(traveller, 31)
+        test.cache_miss_counter = 0
+        my_closable.closed = False
 
-        # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +29
+        with agent_cache:
+            test.test_close()
+            assert test.cache_miss_counter == 1
+            assert not my_closable.closed
 
-        with xcache:
-            # 1 hit:
-            assert "x2" == test.test_method_2(dummy_arg="AAA")
-            # cache : [dummy_arg,'AAA'test_method_2 | x2]  expiry: +60
+        traveller.shift(datetime.timedelta(seconds=61))
+        # The cache entry is stale but still in the cache since
+        # clean_stale_entries wasn't called yet.
+        assert not my_closable.closed
 
-        assert 1 == test.cache_miss_counters["basic_test"]
-
-        # Wait out lingering time of 60s after last read
-        advance_time_and_cleanup(traveller, 61)
-        # cache : []
-
-        with xcache:
-            # 1 cache miss and 1 hit:
-            assert "x2" == test.test_method_2(dummy_arg="AAA")
-            assert "x2" == test.test_method_2(dummy_arg="AAA")
-
-        assert 2 == test.cache_miss_counters["basic_test"]
-
-
-def test_time_machine():
-    def advance_time_and_cleanup(traveller, n_seconds: int):
-        print("1")
-        print(datetime.datetime.now().astimezone())
-        traveller.shift(datetime.timedelta(seconds=n_seconds))
-        print("22")
-        print(datetime.datetime.now().astimezone())
-        print("333")
-        print(datetime.datetime.now().astimezone())
-
-    with time_machine.travel(datetime.datetime.now().astimezone(), tick=False) as traveller:
-        now = localtime(time())
-        print(now)
-        advance_time_and_cleanup(traveller, 60)
-        now = localtime(time())
-        print(now)
-    #
-    #
-    # now = datetime.datetime.now().astimezone()
-    # print(now)
-    # advance_time_and_cleanup(60)
-    # now = datetime.datetime.now().astimezone()
-    # print(now)
+        # Upon entering the cache we call clean_stale_entries:
+        with agent_cache:
+            assert my_closable.closed
