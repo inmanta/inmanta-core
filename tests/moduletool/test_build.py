@@ -240,17 +240,29 @@ def test_build_with_existing_model_directory(tmpdir, modules_v2_dir: str):
 
     # Simulate the existence of a model directory in inmanta_plugins/<module_name>/
     python_pkg_dir = os.path.join(module_copy_dir, "inmanta_plugins", module_name)
-    model_dir_path = os.path.join(python_pkg_dir, "model")
-    os.makedirs(model_dir_path)
-    assert os.path.exists(model_dir_path)  # Ensure the model directory exists
+    for problematic_dir in ["files", "model", "templates"]:
+        problematic_dir_path = os.path.join(python_pkg_dir, problematic_dir)
+        os.makedirs(problematic_dir_path)
+        assert os.path.exists(problematic_dir_path)  # Ensure the model directory exists
 
-    with pytest.raises(
-        Exception,
-        match="There is already a model directory in %s. "
-        "The `inmanta_plugins.minimalv2module.model` package is reserved for bundling the inmanta model files. "
-        "Please use a different name for this Python package." % python_pkg_dir,
-    ):
-        V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
+        if problematic_dir == "model":
+            bundling_description = "the inmanta model files"
+        elif problematic_dir == "files":
+            bundling_description = "inmanta files for managed machines"
+        elif problematic_dir == "templates":
+            bundling_description = "templates that will be used to generate configuration files"
+        else:
+            raise RuntimeError(f"Unexpected bundling case: {problematic_dir}!")
+
+        with pytest.raises(
+            Exception,
+            match=f"There is already a `{problematic_dir}` directory in {python_pkg_dir}. "
+            f"The `inmanta_plugins.minimalv2module.{problematic_dir}` package is reserved for bundling {bundling_description}. "
+            "Please use a different name for this Python package.",
+        ):
+            V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
+
+        os.removedirs(problematic_dir_path)
 
 
 def test_create_dev_build_of_v2_module(tmpdir, modules_v2_dir: str) -> None:

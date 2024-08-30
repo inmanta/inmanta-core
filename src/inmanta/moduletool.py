@@ -1751,13 +1751,32 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         """
         python_pkg_dir: str = os.path.join(build_path, "inmanta_plugins", self._module.name)
         model_dir: str = os.path.join(python_pkg_dir, "model")
-        if os.path.exists(model_dir):
-            raise ModuleBuildFailedError(
-                msg="There is already a model directory in %s. "
-                "The `inmanta_plugins.%s.model` package is reserved for bundling the inmanta model files. "
-                "Please use a different name for this Python package."
-                % (os.path.join(self._module.path, "inmanta_plugins", self._module.name), self._module.name)
-            )
+        files_dir: str = os.path.join(python_pkg_dir, "files")
+        templates_dir: str = os.path.join(python_pkg_dir, "templates")
+        for problematic_dir_path in [model_dir, files_dir, templates_dir]:
+            if os.path.exists(problematic_dir_path):
+                problematic_dir_name = os.path.basename(problematic_dir_path)
+                if problematic_dir_name == "model":
+                    bundling_description = "the inmanta model files"
+                elif problematic_dir_name == "files":
+                    bundling_description = "inmanta files for managed machines"
+                elif problematic_dir_name == "templates":
+                    bundling_description = "templates that will be used to generate configuration files"
+                else:
+                    raise RuntimeError(f"Unexpected bundling case: {problematic_dir_name}!")
+
+                raise ModuleBuildFailedError(
+                    msg="There is already a `%s` directory in %s. "
+                    "The `inmanta_plugins.%s.%s` package is reserved for bundling %s. "
+                    "Please use a different name for this Python package."
+                    % (
+                        problematic_dir_name,
+                        os.path.join(self._module.path, "inmanta_plugins", self._module.name),
+                        self._module.name,
+                        problematic_dir_name,
+                        bundling_description,
+                    )
+                )
 
         for dir_name in ["model", "files", "templates"]:
             fq_dir_name = os.path.join(build_path, dir_name)
