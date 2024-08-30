@@ -25,6 +25,7 @@ from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
 
 # FIXME[#8008] review code structure + functionality + add docstrings
+# FIXME[#8008] add import entry point test case
 
 
 class ResourceScheduler:
