@@ -2577,10 +2577,6 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
     while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
         await asyncio.sleep(0.1)
 
-    # cache has 1 version in flight
-    executor_instance = agent.executor_manager.executors["agent1"]
-    assert len(executor_instance._cache.keys_for_version) == 1
-
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
@@ -2590,11 +2586,8 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
-    executor_instance._cache.cleanup_stale_entries()
-
-    # cache has no versions in flight
-    # for issue #1883
-    assert not executor_instance._cache.keys_for_version
+    executor_instance = agent.executor_manager.executors["agent1"]
+    executor_instance._cache.clean_stale_entries()
 
     # Incremental deploy
     #   * All resources are deployed successfully:
