@@ -304,3 +304,66 @@ def test_hash_with_duplicates():
     )
     assert duplicated == simple
     assert duplicated.blueprint_hash() == simple.blueprint_hash()
+
+
+async def test_executor_server_debug(set_custom_executor_policy, mpmanager: MPManager, client, caplog):
+    """
+    Test the MPManager, this includes
+
+    1. copying of config
+    2. building up an empty venv
+    3. communicate with it
+    4. build up venv with requirements, source files, ...
+    5. check that code is loaded correctly
+
+    Also test that an executor policy can be set:
+        - the agent_executor_cap option correctly stops the oldest executor.
+        - the agent_executor_retention_time option is used to clean up old executors.
+    """
+
+    with pytest.raises(ImportError):
+        # make sure lorem isn't installed at the start of the test.
+        import lorem  # noqa: F401
+
+    manager = mpmanager
+    await manager.start()
+
+    inmanta.config.Config.set("test", "aaa", "bbbb")
+
+    # Simple empty venv
+    simplest_blueprint = executor.ExecutorBlueprint(
+        pip_config=inmanta.data.PipConfig(), requirements=[], sources=[], python_version=sys.version_info[:2]
+    )  # No pip
+    simplest = await manager.get_executor("agent1", "test", [executor.ResourceInstallSpec("test::Test", 5, simplest_blueprint)])
+
+    # check communications
+    result = await simplest.call(Echo(["aaaa"]))
+    assert ["aaaa"] == result
+    # check config copying from parent to child
+    result = await simplest.call(GetConfig("test", "aaa"))
+    assert "bbbb" == result
+
+
+    assert await simplest.call(GetName()) == simplest_blueprint.blueprint_hash()
+
+    await simplest.request_shutdown()
+    await simplest.join()
+    assert simplest.shut_down
+
+    async def check_connection_lost() -> bool:
+        return await simplest.call(GetName()) != simplest_blueprint.blueprint_hash()
+
+
+    with pytest.raises(ConnectionLost):
+        # await retry_limited(check_connection_lost, 1)
+        await simplest.call(GetName())
+
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem  # noqa: F401, F811
+
+
+    # We can get `Caught subprocess termination from unknown pid: %d -> %d`
+    # When we capture signals from the pip installs
+    # Can't happen in real deployment as these things happen in different processes
+    utils.assert_no_warning(caplog, NOISY_LOGGERS + ["asyncio"])
