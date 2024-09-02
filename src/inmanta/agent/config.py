@@ -215,7 +215,7 @@ agent_cache_cleanup_tick_rate = Option[int](
     "agent",
     "cache-cleanup-tick-rate",
     1,
-    "The rate (in seconds) at which the agent will periodically attempt to remove stale entries from the cache.",
+    "The rate (in seconds) at which the agent will periodically attempt to remove stale entries from the cache when idle.",
     is_time,
 )
 
