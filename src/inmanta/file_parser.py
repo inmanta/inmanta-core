@@ -102,8 +102,8 @@ class RequirementsTxtParser:
                     result += line
                 elif line.endswith("\\"):
                     line_continuation_buffer = line
-                elif packaging.utils.canonicalize_name(line) != removed_dependency:
-                    result += line
+                elif safe_parse_requirement(requirement=line).name != removed_dependency:
+                    result += safe_parse_requirement(requirement=line).name
                 else:
                     # Dependency matches `remove_dep_on_pkg` => Remove line from result
                     pass

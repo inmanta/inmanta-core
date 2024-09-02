@@ -251,7 +251,7 @@ def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetc
         os.path.join(modules_v2_dir, "minimalv2module"),
         os.path.join(str(tmpdir), "modone"),
         new_name="modone",
-        new_requirements=[safe_parse_requirement(requiremement="lorem~=0.0.1")],
+        new_requirements=[safe_parse_requirement(requirement="lorem~=0.0.1")],
         install=True,
     )
     module_from_template(
@@ -837,7 +837,7 @@ def test_project_install_incompatible_dependencies(
         index_url=index.url,
         python_requires=[
             safe_parse_requirement(
-                requirement_string=module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata))
+                requirement=module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata))
             )
             for metadata in [v2mod2, v2mod3]
         ],
@@ -921,7 +921,7 @@ def test_install_from_index_dont_leak_pip_index(
         index_url="unknown",
         python_requires=[
             safe_parse_requirement(
-                requirement_string=module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata))
+                requirement=module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata))
             )
             for metadata in [v2mod1]
         ],
@@ -983,7 +983,7 @@ def test_install_with_use_config(
         use_pip_config_file=use_pip_config,
         python_requires=[
             safe_parse_requirement(
-                requirement_string=module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata))
+                requirement=module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata))
             )
             for metadata in [v2mod1]
         ],
@@ -1052,7 +1052,7 @@ def test_install_with_use_config_extra_index(
         use_pip_config_file=True,
         python_requires=[
             safe_parse_requirement(
-                requirement_string=module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata))
+                requirement=module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata))
             )
             for metadata in [v2mod1, v2mod2]
         ],
