@@ -1,0 +1,4 @@
+description: Added first stage of resource scheduler
+change-type: patch  # adds something new but doesn't integrate it => no user-observable change
+destination-branches:
+  - master
