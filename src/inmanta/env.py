@@ -278,8 +278,8 @@ class PythonWorkingSet:
                             return False
 
                         pkgs_required_by_extra: set[Requirement] = set(
-                            [safe_parse_requirement(e.key) for e in distribution.requires(extras=(extra,))]
-                        ) - set([safe_parse_requirement(e.key) for e in distribution.requires(extras=())])
+                            [safe_parse_requirement(str(e)) for e in distribution.requires(extras=(extra,))]
+                        ) - set([safe_parse_requirement(str(e)) for e in distribution.requires(extras=())])
                         if not _are_installed_recursive(
                             reqs=list(pkgs_required_by_extra),
                             seen_requirements=list(seen_requirements) + list(reqs),
@@ -1047,6 +1047,8 @@ class ActiveEnv(PythonEnvironment):
         finally:
             self.notify_change()
 
+    from pkg_resources.__init__ import Requirement
+
     @classmethod
     def get_constraint_violations_for_check(
         cls,
@@ -1067,7 +1069,7 @@ class ActiveEnv(PythonEnvironment):
 
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(safe_parse_requirement(requirement=requirement.key), dist_info.key)
+            OwnedRequirement(safe_parse_requirement(requirement=str(requirement)), dist_info.key)
             for dist_info in pkg_resources.working_set
             for requirement in dist_info.requires()
         )
