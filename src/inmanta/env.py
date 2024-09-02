@@ -1103,8 +1103,9 @@ class ActiveEnv(PythonEnvironment):
         for c in all_constraints:
             requirement = c.requirement
             # If no specifiers are provided, the `in` operation will return `False`
-            if (len(requirement.specifier) > 0 and installed_versions[requirement.name] not in requirement.specifier) and (
-                not requirement.marker or (requirement.marker and requirement.marker.evaluate())
+            if requirement.name not in installed_versions or (
+                (len(requirement.specifier) > 0 and installed_versions[requirement.name] not in requirement.specifier)
+                and (not requirement.marker or (requirement.marker and requirement.marker.evaluate()))
             ):
                 version_conflict = VersionConflict(
                     requirement=requirement,
