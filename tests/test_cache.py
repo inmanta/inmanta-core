@@ -90,7 +90,7 @@ async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent)
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
-    # Cache cleanup job is periodically triggered with a 1s delay
+    # Cache cleanup job is periodically triggered with a 0.1s delay
     await asyncio.sleep(0.3)
     with pytest.raises(KeyError):
         cache.find("test")
