@@ -225,7 +225,6 @@ class LoggerMode(enum.Enum):
 
 
 class LoggingConfigBuilder:
-
     def get_bootstrap_logging_config(
         self,
         stream: TextIO = sys.stdout,
