@@ -209,6 +209,7 @@ def with_timeout(delay):
                     return await func(*args, **kwargs)
             except TimeoutError:
                 raise TimeoutError(f"Test case got interrupted, because it didn't finish in {delay} seconds.")
+
         return new_func
 
     return decorator
