@@ -24,7 +24,7 @@ import sys
 import pytest
 from tornado import process
 
-from inmanta import deploy
+from inmanta import deploy_project
 
 
 @pytest.mark.parametrize("default_main_file", [True, False])
@@ -50,7 +50,7 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db, default_main_file: bool, c
     out, err = capsys.readouterr()
 
     assert out == ""
-    run = deploy.Deploy(options, postgresport=postgres_db.port)
+    run = deploy_project.Deploy(options, postgresport=postgres_db.port)
     try:
         if not run.setup():
             raise Exception("Failed to setup server")
@@ -127,6 +127,6 @@ def test_embedded_inmanta_server(tmpdir, postgres_db):
 
     Options = collections.namedtuple("Options", ["dryrun", "dashboard"])
     options = Options(dryrun=False, dashboard=False)
-    depl = deploy.Deploy(options, postgresport=postgres_db.port)
+    depl = deploy_project.Deploy(options, postgresport=postgres_db.port)
     assert depl.setup()
     depl.stop()

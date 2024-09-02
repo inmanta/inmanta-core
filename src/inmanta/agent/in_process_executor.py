@@ -515,8 +515,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         return []
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
-        for child in self.executors.values():
-            await child.join(thread_pool_finalizer)
+        await asyncio.gather(*(child.join(thread_pool_finalizer) for child in self.executors.values()))
 
     async def get_executor(
         self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
