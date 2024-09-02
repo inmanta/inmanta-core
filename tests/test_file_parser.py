@@ -46,16 +46,14 @@ dep
     assert requirements_as_str == expected_requirements
 
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="test")
-    assert (
-        new_content
-        == """
+    expected_content = """
         # A comment
         other-dep~=2.0.0
         third-dep<5.0.0 # another comment
         splitteddep
         Capital
     """
-    )
+    assert new_content == expected_content
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="third-dep")
     assert (
         new_content

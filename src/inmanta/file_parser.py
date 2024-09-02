@@ -103,7 +103,7 @@ class RequirementsTxtParser:
                 elif line.endswith("\\"):
                     line_continuation_buffer = line
                 elif safe_parse_requirement(requirement=line).name != removed_dependency:
-                    result += safe_parse_requirement(requirement=line).name
+                    result += line
                 else:
                     # Dependency matches `remove_dep_on_pkg` => Remove line from result
                     pass

@@ -65,6 +65,19 @@ class PipInstallError(Exception):
     pass
 
 
+def remove_comment_part(to_clean: str) -> str:
+    """
+    Remove the comment part of a given string and ensure that the lenght of the string is greater than 0
+
+    :param to_clean: The string to clean
+    :return: A cleaned string
+    """
+    drop_comment, _, _ = to_clean.partition("#")
+    if len(drop_comment) == 0:
+        raise ValueError("The name of the requirement cannot be an empty string!")
+    return drop_comment
+
+
 def safe_parse_requirement(requirement: str) -> Requirement:
     """
     To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
@@ -74,9 +87,7 @@ def safe_parse_requirement(requirement: str) -> Requirement:
     :return: A new requirement instance
     """
     # Packaging Requirement is not able to parse requirements with comment. Therefore, we need to remove the `comment` part
-    drop_comment, _, _ = requirement.partition("#")
-    if len(drop_comment) == 0:
-        raise ValueError("The name of the requirement cannot be an empty string!")
+    drop_comment = remove_comment_part(to_clean=requirement)
     # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
     # already installed
     requirement_instance = Requirement(requirement_string=drop_comment)
@@ -255,7 +266,8 @@ class PythonWorkingSet:
                 if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
                     # The marker of the requirement doesn't apply on this environment
                     continue
-                if r.name not in installed_packages or (installed_packages[r.name] not in r.specifier):
+                # If no specifiers are provided, the `in` operation will return `False`
+                if r.name not in installed_packages or (len(r.specifier) > 0 and installed_packages[r.name] not in r.specifier):
                     return False
                 if r.extras:
                     for extra in r.extras:
