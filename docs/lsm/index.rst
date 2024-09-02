@@ -35,6 +35,7 @@ and change the refinement process based on external events.
     validation_types/*
     service_identity
     state_transfer_tx
+    multi_version
     transfer_optimization/*
 
 
@@ -85,6 +86,8 @@ It's also possible to define a service identity for a service. For more informat
     Updating service entities
     =========================
     How to update the definition of a service entity and keeping the instance in the inventory stable
+
+.. _intro_example:
 
 Service Inventory
 -----------------
