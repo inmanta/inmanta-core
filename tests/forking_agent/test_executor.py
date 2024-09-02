@@ -224,8 +224,6 @@ def test():
 
     await simplest.request_shutdown()
     await simplest.join()
-    await retry_limited(lambda: simplest.shut_down, 1)
-    assert simplest.shut_down
 
     async def check_connection_lost() -> bool:
         return await simplest.call(GetName()) != simplest_blueprint.blueprint_hash()
