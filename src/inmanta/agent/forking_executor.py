@@ -143,7 +143,7 @@ class ExecutorContext:
             assert old_one.is_stopped()
             # Make sure old one is down
             finalizer: list[ThreadPoolExecutor] = []
-            old_one.join(finalizer)
+            await old_one.join(finalizer)
             await join_threadpools(finalizer)
 
         loop = asyncio.get_running_loop()
