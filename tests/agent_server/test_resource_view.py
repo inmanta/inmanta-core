@@ -26,7 +26,6 @@ from inmanta import const, data
 async def test_consistent_resource_state_reporting(
     server, agent_factory, environment, resource_container, clienthelper, client, no_agent_backoff
 ) -> None:
-
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, False)

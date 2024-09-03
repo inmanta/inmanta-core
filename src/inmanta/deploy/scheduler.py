@@ -23,6 +23,7 @@ from typing import Optional
 import uuid
 from collections.abc import Mapping, Set
 from typing import Any, Optional
+from typing import Optional
 
 import asyncpg
 
@@ -164,8 +165,8 @@ class ResourceScheduler:
                 ):
                     self._state.update_pending.add(resource)
                     new_desired_state.append(resource)
-                new_requires: Set[ResourceIdStr] = requires_from_db.get(resource, set())
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
+                new_requires: Set[ResourceIdStr] = requires_from_db.get(resource, set())
                 added: Set[ResourceIdStr] = new_requires - old_requires
                 dropped: Set[ResourceIdStr] = old_requires - new_requires
                 if added:
