@@ -7,34 +7,16 @@
 """
 
 import argparse
+
 import requests
 
-parser = argparse.ArgumentParser(
-    description="The goal of this script is to migrate service instances (in the up and failed states) from version 0 or 1 of "
-    "service entity `service_simple` to version 2"
-)
-parser.add_argument(
-    "--host",
-    help="The address of the server hosting the environment",
-    default="172.25.102.2",
-)
-parser.add_argument(
-    "--port", help="The port of the server hosting the environment", default=8888
-)
-parser.add_argument(
-    "--env",
-    help="The environment to execute this script on",
-    default="8404deea-3621-4bca-9076-6a612115f810",
-)
-args = parser.parse_args()
 
-environment = args.env
-address = args.host
-port = args.port
-service_name = "service_simple"
+def main(args):
+    environment = args.env
+    address = args.host
+    port = args.port
+    service_name = "service_simple"
 
-
-def main():
     # Make sure that our service is created
     url = f"http://{address}:{port}/lsm/v1/service_catalog/{service_name}"
     response = requests.get(
@@ -53,9 +35,16 @@ def main():
     d = response.json()
     # Iterate over every retrieved instance and migrate to version 2
     for instance in d["data"]:
-        # Only migrate instances on failed and up states
+        # Only migrate instances on failed and up states because they are the only ones that we know for sure that have an
+        # active attribute set. We will:
+        # 1) Take this active attribute set, modify it to include a description and remove the missing fields.
+        # 2) Set this set as the new candidate attribute set
+        # 3) Set the state to 'start' so that our new candidate attribute set is validated and, eventually, promoted.
         if instance["state"] not in ["failed", "up"]:
-            continue
+            print(
+                f"Instance with id {instance['id']} is being skipped because it is on state {instance['state']}"
+                f"and not on state 'up' or 'failed'."
+            )
 
         description = "migrated instance"
 
@@ -84,4 +73,22 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="The goal of this script is to migrate service instances (in the up and failed states) "
+        "from version 0 or 1 of service entity `service_simple` to version 2"
+    )
+    parser.add_argument(
+        "--host",
+        help="The address of the server hosting the environment",
+        default="172.25.102.2",
+    )
+    parser.add_argument(
+        "--port", help="The port of the server hosting the environment", default=8888
+    )
+    parser.add_argument(
+        "--env",
+        help="The environment to execute this script on",
+        default="8404deea-3621-4bca-9076-6a612115f810",
+    )
+    parser_args = parser.parse_args()
+    main(parser_args)
