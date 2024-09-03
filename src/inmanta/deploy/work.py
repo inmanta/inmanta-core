@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Generic, Optional, TypeAlias, TypeVar
 
 from inmanta.data.model import ResourceIdStr
+from inmanta.resources import Id
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -119,6 +120,16 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         # use simple counter rather than time.monotonic_ns() for performance reasons
         self._entry_count: int = 0
 
+    def _get_queue(self, agent_name: str) -> asyncio.PriorityQueue[TaskQueueItem]:
+        # All we do is sync and on the io loop, no need for locks!
+        out = self._agent_queues.get(agent_name, None)
+        if out is not None:
+            return out
+        out = asyncio.PriorityQueue()
+        # FIXME START DRAINING THE QUEUE!
+        self._agent_queues[agent_name] = out
+        return out
+
     def get_tasks_for_resource(self, resource: ResourceIdStr) -> set[Task]:
         """
         Returns all queued tasks for a given resource id.
@@ -183,8 +194,9 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         if task.resource not in self._tasks_by_resource:
             self._tasks_by_resource[task.resource] = {}
         self._tasks_by_resource[task.resource][task] = item
-        # FIXME[#8008]: parse agent
-        self._agent_queues["TODO"].put_nowait(item)
+        # FIXME[#8008]: parse agent, may need to be optimized
+        agent_name = Id.parse_id(task.resource).agent_name
+        self._get_queue(agent_name).put_nowait(item)
 
     async def queue_get(self, agent: str) -> Task:
         """
@@ -421,7 +433,7 @@ class ScheduledWork:
         # FIXME[#8010]: consider failure scenarios -> check how current agent does it, e.g. skip-for-undefined
         # FIXME[#8008]: docstring + mention under lock + mention only iff not stale
         resource: ResourceIdStr = finished_deploy.resource
-        for dependant in self.provides[resource]:
+        for dependant in self.provides.get(resource, []):
             blocked_deploy: Optional[BlockedDeploy] = self.waiting.get(dependant, None)
             if blocked_deploy is None:
                 # dependant is not currently scheduled

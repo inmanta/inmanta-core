@@ -21,6 +21,7 @@ import uuid
 from collections.abc import Mapping, Set
 from typing import Any, Optional
 
+from inmanta.agent.executor import ExecutorManager
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
@@ -156,40 +157,43 @@ class ResourceScheduler:
         # FIXME[#8010]: send task to agent process (not under lock)
         pass
 
+    async def _work_once(self, agent: str) -> None:
+        task: work.Task = await self._work.agent_queues.queue_get(agent)
+        # FIXME[#8008]: skip and reschedule deploy / refresh-fact task if resource marked as update pending?
+        resource_details: ResourceDetails
+        async with self._scheduler_lock:
+            # fetch resource details atomically under lock
+            try:
+                resource_details = self._state.resources[task.resource]
+            except KeyError:
+                # Stale resource, can simply be dropped.
+                # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
+                # because of this check, and an intrinsic part of the locking design because it's preferred over wider
+                # locking for performance reasons.
+                return
+
+        await self._run_task(agent, task, resource_details)
+
+        # post-processing
+        match task:
+            case work.Deploy():
+                async with self._scheduler_lock:
+                    # refresh resource details for latest model state
+                    new_details: Optional[ResourceDetails] = self._state.resources.get(task.resource, None)
+                    if new_details is not None and new_details.attribute_hash == resource_details.attribute_hash:
+                        # FIXME[#8010]: pass success/failure to notify_provides()
+                        # FIXME[#8008]: iff deploy was successful set resource status and deployment result
+                        #               in self.state.resources
+                        self._work.notify_provides(task)
+                    # The deploy that finished has become stale (state has changed since the deploy started).
+                    # Nothing to report on a stale deploy.
+                    # A new deploy for the current model state will have been queued already.
+            case _:
+                # nothing to do
+                pass
+        self._work.agent_queues.task_done(agent)
+
     async def _run_for_agent(self, agent: str) -> None:
         # FIXME[#8008]: end condition
         while True:
-            task: work.Task = await self._work.agent_queues.queue_get(agent)
-            # FIXME[#8008]: skip and reschedule deploy / refresh-fact task if resource marked as update pending?
-            resource_details: ResourceDetails
-            async with self._scheduler_lock:
-                # fetch resource details atomically under lock
-                try:
-                    resource_details = self._state.resources[task.resource]
-                except KeyError:
-                    # Stale resource, can simply be dropped.
-                    # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
-                    # because of this check, and an intrinsic part of the locking design because it's preferred over wider
-                    # locking for performance reasons.
-                    continue
-
-            await self._run_task(agent, task, resource_details)
-
-            # post-processing
-            match task:
-                case work.Deploy():
-                    async with self._scheduler_lock:
-                        # refresh resource details for latest model state
-                        new_details: Optional[ResourceDetails] = self._state.resources.get(task.resource, None)
-                        if new_details is not None and new_details.attribute_hash == resource_details.attribute_hash:
-                            # FIXME[#8010]: pass success/failure to notify_provides()
-                            # FIXME[#8008]: iff deploy was successful set resource status and deployment result
-                            #               in self.state.resources
-                            self._work.notify_provides(task)
-                        # The deploy that finished has become stale (state has changed since the deploy started).
-                        # Nothing to report on a stale deploy.
-                        # A new deploy for the current model state will have been queued already.
-                case _:
-                    # nothing to do
-                    pass
-            self._work.agent_queues.task_done(agent)
+            self._work_once(agent)
