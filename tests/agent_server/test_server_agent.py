@@ -111,6 +111,7 @@ async def test_deploy_empty(server, client, clienthelper, environment, no_agent_
 
 
 async def test_deploy_with_undefined(server, client, resource_container, async_finalizer, no_agent_backoff):
+    # TODO h interesting file
     """
     Test deploy of resource with undefined
     """
@@ -296,7 +297,7 @@ async def test_server_restart(
         },
     ]
 
-    await clienthelper.put_version_simple(resources, version)
+    await clienthelper.put_version_simple(resources, version)  # TODO h put?
 
     # do a deploy
     result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)

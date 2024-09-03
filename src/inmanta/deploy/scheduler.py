@@ -17,13 +17,23 @@
 """
 
 import asyncio
+import logging
+from collections.abc import Set
+from typing import Optional
 import uuid
 from collections.abc import Mapping, Set
 from typing import Any, Optional
 
+import asyncpg
+
+from inmanta import data, resources
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
+from inmanta.server import config as opt
+
+LOGGER = logging.getLogger(__name__)
+
 
 # FIXME[#8008] review code structure + functionality + add docstrings
 # FIXME[#8008] add import entry point test case
@@ -53,8 +63,44 @@ class ResourceScheduler:
         self._scheduler_lock: asyncio.Lock = asyncio.Lock()
         # - lock to serialize scheduler state updates (i.e. process new version)
         self._update_lock: asyncio.Lock = asyncio.Lock()
+        self._pool: Optional[asyncpg.pool.Pool] = None
+
+    async def connect_database(self) -> None:
+        """Connect to the database"""
+        database_host = opt.db_host.get()
+        database_port = opt.db_port.get()
+
+        database_username = opt.db_username.get()
+        database_password = opt.db_password.get()
+        connection_pool_min_size = opt.db_connection_pool_min_size.get()
+        connection_pool_max_size = opt.db_connection_pool_max_size.get()
+        connection_timeout = opt.db_connection_timeout.get()
+        self._pool = await data.connect(
+            database_host,
+            database_port,
+            opt.db_name.get(),
+            database_username,
+            database_password,
+            connection_pool_min_size=connection_pool_min_size,
+            connection_pool_max_size=connection_pool_max_size,
+            connection_timeout=connection_timeout,
+        )
+        LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
+
+        # Check if JIT is enabled
+        async with self._pool.acquire() as connection:
+            jit_available = await connection.fetchval("SELECT pg_jit_available();")
+            if jit_available:
+                LOGGER.warning("JIT is enabled in the PostgreSQL database. This might result in poor query performance.")
+
+    async def disconnect_database(self) -> None:
+        """Disconnect the database"""
+        await data.disconnect()
 
     async def start(self) -> None:
+        await self.connect_database()
+        resource_mapping, require_mapping = self.build_resource_mappings_from_db()
+        self._state.construct(resource_mapping, require_mapping)
         # FIXME[#8009]: read from DB instead
         pass
 
@@ -82,33 +128,43 @@ class ResourceScheduler:
         # FIXME, also clean up typing of arguments
         pass
 
-    # FIXME[#8009]: design step 2: read new state from DB instead of accepting as parameter
-    #               (method should be notification only, i.e. 0 parameters)
+    async def build_resource_mappings_from_db(self):
+        resources_from_db = await data.Resource.get_list()
+        resource_mapping = {
+            resource.resource_id: ResourceDetails(attribute_hash=resource.attribute_hash, attributes=resource.attributes)
+            for resource in resources_from_db
+        }
+        require_mapping = {
+            resource.resource_id: {resources.Id.parse_id(req).resource_str() for req in resource.attributes.get("requires", [])}
+            for resource in resources_from_db
+        }
+        return resource_mapping, require_mapping
+
     async def new_version(
         self,
         version: int,
-        resources: Mapping[ResourceIdStr, ResourceDetails],
-        requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
     ) -> None:
+        resources_from_db, requires_from_db = self.build_resource_mappings_from_db()
+
         async with self._update_lock:
             # Inspect new state and mark resources as "update pending" where appropriate. Since this method is the only writer
             # for "update pending", and a stale read is acceptable, we can do this part before acquiring the exclusive scheduler
             # lock.
-            deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
+            deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources_from_db.keys()
             for resource in deleted_resources:
                 self._work.delete_resource(resource)
 
             new_desired_state: list[ResourceIdStr] = []
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
-            for resource, details in resources.items():
+            for resource, details in resources_from_db.items():
                 if (
                     resource not in self._state.resources
                     or details.attribute_hash != self._state.resources[resource].attribute_hash
                 ):
                     self._state.update_pending.add(resource)
                     new_desired_state.append(resource)
-                new_requires: Set[ResourceIdStr] = requires.get(resource, set())
+                new_requires: Set[ResourceIdStr] = requires_from_db.get(resource, set())
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 added: Set[ResourceIdStr] = new_requires - old_requires
                 dropped: Set[ResourceIdStr] = old_requires - new_requires
@@ -130,9 +186,9 @@ class ResourceScheduler:
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in new_desired_state:
-                    self._state.update_desired_state(resource, resources[resource])
+                    self._state.update_desired_state(resource, resources_from_db[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
-                    self._state.update_requires(resource, requires[resource])
+                    self._state.update_requires(resource, requires_from_db[resource])
                 # ensure deploy for ALL dirty resources, not just the new ones
                 # FIXME[#8008]: this is copy-pasted, make into a method?
                 dirty: Set[ResourceIdStr] = {

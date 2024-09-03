@@ -1307,7 +1307,7 @@ class Agent(SessionEndpoint):
         return PipConfig(**pip_config)
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
-    async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
+    async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:  # TODO h deploy here
         """
         Trigger an update
         """

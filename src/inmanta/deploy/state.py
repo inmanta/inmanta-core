@@ -102,6 +102,16 @@ class ModelState:
     ResourceStatus so that it lives outside of the scheduler lock's scope.
     """
 
+    def construct(
+        self,
+        resources: Mapping[ResourceIdStr, ResourceDetails],
+        requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
+    ):
+        for resource_id, details in resources.items():
+            self.update_desired_state(resource_id, details)
+        for resource_id, require_list in requires.items():
+            self.update_requires(resource_id, require_list)
+
     def update_desired_state(
         self,
         resource: ResourceIdStr,
