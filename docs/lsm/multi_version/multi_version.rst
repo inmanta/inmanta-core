@@ -1,13 +1,13 @@
-**************
+*****************
 Multi-version LSM
-**************
+*****************
 
 Multi-version lsm allows you to have multiple api versions for the same service.
 
 Why use multi-version LSM?
 ===========================
 
-You should use mutli-version LSM when you want to:
+You should use multi-version LSM when you want to:
 
 * Offer multiple api schema versions to the same service
 * Upgrade a service in a way that is not supported by the :ref:`automated upgrade mechanism <operational_procedures_upgrade>`
@@ -25,19 +25,19 @@ entity into a versioned one. We just need to:
 When unrolling using lsm::all, we use ``lsm::get_service_binding_version`` to fetch the correct entity binding version
 for each instance.
 
-.. literalinclude:: multi_version/multi_version_sources/single_version.cf
+.. literalinclude:: multi_version_sources/single_version.cf
     :linenos:
     :language: inmanta
     :lines: 1-49
 
 Adding or removing versions
-====================
+===========================
 
 To add a new version of our service we can either create a new entity (if we want to modify the attributes of a
 previously created version) or just use the same entity but with different binding attributes
 (i.e. different lifecycle).
 
-.. literalinclude:: multi_version/multi_version_sources/multiple_versions.cf
+.. literalinclude:: multi_version_sources/multiple_versions.cf
     :linenos:
     :language: inmanta
     :lines: 1-86
@@ -51,10 +51,11 @@ version, but version 0 will be unrolled separately into ``InterfaceIPAssignment`
 To remove a version we can delete the corresponding ``lsm::ServiceBindingVersion`` from ``lsm::ServiceBinding.versions``
 and recompile and export the new model.
 
-NOTE: We cannot remove service entity versions that have active instances.
+.. note::
+    We cannot remove service entity versions that have active instances.
 
 API endpoints
-=======================
+=============
 The following API endpoints were added in order to manage versioned services:
 
 * `GET lsm/v2/service_catalog` : List all service entity versions of each defined services entity type in the service catalog
@@ -93,8 +94,9 @@ To do this we need to provide at least 1 of the 3 attribute sets that we want th
 These attribute sets are validated against the schema of the new version.
 We also need to provide the target state that we want to set the instance to.
 
-NOTE: This change is impossible to rollback since we override each attribute set. And each attribute set needs to be
-compatible with the target entity version.
+.. note::
+    This change is impossible to rollback since we override each attribute set. And each attribute set needs to be
+    compatible with the target entity version.
 
 Below is a simple script that migrates existing instances of our service that have `service_entity_version` 0 or 1
 and that are on the up or failed states.
@@ -103,10 +105,10 @@ We modify the existing active attribute set of each instance that qualifies for 
 field. We only need to set the candidate set on this example because we are moving each instance to the start state
 where this set will be validated and eventually promoted.
 
-.. literalinclude:: multi_version/multi_version_sources/service_entity_version_migration.py
+.. literalinclude:: multi_version_sources/service_entity_version_migration.py
     :linenos:
     :language: inmanta
-    :lines: 1-88
+    :lines: 1-94
 
 
 
