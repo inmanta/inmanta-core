@@ -21,10 +21,12 @@ import uuid
 from collections.abc import Mapping, Set
 from typing import Any, Optional
 
+from inmanta.agent import executor
 from inmanta.agent.executor import ExecutorManager
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
+from inmanta.deploy.work import PoisonPill
 
 # FIXME[#8008] review code structure + functionality + add docstrings
 # FIXME[#8008] add import entry point test case
@@ -38,12 +40,15 @@ class ResourceScheduler:
     The scheduler expects to be notified by the server whenever a new version is released.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, executor_manager: executor.ExecutorManager[executor.Executor]) -> None:
         self._state: ModelState = ModelState(version=0)
         self._work: work.ScheduledWork = work.ScheduledWork(
             requires=self._state.requires.requires_view(),
             provides=self._state.requires.provides_view(),
+            consumer_factory=self.start_for_agent,
         )
+
+        self._executor_manager = executor_manager
 
         # We uphold two locks to prevent concurrency conflicts between external events (e.g. new version or deploy request)
         # and the task executor background tasks.
@@ -55,12 +60,20 @@ class ResourceScheduler:
         # - lock to serialize scheduler state updates (i.e. process new version)
         self._update_lock: asyncio.Lock = asyncio.Lock()
 
+        self._running = False
+        # Agent name to worker task
+        # here to prevent it from being GC-ed
+        self.workers: dict[str, asyncio.Task] = {}
+
     async def start(self) -> None:
+        self._running = True
         # FIXME[#8009]: read from DB instead
         pass
 
     async def stop(self) -> None:
-        pass
+        self._running = False
+        self._work.agent_queues.send_shutdown()
+        await asyncio.gather(*self.workers.values())
 
     async def deploy(self) -> None:
         async with self._scheduler_lock:
@@ -153,13 +166,21 @@ class ResourceScheduler:
     # FIXME[#8008]: set up background workers for each agent, calling _run_for_agent(). Make sure to somehow respond to new
     #           agents or removed ones
 
+    def start_for_agent(self, agent: str) -> None:
+        self.workers[agent] = asyncio.create_task(self._run_for_agent(agent))
+
     async def _run_task(self, agent: str, task: work.Task, resource_details: ResourceDetails) -> None:
         # FIXME[#8010]: send task to agent process (not under lock)
-        pass
+        # FIXME: resolve code !
+        executor = await self._executor_manager.get_executor(agent, None, None)
+        await executor.execute("XX", resource_details, "Because!!")
 
     async def _work_once(self, agent: str) -> None:
         task: work.Task = await self._work.agent_queues.queue_get(agent)
         # FIXME[#8008]: skip and reschedule deploy / refresh-fact task if resource marked as update pending?
+        if isinstance(task, PoisonPill):
+            # wake up and return, queue will be shut down
+            return
         resource_details: ResourceDetails
         async with self._scheduler_lock:
             # fetch resource details atomically under lock
@@ -194,6 +215,6 @@ class ResourceScheduler:
         self._work.agent_queues.task_done(agent)
 
     async def _run_for_agent(self, agent: str) -> None:
-        # FIXME[#8008]: end condition
-        while True:
-            self._work_once(agent)
+        while self._running:
+            await self._work_once(agent)
+        print("Done")

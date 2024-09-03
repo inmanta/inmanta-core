@@ -22,7 +22,7 @@ import tempfile
 import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from typing import Mapping, Sequence, Set
+from typing import Mapping, Optional, Sequence, Set
 
 import pytest
 
@@ -35,12 +35,16 @@ from inmanta.config import Config
 from inmanta.data import ResourceIdStr
 from inmanta.deploy import state
 from inmanta.protocol.common import custom_json_encoder
+from inmanta.util import retry_limited
 
 
 class DummyExecutor(executor.Executor):
 
+    def __init__(self):
+        self.execute_count = 0
+
     async def execute(self, gid: uuid.UUID, resource_details: ResourceDetails, reason: str) -> None:
-        pass
+        self.execute_count += 1
 
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
         pass
@@ -57,10 +61,15 @@ class DummyExecutor(executor.Executor):
 
 class DummyManager(executor.ExecutorManager[executor.Executor]):
 
+    def __init__(self):
+        self.executors = {}
+
     async def get_executor(
         self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
     ) -> DummyExecutor:
-        pass
+        if agent_name not in self.executors:
+            self.executors[agent_name] = DummyExecutor()
+        return self.executors[agent_name]
 
     async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
         pass
@@ -77,8 +86,15 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
 
 class TestAgent(Agent):
 
+    def __init__(
+        self,
+        environment: Optional[uuid.UUID] = None,
+    ):
+        self.manager = DummyManager()
+        super().__init__(environment)
+
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
-        return DummyManager()
+        return self.manager
 
 
 @pytest.fixture
@@ -98,7 +114,7 @@ async def config(inmanta_config, tmp_path):
 
 
 @pytest.fixture
-async def agent(environment, config):
+async def agent(environment, config, event_loop):
     out = TestAgent(environment)
     await out.start_working()
     yield out
@@ -138,14 +154,24 @@ async def test_fixtures(agent: TestAgent):
     # Is this by design?
     await agent.scheduler.new_version(5, resources, make_requires(resources))
 
-    assert len(agent.scheduler._work.agent_queues._agent_queues) == 1
-    agent_1_queue = agent.scheduler._work.agent_queues._agent_queues["agent1"]
-    assert agent_1_queue._unfinished_tasks == 1
+    # assert len(agent.scheduler._work.agent_queues._agent_queues) == 1
+    # agent_1_queue = agent.scheduler._work.agent_queues._agent_queues["agent1"]
+    # assert agent_1_queue._unfinished_tasks == 1
+    #
+    # await agent.scheduler._work_once("agent1")
+    #
+    # assert agent_1_queue._unfinished_tasks == 1
+    #
+    # await agent.scheduler._work_once("agent1")
+    #
+    # assert agent_1_queue._unfinished_tasks == 0
 
-    await agent.scheduler._work_once("agent1")
+    async def done():
+        agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent1")
+        if not agent_1_queue:
+            return False
+        return agent_1_queue._unfinished_tasks == 0
 
-    assert agent_1_queue._unfinished_tasks == 1
+    await retry_limited(done, 5)
 
-    await agent.scheduler._work_once("agent1")
-
-    assert agent_1_queue._unfinished_tasks == 0
+    assert agent.executor_manager.executors["agent1"].execute_count == 2

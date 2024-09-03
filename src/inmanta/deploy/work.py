@@ -23,7 +23,7 @@ import itertools
 import typing
 from collections.abc import Iterator, Mapping, Set
 from dataclasses import dataclass
-from typing import Generic, Optional, TypeAlias, TypeVar
+from typing import Callable, Generic, Optional, TypeAlias, TypeVar
 
 from inmanta.data.model import ResourceIdStr
 from inmanta.resources import Id
@@ -51,7 +51,11 @@ class RefreshFact(_Task):
     pass
 
 
-Task: TypeAlias = Deploy | DryRun | RefreshFact
+class PoisonPill(_Task):
+    """Task to signal queue shutdown"""
+
+
+Task: TypeAlias = Deploy | DryRun | RefreshFact | PoisonPill
 """
 Type alias for the union of all task types. Allows exhaustive case matches.
 """
@@ -72,7 +76,7 @@ class PrioritizedTask(Generic[T]):
 
 
 @functools.total_ordering
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class TaskQueueItem:
     """
     Task item for the task queue. Adds insert order field to each item and implements full ordering based purely on priority
@@ -85,6 +89,9 @@ class TaskQueueItem:
 
     task: PrioritizedTask[Task]
     insert_order: int
+
+    # Mutable state
+    is_active: bool = True
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
@@ -109,7 +116,7 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
     # FIXME[#8019]: relies on undocumented asyncio.PriorityQueue._queue field and the fact that it's a heapq,
     #               can we do something about that?
 
-    def __init__(self) -> None:
+    def __init__(self, consumer_factory: Callable[[str], None]) -> None:
         self._agent_queues: dict[str, asyncio.PriorityQueue[TaskQueueItem]] = {}
         # can not drop tasks from queue without breaking the heap invariant, or potentially breaking asyncio.Queue invariants
         # => take approach suggested in heapq docs: simply mark as deleted.
@@ -119,6 +126,7 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         # monotonically rising value for item insert order
         # use simple counter rather than time.monotonic_ns() for performance reasons
         self._entry_count: int = 0
+        self._consumer_factory = consumer_factory
 
     def _get_queue(self, agent_name: str) -> asyncio.PriorityQueue[TaskQueueItem]:
         # All we do is sync and on the io loop, no need for locks!
@@ -126,8 +134,8 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         if out is not None:
             return out
         out = asyncio.PriorityQueue()
-        # FIXME START DRAINING THE QUEUE!
         self._agent_queues[agent_name] = out
+        self._consumer_factory(agent_name)
         return out
 
     def get_tasks_for_resource(self, resource: ResourceIdStr) -> set[Task]:
@@ -143,6 +151,7 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         """
         tasks: dict[Task, TaskQueueItem] = self._tasks_by_resource.get(task.resource, {})
         queue_item: TaskQueueItem = tasks[task]
+        queue_item.is_active = False
         del tasks[task]
         if not tasks:
             del self._tasks_by_resource[task.resource]
@@ -161,18 +170,12 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
     def _queue_item_for_task(self, task: Task) -> Optional[TaskQueueItem]:
         return self._tasks_by_resource.get(task.resource, {}).get(task, None)
 
-    def _is_active(self, item: TaskQueueItem) -> bool:
-        """
-        Returns true iff this item is still active, i.e. it has not been removed from the queue.
-        """
-        return item == self._queue_item_for_task(item.task.task)
-
     def sorted(self, agent: str) -> list[PrioritizedTask[Task]]:
         # FIXME[#8008]: remove this method: it's only a PoC to hightlight how to achieve a sorted view
         queue: asyncio.PriorityQueue[TaskQueueItem] = self._agent_queues[agent]
         backing_heapq: list[TaskQueueItem] = queue._queue  # type: ignore [attr-defined]
         backing_heapq.sort()
-        return [item.task for item in backing_heapq if self._is_active(item)]
+        return [item.task for item in backing_heapq if item.is_active]
 
     ########################################
     # asyncio.PriorityQueue-like interface #
@@ -189,6 +192,8 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
             # task is already queued with equal or higher priority
             return
         # reschedule with new priority, no need to explicitly remove, this is achieved by setting self._tasks_by_resource
+        if already_queued is not None:
+            already_queued.is_active = False
         item: TaskQueueItem = TaskQueueItem(task=prioritized_task, insert_order=self._entry_count)
         self._entry_count += 1
         if task.resource not in self._tasks_by_resource:
@@ -198,6 +203,16 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         agent_name = Id.parse_id(task.resource).agent_name
         self._get_queue(agent_name).put_nowait(item)
 
+    def send_shutdown(self) -> None:
+        """Wake up all wrokers after shutdown is signalled"""
+        poison_pill = TaskQueueItem(
+            task=PrioritizedTask(task=PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")), priority=0),
+            insert_order=self._entry_count,
+        )
+        self._entry_count += 1
+        for queue in self._agent_queues.values():
+            queue.put_nowait(poison_pill)
+
     async def queue_get(self, agent: str) -> Task:
         """
         Consume a task from an agent's queue. If the queue is empty, blocks until a task becomes available.
@@ -205,7 +220,7 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         queue: asyncio.PriorityQueue[TaskQueueItem] = self._agent_queues[agent]
         while True:
             item: TaskQueueItem = await queue.get()
-            if not self._is_active(item):
+            if not item.is_active:
                 # task was marked as removed, ignore it and consume the next item from the queue
                 queue.task_done()
                 continue
@@ -262,16 +277,18 @@ class ScheduledWork:
     Expects to be informed by task runners of finished tasks through notify_provides().
 
     :param requires: Live, read-only view on requires-provides mapping for the latest model state.
+    :param consumer_factory: Method to call to start draining the queue when created
     """
 
     def __init__(
         self,
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
         provides: Mapping[ResourceIdStr, Set[ResourceIdStr]],
+        consumer_factory: Callable[[str], None],
     ) -> None:
         self.requires: Mapping[ResourceIdStr, Set[ResourceIdStr]] = requires
         self.provides: Mapping[ResourceIdStr, Set[ResourceIdStr]] = provides
-        self.agent_queues: AgentQueues = AgentQueues()
+        self.agent_queues: AgentQueues = AgentQueues(consumer_factory)
         self.waiting: dict[ResourceIdStr, BlockedDeploy] = {}
 
     # FIXME[#8008]: name
@@ -424,6 +441,9 @@ class ScheduledWork:
                     delete = False
                 case RefreshFact():
                     delete = True
+                case PoisonPill():
+                    # don't care, the end is near
+                    delete = False
                 case _ as _never:
                     typing.assert_never(_never)
             if delete:

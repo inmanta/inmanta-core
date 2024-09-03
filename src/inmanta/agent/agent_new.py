@@ -75,7 +75,7 @@ class Agent(SessionEndpoint):
         self.set_environment(environment)
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
-        self.scheduler = ResourceScheduler()
+        self.scheduler = ResourceScheduler(self.executor_manager)
         self.working = False
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
