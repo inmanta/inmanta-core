@@ -299,3 +299,28 @@ def test_hash_with_duplicates():
     )
     assert duplicated == simple
     assert duplicated.blueprint_hash() == simple.blueprint_hash()
+
+
+async def test_race_condition_minimal_reproduction(set_custom_executor_policy, mpmanager: MPManager, client, caplog):
+    manager = mpmanager
+    await manager.start()
+
+    inmanta.config.Config.set("test", "aaa", "bbbb")
+
+    # Simple empty venv
+    simplest_blueprint = executor.ExecutorBlueprint(
+        pip_config=inmanta.data.PipConfig(), requirements=[], sources=[], python_version=sys.version_info[:2]
+    )  # No pip
+    simplest = await manager.get_executor("agent1", "test", [executor.ResourceInstallSpec("test::Test", 5, simplest_blueprint)])
+
+    assert await simplest.call(GetName()) == simplest_blueprint.blueprint_hash()
+
+    await simplest.request_shutdown()
+    await simplest.join()
+
+    async def check_connection_lost() -> bool:
+        return await simplest.call(GetName()) != simplest_blueprint.blueprint_hash()
+
+    with pytest.raises(ConnectionLost):
+        # await retry_limited(check_connection_lost, 1)
+        await simplest.call(GetName())
