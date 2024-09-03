@@ -51,7 +51,8 @@ version, but version 0 will be unrolled separately into ``InterfaceIPAssignment`
 To remove a version we can delete the corresponding ``lsm::ServiceBindingVersion`` from ``lsm::ServiceBinding.versions``
 and recompile and export the new model.
 
-NOTE: We cannot remove service entity versions that have active instances.
+.. note::
+    We cannot remove service entity versions that have active instances.
 
 API endpoints
 =======================
@@ -93,8 +94,9 @@ To do this we need to provide at least 1 of the 3 attribute sets that we want th
 These attribute sets are validated against the schema of the new version.
 We also need to provide the target state that we want to set the instance to.
 
-NOTE: This change is impossible to rollback since we override each attribute set. And each attribute set needs to be
-compatible with the target entity version.
+.. note::
+    This change is impossible to rollback since we override each attribute set. And each attribute set needs to be
+    compatible with the target entity version.
 
 Below is a simple script that migrates existing instances of our service that have `service_entity_version` 0 or 1
 and that are on the up or failed states.
