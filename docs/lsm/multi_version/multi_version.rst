@@ -1,6 +1,6 @@
-**************
+*****************
 Multi-version LSM
-**************
+*****************
 
 Multi-version lsm allows you to have multiple api versions for the same service.
 
@@ -31,7 +31,7 @@ for each instance.
     :lines: 1-49
 
 Adding or removing versions
-====================
+===========================
 
 To add a new version of our service we can either create a new entity (if we want to modify the attributes of a
 previously created version) or just use the same entity but with different binding attributes
@@ -55,7 +55,7 @@ and recompile and export the new model.
     We cannot remove service entity versions that have active instances.
 
 API endpoints
-=======================
+=============
 The following API endpoints were added in order to manage versioned services:
 
 * `GET lsm/v2/service_catalog` : List all service entity versions of each defined services entity type in the service catalog
@@ -108,7 +108,7 @@ where this set will be validated and eventually promoted.
 .. literalinclude:: multi_version_sources/service_entity_version_migration.py
     :linenos:
     :language: inmanta
-    :lines: 1-88
+    :lines: 1-87
 
 
 
