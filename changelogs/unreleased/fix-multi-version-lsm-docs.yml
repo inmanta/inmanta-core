@@ -1,0 +1,4 @@
+---
+description: Fix multi-version lsm docs
+change-type: minor
+destination-branches: [master, iso7]

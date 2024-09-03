@@ -7,7 +7,7 @@ Multi-version lsm allows you to have multiple api versions for the same service.
 Why use multi-version LSM?
 ===========================
 
-You should use mutli-version LSM when you want to:
+You should use multi-version LSM when you want to:
 
 * Offer multiple api schema versions to the same service
 * Upgrade a service in a way that is not supported by the :ref:`automated upgrade mechanism <operational_procedures_upgrade>`
@@ -25,7 +25,7 @@ entity into a versioned one. We just need to:
 When unrolling using lsm::all, we use ``lsm::get_service_binding_version`` to fetch the correct entity binding version
 for each instance.
 
-.. literalinclude:: multi_version/multi_version_sources/single_version.cf
+.. literalinclude:: multi_version_sources/single_version.cf
     :linenos:
     :language: inmanta
     :lines: 1-49
@@ -37,7 +37,7 @@ To add a new version of our service we can either create a new entity (if we wan
 previously created version) or just use the same entity but with different binding attributes
 (i.e. different lifecycle).
 
-.. literalinclude:: multi_version/multi_version_sources/multiple_versions.cf
+.. literalinclude:: multi_version_sources/multiple_versions.cf
     :linenos:
     :language: inmanta
     :lines: 1-86
@@ -103,7 +103,7 @@ We modify the existing active attribute set of each instance that qualifies for 
 field. We only need to set the candidate set on this example because we are moving each instance to the start state
 where this set will be validated and eventually promoted.
 
-.. literalinclude:: multi_version/multi_version_sources/service_entity_version_migration.py
+.. literalinclude:: multi_version_sources/service_entity_version_migration.py
     :linenos:
     :language: inmanta
     :lines: 1-88
