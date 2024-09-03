@@ -17,6 +17,12 @@
 """
 
 import asyncio
+from collections.abc import Mapping, Set
+from typing import Optional
+
+from inmanta.data.model import ResourceIdStr
+from inmanta.deploy import work
+from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
 import uuid
 from collections.abc import Mapping, Set
 from typing import Any, Optional
@@ -66,7 +72,6 @@ class ResourceScheduler:
         self.workers: dict[str, asyncio.Task] = {}
 
     async def start(self) -> None:
-        self._running = True
         # FIXME[#8009]: read from DB instead
         pass
 

@@ -18,12 +18,11 @@
 
 import abc
 import json
+import urllib.parse
 from abc import ABC
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Generic, Mapping, Optional, TypeVar, Union, cast
-from urllib import parse
-from urllib.parse import quote
 from uuid import UUID
 
 from asyncpg import Record
@@ -292,7 +291,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         try:
             dtos, paging_boundaries_in = await self.get_data()
-
             paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
             if paging_boundaries_in:
                 paging_boundaries = paging_boundaries_in
@@ -414,7 +412,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:
                 params = url_query_params.copy()
                 params.update({k: value_to_string(v) for k, v in args.items() if v is not None})
-                return f"{base_url}?{parse.urlencode(params, doseq=True)}"
+                return f"{base_url}?{urllib.parse.urlencode(params, doseq=True)}"
 
             link_with_end = make_link(
                 end=paging_boundaries.end,
@@ -833,7 +831,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
         return {}
 
     def get_base_url(self) -> str:
-        return f"/api/v2/resource/{quote(self.rid, safe='')}/history"
+        return f"/api/v2/resource/{urllib.parse.quote(self.rid, safe='')}/history"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
@@ -939,7 +937,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
         return query
 
     def get_base_url(self) -> str:
-        return f"/api/v2/resource/{parse.quote(self.rid, safe='')}/logs"
+        return f"/api/v2/resource/{urllib.parse.quote(self.rid, safe='')}/logs"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
@@ -1294,11 +1292,19 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
                     dr.environment,
                     dr.discovered_resource_id,
                     dr.values,
-                    (rps.resource_id IS NOT NULL)  AS managed
+                    (rps_1.resource_id IS NOT NULL) AS managed,
+                    rps_2.resource_id AS discovery_resource_id
 
                 FROM {data.DiscoveredResource.table_name()} as dr
-                LEFT JOIN {data.ResourcePersistentState.table_name()} rps
-                ON dr.environment=rps.environment AND dr.discovered_resource_id = rps.resource_id
+
+                -- Retrieve the corresponding managed resource id (if any)
+                LEFT JOIN {data.ResourcePersistentState.table_name()} rps_1
+                ON dr.environment=rps_1.environment AND dr.discovered_resource_id = rps_1.resource_id
+
+                -- Retrieve the id of the resource responsible for discovering this resource
+                LEFT JOIN {data.ResourcePersistentState.table_name()} rps_2
+                ON dr.environment=rps_2.environment AND dr.discovery_resource_id = rps_2.resource_id
+
                 WHERE dr.environment = $1
             )
             """,
@@ -1312,7 +1318,12 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
             model.DiscoveredResource(
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
-                managed_resource_uri=f"/api/v2/resource/{res['discovered_resource_id']}" if res["managed"] else None,
+                managed_resource_uri=(
+                    f"/api/v2/resource/{urllib.parse.quote(str(res['discovered_resource_id']), safe='')}"
+                    if res["managed"]
+                    else None
+                ),
+                discovery_resource_id=res["discovery_resource_id"] if res["discovery_resource_id"] else None,
             ).model_dump()
             for res in records
         ]

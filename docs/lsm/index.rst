@@ -35,6 +35,7 @@ and change the refinement process based on external events.
     validation_types/*
     service_identity
     state_transfer_tx
+    multi_version/*
     transfer_optimization/*
 
 
@@ -60,6 +61,8 @@ read, update and delete (CRUD) service instances of service entities.
 
 Creating service entities
 =========================
+.. _intro_example:
+
 Service entities are :ref:`entities <lang-entity>` that extend ``lsm::ServiceEntity``
 We define attributes for the service entity the same way as for entities. We can also define a modifier for the attribute.
 If no modifier is defined for an attribute, it will be ``rw`` by default.
@@ -85,6 +88,7 @@ It's also possible to define a service identity for a service. For more informat
     Updating service entities
     =========================
     How to update the definition of a service entity and keeping the instance in the inventory stable
+
 
 Service Inventory
 -----------------
