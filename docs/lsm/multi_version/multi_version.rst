@@ -108,7 +108,7 @@ where this set will be validated and eventually promoted.
 .. literalinclude:: multi_version_sources/service_entity_version_migration.py
     :linenos:
     :language: inmanta
-    :lines: 1-87
+    :lines: 1-94
 
 
 
