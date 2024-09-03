@@ -214,11 +214,12 @@ src/inmanta/ast/attribute.py:0: error: Need type annotation for "target_annotati
 src/inmanta/ast/attribute.py:0: error: Incompatible types in assignment (expression has type "int | None", variable has type "int")  [assignment]
 src/inmanta/ast/attribute.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]
 src/inmanta/ast/attribute.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]
+src/inmanta/agent/io/remote.py:0: error: Skipping analyzing "execnet": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+src/inmanta/agent/io/remote.py:0: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
 src/inmanta/agent/io/remote.py:0: error: Argument "hostname" to "HostNotFoundException" has incompatible type "str | None"; expected "str"  [arg-type]
-src/inmanta/agent/io/remote.py:0: error: Argument "error" to "HostNotFoundException" has incompatible type "HostNotFound"; expected "str"  [arg-type]
 src/inmanta/agent/io/remote.py:0: error: Argument "hostname" to "HostNotFoundException" has incompatible type "str | None"; expected "str"  [arg-type]
 src/inmanta/agent/io/remote.py:0: error: Argument "error" to "HostNotFoundException" has incompatible type "BrokenPipeError"; expected "str"  [arg-type]
-src/inmanta/agent/io/remote.py:0: error: Item "None" of "Gateway | None" has no attribute "remote_exec"  [union-attr]
+src/inmanta/agent/io/remote.py:0: error: Item "None" of "Any | None" has no attribute "remote_exec"  [union-attr]
 src/inmanta/agent/io/remote.py:0: error: Incompatible return value type (got "object", expected "bytes")  [return-value]
 src/inmanta/agent/io/remote.py:0: error: Missing type parameters for generic type "Callable"  [type-arg]
 src/inmanta/util/__init__.py:0: error: Argument "key" to "sorted" has incompatible type "Callable[[T], S]"; expected "Callable[[T], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"  [arg-type]
@@ -1017,7 +1018,6 @@ src/inmanta/export.py:0: error: Value of type "dict[str, Any] | None" is not ind
 src/inmanta/export.py:0: error: Incompatible return value type (got "int | None", expected "int")  [return-value]
 src/inmanta/export.py:0: error: Argument 2 to "add" of "Exporter" has incompatible type "tuple[str, ...]"; expected "list[str]"  [arg-type]
 src/inmanta/app.py:0: error: Skipping analyzing "rpdb": module is installed, but missing library stubs or py.typed marker  [import-untyped]
-src/inmanta/app.py:0: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
 src/inmanta/app.py:0: error: Missing type parameters for generic type "Future"  [type-arg]
 src/inmanta/app.py:0: error: Argument 2 to "safe_shutdown" has incompatible type "Callable[[int | None], Coroutine[Any, Any, None]]"; expected "Callable[[], None]"  [arg-type]
 src/inmanta/app.py:0: error: Argument 2 to "safe_shutdown" has incompatible type "Callable[[int | None], Coroutine[Any, Any, None]]"; expected "Callable[[], None]"  [arg-type]
