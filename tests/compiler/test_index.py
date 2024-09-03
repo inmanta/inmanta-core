@@ -72,13 +72,21 @@ def test_issue_140_index_error(snippetcompiler):
     try:
         snippetcompiler.setup_for_snippet(
             """
+        entity A:
+            string name
+        end
+
+        A.host [1] -- std::Host
+
+        index A(host, name)
+
         h = std::Host(name="test", os=std::linux)
-        test = std::Service[host=h, path="test"]"""
+        test = A[host=h, path="test"]"""
         )
         compiler.do_compile()
         raise AssertionError("Should get exception")
     except NotFoundException as e:
-        assert re.match(".*No index defined on std::Service for this lookup:.*", str(e))
+        assert re.match(".*No index defined on __config__::A for this lookup:.*", str(e))
 
 
 @pytest.mark.parametrize("explicit", [True, False])
@@ -141,9 +149,23 @@ index Test1(x,y)
 def test_index_on_subtype(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-        host = std::Host(name="a",os=std::linux)
-        a=std::DefaultDirectory(host=host,path="/etc")
-        b=std::DefaultDirectory(host=host,path="/etc")
+        entity A:
+            string path
+        end
+
+        A.host [1] -- std::Host.ases [0:]
+
+        index A(host, path)
+
+        entity B extends A:
+        end
+
+        implement A using std::none
+        implement B using parents
+
+        host = std::Host(name="ahost",os=std::linux)
+        a=B(host=host,path="/etc")
+        b=B(host=host,path="/etc")
     """
     )
 
