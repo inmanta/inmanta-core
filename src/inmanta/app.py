@@ -151,7 +151,8 @@ def start_scheduler(options: argparse.Namespace) -> None:
     # The call to configure() should be done as soon as possible.
     # If an AsyncHTTPClient is started before this call, the max_client
     # will not be taken into account.
-    max_clients: Optional[int] = Config.get("agent_rest_transport", "max_clients", None)
+    max_clients: Optional[int] = Config.get(section="agent_rest_transport", name="max_clients")
+
     if max_clients:
         AsyncHTTPClient.configure(None, max_clients=max_clients)
 

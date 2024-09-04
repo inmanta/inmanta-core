@@ -29,7 +29,7 @@ from inmanta.data.model import PipConfig
 from inmanta.protocol import exceptions
 from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
-from inmanta.types import JsonType, PrimitiveTypes
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
 
 async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environment":
@@ -1086,7 +1086,7 @@ def resource_event(
 
 
 @method(path="/agentrecovery", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
-def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
+def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str) -> Apireturn:
     """
     Get the state for this agent.
 

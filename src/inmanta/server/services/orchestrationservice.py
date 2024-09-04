@@ -818,10 +818,11 @@ class OrchestrationService(protocol.ServerSlice):
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
+            all_agents: abc.Set[str]
             if opt.server_use_resource_scheduler.get():
-                all_agents: abc.Set[str] = {const.AGENT_SCHEDULER_ID}
+                all_agents = {const.AGENT_SCHEDULER_ID}
             else:
-                all_agents: abc.Set[str] = {res.agent for res in rid_to_resource.values()}
+                all_agents = {res.agent for res in rid_to_resource.values()}
 
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
@@ -1203,13 +1204,14 @@ class OrchestrationService(protocol.ServerSlice):
 
                 if opt.server_use_resource_scheduler.get():
                     await self.autostarted_agent_manager._ensure_scheduler(env)
-                    agents = {const.AGENT_SCHEDULER_ID}
+                    agents = [const.AGENT_SCHEDULER_ID]
                 else:
                     if agents is None:
                         # fetch all resource in this cm and create a list of distinct agents
                         agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
                     await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
 
+                assert agents is not None
                 for agent in agents:
                     client = self.agentmanager_service.get_agent_client(env.id, agent)
                     if client is not None:

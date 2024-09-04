@@ -73,6 +73,7 @@ class Agent(SessionEndpoint):
             if environment is None:
                 raise Exception("The agent requires an environment to be set.")
         self.set_environment(environment)
+        assert self.environment is not None
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
         self.scheduler = ResourceScheduler()

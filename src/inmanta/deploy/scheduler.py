@@ -20,9 +20,10 @@ import asyncio
 import logging
 import uuid
 from collections.abc import Set
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from inmanta import data, resources
+from inmanta.data import Resource
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
@@ -87,14 +88,18 @@ class ResourceScheduler:
         # FIXME, also clean up typing of arguments
         pass
 
-    async def build_resource_mappings_from_db(self):
-        resources_from_db = await data.Resource.get_list()
+    async def build_resource_mappings_from_db(
+        self,
+    ) -> tuple[Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
+        resources_from_db: list[Resource] = await data.Resource.get_list()
         resource_mapping = {
             resource.resource_id: ResourceDetails(attribute_hash=resource.attribute_hash, attributes=resource.attributes)
             for resource in resources_from_db
         }
         require_mapping = {
-            resource.resource_id: {resources.Id.parse_id(req).resource_str() for req in resource.attributes.get("requires", [])}
+            resource.resource_id: {
+                resources.Id.parse_id(req).resource_str() for req in list(resource.attributes.get("requires", []))
+            }
             for resource in resources_from_db
         }
         return resource_mapping, require_mapping
@@ -104,6 +109,8 @@ class ResourceScheduler:
         environment_id: uuid.UUID,
     ) -> None:
         environment = await data.Environment.get_by_id(environment_id)
+        if environment is None:
+            raise ValueError(f"No environment found with this id: `{environment_id}`")
         version = environment.last_version
         resources_from_db, requires_from_db = await self.build_resource_mappings_from_db()
 

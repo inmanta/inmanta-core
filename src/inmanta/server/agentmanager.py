@@ -1265,10 +1265,6 @@ class AutostartedAgentManager(ServerSlice):
         agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
 
         use_resource_scheduler: bool = opt.server_use_resource_scheduler.get()
-        if use_resource_scheduler:
-            command = "scheduler"
-        else:
-            command = "agent"
 
         proc: subprocess.Process = await self._fork_inmanta(
             [
@@ -1281,7 +1277,7 @@ class AutostartedAgentManager(ServerSlice):
                 Config._config_dir if Config._config_dir is not None else "",
                 "--log-file",
                 agent_log,
-                command,
+                "scheduler" if use_resource_scheduler else "agent",
             ],
             out,
             err,
