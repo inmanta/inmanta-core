@@ -178,7 +178,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_details.rvid: ctx.changes}
         response = await self.client.resource_deploy_done(
-            tid=resource_details.env_id,
+            tid=self.environment,
             rvid=resource_details.rvid,
             action_id=ctx.action_id,
             status=ctx.status,
@@ -202,7 +202,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             )
 
             await self.client.resource_action_update(
-                tid=resource_details.env_id,
+                tid=self.environment,
                 resource_ids=[resource_details.rvid],
                 action_id=uuid.uuid4(),
                 action=action,
@@ -236,7 +236,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         try:
             requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(
-                ctx.action_id, resource_details.env_id, resource_details.rvid
+                ctx.action_id, self.environment, resource_details.rvid
             )
         except Exception:
             ctx.set_status(const.ResourceState.failed)
@@ -253,7 +253,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         if ctx.facts:
             ctx.debug("Sending facts to the server")
-            set_fact_response = await self.client.set_parameters(tid=resource_details.env_id, parameters=ctx.facts)
+            set_fact_response = await self.client.set_parameters(tid=self.environment, parameters=ctx.facts)
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
@@ -271,7 +271,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param dry_run_id: id for this dryrun
         """
         model_version: int = resources[0].model_version
-        env_id: uuid.UUID = resources[0].env_id
+        env_id: uuid.UUID = self.environment
 
         async with self.cache(model_version):
             for resource in resources:
@@ -355,7 +355,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param resource: The resource for which to get facts.
         """
         model_version: int = resource.model_version
-        env_id: uuid.UUID = resource.env_id
+        env_id: uuid.UUID = self.environment
 
         provider = None
         try:
@@ -437,7 +437,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         client: inmanta.protocol.SessionClient,
         eventloop: asyncio.AbstractEventLoop,
         parent_logger: logging.Logger,
-        process: "agent.Agent",
+        thread_pool: ThreadPoolExecutor,
         code_dir: str,
         env_dir: str,
         code_loader: bool = True,
@@ -446,7 +446,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self.client = client
         self.eventloop = eventloop
         self.logger = parent_logger
-        self.process = process
+        self.thread_pool = thread_pool
 
         self.executors: dict[str, InProcessExecutor] = {}
         self._creation_locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
@@ -570,9 +570,9 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         async with self._loader_lock:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
-                self.process.thread_pool,
+                self.thread_pool,
                 self._env.install_for_config,
                 list(pkg_resources.parse_requirements(blueprint.requirements)),
                 blueprint.pip_config,
             )
-            await loop.run_in_executor(self.process.thread_pool, self._loader.deploy_version, blueprint.sources)
+            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)

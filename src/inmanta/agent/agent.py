@@ -780,7 +780,7 @@ class AgentInstance:
                             undeployable[resource.rvid],
                         )
                         await self.get_client().dryrun_update(
-                            tid=resource.env_id,
+                            tid=self.environment,
                             id=dry_run_id,
                             resource=resource.rvid,
                             changes={"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}},
@@ -1005,7 +1005,7 @@ class Agent(SessionEndpoint):
                 self._client,
                 asyncio.get_event_loop(),
                 LOGGER,
-                self,
+                self.thread_pool,
                 self._storage["code"],
                 self._storage["env"],
                 code_loader,

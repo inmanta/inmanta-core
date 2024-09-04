@@ -18,12 +18,14 @@
     based on code from https://github.com/python/cpython/issues/90780
 """
 
+import asyncio
+from asyncio import Future, Lock
+
 # Async support for @functools.lrucache
 # From https://github.com/python/cpython/issues/90780
 from functools import _lru_cache_wrapper, lru_cache, wraps
 from typing import Any, Awaitable, Callable, Generator, Literal, ParamSpec, TypeVar, overload
 
-_unset = ["unset"]
 T = TypeVar("T")
 _PWrapped = ParamSpec("_PWrapped")
 
@@ -31,11 +33,14 @@ _PWrapped = ParamSpec("_PWrapped")
 class CachedAwaitable(Awaitable[T]):
     def __init__(self, awaitable: Awaitable[T]) -> None:
         self.awaitable = awaitable
-        self.result: T | Literal[_unset] = _unset  # TODO: how to type this sentinel?
+        self.result: Future[T] | None = None
 
     def __await__(self) -> Generator[Any, None, T]:
-        if self.result is _unset:
+        if self.result is None:
+            fut = asyncio.get_event_loop().create_future()
+            self.result = fut
             self.result = yield from self.awaitable.__await__()
+            fut.set_result(self.result)
         return self.result
 
 

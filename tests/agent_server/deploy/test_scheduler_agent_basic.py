@@ -21,18 +21,17 @@ import json
 import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from typing import Collection, Mapping, Optional, Sequence, Set
+from typing import Optional, Sequence
 
 import pytest
 
 import inmanta.types
+from agent_server.deploy.scheduler_test_util import DummyCodeManager, make_requires
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.data import ResourceIdStr
-from inmanta.data.model import LEGACY_PIP_DEFAULT, ResourceType
 from inmanta.deploy import state
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.util import retry_limited
@@ -83,22 +82,6 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
         pass
-
-
-dummyblueprint = ExecutorBlueprint(
-    pip_config=LEGACY_PIP_DEFAULT,
-    requirements=[],
-    python_version=(3, 11),
-    sources=[],
-)
-
-
-class DummyCodeManager(CodeManager):
-
-    async def get_code(
-        self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
-    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
-        return ([ResourceInstallSpec(rt, version, dummyblueprint) for rt in resource_types], {})
 
 
 class TestAgent(Agent):
@@ -159,10 +142,6 @@ def make_resource_minimal(environment):
         return state.ResourceDetails(out, attribute_hash)
 
     return make_resource_minimal
-
-
-def make_requires(resources: Mapping[ResourceIdStr, ResourceDetails]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
-    return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
 
 
 async def test_fixtures(agent: TestAgent, make_resource_minimal):

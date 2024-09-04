@@ -73,7 +73,6 @@ class ResourceDetails:
     id: Id
     rid: ResourceIdStr
     rvid: ResourceVersionIdStr
-    env_id: uuid.UUID
     model_version: int
     requires: Sequence[Id]
     attributes: dict[str, object]
@@ -84,7 +83,6 @@ class ResourceDetails:
         self.id = Id.parse_id(resource_dict["id"])
         self.rid = self.id.resource_str()
         self.rvid = self.id.resource_version_str()
-        self.env_id = resource_dict["environment"]
         self.requires = [Id.parse_id(resource_id) for resource_id in resource_dict["attributes"]["requires"]]
         self.model_version = resource_dict["model"]
 
