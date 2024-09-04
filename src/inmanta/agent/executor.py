@@ -393,7 +393,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         return f"venv with hash: {member.get_id()}"
 
     def render_id(self, member: EnvBlueprint) -> str:
-        return f"venv with hash: {member.blueprint_hash() }"
+        return f"venv with hash: {member.blueprint_hash()}"
 
     def _id_to_internal(self, ext_id: EnvBlueprint) -> str:
         return ext_id.blueprint_hash()

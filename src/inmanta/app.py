@@ -354,9 +354,9 @@ def deploy_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
 def deploy(options: argparse.Namespace) -> None:
     module.Project.get(options.main_file)
-    from inmanta import deploy as deploy_module
+    from inmanta import deploy_project
 
-    run = deploy_module.Deploy(options)
+    run = deploy_project.Deploy(options)
     try:
         if not run.setup():
             raise Exception("Failed to setup an embedded Inmanta orchestrator.")
