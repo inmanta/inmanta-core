@@ -16,10 +16,12 @@
     Contact: code@inmanta.com
 """
 
+import copy
 import logging
 import uuid
 
-from inmanta import const, data, execute
+import inmanta.execute.util
+from inmanta import const, data
 from inmanta.config import Config
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.util import get_compiler_version
@@ -59,7 +61,7 @@ async def test_deploy_with_undefined(server, client, async_finalizer, no_agent_b
         },
         {
             "key": "key2",
-            "value": execute.util.Unknown(source=None),
+            "value": inmanta.execute.util.Unknown(source=None),
             "id": "test::Resource[agent2,key=key2],v=%d" % version,
             "send_event": False,
             "purged": False,
@@ -67,7 +69,7 @@ async def test_deploy_with_undefined(server, client, async_finalizer, no_agent_b
         },
         {
             "key": "key4",
-            "value": execute.util.Unknown(source=None),
+            "value": inmanta.execute.util.Unknown(source=None),
             "id": "test::Resource[agent2,key=key4],v=%d" % version,
             "send_event": False,
             "requires": ["test::Resource[agent2,key=key1],v=%d" % version, "test::Resource[agent2,key=key2],v=%d" % version],
@@ -100,3 +102,97 @@ async def test_deploy_with_undefined(server, client, async_finalizer, no_agent_b
 
     scheduler = ResourceScheduler()
     await scheduler.start()
+    for resource in resources:
+        id_without_version, _, _ = resource["id"].partition(",v=")
+        assert id_without_version in scheduler._state.resources
+        expected_resource_attributes = copy.deepcopy(resource)
+        expected_resource_attributes.pop("id")
+        current_attributes = scheduler._state.resources[id_without_version].attributes
+        # TODO h ResourceScheduler -> Unknown == undefined?
+        # TODO h ResourceScheduler -> loose version information on requires?
+
+        # Already a todo for that
+        # TODO h ResourceScheduler -> undefined status lost in the process -> has update / new only?
+        if current_attributes["value"] == "<<undefined>>" and isinstance(
+            expected_resource_attributes["value"], inmanta.execute.util.Unknown
+        ):
+            expected_resource_attributes["value"] = "<<undefined>>"
+        new_requires = []
+        for require in expected_resource_attributes["requires"]:
+            require_without_version, _, _ = require.partition(",v=")
+            new_requires.append(require_without_version)
+        expected_resource_attributes["requires"] = new_requires
+        assert current_attributes == expected_resource_attributes
+        assert scheduler._state.requires._primary[id_without_version] == set(expected_resource_attributes["requires"])
+
+    version = await ClientHelper(client, env_id).get_version()
+
+    updated_resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent2,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": inmanta.execute.util.Unknown(source=None),
+            "id": "test::Resource[agent2,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": True,
+            "requires": [],
+        },
+        {
+            "key": "key4",
+            "value": inmanta.execute.util.Unknown(source=None),
+            "id": "test::Resource[agent2,key=key4],v=%d" % version,
+            "send_event": False,
+            "requires": ["test::Resource[agent2,key=key1],v=%d" % version, "test::Resource[agent2,key=key2],v=%d" % version],
+            "purged": False,
+        },
+        {
+            "key": "key5",
+            "value": "val",
+            "id": "test::Resource[agent2,key=key5],v=%d" % version,
+            "send_event": False,
+            "requires": ["test::Resource[agent2,key=key4],v=%d" % version],
+            "purged": False,
+        },
+    ]
+    result = await client.put_version(
+        tid=env_id,
+        version=version,
+        resources=updated_resources,
+        resource_state=status,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+    await scheduler.new_version(version)
+    # TODO h ResourceScheduler crashing on -> self._agent_queues["TODO"].put_nowait(item)
+
+    for resource in updated_resources:
+        id_without_version, _, _ = resource["id"].partition(",v=")
+        assert id_without_version in scheduler._state.resources
+        expected_resource_attributes = copy.deepcopy(resource)
+        expected_resource_attributes.pop("id")
+        current_attributes = scheduler._state.resources[id_without_version].attributes
+        # TODO h ResourceScheduler -> Unknown == undefined?
+        # TODO h ResourceScheduler -> loose version information on requires?
+
+        # Already a todo for that
+        # TODO h ResourceScheduler -> undefined status lost in the process -> has update / new only?
+        if current_attributes["value"] == "<<undefined>>" and isinstance(
+            expected_resource_attributes["value"], inmanta.execute.util.Unknown
+        ):
+            expected_resource_attributes["value"] = "<<undefined>>"
+        new_requires = []
+        for require in expected_resource_attributes["requires"]:
+            require_without_version, _, _ = require.partition(",v=")
+            new_requires.append(require_without_version)
+        expected_resource_attributes["requires"] = new_requires
+        assert current_attributes == expected_resource_attributes
+        assert scheduler._state.requires._primary[id_without_version] == set(expected_resource_attributes["requires"])

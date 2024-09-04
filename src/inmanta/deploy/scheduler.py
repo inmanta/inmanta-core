@@ -18,20 +18,14 @@
 
 import asyncio
 import logging
-from collections.abc import Set
-from typing import Optional
 import uuid
-from collections.abc import Mapping, Set
+from collections.abc import Set
 from typing import Any, Optional
-from typing import Optional
-
-import asyncpg
 
 from inmanta import data, resources
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
-from inmanta.server import config as opt
 
 LOGGER = logging.getLogger(__name__)
 
@@ -64,46 +58,10 @@ class ResourceScheduler:
         self._scheduler_lock: asyncio.Lock = asyncio.Lock()
         # - lock to serialize scheduler state updates (i.e. process new version)
         self._update_lock: asyncio.Lock = asyncio.Lock()
-        self._pool: Optional[asyncpg.pool.Pool] = None
-
-    async def connect_database(self) -> None:
-        """Connect to the database"""
-        database_host = opt.db_host.get()
-        database_port = opt.db_port.get()
-
-        database_username = opt.db_username.get()
-        database_password = opt.db_password.get()
-        connection_pool_min_size = opt.db_connection_pool_min_size.get()
-        connection_pool_max_size = opt.db_connection_pool_max_size.get()
-        connection_timeout = opt.db_connection_timeout.get()
-        self._pool = await data.connect(
-            database_host,
-            database_port,
-            opt.db_name.get(),
-            database_username,
-            database_password,
-            connection_pool_min_size=connection_pool_min_size,
-            connection_pool_max_size=connection_pool_max_size,
-            connection_timeout=connection_timeout,
-        )
-        LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
-
-        # Check if JIT is enabled
-        async with self._pool.acquire() as connection:
-            jit_available = await connection.fetchval("SELECT pg_jit_available();")
-            if jit_available:
-                LOGGER.warning("JIT is enabled in the PostgreSQL database. This might result in poor query performance.")
-
-    async def disconnect_database(self) -> None:
-        """Disconnect the database"""
-        await data.disconnect()
 
     async def start(self) -> None:
-        await self.connect_database()
-        resource_mapping, require_mapping = self.build_resource_mappings_from_db()
+        resource_mapping, require_mapping = await self.build_resource_mappings_from_db()
         self._state.construct(resource_mapping, require_mapping)
-        # FIXME[#8009]: read from DB instead
-        pass
 
     async def stop(self) -> None:
         pass
@@ -145,7 +103,7 @@ class ResourceScheduler:
         self,
         version: int,
     ) -> None:
-        resources_from_db, requires_from_db = self.build_resource_mappings_from_db()
+        resources_from_db, requires_from_db = await self.build_resource_mappings_from_db()
 
         async with self._update_lock:
             # Inspect new state and mark resources as "update pending" where appropriate. Since this method is the only writer
