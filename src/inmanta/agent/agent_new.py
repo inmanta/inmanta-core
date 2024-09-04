@@ -75,7 +75,7 @@ class Agent(SessionEndpoint):
         self.set_environment(environment)
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
-        self.scheduler = ResourceScheduler(self.executor_manager)
+        self.scheduler = ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
@@ -83,7 +83,7 @@ class Agent(SessionEndpoint):
         return forking_executor.MPManager(
             self.thread_pool,
             self.sessionid,
-            self.environment,
+            self._env_id,
             config.log_dir.get(),
             self._storage["executor"],
             LOGGER.level,

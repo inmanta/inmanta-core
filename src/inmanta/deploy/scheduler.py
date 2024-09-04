@@ -17,22 +17,22 @@
 """
 
 import asyncio
-from collections.abc import Mapping, Set
-from typing import Optional
-
-from inmanta.data.model import ResourceIdStr
-from inmanta.deploy import work
-from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
+import datetime
+import logging
+import traceback
 import uuid
 from collections.abc import Mapping, Set
 from typing import Any, Optional
 
+from inmanta import const, data
 from inmanta.agent import executor
-from inmanta.agent.executor import ExecutorManager
+from inmanta.agent.code_manager import CodeManager
+from inmanta.const import ResourceAction
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
 from inmanta.deploy.work import PoisonPill
+from inmanta.protocol import Client
 
 # FIXME[#8008] review code structure + functionality + add docstrings
 # FIXME[#8008] add import entry point test case
@@ -46,7 +46,9 @@ class ResourceScheduler:
     The scheduler expects to be notified by the server whenever a new version is released.
     """
 
-    def __init__(self, executor_manager: executor.ExecutorManager[executor.Executor]) -> None:
+    def __init__(
+        self, environment: uuid.UUID, executor_manager: executor.ExecutorManager[executor.Executor], client: Client
+    ) -> None:
         self._state: ModelState = ModelState(version=0)
         self._work: work.ScheduledWork = work.ScheduledWork(
             requires=self._state.requires.requires_view(),
@@ -69,16 +71,21 @@ class ResourceScheduler:
         self._running = False
         # Agent name to worker task
         # here to prevent it from being GC-ed
-        self.workers: dict[str, asyncio.Task] = {}
+        self._workers: dict[str, asyncio.Task[None]] = {}
+
+        self._code_manager = CodeManager(client)
+        self._environment = environment
+        self._client = client
 
     async def start(self) -> None:
+        self._running = True
         # FIXME[#8009]: read from DB instead
         pass
 
     async def stop(self) -> None:
         self._running = False
         self._work.agent_queues.send_shutdown()
-        await asyncio.gather(*self.workers.values())
+        await asyncio.gather(*self._workers.values())
 
     async def deploy(self) -> None:
         async with self._scheduler_lock:
@@ -154,6 +161,7 @@ class ResourceScheduler:
                     self._state.update_requires(resource, requires[resource])
                 # ensure deploy for ALL dirty resources, not just the new ones
                 # FIXME[#8008]: this is copy-pasted, make into a method?
+                # FIXME: WDB TO SANDER: We should track dirty resources in a collection to not force a scan of the full state
                 dirty: Set[ResourceIdStr] = {
                     r for r, details in self._state.resource_state.items() if details.status == ResourceStatus.HAS_UPDATE
                 }
@@ -164,6 +172,8 @@ class ResourceScheduler:
                     added_requires=added_requires,
                     dropped_requires=dropped_requires,
                 )
+                for resource in deleted_resources:
+                    self._state.drop(resource)
                 # FIXME[#8008]: design step 7: drop update_pending
             # FIXME[#8008]: design step 10: Once more, drop all resources that do not exist in this version from the scheduled
             #               work, in case they got added again by a deploy trigger
@@ -172,13 +182,73 @@ class ResourceScheduler:
     #           agents or removed ones
 
     def start_for_agent(self, agent: str) -> None:
-        self.workers[agent] = asyncio.create_task(self._run_for_agent(agent))
+        self._workers[agent] = asyncio.create_task(self._run_for_agent(agent))
 
     async def _run_task(self, agent: str, task: work.Task, resource_details: ResourceDetails) -> None:
-        # FIXME[#8010]: send task to agent process (not under lock)
-        # FIXME: resolve code !
-        executor = await self._executor_manager.get_executor(agent, None, None)
-        await executor.execute("XX", resource_details, "Because!!")
+        match task:
+            case work.Deploy():
+                await self.perform_deploy(agent, resource_details)
+            case _:
+                print("Nothing here!")
+
+    async def perform_deploy(self, agent: str, resource_details: ResourceDetails) -> None:
+        """
+        Perform an actual deploy on an agent.
+
+        :param agent:
+        :param resource_details:
+        """
+        # FIXME: WDB to Sander: is the version of the state the correct version?
+        #   It may happen that the set of type no longer matches the version?
+        # FIXME: code loading interface is not nice like this,
+        #   - we may want to track modules per agent, instead of types
+        #   - we may also want to track the module version vs the model version
+        #       as it avoid the problem of fast chanfing model versions
+
+        async def report_deploy_failure(excn: Exception) -> None:
+            res_type = resource_details.id.entity_type
+            log_line = data.LogLine.log(
+                logging.ERROR,
+                "All resources of type `%(res_type)s` failed to load handler code or install handler code "
+                "dependencies: `%(error)s`\n%(traceback)s",
+                res_type=res_type,
+                error=str(excn),
+                traceback="".join(traceback.format_tb(excn.__traceback__)),
+            )
+            await self._client.resource_action_update(
+                tid=self._environment,
+                resource_ids=[resource_details.rvid],
+                action_id=uuid.uuid4(),
+                action=ResourceAction.deploy,
+                started=datetime.datetime.now().astimezone(),
+                finished=datetime.datetime.now().astimezone(),
+                messages=[log_line],
+                status=const.ResourceState.unavailable,
+            )
+
+        # Find code
+        code, invalid_resources = await self._code_manager.get_code(
+            environment=self._environment, version=self._state.version, resource_types=self._state.get_types_for_agent(agent)
+        )
+
+        # Bail out if this failed
+        if resource_details.id.entity_type in invalid_resources:
+            await report_deploy_failure(invalid_resources[resource_details.id.entity_type])
+            return
+
+        # Get executor
+        my_executor: executor.Executor = await self._executor_manager.get_executor(agent, None, code)
+        failed_resources = my_executor.failed_resources
+
+        # Bail out if this failed
+        if resource_details.id.entity_type in failed_resources:
+            await report_deploy_failure(failed_resources[resource_details.id.entity_type])
+            return
+
+        # DEPLOY!!!
+        gid = uuid.uuid4()
+        # FIXME: reason argument is not used
+        await my_executor.execute(gid, resource_details, "Because!!")
 
     async def _work_once(self, agent: str) -> None:
         task: work.Task = await self._work.agent_queues.queue_get(agent)

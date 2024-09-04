@@ -18,12 +18,16 @@
 
 import dataclasses
 import enum
+from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TypeAlias
+from typing import Collection, TypeAlias
 
-from inmanta.data.model import ResourceIdStr
+from inmanta.agent import executor
+from inmanta.data.model import ResourceIdStr, ResourceType
+from inmanta.resources import Id
+from inmanta.types import JsonType
 from inmanta.util.collections import BidirectionalManyToManyMapping
 
 
@@ -38,10 +42,15 @@ class RequiresProvidesMapping(BidirectionalManyToManyMapping[ResourceIdStr, Reso
 AttributeHash: TypeAlias = str
 
 
-@dataclass(frozen=True)
-class ResourceDetails:
+class ResourceDetails(executor.ResourceDetails):
+
+    # FIXME: flatten out inheritance?
+
+    def __init__(self, resource_dict: JsonType, attribute_hash: AttributeHash) -> None:
+        super().__init__(resource_dict)
+        self.attribute_hash = attribute_hash
+
     attribute_hash: AttributeHash
-    attributes: Mapping[str, object]
 
 
 class ResourceStatus(StrEnum):
@@ -96,6 +105,9 @@ class ModelState:
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict[ResourceIdStr, ResourceState] = dataclasses.field(default_factory=dict)
     update_pending: set[ResourceIdStr] = dataclasses.field(default_factory=set)
+    types_per_agent: dict[str, dict[ResourceType, int]] = dataclasses.field(
+        default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
+    )
     """
     Resources that have a new desired state (might be simply a change of its dependencies), which are still being processed by
     the resource scheduler. This is a shortlived transient state, used for internal concurrency control. Kept separate from
@@ -115,6 +127,9 @@ class ModelState:
             self.resource_state[resource] = ResourceState(
                 status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW
             )
+            # QUESTION: Sander, do we want to carry around parsed id's like agent.executor.ResourceDetails?
+            parsed_id = Id.parse_id(resource)
+            self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] += 1
 
     def update_requires(
         self,
@@ -122,3 +137,17 @@ class ModelState:
         requires: Set[ResourceIdStr],
     ) -> None:
         self.requires[resource] = requires
+
+    def drop(self, resource: ResourceIdStr) -> None:
+        del self.resources[resource]
+        del self.resource_state[resource]
+        del self.requires[resource]
+
+        parsed_id = Id.parse_id(resource)
+        self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] -= 1
+
+    def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
+        unfiltered = self.types_per_agent[agent]
+        filtered = {k: v for k, v in unfiltered.items() if v > 0}
+        self.types_per_agent[agent] = defaultdict(lambda: 0, filtered)
+        return list(filtered.keys())

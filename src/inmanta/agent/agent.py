@@ -24,7 +24,6 @@ import enum
 import logging
 import os
 import random
-import sys
 import time
 import traceback
 import uuid
@@ -36,18 +35,11 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
+from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.reporting import collect_report
-from inmanta.data.model import (
-    LEGACY_PIP_DEFAULT,
-    AttributeStateChange,
-    PipConfig,
-    ResourceIdStr,
-    ResourceType,
-    ResourceVersionIdStr,
-)
-from inmanta.loader import ModuleSource
-from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
+from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.resources import Id
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, TaskMethod, TaskSchedule, add_future, join_threadpools
@@ -984,6 +976,8 @@ class Agent(SessionEndpoint):
 
         self.agent_map: Optional[dict[str, str]] = agent_map
 
+        self.code_manager = CodeManager(self._client)
+
         remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExecutorMode.forking
         can_have_remote_executor = code_loader
 
@@ -1228,83 +1222,7 @@ class Agent(SessionEndpoint):
         if not self._code_loader:
             return [], {}
 
-        # store it outside the loop, but only load when required
-        pip_config: Optional[PipConfig] = None
-
-        resource_install_specs: list[ResourceInstallSpec] = []
-        invalid_resources: executor.FailedResources = {}
-        for resource_type in set(resource_types):
-            cached_spec: Optional[ResourceInstallSpec] = self._code_cache.get((resource_type, version))
-            if cached_spec:
-                LOGGER.debug(
-                    "Cache hit, using existing ResourceInstallSpec for resource_type=%s version=%d", resource_type, version
-                )
-                resource_install_specs.append(cached_spec)
-                continue
-            result: protocol.Result = await self._client.get_source_code(environment, version, resource_type)
-            if result.code == 200 and result.result is not None:
-                sync_client = SyncClient(client=self._client, ioloop=self._io_loop)
-                requirements: set[str] = set()
-                sources: list["ModuleSource"] = []
-                # Encapsulate source code details in ``ModuleSource`` objects
-                for source in result.result["data"]:
-                    sources.append(
-                        ModuleSource(
-                            name=source["module_name"],
-                            is_byte_code=source["is_byte_code"],
-                            hash_value=source["hash"],
-                            _client=sync_client,
-                        )
-                    )
-                    requirements.update(source["requirements"])
-
-                if pip_config is None:
-                    try:
-                        pip_config = await self._get_pip_config(environment, version)
-                    except Exception as e:
-                        LOGGER.exception("Failed to load resources due to missing pip config for type %s", resource_type)
-                        invalid_resources[resource_type] = Exception(
-                            f"Failed to load resources due to missing pip config for type {resource_type}: {e}"
-                        ).with_traceback(e.__traceback__)
-                        continue
-
-                resource_install_spec = ResourceInstallSpec(
-                    resource_type,
-                    version,
-                    executor.ExecutorBlueprint(
-                        pip_config=pip_config,
-                        requirements=list(requirements),
-                        sources=sources,
-                        python_version=sys.version_info[:2],
-                    ),
-                )
-                resource_install_specs.append(resource_install_spec)
-                # Update the ``_code_cache`` cache to indicate that the given resource type's ResourceInstallSpec
-                # was constructed successfully at the specified version.
-                # TODO: this cache is a slight memory leak, to be phased out on new executor
-                self._code_cache[(resource_type, version)] = resource_install_spec
-            else:
-                LOGGER.error(
-                    "Failed to get source code for %s version=%d\n%s",
-                    resource_type,
-                    version,
-                    result.result,
-                )
-                invalid_resources[resource_type] = Exception(
-                    f"Failed to get source code for {resource_type} version={version}, result={result.get_result()}"
-                )
-
-        return resource_install_specs, invalid_resources
-
-    async def _get_pip_config(self, environment: uuid.UUID, version: int) -> PipConfig:
-        response = await self._client.get_pip_config(tid=environment, version=version)
-        if response.code != 200:
-            raise Exception("Could not get pip config from server " + str(response.result))
-        assert response.result is not None  # mypy
-        pip_config = response.result["data"]
-        if pip_config is None:
-            return LEGACY_PIP_DEFAULT
-        return PipConfig(**pip_config)
+        return await self.code_manager.get_code(environment, version, resource_types)
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
