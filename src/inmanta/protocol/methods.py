@@ -1034,6 +1034,25 @@ def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
     """
 
 
+@method(
+    path="/scheduler/",
+    operation="POST",
+    server_agent=True,
+    enforce_auth=False,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+)
+def trigger_release_version(tid: uuid.UUID, id: str, incremental_deploy: bool):
+    """
+    Notify the scheduler that a new version has been released
+
+    :param tid: The environment this agent is defined in
+    :param id: The name of the agent
+    :param incremental_deploy: Indicates whether the agent should perform an incremental deploy or a full deploy
+    """
+
+
 # Methods to send event to the server
 
 

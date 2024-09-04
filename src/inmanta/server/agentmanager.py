@@ -873,8 +873,11 @@ class AgentManager(ServerSlice, SessionListener):
                 resource_id not in self._fact_resource_block_set
                 or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now
             ):
-                agents = await data.ConfigurationModel.get_agents(env.id, version)
-                await self._autostarted_agent_manager._ensure_agents(env, agents)
+                if opt.server_use_resource_scheduler.get():
+                    await self._autostarted_agent_manager._ensure_scheduler(env)
+                else:
+                    agents = await data.ConfigurationModel.get_agents(env.id, version)
+                    await self._autostarted_agent_manager._ensure_agents(env, agents)
 
                 client = self.get_agent_client(env_id, res.agent)
                 if client is not None:
@@ -961,7 +964,7 @@ class AutostartedAgentManager(ServerSlice):
 
     async def start(self) -> None:
         await super().start()
-        self.add_background_task(self._start_agents())
+        self.add_background_task(self._start_agents())  # TODO h modify and then start here?
 
     async def prestop(self) -> None:
         await super().prestop()
@@ -976,7 +979,7 @@ class AutostartedAgentManager(ServerSlice):
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
-    async def _start_agents(self) -> None:
+    async def _start_agents(self) -> None:  # TODO h
         """
         Ensure that autostarted agents of each environment are started when AUTOSTART_ON_START is true. This method
         is called on server start.
@@ -984,16 +987,24 @@ class AutostartedAgentManager(ServerSlice):
         environments = await data.Environment.get_list()
         for env in environments:
             autostart = await env.get(data.AUTOSTART_ON_START)
-            if autostart:
+            if not autostart:
+                continue
+
+            if opt.server_use_resource_scheduler.get():
+                await self._ensure_scheduler(env)
+            else:
                 agents = await data.Agent.get_list(environment=env.id)
-                agent_list = [a.name for a in agents]
+                agent_list = {a.name for a in agents}
                 await self._ensure_agents(env, agent_list)
 
     async def restart_agents(self, env: data.Environment) -> None:
         LOGGER.debug("Restarting agents in environment %s", env.id)
-        agents = await data.Agent.get_list(environment=env.id)
-        agent_list = [a.name for a in agents]
-        await self._ensure_agents(env, agent_list, restart=True)
+        if opt.server_use_resource_scheduler.get():
+            await self._ensure_scheduler(env)
+        else:
+            agents = await data.Agent.get_list(environment=env.id)
+            agent_list = [a.name for a in agents]
+            await self._ensure_agents(env, agent_list, restart=True)
 
     async def stop_agents(
         self,
@@ -1160,6 +1171,78 @@ class AutostartedAgentManager(ServerSlice):
                     LOGGER.warning("Not all agent instances started successfully")
                 return start_new_process
 
+    # Start/Restart scheduler
+    async def _ensure_scheduler(
+        self,
+        env: data.Environment,
+        *,
+        restart: bool = False,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> bool:
+        """
+        Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
+
+        :param env: The environment to start the agents for
+        :param restart: Restart all agents even if the list of agents is up to date.
+        :param connection: The database connection to use. Must not be in a transaction context.
+
+        :return: True iff a new agent process was started.
+        """
+        if self._stopping:
+            raise ShutdownInProgress()
+
+        if connection is not None and connection.is_in_transaction():
+            # Should not be called in a transaction context because it has (immediate) side effects outside of the database
+            # that are tied to the database state. Several inconsistency issues could occur if this runs in a transaction
+            # context:
+            #   - side effects based on oncommitted reads (may even need to be rolled back)
+            #   - race condition with similar side effect flows due to stale reads (e.g. other flow pauses agent and kills
+            #       process, this one brings it back because it reads the agent as unpaused)
+            raise Exception("_ensure_scheduler should not be called in a transaction context")
+
+        autostart_scheduler = {const.AGENT_SCHEDULER_ID}
+        async with data.Agent.get_connection(connection) as connection:
+            async with self.agent_lock:
+                # silently ignore requests if this environment is halted
+                refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+                if refreshed_env is None:
+                    raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
+                env = refreshed_env
+                if env.halted:
+                    return False
+
+                if not restart and await self._agent_manager.are_agents_active(env.id, autostart_scheduler):
+                    # do not start a new agent process if the agents are already active, regardless of whether their session
+                    # is with an autostarted process or not.
+                    return False
+
+                start_new_process: bool
+                if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is not None:
+                    # Start new process if none is currently running for this environment.
+                    # Otherwise trust that it tracks any changes to the agent map.
+                    LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_scheduler)
+                    start_new_process = True
+                elif restart:
+                    LOGGER.info(
+                        "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
+                        autostart_scheduler,
+                        self._agent_procs[env.id],
+                    )
+                    await self._stop_autostarted_agents(env, connection=connection)
+                    start_new_process = True
+                else:
+                    start_new_process = False
+
+                if start_new_process:
+                    self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
+
+                # Wait for all agents to start
+                try:
+                    await self._wait_for_agents(env, autostart_scheduler, connection=connection)
+                except asyncio.TimeoutError:
+                    LOGGER.warning("Not all agent instances started successfully")
+                return start_new_process
+
     async def __do_start_agent(
         self, env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> subprocess.Process:
@@ -1181,6 +1264,12 @@ class AutostartedAgentManager(ServerSlice):
 
         agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
 
+        use_resource_scheduler: bool = opt.server_use_resource_scheduler.get()
+        if use_resource_scheduler:
+            command = "scheduler"
+        else:
+            command = "agent"
+
         proc: subprocess.Process = await self._fork_inmanta(
             [
                 "--log-file-level",
@@ -1192,7 +1281,7 @@ class AutostartedAgentManager(ServerSlice):
                 Config._config_dir if Config._config_dir is not None else "",
                 "--log-file",
                 agent_log,
-                "agent",
+                command,
             ],
             out,
             err,

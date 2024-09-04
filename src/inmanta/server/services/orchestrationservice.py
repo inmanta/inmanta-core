@@ -818,7 +818,11 @@ class OrchestrationService(protocol.ServerSlice):
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
-            all_agents: abc.Set[str] = {res.agent for res in rid_to_resource.values()}
+            if opt.server_use_resource_scheduler.get():
+                all_agents: abc.Set[str] = {const.AGENT_SCHEDULER_ID}
+            else:
+                all_agents: abc.Set[str] = {res.agent for res in rid_to_resource.values()}
+
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
@@ -1197,10 +1201,14 @@ class OrchestrationService(protocol.ServerSlice):
                 # This assert prevents anyone from wrapping this method in a transaction by accident
                 assert not connection.is_in_transaction()
 
-                if agents is None:
-                    # fetch all resource in this cm and create a list of distinct agents
-                    agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
-                await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
+                if opt.server_use_resource_scheduler.get():
+                    await self.autostarted_agent_manager._ensure_scheduler(env)
+                    agents = {const.AGENT_SCHEDULER_ID}
+                else:
+                    if agents is None:
+                        # fetch all resource in this cm and create a list of distinct agents
+                        agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
+                    await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
 
                 for agent in agents:
                     client = self.agentmanager_service.get_agent_client(env.id, agent)
@@ -1210,7 +1218,7 @@ class OrchestrationService(protocol.ServerSlice):
                             incremental_deploy = env_agent_trigger_method == const.AgentTriggerMethod.push_incremental_deploy
                         else:
                             incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
-                        self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
+                        self.add_background_task(client.trigger_release_version(env.id, agent, incremental_deploy))
                     else:
                         LOGGER.warning(
                             "Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id
@@ -1247,11 +1255,14 @@ class OrchestrationService(protocol.ServerSlice):
         if not allagents:
             return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
 
+        is_using_new_scheduler = opt.server_use_resource_scheduler.get()
+        if is_using_new_scheduler:
+            await self.autostarted_agent_manager._ensure_scheduler(env)
+        else:
+            await self.autostarted_agent_manager._ensure_agents(env, allagents)
+
         present = set()
         absent = set()
-
-        await self.autostarted_agent_manager._ensure_agents(env, allagents)
-
         for agent in allagents:
             client = self.agentmanager_service.get_agent_client(env.id, agent)
             if client is not None:

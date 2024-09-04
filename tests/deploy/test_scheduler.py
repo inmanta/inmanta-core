@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
 import copy
 import logging
 import uuid
@@ -25,7 +26,7 @@ from inmanta import const, data
 from inmanta.config import Config
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.util import get_compiler_version
-from utils import ClientHelper
+from utils import UNKWN, ClientHelper, assert_equal_ish
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -35,6 +36,7 @@ async def test_deploy_with_undefined(server, client, async_finalizer, no_agent_b
     Test deploy of resource with undefined
     """
     Config.set("config", "agent-deploy-interval", "100")
+    Config.set("server", "new-resource-scheduler", "True")
 
     result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
@@ -45,6 +47,7 @@ async def test_deploy_with_undefined(server, client, async_finalizer, no_agent_b
     await env.set(data.AUTO_DEPLOY, False)
     await env.set(data.PUSH_ON_AUTO_DEPLOY, False)
     await env.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
+    await server._slices["core.autostarted_agent_manager"]._start_agents()
 
     clienthelper = ClientHelper(client, env_id)
 
@@ -171,7 +174,7 @@ async def test_deploy_with_undefined(server, client, async_finalizer, no_agent_b
         compiler_version=get_compiler_version(),
     )
     assert result.code == 200
-    await scheduler.new_version(version)
+    await scheduler.new_version(env_id)
     # TODO h ResourceScheduler crashing on -> self._agent_queues["TODO"].put_nowait(item)
 
     for resource in updated_resources:
@@ -196,3 +199,58 @@ async def test_deploy_with_undefined(server, client, async_finalizer, no_agent_b
         expected_resource_attributes["requires"] = new_requires
         assert current_attributes == expected_resource_attributes
         assert scheduler._state.requires._primary[id_without_version] == set(expected_resource_attributes["requires"])
+
+    result = await client.list_agent_processes(env_id)
+    assert result.code == 200
+
+    while len(result.result["processes"]) != 1:
+        result = await client.list_agent_processes(env_id)
+        assert result.code == 200
+        await asyncio.sleep(0.1)
+
+    assert len(result.result["processes"]) == 1
+    for proc in result.result["processes"]:
+        assert proc["environment"] == env_id
+        assert len(proc["endpoints"]) == 1
+        assert proc["endpoints"][0]["name"] == const.AGENT_SCHEDULER_ID
+
+    assert_equal_ish(
+        {
+            "processes": [
+                {
+                    "expired": None,
+                    "environment": env_id,
+                    "endpoints": [{"name": UNKWN, "process": UNKWN, "id": UNKWN}],
+                    "hostname": UNKWN,
+                    "first_seen": UNKWN,
+                    "last_seen": UNKWN,
+                },
+            ]
+        },
+        result.result,
+        ["name", "first_seen"],
+    )
+
+    endpointid = [
+        x["endpoints"][0]["id"] for x in result.result["processes"] if x["endpoints"][0]["name"] == const.AGENT_SCHEDULER_ID
+    ][0]
+
+    result = await client.list_agents(tid=env_id)
+    assert result.code == 200
+
+    expected_agent = {
+        "agents": [
+            {
+                "last_failover": UNKWN,
+                "environment": env_id,
+                "paused": False,
+                "primary": endpointid,
+                "name": const.AGENT_SCHEDULER_ID,
+                "state": "up",
+            }
+        ]
+    }
+
+    assert_equal_ish(expected_agent, result.result)
+
+    Config.set("server", "new-resource-scheduler", "False")

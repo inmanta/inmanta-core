@@ -101,8 +101,10 @@ class ResourceScheduler:
 
     async def new_version(
         self,
-        version: int,
+        environment_id: uuid.UUID,
     ) -> None:
+        environment = await data.Environment.get_by_id(environment_id)
+        version = environment.last_version
         resources_from_db, requires_from_db = await self.build_resource_mappings_from_db()
 
         async with self._update_lock:
