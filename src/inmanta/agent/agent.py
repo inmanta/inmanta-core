@@ -1331,7 +1331,7 @@ class Agent(SessionEndpoint):
         )
         return 200
 
-    @protocol.handle(methods.release_version, env="tid", agent="id")
+    @protocol.handle(methods.trigger_release_version, env="tid", agent="id")
     async def release_version(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
         """
         Trigger an update
