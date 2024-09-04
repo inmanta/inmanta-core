@@ -27,6 +27,7 @@ from inmanta.agent import executor, forking_executor
 from inmanta.agent.forking_executor import MPExecutor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
+from inmanta.signals import context_dump, dump_threads, dump_ioloop_running
 from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
 
 logger = logging.getLogger(__name__)
@@ -209,6 +210,8 @@ def with_timeout(delay):
                 async with asyncio.timeout(delay):
                     return await func(*args, **kwargs)
             except TimeoutError:
+                dump_threads()
+                await dump_ioloop_running()
                 raise TimeoutError(f"Test case got interrupted, because it didn't finish in {delay} seconds.")
 
         return new_func
@@ -218,13 +221,13 @@ def with_timeout(delay):
 
 def trace_error_26(func):
     @functools.wraps(func)
-    def wrapper(*args, **kwds):
+    async def wrapper(*args, **kwds):
         try:
-            return func(*args, **kwds)
+            return await func(*args, **kwds)
         except OSError as e:
             if e.errno == 26:
                 out = subprocess.check_output(["lsof", e.filename])
-                raise RuntimeError(f"OSERROR 26 for {e.filename}" + out)
+                raise RuntimeError(f"OSERROR 26 for {e.filename}\n" + out.decode())
 
     return wrapper
 
