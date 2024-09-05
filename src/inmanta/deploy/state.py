@@ -135,8 +135,7 @@ class ModelState:
             self.resource_state[resource_id] = ResourceState(
                 status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW
             )
-            parsed_id = resource.id
-            self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] += 1
+            self.types_per_agent[resource.id.agent_name][resource.id.entity_type] += 1
 
     def update_requires(
         self,

@@ -43,7 +43,7 @@ class DummyExecutor(executor.Executor):
 
     def __init__(self):
         self.execute_count = 0
-        self.failed_resources = []
+        self.failed_resources = {}
 
     async def execute(self, gid: uuid.UUID, resource_details: ResourceDetails, reason: str) -> None:
         self.execute_count += 1

@@ -268,14 +268,12 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param dry_run_id: id for this dryrun
         """
         model_version: int = resources[0].model_version
-        env_id: uuid.UUID = self.environment
-
         async with self.cache(model_version):
             for resource in resources:
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
                 except Exception:
-                    await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource.rvid, changes={})
+                    await self.client.dryrun_update(tid=self.environment, id=dry_run_id, resource=resource.rvid, changes={})
                     continue
                 assert resource_obj is not None
                 ctx = handler.HandlerContext(resource_obj, True)
@@ -296,7 +294,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                             exception=str(e),
                         )
                         await self.client.dryrun_update(
-                            tid=env_id,
+                            tid=self.environment,
                             id=dry_run_id,
                             resource=resource_id,
                             changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
@@ -312,7 +310,9 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 changes = {}
                             if ctx.status == const.ResourceState.failed:
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                            await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
+                            await self.client.dryrun_update(
+                                tid=self.environment, id=dry_run_id, resource=resource_id, changes=changes
+                            )
                         except Exception as e:
                             ctx.exception(
                                 "Exception during dryrun for %(resource_id)s (exception: %(exception)s",
@@ -323,20 +323,22 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                             if changes is None:
                                 changes = {}
                             changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                            await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
+                            await self.client.dryrun_update(
+                                tid=self.environment, id=dry_run_id, resource=resource_id, changes=changes
+                            )
 
                 except Exception:
                     ctx.exception("Unable to process resource for dryrun.")
                     changes = {}
                     changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
-                    await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
+                    await self.client.dryrun_update(tid=self.environment, id=dry_run_id, resource=resource_id, changes=changes)
                 finally:
                     if provider is not None:
                         provider.close()
 
                     finished = datetime.datetime.now().astimezone()
                     await self.client.resource_action_update(
-                        tid=env_id,
+                        tid=self.environment,
                         resource_ids=[resource_id],
                         action_id=ctx.action_id,
                         action=const.ResourceAction.dryrun,
@@ -352,8 +354,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param resource: The resource for which to get facts.
         """
         model_version: int = resource.model_version
-        env_id: uuid.UUID = self.environment
-
         provider = None
         try:
             try:
@@ -383,10 +383,10 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     # Add facts set via the set_fact() method of the HandlerContext
                     parameters.extend(ctx.facts)
 
-                    await self.client.set_parameters(tid=env_id, parameters=parameters)
+                    await self.client.set_parameters(tid=self.environment, parameters=parameters)
                     finished = datetime.datetime.now().astimezone()
                     await self.client.resource_action_update(
-                        tid=env_id,
+                        tid=self.environment,
                         resource_ids=[resource.rvid],
                         action_id=ctx.action_id,
                         action=const.ResourceAction.getfact,
