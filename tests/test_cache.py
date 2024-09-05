@@ -26,7 +26,8 @@ import pytest
 from pytest import fixture
 
 import time_machine
-from inmanta.agent import config as agent_config, Agent
+from inmanta.agent import Agent
+from inmanta.agent import config as agent_config
 from inmanta.agent import executor
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import cache
@@ -327,6 +328,7 @@ class CacheMissCounter:
     Utility class wrapper around AgentCache providing
     functionality to count cache misses.
     """
+
     def __init__(self, cache: AgentCache):
         self.cache = cache
         self._counter = 0
@@ -343,6 +345,7 @@ class CacheMissCounter:
 
     def check_n_cache_misses(self, n: int):
         assert self._counter == n, f"Expected {n} cache misses, but counted {self._counter}."
+
 
 async def test_cache_decorator_basics():
     """
