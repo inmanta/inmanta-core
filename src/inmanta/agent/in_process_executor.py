@@ -28,8 +28,7 @@ import pkg_resources
 import inmanta.agent.cache
 import inmanta.protocol
 import inmanta.util
-import logfire
-from inmanta import const, data, env
+from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
 from inmanta.agent.executor import FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
@@ -255,7 +254,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             )
             raise
 
-    @logfire.instrument("InProcessExecutor.execute", extract_args=True)
+    @tracing.instrument("InProcessExecutor.execute", extract_args=True)
     async def execute(
         self,
         gid: uuid.UUID,

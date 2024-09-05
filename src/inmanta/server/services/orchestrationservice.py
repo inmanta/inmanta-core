@@ -29,8 +29,7 @@ import asyncpg.exceptions
 import pydantic
 
 import inmanta.util
-import logfire
-from inmanta import const, data
+from inmanta import const, data, tracing
 from inmanta.const import ResourceState
 from inmanta.data import (
     APILIMIT,
@@ -783,7 +782,7 @@ class OrchestrationService(protocol.ServerSlice):
             except asyncpg.exceptions.UniqueViolationError:
                 raise ServerError("The given version is already defined. Versions should be unique.")
 
-            with logfire.span("put_version.partial"):
+            with tracing.span("put_version.partial"):
                 all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
                 if is_partial_update:
                     # Make mypy happy

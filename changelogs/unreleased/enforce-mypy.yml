@@ -1,0 +1,3 @@
+description: Enforece the use of mypy using mypy baseline
+change-type: patch
+destination-branches: [iso7, master]
