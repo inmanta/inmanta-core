@@ -94,6 +94,7 @@ class TestAgent(Agent):
     ):
         super().__init__(environment)
         self.executor_manager = DummyManager()
+        self.scheduler._executor_manager = self.executor_manager
         self.scheduler._code_manager = DummyCodeManager(self._client)
 
 
