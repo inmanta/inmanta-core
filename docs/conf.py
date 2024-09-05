@@ -27,10 +27,9 @@ import sys, os, pkg_resources, datetime
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = [
-    'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.graphviz', 'sphinx.ext.ifconfig',
-    'sphinx.ext.viewcode', 'sphinxarg.ext', 'sphinxcontrib.contentui', 'sphinxcontrib.inmanta.config',
-    'sphinxcontrib.inmanta.dsl', 'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'sphinx_tabs.tabs',
-    'recommonmark',
+    'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.viewcode',
+    'sphinxarg.ext', 'sphinxcontrib.inmanta.config', 'sphinxcontrib.inmanta.dsl', 'sphinx_tabs.tabs',
+    'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'recommonmark'
 ]
 
 def setup(app):
@@ -93,7 +92,7 @@ if "INMANTA_DONT_DISCOVER_VERSION" in os.environ:
     #    this value will be overwritten with the ISO product version.
     version = "1.0.0"
 else:
-    version = pkg_resources.get_distribution("inmanta-core").version
+    version = pkg_resources.get_distribution("inmanta").version
 # The full version, including alpha/beta/rc tags.
 release = version
 
@@ -306,5 +305,3 @@ linkcheck_ignore = [
 # Do not print the warning that tabs only work in html
 # https://github.com/djungelorm/sphinx-tabs/issues/39
 sphinx_tabs_nowarn = True
-
-graphviz_output_format = "svg"

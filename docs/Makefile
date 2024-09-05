@@ -67,7 +67,8 @@ clean:
 	-rm -rf $(BUILDDIR)/*
 	-rm -rf $(PNGs)
 
-html:
+html: openapi latexpdf
+	cp $(BUILDDIR)/latex/inmanta.pdf $(SOURCEDIR)
 	$(SPHINXBUILD) -b html -t include_redoc $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
