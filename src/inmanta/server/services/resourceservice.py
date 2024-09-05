@@ -44,6 +44,7 @@ from inmanta.data.model import (
     AttributeStateChange,
     DiscoveredResource,
     LatestReleasedResource,
+    LinkedDiscoveredResource,
     LogLine,
     ReleasedResourceDetails,
     Resource,
@@ -1318,9 +1319,17 @@ class ResourceService(protocol.ServerSlice):
         return resource
 
     @handle(methods_v2.discovered_resource_create, env="tid")
-    async def discovered_resource_create(self, env: data.Environment, discovered_resource_id: str, values: JsonType) -> None:
+    async def discovered_resource_create(
+        self,
+        env: data.Environment,
+        discovered_resource_id: ResourceIdStr,
+        values: JsonType,
+        discovery_resource_id: ResourceIdStr,
+    ) -> None:
         try:
-            discovered_resource = DiscoveredResource(discovered_resource_id=discovered_resource_id, values=values)
+            discovered_resource = LinkedDiscoveredResource(
+                discovered_resource_id=discovered_resource_id, values=values, discovery_resource_id=discovery_resource_id
+            )
         except ValidationError as e:
             # this part was copy/pasted from protocol.common.MethodProperties.validate_arguments.
             error_msg = f"Failed to validate argument\n{str(e)}"
@@ -1332,7 +1341,7 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods_v2.discovered_resource_create_batch, env="tid")
     async def discovered_resources_create_batch(
-        self, env: data.Environment, discovered_resources: list[DiscoveredResource]
+        self, env: data.Environment, discovered_resources: list[LinkedDiscoveredResource]
     ) -> None:
         dao_list = [res.to_dao(env.id) for res in discovered_resources]
         await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
@@ -1366,6 +1375,7 @@ class ResourceService(protocol.ServerSlice):
         try:
             handler = DiscoveredResourceView(environment=env, limit=limit, sort=sort, start=start, end=end, filter=filter)
             out = await handler.execute()
+
             return out
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
