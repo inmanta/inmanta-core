@@ -567,12 +567,12 @@ def put_version(
     """
 
 
-@method(
+@typedmethod(
     path="/version/<id>", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api, const.ClientType.compiler]
 )
 def release_version(
     tid: uuid.UUID, id: int, push: bool = False, agent_trigger_method: Optional[const.AgentTriggerMethod] = None
-):
+) -> int:
     """
     Release version of the configuration model for deployment.
 

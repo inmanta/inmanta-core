@@ -47,7 +47,6 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
     await env.set(data.AUTO_DEPLOY, False)
     await env.set(data.PUSH_ON_AUTO_DEPLOY, False)
     await env.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
-    await server._slices["core.autostarted_agent_manager"]._start_agents()
 
     clienthelper = ClientHelper(client, env_id)
 
@@ -245,6 +244,62 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
                 "environment": env_id,
                 "paused": False,
                 "primary": endpointid,
+                "name": const.AGENT_SCHEDULER_ID,
+                "state": "up",
+            }
+        ]
+    }
+
+    assert_equal_ish(expected_agent, result.result)
+
+    result = await client.create_environment(project_id=project_id, name="dev2")
+    new_env_id = result.result["environment"]["id"]
+
+    result = await client.list_agent_processes(new_env_id)
+    assert result.code == 200
+
+    while len(result.result["processes"]) != 1:
+        result = await client.list_agent_processes(new_env_id)
+        assert result.code == 200
+        await asyncio.sleep(0.1)
+
+    assert len(result.result["processes"]) == 1
+    for proc in result.result["processes"]:
+        assert proc["environment"] == new_env_id
+        assert len(proc["endpoints"]) == 1
+        assert proc["endpoints"][0]["name"] == const.AGENT_SCHEDULER_ID
+
+    new_endpoint_id = [
+        x["endpoints"][0]["id"] for x in result.result["processes"] if x["endpoints"][0]["name"] == const.AGENT_SCHEDULER_ID
+    ][0]
+
+    assert_equal_ish(
+        {
+            "processes": [
+                {
+                    "expired": None,
+                    "environment": new_env_id,
+                    "endpoints": [{"name": UNKWN, "process": UNKWN, "id": UNKWN}],
+                    "hostname": UNKWN,
+                    "first_seen": UNKWN,
+                    "last_seen": UNKWN,
+                },
+            ]
+        },
+        result.result,
+        ["name", "first_seen"],
+    )
+
+    result = await client.list_agents(tid=new_env_id)
+    assert result.code == 200
+
+    expected_agent = {
+        "agents": [
+            {
+                "last_failover": UNKWN,
+                "environment": new_env_id,
+                "paused": False,
+                "primary": new_endpoint_id,
                 "name": const.AGENT_SCHEDULER_ID,
                 "state": "up",
             }

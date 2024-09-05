@@ -191,18 +191,14 @@ class Agent(SessionEndpoint):
         return 200
 
     @protocol.handle(methods.release_version, env="tid", agent="id")
-    async def release_version(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
+    async def release_version(self, env: uuid.UUID, agent: str, _: bool) -> Apireturn:
         """
         Trigger an update
         """
         assert env == self.environment
         assert agent == AGENT_SCHEDULER_ID
         await self.scheduler.new_version(self.environment)
-        return await self.trigger_update(
-            env=env,
-            agent=agent,
-            incremental_deploy=incremental_deploy,
-        )
+        return 200
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")
     async def resource_event(

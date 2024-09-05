@@ -90,8 +90,19 @@ class ResourceScheduler:
 
     async def build_resource_mappings_from_db(
         self,
+        environment_id: Optional[uuid.UUID] = None,
     ) -> tuple[Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
-        resources_from_db: list[Resource] = await data.Resource.get_list()
+        """
+        Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
+
+        :param environment_id: The environment ID we need to filter the resources on
+        :return: resource_mapping {id -> resource details} and require_mapping {id -> requires}
+        """
+        if environment_id is not None:
+            resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(environment=environment_id)
+        else:
+            resources_from_db: list[Resource] = await data.Resource.get_list()
+
         resource_mapping = {
             resource.resource_id: ResourceDetails(attribute_hash=resource.attribute_hash, attributes=resource.attributes)
             for resource in resources_from_db

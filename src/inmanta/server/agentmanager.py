@@ -965,7 +965,7 @@ class AutostartedAgentManager(ServerSlice, EnvironmentListener):
 
     async def start(self) -> None:
         await super().start()
-        self.add_background_task(self._start_agents())  # TODO h modify and then start here?
+        self.add_background_task(self._start_agents())
 
     async def prestop(self) -> None:
         await super().prestop()
@@ -980,7 +980,7 @@ class AutostartedAgentManager(ServerSlice, EnvironmentListener):
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
-    async def _start_agents(self) -> None:  # TODO h
+    async def _start_agents(self) -> None:
         """
         Ensure that autostarted agents of each environment are started when AUTOSTART_ON_START is true. This method
         is called on server start.
@@ -1491,4 +1491,6 @@ ssl=True
 
         :param env: The new environment
         """
-        await self._ensure_scheduler(env)
+        if opt.server_use_resource_scheduler.get():
+            await self._ensure_scheduler(env)
+            await self._agent_manager.ensure_agent_registered(env, const.AGENT_SCHEDULER_ID)
