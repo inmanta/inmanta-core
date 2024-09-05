@@ -572,7 +572,7 @@ def put_version(
 )
 def release_version(
     tid: uuid.UUID, id: int, push: bool = False, agent_trigger_method: Optional[const.AgentTriggerMethod] = None
-) -> int:
+):
     """
     Release version of the configuration model for deployment.
 
