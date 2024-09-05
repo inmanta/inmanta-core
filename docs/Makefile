@@ -10,7 +10,7 @@ BUILDDIR      = build
 endif
 SOURCEDIR	  = .
 #IMAGEDIRS can be a list of directories that contain SVG files and are relative to the SOURCEDIR
-IMAGEDIRS     = _static model_developers/images
+IMAGEDIRS     = _static model_developers/images lsm
 
 # SVG to PDF conversion
 # support inkscape versions <1.0 and >1.0
@@ -29,7 +29,7 @@ SVG2PDF       = inkscape
 SVG2PDF_FLAGS =
 
 # Internal variables.
-ALLSPHINXOPTS   = -d $(BUILDDIR)/doctrees $(SPHINXOPTS) .
+ALLSPHINXOPTS   = -t oss -d $(BUILDDIR)/doctrees $(SPHINXOPTS) .
 # the i18n builder cannot share the environment and doctrees with the others
 I18NSPHINXOPTS  = $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
 
@@ -67,11 +67,15 @@ clean:
 	-rm -rf $(BUILDDIR)/*
 	-rm -rf $(PNGs)
 
-html: openapi latexpdf
-	cp $(BUILDDIR)/latex/inmanta.pdf $(SOURCEDIR)
+html: openapi
 	$(SPHINXBUILD) -b html -t include_redoc $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
+
+onlyhtml:
+	$(SPHINXBUILD) -b html -t include_redoc $(ALLSPHINXOPTS) $(BUILDDIR)/html
+	@echo
+	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html. PDF and REST API documentation will be missing"
 
 dirhtml:
 	$(SPHINXBUILD) -b dirhtml $(ALLSPHINXOPTS) $(BUILDDIR)/dirhtml
@@ -181,7 +185,7 @@ doctest:
 
 .PHONY: openapi
 openapi:
-	pytest --rootdir=../tests ./extract_openapi_json.py
+	pytest --rootdir=../tests ../tests/docs/extract_openapi_json.py
 	mv openapi.json reference/openapi.json
 
 # Pattern rule for converting SVG to PDF
@@ -197,4 +201,3 @@ PNGs := $(foreach dir, $(IMAGEDIRS), $(patsubst %.svg,%.png,$(wildcard $(SOURCED
 
 # Make a rule to build the PDFs
 images: $(PNGs) $(PDFs)
-
