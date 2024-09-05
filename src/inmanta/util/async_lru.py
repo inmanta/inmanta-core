@@ -19,7 +19,7 @@
 """
 
 import asyncio
-from asyncio import Future, Lock
+from asyncio import Future, Lock, isfuture
 
 # Async support for @functools.lrucache
 # From https://github.com/python/cpython/issues/90780
@@ -39,9 +39,11 @@ class CachedAwaitable(Awaitable[T]):
         if self.result is None:
             fut = asyncio.get_event_loop().create_future()
             self.result = fut
-            self.result = yield from self.awaitable.__await__()
-            fut.set_result(self.result)
-        return self.result
+            result = yield from self.awaitable.__await__()
+            fut.set_result(result)
+        if not self.result.done():
+            yield from self.result
+        return self.result.result()
 
 
 def reawaitable(func: Callable[_PWrapped, Awaitable[T]]) -> Callable[_PWrapped, CachedAwaitable[T]]:

@@ -114,21 +114,28 @@ class ModelState:
     ResourceStatus so that it lives outside of the scheduler lock's scope.
     """
 
+    def reset(self) -> None:
+        self.version = 0
+        self.resources.clear()
+        self.requires.clear()
+        self.resource_state.clear()
+        self.update_pending.clear()
+        self.types_per_agent.clear()
+
     def update_desired_state(
         self,
-        resource: ResourceIdStr,
-        attributes: ResourceDetails,
+        resource: ResourceDetails,
     ) -> None:
         # FIXME[#8008]: raise KeyError if already lives in state?
-        self.resources[resource] = attributes
-        if resource in self.resource_state:
-            self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
+        resource_id = resource.rid
+        self.resources[resource_id] = resource
+        if resource_id in self.resource_state:
+            self.resource_state[resource_id].status = ResourceStatus.HAS_UPDATE
         else:
-            self.resource_state[resource] = ResourceState(
+            self.resource_state[resource_id] = ResourceState(
                 status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW
             )
-            # QUESTION: Sander, do we want to carry around parsed id's like agent.executor.ResourceDetails?
-            parsed_id = Id.parse_id(resource)
+            parsed_id = resource.id
             self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] += 1
 
     def update_requires(

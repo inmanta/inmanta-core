@@ -52,7 +52,12 @@ class RefreshFact(_Task):
 
 
 class PoisonPill(_Task):
-    """Task to signal queue shutdown"""
+    """
+    Task to signal queue shutdown
+
+    It is used to make sure all workers wake up to observe that they have been closed.
+    It functions mostly as a no-op
+    """
 
 
 Task: TypeAlias = Deploy | DryRun | RefreshFact | PoisonPill
@@ -117,6 +122,9 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
     #               can we do something about that?
 
     def __init__(self, consumer_factory: Callable[[str], None]) -> None:
+        """
+        :param consumer_factory: the method that will cause the queue to be consumed, called with agent name as argument
+        """
         self._agent_queues: dict[str, asyncio.PriorityQueue[TaskQueueItem]] = {}
         # can not drop tasks from queue without breaking the heap invariant, or potentially breaking asyncio.Queue invariants
         # => take approach suggested in heapq docs: simply mark as deleted.
@@ -127,6 +135,11 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         # use simple counter rather than time.monotonic_ns() for performance reasons
         self._entry_count: int = 0
         self._consumer_factory = consumer_factory
+
+    def reset(self) -> None:
+        self._agent_queues.clear()
+        self._tasks_by_resource.clear()
+        self._entry_count = 0
 
     def _get_queue(self, agent_name: str) -> asyncio.PriorityQueue[TaskQueueItem]:
         # All we do is sync and on the io loop, no need for locks!
@@ -290,6 +303,10 @@ class ScheduledWork:
         self.provides: Mapping[ResourceIdStr, Set[ResourceIdStr]] = provides
         self.agent_queues: AgentQueues = AgentQueues(consumer_factory)
         self.waiting: dict[ResourceIdStr, BlockedDeploy] = {}
+
+    def reset(self) -> None:
+        self.agent_queues.reset()
+        self.waiting.clear()
 
     # FIXME[#8008]: name
     def update_state(

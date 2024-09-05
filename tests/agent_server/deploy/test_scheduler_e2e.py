@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(scope="function")
 async def agent(server, environment):
+    """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     config.Config.set("config", "agent-deploy-interval", "0")

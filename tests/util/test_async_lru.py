@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
+
 from inmanta.util.async_lru import async_lru_cache
 
 
@@ -25,11 +27,18 @@ async def test_async_lru():
     @async_lru_cache
     async def coro(arg: str) -> str:
         hit_count.append(arg)
+        await asyncio.sleep(0.01)
         return arg
 
-    assert "A" == await coro("A")
+    async def work(arg: str) -> str:
+        return await coro("A")
+
+    a_fut_1 = asyncio.create_task(work("A"))
+    a_fut_2 = asyncio.create_task(work("A"))
+    assert "A" == await a_fut_1
+    assert len(hit_count) == 1
+    assert "A" == await a_fut_2
     assert len(hit_count) == 1
     assert "A" == await coro("A")
-    assert len(hit_count) == 1
     assert "B" == await coro("B")
     assert len(hit_count) == 2

@@ -14,6 +14,8 @@
     limitations under the License.
 
     Contact: code@inmanta.com
+
+    This file is intended to contain test that use the agent/scheduler combination in isolation: no server, no executor
 """
 
 import hashlib
@@ -90,12 +92,9 @@ class TestAgent(Agent):
         self,
         environment: Optional[uuid.UUID] = None,
     ):
-        self.manager = DummyManager()
         super().__init__(environment)
+        self.executor_manager = DummyManager()
         self.scheduler._code_manager = DummyCodeManager(self._client)
-
-    def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
-        return self.manager
 
 
 @pytest.fixture
@@ -116,6 +115,11 @@ async def config(inmanta_config, tmp_path):
 
 @pytest.fixture
 async def agent(environment, config, event_loop):
+    """
+    Provide a new agent, with a scheduler that uses the dummy executor
+
+    Allows testing without server, or executor
+    """
     out = TestAgent(environment)
     await out.start_working()
     yield out
@@ -125,6 +129,7 @@ async def agent(environment, config, event_loop):
 @pytest.fixture
 def make_resource_minimal(environment):
     def make_resource_minimal(rid: str, values: dict[str, object], requires: list[str], version: int) -> state.ResourceDetails:
+        """Produce a resource that is valid to the scheduler"""
         attributes = dict(values)
         attributes["requires"] = requires
         out = dict(attributes=attributes, id=rid + f",v={version}", environment=environment, model=version)
@@ -144,7 +149,11 @@ def make_resource_minimal(environment):
     return make_resource_minimal
 
 
-async def test_fixtures(agent: TestAgent, make_resource_minimal):
+async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure the simples deploy scenario works: 2 dependant resources
+    """
+
     rid1 = "test::Resource[agent1,name=1]"
     rid2 = "test::Resource[agent1,name=2]"
     resources = {
@@ -155,18 +164,6 @@ async def test_fixtures(agent: TestAgent, make_resource_minimal):
     # FIXME: SANDER: It seems we immediatly deploy if a new version arrives, we don't wait for an explicit deploy call?
     # Is this by design?
     await agent.scheduler.new_version(5, resources, make_requires(resources))
-
-    # assert len(agent.scheduler._work.agent_queues._agent_queues) == 1
-    # agent_1_queue = agent.scheduler._work.agent_queues._agent_queues["agent1"]
-    # assert agent_1_queue._unfinished_tasks == 1
-    #
-    # await agent.scheduler._work_once("agent1")
-    #
-    # assert agent_1_queue._unfinished_tasks == 1
-    #
-    # await agent.scheduler._work_once("agent1")
-    #
-    # assert agent_1_queue._unfinished_tasks == 0
 
     async def done():
         agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent1")
@@ -180,6 +177,9 @@ async def test_fixtures(agent: TestAgent, make_resource_minimal):
 
 
 async def test_removal(agent: TestAgent, make_resource_minimal):
+    """
+    Test that resources are removed from the state store correctly
+    """
     rid1 = "test::Resource[agent1,name=1]"
     rid2 = "other::Resource[agent1,name=2]"
     resources = {
@@ -199,6 +199,3 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
 
     assert len(agent.scheduler._state.get_types_for_agent("agent1")) == 1
     assert len(agent.scheduler._state.resources) == 1
-
-
-# TODO: test failed resource with server

@@ -49,6 +49,11 @@ class ResourceScheduler:
     def __init__(
         self, environment: uuid.UUID, executor_manager: executor.ExecutorManager[executor.Executor], client: Client
     ) -> None:
+        """
+        :param environment: the environment we work for
+        :param executor_manager: the executor manager that will provide us with workers
+        :param client: connection to the server
+        """
         self._state: ModelState = ModelState(version=0)
         self._work: work.ScheduledWork = work.ScheduledWork(
             requires=self._state.requires.requires_view(),
@@ -77,7 +82,18 @@ class ResourceScheduler:
         self._environment = environment
         self._client = client
 
+    def reset(self):
+        """
+        Clear out all state and start empty
+
+        only allowed when ResourceScheduler is not running
+        """
+        assert not self._running
+        self._state.reset()
+        self._work.reset()
+
     async def start(self) -> None:
+        self.reset()
         self._running = True
         # FIXME[#8009]: read from DB instead
         pass
@@ -88,6 +104,9 @@ class ResourceScheduler:
         await asyncio.gather(*self._workers.values())
 
     async def deploy(self) -> None:
+        """
+        Trigger a deploy
+        """
         async with self._scheduler_lock:
             # FIXME[#8008]: more efficient access to dirty set by caching it on the ModelState
             dirty: Set[ResourceIdStr] = {
@@ -116,6 +135,7 @@ class ResourceScheduler:
         resources: Mapping[ResourceIdStr, ResourceDetails],
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
     ) -> None:
+        """A new version was received, update state and start deploying"""
         async with self._update_lock:
             # Inspect new state and mark resources as "update pending" where appropriate. Since this method is the only writer
             # for "update pending", and a stale read is acceptable, we can do this part before acquiring the exclusive scheduler
@@ -156,7 +176,7 @@ class ResourceScheduler:
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in new_desired_state:
-                    self._state.update_desired_state(resource, resources[resource])
+                    self._state.update_desired_state(resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
                 # ensure deploy for ALL dirty resources, not just the new ones
@@ -182,9 +202,11 @@ class ResourceScheduler:
     #           agents or removed ones
 
     def start_for_agent(self, agent: str) -> None:
+        """Start processing for the given agent"""
         self._workers[agent] = asyncio.create_task(self._run_for_agent(agent))
 
     async def _run_task(self, agent: str, task: work.Task, resource_details: ResourceDetails) -> None:
+        """Run a task"""
         match task:
             case work.Deploy():
                 await self.perform_deploy(agent, resource_details)
@@ -199,7 +221,7 @@ class ResourceScheduler:
         :param resource_details:
         """
         # FIXME: WDB to Sander: is the version of the state the correct version?
-        #   It may happen that the set of type no longer matches the version?
+        #   It may happen that the set of types no longer matches the version?
         # FIXME: code loading interface is not nice like this,
         #   - we may want to track modules per agent, instead of types
         #   - we may also want to track the module version vs the model version
@@ -248,7 +270,7 @@ class ResourceScheduler:
         # DEPLOY!!!
         gid = uuid.uuid4()
         # FIXME: reason argument is not used
-        await my_executor.execute(gid, resource_details, "Because!!")
+        await my_executor.execute(gid, resource_details, "New Scheduler initiated action")
 
     async def _work_once(self, agent: str) -> None:
         task: work.Task = await self._work.agent_queues.queue_get(agent)
@@ -290,6 +312,6 @@ class ResourceScheduler:
         self._work.agent_queues.task_done(agent)
 
     async def _run_for_agent(self, agent: str) -> None:
+        """Main loop for one agent"""
         while self._running:
             await self._work_once(agent)
-        print("Done")

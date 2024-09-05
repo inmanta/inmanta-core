@@ -43,13 +43,10 @@ class CouldNotConnectToServer(Exception):
 
 class Agent(SessionEndpoint):
     """
-    An agent to enact changes upon resources. This agent listens to the
-    message bus for changes.
-    """
+    This is the new scheduler, adapted to the agent protocol
 
-    # cache reference to THIS ioloop for handlers to push requests on it
-    # defer to start, just to be sure
-    _io_loop: asyncio.AbstractEventLoop
+    It serves a single endpoint that allows communciations with the scheduler
+    """
 
     def __init__(
         self,
@@ -79,7 +76,6 @@ class Agent(SessionEndpoint):
         self.working = False
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
-        # To override in testing
         return forking_executor.MPManager(
             self.thread_pool,
             self.sessionid,
@@ -106,20 +102,12 @@ class Agent(SessionEndpoint):
 
     async def start_connected(self) -> None:
         """
-        This method is required because:
-            1) The client transport is required to retrieve the autostart_agent_map from the server.
-            2) _init_endpoint_names() needs to be an async method and async calls are not possible in a constructor.
+        Setup our single endpoint
         """
         await self.add_end_point_name(AGENT_SCHEDULER_ID)
 
-    async def start(self) -> None:
-        # cache reference to THIS ioloop for handlers to push requests on it
-        self._io_loop = asyncio.get_running_loop()
-        await super().start()
-
     async def start_working(self) -> None:
         """Start working, once we have a session"""
-        # Todo: recycle them when we restart
         if self.working:
             return
         self.working = True
@@ -127,10 +115,9 @@ class Agent(SessionEndpoint):
         await self.scheduler.start()
 
     async def stop_working(self) -> None:
-        """Start working, once we have a session"""
+        """Stop working, connection lost"""
         if not self.working:
             return
-        # Todo: recycle them when we restart
         self.working = False
         await self.executor_manager.stop()
         await self.scheduler.stop()

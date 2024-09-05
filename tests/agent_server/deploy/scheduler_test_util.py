@@ -15,11 +15,12 @@ from inmanta.types import JsonType
 
 
 def make_requires(resources: Mapping[ResourceIdStr, ResourceDetails]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
+    """Convert resources from the scheduler input format to its requires format"""
     return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
 
 
 def convert_resource(resource: JsonType) -> ResourceDetails:
-
+    """Convert a resource, in the form they are pushed by the compiler to the format expected by the scheduler"""
     attributes = {}
     for field, value in resource.items():
         if field not in {"id", "version"}:
@@ -50,6 +51,7 @@ def convert_resource(resource: JsonType) -> ResourceDetails:
 
 
 def convert_resources(resources: list[JsonType]) -> Mapping[ResourceIdStr, ResourceDetails]:
+    """Convert a set of resources, as they would be pushed to the server, to input for the scheduler"""
     return {rd.rid: rd for rd in (convert_resource(r) for r in resources)}
 
 
@@ -62,6 +64,7 @@ dummyblueprint = ExecutorBlueprint(
 
 
 class DummyCodeManager(CodeManager):
+    """Code manager that prentends no code is ever needed"""
 
     async def get_code(
         self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]

@@ -41,7 +41,11 @@ class CouldNotResolveCode(Exception):
 
 
 class CodeManager:
-    """Helper responsible for translating resource versions into code"""
+    """
+    Helper responsible for translating resource versions into code
+
+    Caches heavily
+    """
 
     def __init__(self, client: Client) -> None:
         self._client = client
