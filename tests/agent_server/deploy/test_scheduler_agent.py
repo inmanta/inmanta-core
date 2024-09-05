@@ -31,7 +31,7 @@ import inmanta.types
 from agent_server.deploy.scheduler_test_util import DummyCodeManager, make_requires
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import ExecutorBlueprint, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.data import ResourceIdStr
 from inmanta.deploy import state

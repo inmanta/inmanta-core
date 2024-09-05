@@ -15,16 +15,14 @@
 
     Contact: code@inmanta.com
 
-    based on code from https://github.com/python/cpython/issues/90780
+   Async support for @functools.lrucache
+   From https://github.com/python/cpython/issues/90780
 """
 
 import asyncio
-from asyncio import Future, Lock, isfuture
-
-# Async support for @functools.lrucache
-# From https://github.com/python/cpython/issues/90780
+from asyncio import Future
 from functools import _lru_cache_wrapper, lru_cache, wraps
-from typing import Any, Awaitable, Callable, Generator, Literal, ParamSpec, TypeVar, overload
+from typing import Any, Awaitable, Callable, Generator, ParamSpec, TypeVar, overload
 
 T = TypeVar("T")
 _PWrapped = ParamSpec("_PWrapped")

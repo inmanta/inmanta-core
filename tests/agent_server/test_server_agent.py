@@ -4105,7 +4105,7 @@ async def test_agent_code_loading_with_failure(
 
     idx1 = log_index(
         caplog,
-        "inmanta.agent.agent",
+        "inmanta.agent.code_manager",
         logging.ERROR,
         "Failed to get source code for test::Test2 version=-1",
     )

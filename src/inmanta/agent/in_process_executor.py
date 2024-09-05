@@ -40,9 +40,6 @@ from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn
 from inmanta.util import NamedLock
 
-if typing.TYPE_CHECKING:
-    import inmanta.agent.agent as agent
-
 
 class InProcessExecutor(executor.Executor, executor.AgentInstance):
     """
