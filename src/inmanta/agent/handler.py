@@ -121,16 +121,14 @@ def cache(
 
     The name of the method + the arguments of the method form the cache key
 
-    If an argument named version is present and for_version is True,
-    the cache entry (and all other entries belonging to this version)
-    will be flushed after this version is not being used for a while.
-
     If an argument named resource is present,
     it is assumed to be a resource and its ID is used, without the version information
 
-    :param timeout: the number of second this cache entry should live
-    :param for_version: if True (default behaviour), the value being cached will be tied to a given version
-        passed via the ``version`` argument of the decorated method.
+    :param timeout: Hard timeout for non-lingering cache item i.e. when `for_version=False`.
+        Ignored otherwise.
+    :param for_version: When True, this cache item will linger in the cache for 60s after its last use.
+        When False, this cache item will be evicted from the cache <timeout> seconds after
+        entering the cache.
     :param ignore: a list of argument names that should not be part of the cache key
     :param cache_none: allow the caching of None values
     :param call_on_delete: A callback function that is called when the value is removed from the cache,

@@ -2586,9 +2586,6 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
-    executor_instance = agent.executor_manager.executors["agent1"]
-    executor_instance._cache.clean_stale_entries()
-
     # Incremental deploy
     #   * All resources are deployed successfully:
     # Full deploy:

@@ -131,13 +131,13 @@ class AgentCache:
 
     def touch_used_cache_items(self) -> None:
         """
-        Extend the expiry time of items in the lingering_set by 60s
+        Extend the expiry time of items in the used_lingering_items by 60s
         """
         now = time.time()
-        for item in self.lingering_set:
+        for item in self.used_lingering_items:
             item.expiry_time = now + 60
 
-        self.lingering_set = set()
+        self.used_lingering_items = set()
         if self.timer_queue:
             # Bad O(N) but unavoidable (?) Since we modify elements above
             # we have to make sure the heap is still a heap.
@@ -190,7 +190,7 @@ class AgentCache:
         item = self.cache[key]
 
         if item.lingering:
-            self.lingering_set.add(item)
+            self.used_lingering_items.add(item)
 
         return item
 
@@ -203,7 +203,7 @@ class AgentCache:
         heapq.heappush(self.timer_queue, item)
 
         if item.lingering:
-            self.lingering_set.add(item)
+            self.used_lingering_items.add(item)
 
         if item.expiry_time < self.next_action:
             self.next_action = item.expiry_time
