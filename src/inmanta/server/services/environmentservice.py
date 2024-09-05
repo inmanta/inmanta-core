@@ -122,8 +122,6 @@ class EnvironmentService(protocol.ServerSlice):
         self.compiler_service = cast(compilerservice.CompilerService, server.get_slice(SLICE_COMPILER))
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
-        # Register the compiler service here to the environment service listener. Registering it within the compiler service
-        # would result in a circular dependency between the environment slice and the compiler service slice.
         self.register_listener_for_multiple_actions(
             self.compiler_service, {EnvironmentAction.cleared, EnvironmentAction.deleted}
         )

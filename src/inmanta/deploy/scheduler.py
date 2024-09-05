@@ -43,7 +43,10 @@ class ResourceScheduler:
     The scheduler expects to be notified by the server whenever a new version is released.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, environment: uuid.UUID) -> None:
+        """
+        :param environment: the environment we work for
+        """
         self._state: ModelState = ModelState(version=0)
         self._work: work.ScheduledWork = work.ScheduledWork(
             requires=self._state.requires.requires_view(),
@@ -59,6 +62,7 @@ class ResourceScheduler:
         self._scheduler_lock: asyncio.Lock = asyncio.Lock()
         # - lock to serialize scheduler state updates (i.e. process new version)
         self._update_lock: asyncio.Lock = asyncio.Lock()
+        self._environment = environment
 
     async def start(self) -> None:
         resource_mapping, require_mapping = await self.build_resource_mappings_from_db()
@@ -90,7 +94,6 @@ class ResourceScheduler:
 
     async def build_resource_mappings_from_db(
         self,
-        environment_id: Optional[uuid.UUID] = None,
     ) -> tuple[Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
         """
         Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
@@ -98,10 +101,7 @@ class ResourceScheduler:
         :param environment_id: The environment ID we need to filter the resources on
         :return: resource_mapping {id -> resource details} and require_mapping {id -> requires}
         """
-        if environment_id is not None:
-            resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(environment=environment_id)
-        else:
-            resources_from_db: list[Resource] = await data.Resource.get_list()
+        resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(environment=self._environment)
 
         resource_mapping = {
             resource.resource_id: ResourceDetails(attribute_hash=resource.attribute_hash, attributes=resource.attributes)
@@ -117,11 +117,10 @@ class ResourceScheduler:
 
     async def new_version(
         self,
-        environment_id: uuid.UUID,
     ) -> None:
-        environment = await data.Environment.get_by_id(environment_id)
+        environment = await data.Environment.get_by_id(self._environment)
         if environment is None:
-            raise ValueError(f"No environment found with this id: `{environment_id}`")
+            raise ValueError(f"No environment found with this id: `{self._environment}`")
         version = environment.last_version
         resources_from_db, requires_from_db = await self.build_resource_mappings_from_db()
 

@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2024 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -197,7 +197,7 @@ class Agent(SessionEndpoint):
         """
         assert env == self.environment
         assert agent == AGENT_SCHEDULER_ID
-        await self.scheduler.new_version(self.environment)
+        await self.scheduler.new_version()
         return 200
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")

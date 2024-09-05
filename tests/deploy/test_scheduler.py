@@ -33,8 +33,11 @@ logger = logging.getLogger("inmanta.test.server_agent")
 
 async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_backoff):
     """
-    Test deploy of resource with undefined
+    This tests make sure the resource scheduler is working as expected for these parts:
+        - Construction of initial model state
+        - Retrieval of data when a new version is released
     """
+    # First part - test the ResourceScheduler (retrieval of data from DB)
     Config.set("config", "agent-deploy-interval", "100")
     Config.set("server", "new-resource-scheduler", "True")
 
@@ -102,19 +105,17 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
     )
     assert result.code == 200
 
-    scheduler = ResourceScheduler()
+    scheduler = ResourceScheduler(env_id)
     await scheduler.start()
+
     for resource in resources:
         id_without_version, _, _ = resource["id"].partition(",v=")
         assert id_without_version in scheduler._state.resources
         expected_resource_attributes = copy.deepcopy(resource)
         expected_resource_attributes.pop("id")
         current_attributes = scheduler._state.resources[id_without_version].attributes
-        # TODO h ResourceScheduler -> Unknown == undefined?
         # TODO h ResourceScheduler -> loose version information on requires?
 
-        # Already a todo for that
-        # TODO h ResourceScheduler -> undefined status lost in the process -> has update / new only?
         if current_attributes["value"] == "<<undefined>>" and isinstance(
             expected_resource_attributes["value"], inmanta.execute.util.Unknown
         ):
@@ -173,8 +174,9 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
         compiler_version=get_compiler_version(),
     )
     assert result.code == 200
-    await scheduler.new_version(env_id)
-    # TODO h ResourceScheduler crashing on -> self._agent_queues["TODO"].put_nowait(item)
+
+    # We test the new_version method the ResourceScheduler
+    await scheduler.new_version()
 
     for resource in updated_resources:
         id_without_version, _, _ = resource["id"].partition(",v=")
@@ -182,11 +184,7 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
         expected_resource_attributes = copy.deepcopy(resource)
         expected_resource_attributes.pop("id")
         current_attributes = scheduler._state.resources[id_without_version].attributes
-        # TODO h ResourceScheduler -> Unknown == undefined?
-        # TODO h ResourceScheduler -> loose version information on requires?
 
-        # Already a todo for that
-        # TODO h ResourceScheduler -> undefined status lost in the process -> has update / new only?
         if current_attributes["value"] == "<<undefined>>" and isinstance(
             expected_resource_attributes["value"], inmanta.execute.util.Unknown
         ):
@@ -199,6 +197,7 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
         assert current_attributes == expected_resource_attributes
         assert scheduler._state.requires._primary[id_without_version] == set(expected_resource_attributes["requires"])
 
+    # Now we make sure that the agent is up and running for this environment
     result = await client.list_agent_processes(env_id)
     assert result.code == 200
 
@@ -234,6 +233,10 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
         x["endpoints"][0]["id"] for x in result.result["processes"] if x["endpoints"][0]["name"] == const.AGENT_SCHEDULER_ID
     ][0]
 
+    # The agent was there because `ensure_agent_registered` was called each time we release a new version or call
+    # `put_version` + `AUTO_DEPLOY` set to `True`
+    # But this will be tested later in the test to make sure that when we create a new environment, everything is started and
+    # registered correctly
     result = await client.list_agents(tid=env_id)
     assert result.code == 200
 
@@ -252,6 +255,7 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
 
     assert_equal_ish(expected_agent, result.result)
 
+    # We test the creation of this new agent on another environment
     result = await client.create_environment(project_id=project_id, name="dev2")
     new_env_id = result.result["environment"]["id"]
 

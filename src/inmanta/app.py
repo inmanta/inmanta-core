@@ -146,6 +146,9 @@ def start_agent(options: argparse.Namespace) -> None:
 
 @command("scheduler", help_msg="Start the resource scheduler")
 def start_scheduler(options: argparse.Namespace) -> None:
+    """
+    Start the new agent with the Resource Scheduler
+    """
     from inmanta.agent import agent_new
 
     # The call to configure() should be done as soon as possible.

@@ -1491,6 +1491,10 @@ ssl=True
 
         :param env: The new environment
         """
-        if opt.server_use_resource_scheduler.get():
-            await self._ensure_scheduler(env)
-            await self._agent_manager.ensure_agent_registered(env, const.AGENT_SCHEDULER_ID)
+        if not opt.server_use_resource_scheduler.get():
+            return
+
+        env_db = await data.Environment.get_by_id(env.id)
+        await self._ensure_scheduler(env_db)
+        # We need to make sure that the AGENT_SCHEDULER is registered to be up and running
+        await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
