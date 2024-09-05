@@ -18,6 +18,8 @@
 
 import asyncio
 
+import pytest
+
 from inmanta.util.async_lru import async_lru_cache
 
 
@@ -41,4 +43,32 @@ async def test_async_lru():
     assert len(hit_count) == 1
     assert "A" == await coro("A")
     assert "B" == await coro("B")
+    assert len(hit_count) == 2
+
+
+async def test_async_lru_raising():
+    hit_count = []
+
+    @async_lru_cache
+    async def coro(arg: str) -> str:
+        hit_count.append(arg)
+        await asyncio.sleep(0.01)
+        raise Exception(arg)
+
+    async def work(arg: str) -> str:
+        return await coro(arg)
+
+    a_fut_1 = asyncio.create_task(work("A"))
+    a_fut_2 = asyncio.create_task(work("A"))
+    with pytest.raises(Exception, match="A"):
+        await a_fut_1
+    with pytest.raises(Exception, match="A"):
+        await a_fut_2
+    assert len(hit_count) == 1
+
+    with pytest.raises(Exception, match="A"):
+        await coro("A")
+
+    with pytest.raises(Exception, match="B"):
+        await coro("B")
     assert len(hit_count) == 2

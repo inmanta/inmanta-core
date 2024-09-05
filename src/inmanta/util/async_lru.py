@@ -37,8 +37,11 @@ class CachedAwaitable(Awaitable[T]):
         if self.result is None:
             fut = asyncio.get_event_loop().create_future()
             self.result = fut
-            result = yield from self.awaitable.__await__()
-            fut.set_result(result)
+            try:
+                result = yield from self.awaitable.__await__()
+                fut.set_result(result)
+            except Exception as e:
+                fut.set_exception(e)
         if not self.result.done():
             yield from self.result
         return self.result.result()
