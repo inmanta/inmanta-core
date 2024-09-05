@@ -65,9 +65,6 @@ class ResourceScheduler:
         self._environment = environment
 
     async def start(self) -> None:
-        await self.update_state()
-
-    async def update_state(self) -> None:
         resource_mapping, require_mapping = await self.build_resource_mappings_from_db()
         self._state.construct(resource_mapping, require_mapping)
 
@@ -96,18 +93,15 @@ class ResourceScheduler:
         pass
 
     async def build_resource_mappings_from_db(
-        self, version: Optional[int] = None
+        self,
     ) -> tuple[Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
         """
         Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
 
+        :param environment_id: The environment ID we need to filter the resources on
         :return: resource_mapping {id -> resource details} and require_mapping {id -> requires}
         """
-        resources_from_db: list[Resource]
-        if version is None:
-            resources_from_db = await data.Resource.get_resources_in_latest_version(environment=self._environment)
-        else:
-            resources_from_db = await data.Resource.get_resources_for_version(environment=self._environment, version=version)
+        resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(environment=self._environment)
 
         resource_mapping = {
             resource.resource_id: ResourceDetails(attribute_hash=resource.attribute_hash, attributes=resource.attributes)
@@ -124,12 +118,11 @@ class ResourceScheduler:
     async def new_version(
         self,
     ) -> None:
-        await self.update_state()
         environment = await data.Environment.get_by_id(self._environment)
         if environment is None:
             raise ValueError(f"No environment found with this id: `{self._environment}`")
-        latest_version = environment.last_version
-        resources_from_db, requires_from_db = await self.build_resource_mappings_from_db(version=latest_version - 1)
+        version = environment.last_version
+        resources_from_db, requires_from_db = await self.build_resource_mappings_from_db()
 
         async with self._update_lock:
             # Inspect new state and mark resources as "update pending" where appropriate. Since this method is the only writer
@@ -169,7 +162,7 @@ class ResourceScheduler:
             #   (could be achieved with a simple sleep(0) if desired)
             # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
             async with self._scheduler_lock:
-                self._state.version = latest_version
+                self._state.version = version
                 for resource in new_desired_state:
                     self._state.update_desired_state(resource, resources_from_db[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
