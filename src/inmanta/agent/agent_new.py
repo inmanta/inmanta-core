@@ -76,7 +76,7 @@ class Agent(SessionEndpoint):
         assert self.environment is not None
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
-        self.scheduler = ResourceScheduler()
+        self.scheduler = ResourceScheduler(self.environment)
         self.working = False
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
