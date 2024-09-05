@@ -140,7 +140,7 @@ class AgentCache:
         self._agent_instance = agent_instance
 
         # Set of lingering cache items used during a resource action.
-        self.lingering_set: set[CacheItem] = set()
+        self.used_lingering_items: set[CacheItem] = set()
 
     def touch_used_cache_items(self) -> None:
         """
