@@ -50,6 +50,7 @@ from inmanta.server import (
     SLICE_RESOURCE,
     SLICE_SERVER,
     SLICE_TRANSPORT,
+    listener,
     protocol,
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
@@ -76,41 +77,6 @@ class EnvironmentAction(str, Enum):
     updated = "updated"
 
 
-class EnvironmentListener:
-    """
-    Base class for environment listeners
-    Exceptions from the listeners are dropped, the listeners are responsible for handling them
-    """
-
-    async def environment_action_created(self, env: model.Environment) -> None:
-        """
-        Will be called when a new environment is created
-
-        :param env: The new environment
-        """
-
-    async def environment_action_cleared(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is cleared
-
-        :param env: The environment that is cleared
-        """
-
-    async def environment_action_deleted(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is deleted
-
-        :param env: The environment that is deleted
-        """
-
-    async def environment_action_updated(self, updated_env: model.Environment, original_env: model.Environment) -> None:
-        """
-        Will be called when an environment is updated
-        :param updated_env: The updated environment
-        :param original_env: The original environment
-        """
-
-
 class EnvironmentService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
@@ -119,7 +85,7 @@ class EnvironmentService(protocol.ServerSlice):
     autostarted_agent_manager: AutostartedAgentManager
     orchestration_service: OrchestrationService
     resource_service: ResourceService
-    listeners: dict[EnvironmentAction, list[EnvironmentListener]]
+    listeners: dict[EnvironmentAction, list[listener.EnvironmentListener]]
     # environment_state_operation_lock is to prevent concurrent execution of
     # operations that modify the state of an environment, such as halting, resuming, or deleting.
     # This lock helps prevent race conditions and ensures that state changes are carried out in a safe and
@@ -161,6 +127,7 @@ class EnvironmentService(protocol.ServerSlice):
         self.register_listener_for_multiple_actions(
             self.compiler_service, {EnvironmentAction.cleared, EnvironmentAction.deleted}
         )
+        self.register_listener_for_multiple_actions(self.autostarted_agent_manager, {EnvironmentAction.created})
 
     async def start(self) -> None:
         await super().start()
@@ -624,25 +591,27 @@ class EnvironmentService(protocol.ServerSlice):
         except KeyError:
             raise NotFound()
 
-    def register_listener_for_multiple_actions(self, listener: EnvironmentListener, actions: Set[EnvironmentAction]) -> None:
+    def register_listener_for_multiple_actions(
+        self, current_listener: listener.EnvironmentListener, actions: Set[EnvironmentAction]
+    ) -> None:
         """
             Should only be called during pre-start
-        :param listener: The listener to register
+        :param current_listener: The listener to register
         :param actions: type of actions the listener is interested in
         """
         for action in actions:
-            self.register_listener(listener, action)
+            self.register_listener(current_listener, action)
 
-    def register_listener(self, listener: EnvironmentListener, action: EnvironmentAction) -> None:
+    def register_listener(self, current_listener: listener.EnvironmentListener, action: EnvironmentAction) -> None:
         """
             Should only be called during pre-start
-        :param listener: The listener to register
+        :param current_listener: The listener to register
         :param action: type of action the listener is interested in
         """
-        self.listeners[action].append(listener)
+        self.listeners[action].append(current_listener)
 
-    def remove_listener(self, action: EnvironmentAction, listener: EnvironmentListener) -> None:
-        self.listeners[action].remove(listener)
+    def remove_listener(self, action: EnvironmentAction, current_listener: listener.EnvironmentListener) -> None:
+        self.listeners[action].remove(current_listener)
 
     async def _delete_environment_dir(self, environment_id: uuid.UUID) -> None:
         """
@@ -676,16 +645,16 @@ class EnvironmentService(protocol.ServerSlice):
     async def notify_listeners(
         self, action: EnvironmentAction, updated_env: model.Environment, original_env: Optional[model.Environment] = None
     ) -> None:
-        for listener in self.listeners[action]:
+        for current_listener in self.listeners[action]:
             try:
                 if action == EnvironmentAction.created:
-                    await listener.environment_action_created(updated_env)
+                    await current_listener.environment_action_created(updated_env)
                 if action == EnvironmentAction.deleted:
-                    await listener.environment_action_deleted(updated_env)
+                    await current_listener.environment_action_deleted(updated_env)
                 if action == EnvironmentAction.cleared:
-                    await listener.environment_action_cleared(updated_env)
+                    await current_listener.environment_action_cleared(updated_env)
                 if action == EnvironmentAction.updated and original_env:
-                    await listener.environment_action_updated(updated_env, original_env)
+                    await current_listener.environment_action_updated(updated_env, original_env)
             except Exception:
                 LOGGER.warning("Notifying listener of %s failed with the following exception", action.value, exc_info=True)
 

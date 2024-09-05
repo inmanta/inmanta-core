@@ -31,7 +31,7 @@ from utils import UNKWN, ClientHelper, assert_equal_ish
 logger = logging.getLogger("inmanta.test.server_agent")
 
 
-async def test_deploy_with_undefined(server, client, async_finalizer, no_agent_backoff):
+async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_backoff):
     """
     Test deploy of resource with undefined
     """

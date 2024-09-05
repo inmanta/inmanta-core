@@ -1197,12 +1197,13 @@ class OrchestrationService(protocol.ServerSlice):
                 await model.mark_done(connection=connection)
                 return 200, {"model": model}
 
-            if push:
+            is_using_new_scheduler = opt.server_use_resource_scheduler.get()
+            if push or is_using_new_scheduler:
                 # We can't be in a transaction here, or the agent will not see the data that as committed
                 # This assert prevents anyone from wrapping this method in a transaction by accident
                 assert not connection.is_in_transaction()
 
-                if opt.server_use_resource_scheduler.get():
+                if is_using_new_scheduler:
                     await self.autostarted_agent_manager._ensure_scheduler(env)
                     agents = [const.AGENT_SCHEDULER_ID]
                 else:

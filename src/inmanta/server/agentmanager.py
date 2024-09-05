@@ -56,6 +56,7 @@ from inmanta.server import (
 )
 from inmanta.server import config as opt
 from inmanta.server import protocol
+from inmanta.server.listener import EnvironmentListener
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
 from inmanta.server.server import Server
 from inmanta.types import Apireturn, ArgumentTypes, ReturnTupple
@@ -937,7 +938,7 @@ class AgentManager(ServerSlice, SessionListener):
         return dto
 
 
-class AutostartedAgentManager(ServerSlice):
+class AutostartedAgentManager(ServerSlice, EnvironmentListener):
     """
     An instance of this class manages autostarted agent instance processes. It does not manage the logical agents as those
     are managed by `:py:class:AgentManager`.
@@ -1483,3 +1484,11 @@ ssl=True
             await asyncio.wait_for(asyncio.gather(*[asyncio.shield(proc.wait()) for proc in unfinished_processes]), timeout)
         except asyncio.TimeoutError:
             LOGGER.warning("Agent processes did not close in time (%s)", procs)
+
+    async def environment_action_created(self, env: model.Environment) -> None:
+        """
+        Will be called when a new environment is created to create a scheduler agent
+
+        :param env: The new environment
+        """
+        await self._ensure_scheduler(env)
