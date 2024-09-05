@@ -33,19 +33,6 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class Scope:
-    """
-    Scope of the lifetime of CacheItem.
-    """
-
-    def __init__(self, timeout: float = 24 * 3600) -> None:
-        """
-        :param timeout: How long (in seconds) before the associated cache item is considered expired.
-        :param version: The version to which this cache item belongs.
-        """
-        self.timeout = timeout
-
-
 class CacheItem:
     def __init__(
         self,
