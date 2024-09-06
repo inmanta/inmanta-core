@@ -184,7 +184,7 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods.release_version, env="tid", agent="id")
     async def read_version(self, env: uuid.UUID, agent: str, _: bool) -> Apireturn:
         """
-        Trigger an update
+        Send a notification to the scheduler that a new version has been released
         """
         assert env == self.environment
         assert agent == AGENT_SCHEDULER_ID
