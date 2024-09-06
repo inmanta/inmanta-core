@@ -37,7 +37,7 @@ from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import NamedTuple, Optional, TypeVar, Tuple
+from typing import NamedTuple, Optional, Tuple, TypeVar
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
@@ -391,7 +391,14 @@ class Pip(PipCommandBuilder):
         """
 
         cmd, constraints_files_clean, requirements_files_clean, sub_env = cls._prepare_command(
-            python_path, config, requirements, requirements_files, upgrade, upgrade_strategy, constraints_files, paths,
+            python_path,
+            config,
+            requirements,
+            requirements_files,
+            upgrade,
+            upgrade_strategy,
+            constraints_files,
+            paths,
         )
 
         cls.run_pip(cmd, sub_env, constraints_files_clean, requirements_files_clean)
@@ -425,7 +432,14 @@ class Pip(PipCommandBuilder):
         """
 
         cmd, constraints_files_clean, requirements_files_clean, sub_env = cls._prepare_command(
-            python_path, config, requirements, requirements_files, upgrade, upgrade_strategy, constraints_files, paths,
+            python_path,
+            config,
+            requirements,
+            requirements_files,
+            upgrade,
+            upgrade_strategy,
+            constraints_files,
+            paths,
         )
         await cls.async_run_pip(cmd, sub_env, constraints_files_clean, requirements_files_clean)
 
@@ -440,7 +454,7 @@ class Pip(PipCommandBuilder):
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         constraints_files: Optional[list[str]] = None,
         paths: Optional[list[LocalPackagePath]] = None,
-    ) -> Tuple[list[str], list[str], list[str], dict[str,str]]:
+    ) -> Tuple[list[str], list[str], list[str], dict[str, str]]:
         # What
         requirements = requirements if requirements is not None else []
         clean_requirements_files = requirements_files if requirements_files is not None else []
