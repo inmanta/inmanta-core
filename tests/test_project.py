@@ -28,8 +28,8 @@ import pytest
 
 from inmanta.data import model
 from inmanta.module import ModuleLoadingException, Project
-from inmanta.server import SLICE_ENVIRONMENT, listener
-from inmanta.server.services.environmentservice import EnvironmentAction, EnvironmentService
+from inmanta.server import SLICE_ENVIRONMENT
+from inmanta.server.services import environmentservice
 from utils import log_contains
 
 
@@ -362,7 +362,7 @@ async def test_create_with_id(client):
 
 
 async def test_environment_listener(server, client_v2, caplog):
-    class EnvironmentListenerCounter(listener.EnvironmentListener):
+    class EnvironmentListenerCounter(environmentservice.EnvironmentListener):
         def __init__(self):
             self.created_counter = 0
             self.updated_counter = 0
@@ -385,10 +385,15 @@ async def test_environment_listener(server, client_v2, caplog):
 
     environment_listener = EnvironmentListenerCounter()
 
-    environment_service = cast(EnvironmentService, server.get_slice(SLICE_ENVIRONMENT))
+    environment_service = cast(environmentservice.EnvironmentService, server.get_slice(SLICE_ENVIRONMENT))
     environment_service.register_listener_for_multiple_actions(
         environment_listener,
-        {EnvironmentAction.created, EnvironmentAction.updated, EnvironmentAction.deleted, EnvironmentAction.cleared},
+        {
+            environmentservice.EnvironmentAction.created,
+            environmentservice.EnvironmentAction.updated,
+            environmentservice.EnvironmentAction.deleted,
+            environmentservice.EnvironmentAction.cleared,
+        },
     )
     result = await client_v2.project_create("project-test")
     assert result.code == 200
