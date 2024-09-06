@@ -72,10 +72,6 @@ class EnvironmentAction(str, Enum):
     deleted = "deleted"
     cleared = "cleared"
     updated = "updated"
-    halted = "halted"
-    resumed = "resumed"
-    setting_updated = "setting_updated"
-    agent_map_updated = "agent_map_updated"
 
 
 class EnvironmentListener:
@@ -109,40 +105,13 @@ class EnvironmentListener:
         :param original_env: The original environment
         """
 
-    async def environment_action_settings_updated(self, env: model.Environment) -> None:
-        """
-        Will be called when one setting of the environment has changed (except `AUTOSTART_AGENT_MAP`)
-
-        :param env: The environment that is updated
-        """
-
-    async def environment_action_agent_map_updated(self, env: model.Environment) -> None:
-        """
-        Will be called when the `AUTOSTART_AGENT_MAP` of the environment has changed
-
-        :param env: The environment that is updated
-        """
-
-    async def environment_action_halted(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is halted
-
-        :param env: The environment that is halted
-        """
-
-    async def environment_action_resumed(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is resumed
-
-        :param env: The environment that is resumed
-        """
-
 
 class EnvironmentService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
     server_slice: Server
     agent_manager: "agentmanager.AgentManager"
+    autostarted_agent_manager: "agentmanager.AutostartedAgentManager"
     orchestration_service: "orchestrationservice.OrchestrationService"
     resource_service: "resourceservice.ResourceService"
     listeners: dict[EnvironmentAction, list[EnvironmentListener]]
@@ -178,6 +147,9 @@ class EnvironmentService(protocol.ServerSlice):
         await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
         self.agent_manager = cast(agentmanager.AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
+        self.autostarted_agent_manager = cast(
+            agentmanager.AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+        )
         self.orchestration_service = cast(orchestrationservice.OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(resourceservice.ResourceService, server.get_slice(SLICE_RESOURCE))
 
@@ -222,12 +194,12 @@ class EnvironmentService(protocol.ServerSlice):
             warnings = await self.server_slice._async_recompile(env, setting.update, metadata=metadata.model_dump())
 
         if setting.agent_restart:
-            if key == data.AUTOSTART_AGENT_MAP:  # TODO h check to change them as listener
+            if key == data.AUTOSTART_AGENT_MAP:
                 LOGGER.info("Environment setting %s changed. Notifying agents.", key)
-                self.add_background_task(self.notify_listeners(EnvironmentAction.agent_map_updated, env.to_dto()))
+                self.add_background_task(self.autostarted_agent_manager.notify_agent_about_agent_map_update(env))
             else:
                 LOGGER.info("Environment setting %s changed. Restarting agents.", key)
-                self.add_background_task(self.notify_listeners(EnvironmentAction.setting_updated, env.to_dto()))
+                self.add_background_task(self.autostarted_agent_manager.restart_agents(env))
 
         self.add_background_task(self._enable_schedules(env, setting))
 
@@ -309,7 +281,7 @@ class EnvironmentService(protocol.ServerSlice):
 
                 await refreshed_env.update_fields(halted=True, connection=con)
                 await self.agent_manager.halt_agents(refreshed_env, connection=con)
-        await self.notify_listeners(EnvironmentAction.halted, env.to_dto(), delete_agent_venv=delete_agent_venv)
+        await self.autostarted_agent_manager.stop_agents(refreshed_env, delete_venv=delete_agent_venv)
 
     @handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
@@ -333,7 +305,7 @@ class EnvironmentService(protocol.ServerSlice):
 
                 await refreshed_env.update_fields(halted=False, connection=con)
                 await self.agent_manager.resume_agents(refreshed_env, connection=con)
-        await self.notify_listeners(EnvironmentAction.resumed, env.to_dto())
+        await self.autostarted_agent_manager.restart_agents(refreshed_env)
         await self.server_slice.compiler.resume_environment(refreshed_env.id)
 
     @handle(methods.clear_environment, env="id")
@@ -699,7 +671,6 @@ class EnvironmentService(protocol.ServerSlice):
         action: EnvironmentAction,
         updated_env: model.Environment,
         original_env: Optional[model.Environment] = None,
-        delete_agent_venv: Optional[bool] = None,
     ) -> None:
         for current_listener in self.listeners[action]:
             try:
@@ -711,14 +682,6 @@ class EnvironmentService(protocol.ServerSlice):
                     await current_listener.environment_action_cleared(updated_env)
                 if action == EnvironmentAction.updated and original_env:
                     await current_listener.environment_action_updated(updated_env, original_env)
-                if action == EnvironmentAction.halted:
-                    await current_listener.environment_action_halted(updated_env)
-                if action == EnvironmentAction.resumed:
-                    await current_listener.environment_action_resumed(updated_env)
-                if action == EnvironmentAction.setting_updated:
-                    await current_listener.environment_action_settings_updated(updated_env)
-                if action == EnvironmentAction.agent_map_updated:
-                    await current_listener.environment_action_agent_map_updated(updated_env)
             except Exception:
                 LOGGER.warning("Notifying listener of %s failed with the following exception", action.value, exc_info=True)
 

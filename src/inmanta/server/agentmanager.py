@@ -1504,35 +1504,3 @@ ssl=True
         await self._ensure_scheduler(env_db)
         # We need to make sure that the AGENT_SCHEDULER is registered to be up and running
         await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
-
-    async def environment_action_settings_updated(self, env: model.Environment) -> None:
-        """
-        Will be called when one setting of the environment has changed (except `AUTOSTART_AGENT_MAP`)
-
-        :param env: The environment that is updated
-        """
-        await self.restart_agents(env)
-
-    async def environment_action_agent_map_updated(self, env: model.Environment) -> None:
-        """
-        Will be called when the `AUTOSTART_AGENT_MAP` of the environment has changed
-
-        :param env: The environment that is updated
-        """
-        await self.notify_agent_about_agent_map_update(env)
-
-    async def environment_action_halted(self, env: model.Environment, delete_agent_venv: bool) -> None:
-        """
-        Will be called when the environment is halted
-
-        :param env: The environment that is halted
-        """
-        await self.stop_agents(env, delete_venv=delete_agent_venv)
-
-    async def environment_action_resumed(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is resumed
-
-        :param env: The environment that is resumed
-        """
-        await self.restart_agents(env)
