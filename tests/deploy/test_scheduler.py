@@ -16,16 +16,16 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import copy
 import logging
+import typing
 import uuid
 
 import inmanta.execute.util
 from inmanta import const, data
 from inmanta.config import Config
 from inmanta.deploy.scheduler import ResourceScheduler
-from inmanta.util import get_compiler_version
+from inmanta.util import get_compiler_version, retry_limited
 from utils import UNKWN, ClientHelper, assert_equal_ish
 
 logger = logging.getLogger("inmanta.test.server_agent")
@@ -208,16 +208,25 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
     result = await client.list_agent_processes(env_id)
     assert result.code == 200
 
-    while len(result.result["processes"]) != 1:
+    async def done():
         result = await client.list_agent_processes(env_id)
         assert result.code == 200
-        await asyncio.sleep(0.1)
+        if len(result.result["processes"]) != 1:
+            return False
+        return True
 
+    await retry_limited(done, 5)
+
+    result = await client.list_agent_processes(env_id)
     assert len(result.result["processes"]) == 1
+
+    endpoint_id: typing.Optional[uuid.UUID] = None
     for proc in result.result["processes"]:
         assert proc["environment"] == env_id
         assert len(proc["endpoints"]) == 1
         assert proc["endpoints"][0]["name"] == const.AGENT_SCHEDULER_ID
+        endpoint_id = proc["endpoints"][0]["id"]
+    assert endpoint_id is not None
 
     assert_equal_ish(
         {
@@ -236,10 +245,6 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
         ["name", "first_seen"],
     )
 
-    endpointid = [
-        x["endpoints"][0]["id"] for x in result.result["processes"] if x["endpoints"][0]["name"] == const.AGENT_SCHEDULER_ID
-    ][0]
-
     # The agent was there because `ensure_agent_registered` was called each time we release a new version or call
     # `put_version` + `AUTO_DEPLOY` set to `True`
     # But this will be tested later in the test to make sure that when we create a new environment, everything is started and
@@ -253,7 +258,7 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
                 "last_failover": UNKWN,
                 "environment": env_id,
                 "paused": False,
-                "primary": endpointid,
+                "primary": endpoint_id,
                 "name": const.AGENT_SCHEDULER_ID,
                 "state": "up",
             }
@@ -269,20 +274,25 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
     result = await client.list_agent_processes(new_env_id)
     assert result.code == 200
 
-    while len(result.result["processes"]) != 1:
+    async def done():
         result = await client.list_agent_processes(new_env_id)
         assert result.code == 200
-        await asyncio.sleep(0.1)
+        if len(result.result["processes"]) != 1:
+            return False
+        return True
 
+    await retry_limited(done, 5)
+
+    result = await client.list_agent_processes(new_env_id)
     assert len(result.result["processes"]) == 1
+
+    new_endpoint_id: typing.Optional[uuid.UUID] = None
     for proc in result.result["processes"]:
         assert proc["environment"] == new_env_id
         assert len(proc["endpoints"]) == 1
         assert proc["endpoints"][0]["name"] == const.AGENT_SCHEDULER_ID
-
-    new_endpoint_id = [
-        x["endpoints"][0]["id"] for x in result.result["processes"] if x["endpoints"][0]["name"] == const.AGENT_SCHEDULER_ID
-    ][0]
+        new_endpoint_id = proc["endpoints"][0]["id"]
+    assert new_endpoint_id is not None
 
     assert_equal_ish(
         {

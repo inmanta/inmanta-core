@@ -37,10 +37,6 @@ from inmanta.util import join_threadpools
 LOGGER = logging.getLogger(__name__)
 
 
-class CouldNotConnectToServer(Exception):
-    pass
-
-
 class Agent(SessionEndpoint):
     """
     An agent to enact changes upon resources. This agent listens to the
@@ -56,11 +52,6 @@ class Agent(SessionEndpoint):
         environment: Optional[uuid.UUID] = None,
     ):
         """
-        :param hostname: this used to indicate the hostname of the agent,
-        but it is now mostly used by testcases to prevent endpoint to be loaded from the config singleton
-           see _init_endpoint_names
-        :param agent_map: the agent map for this agent to use
-        :param code_loader: do we enable the code loader (used for testing)
         :param environment: environment id
         """
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
@@ -124,11 +115,11 @@ class Agent(SessionEndpoint):
         if self.working:
             return
         self.working = True
-        await self.executor_manager.start()
         await self.scheduler.start()
+        await self.executor_manager.start()
 
     async def stop_working(self) -> None:
-        """Start working, once we have a session"""
+        """Stop working"""
         if not self.working:
             return
         # Todo: recycle them when we restart
@@ -191,7 +182,7 @@ class Agent(SessionEndpoint):
         return 200
 
     @protocol.handle(methods.release_version, env="tid", agent="id")
-    async def release_version(self, env: uuid.UUID, agent: str, _: bool) -> Apireturn:
+    async def read_version(self, env: uuid.UUID, agent: str, _: bool) -> Apireturn:
         """
         Trigger an update
         """

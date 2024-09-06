@@ -152,6 +152,11 @@ class EnvironmentService(protocol.ServerSlice):
         )
         self.orchestration_service = cast(orchestrationservice.OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(resourceservice.ResourceService, server.get_slice(SLICE_RESOURCE))
+        # Register the compiler service here to the environment service listener. Registering it within the compiler service
+        # would result in a circular dependency between the environment slice and the compiler service slice.
+        self.register_listener_for_multiple_actions(
+            self.server_slice.compiler, {EnvironmentAction.cleared, EnvironmentAction.deleted}
+        )
 
     async def start(self) -> None:
         await super().start()

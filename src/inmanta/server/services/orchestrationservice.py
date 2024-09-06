@@ -1202,19 +1202,16 @@ class OrchestrationService(protocol.ServerSlice):
             is_using_new_scheduler = opt.server_use_resource_scheduler.get()
             # New code relying on the ResourceScheduler
             if is_using_new_scheduler:
-                # We can't be in a transaction here, or the agent will not see the data that as committed
-                # This assert prevents anyone from wrapping this method in a transaction by accident
-                assert not connection.is_in_transaction()
+                if connection.is_in_transaction():
+                    raise RuntimeError(
+                        "The release of a new version cannot be in a transaction! "
+                        "The agent would not see the data that as committed"
+                    )
                 await self.autostarted_agent_manager._ensure_scheduler(env)
                 agent = const.AGENT_SCHEDULER_ID
 
                 client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
                 if client is not None:
-                    if not agent_trigger_method:
-                        env_agent_trigger_method = await env.get(ENVIRONMENT_AGENT_TRIGGER_METHOD, connection=connection)
-                        incremental_deploy = env_agent_trigger_method == const.AgentTriggerMethod.push_incremental_deploy
-                    else:
-                        incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
                     self.add_background_task(client.trigger_release_version(env.id))
                 else:
                     LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)

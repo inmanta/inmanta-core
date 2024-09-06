@@ -560,10 +560,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         state_dir: str = config.state_dir.get()
         server_state_dir = ensure_directory_exist(state_dir, "server")
         self._env_folder = ensure_directory_exist(server_state_dir, "environments")
-        self.environment_service = cast(environmentservice.EnvironmentService, server.get_slice(SLICE_ENVIRONMENT))
-        self.environment_service.register_listener_for_multiple_actions(
-            self, {environmentservice.EnvironmentAction.cleared, environmentservice.EnvironmentAction.deleted}
-        )
 
     async def start(self) -> None:
         await super().start()

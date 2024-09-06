@@ -116,6 +116,12 @@ class ResourceScheduler:
     async def new_version(
         self,
     ) -> None:
+        """
+        Method that is used as a notification from the Server to retrieve the latest data concerning the release of the
+        latest version. This method will fetch the latest version and the different resources in their latest version.
+        It will then compute the work that needs to be done (resources to create / delete / update) to in order to be up to
+        date with this new version.
+        """
         environment = await data.Environment.get_by_id(self._environment)
         if environment is None:
             raise ValueError(f"No environment found with this id: `{self._environment}`")

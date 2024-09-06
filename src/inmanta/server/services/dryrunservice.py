@@ -21,7 +21,7 @@ import logging
 import uuid
 from typing import Optional, cast
 
-from inmanta import data
+from inmanta import const, data
 from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus, ResourceVersionIdStr
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound
@@ -74,6 +74,7 @@ class DyrunService(protocol.ServerSlice):
         dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
 
         if opt.server_use_resource_scheduler.get():
+            agents = [const.AGENT_SCHEDULER_ID]
             await self.autostarted_agent_manager._ensure_scheduler(env)
         else:
             agents = await data.ConfigurationModel.get_agents(env.id, version_id)

@@ -1043,7 +1043,7 @@ def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
     arg_options=AGENT_ENV_OPTS,
     client_types=[],
 )
-def trigger_release_version(tid: uuid.UUID) -> int:
+def trigger_read_version(tid: uuid.UUID) -> int:
     """
     Notify the scheduler that a new version has been released
 
