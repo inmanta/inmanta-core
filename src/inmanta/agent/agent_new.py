@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2024 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ class Agent(SessionEndpoint):
     """
     This is the new scheduler, adapted to the agent protocol
 
-    It serves a single endpoint that allows communciations with the scheduler
+    It serves a single endpoint that allows communications with the scheduler
     """
 
     def __init__(
@@ -54,7 +54,7 @@ class Agent(SessionEndpoint):
         """
         :param environment: environment id
         """
-        super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
+        super().__init__(name="agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.thread_pool = ThreadPoolExecutor(1, thread_name_prefix="mainpool")
         self._storage = self.check_storage()
@@ -77,7 +77,7 @@ class Agent(SessionEndpoint):
             config.log_dir.get(),
             self._storage["executor"],
             LOGGER.level,
-            False,
+            cli_log=False,
         )
 
     async def stop(self) -> None:
@@ -122,14 +122,14 @@ class Agent(SessionEndpoint):
         pass
 
     async def unpause(self, name: str) -> Apireturn:
-        if not name == AGENT_SCHEDULER_ID:
+        if name != AGENT_SCHEDULER_ID:
             return 404, "No such agent"
 
         await self.start_working()
         return 200
 
     async def pause(self, name: str) -> Apireturn:
-        if not name == AGENT_SCHEDULER_ID:
+        if name != AGENT_SCHEDULER_ID:
             return 404, "No such agent"
 
         await self.stop_working()

@@ -51,7 +51,7 @@ class ResourceScheduler:
     ) -> None:
         """
         :param environment: the environment we work for
-        :param executor_manager: the executor manager that will provide us with workers
+        :param executor_manager: the executor manager that will provide us with executors
         :param client: connection to the server
         """
         self._state: ModelState = ModelState(version=0)
@@ -259,7 +259,7 @@ class ResourceScheduler:
             return
 
         # Get executor
-        my_executor: executor.Executor = await self._executor_manager.get_executor(agent, "NOURI", code)
+        my_executor: executor.Executor = await self._executor_manager.get_executor(agent_name=agent, agent_uri="NO_URI", code=code)
         failed_resources = my_executor.failed_resources
 
         # Bail out if this failed

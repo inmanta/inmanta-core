@@ -82,7 +82,7 @@ dummyblueprint = ExecutorBlueprint(
 
 
 class DummyCodeManager(CodeManager):
-    """Code manager that prentends no code is ever needed"""
+    """Code manager that prentend no code is ever needed"""
 
     async def get_code(
         self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]

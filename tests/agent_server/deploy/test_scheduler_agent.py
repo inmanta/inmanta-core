@@ -158,7 +158,7 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
     rid1 = "test::Resource[agent1,name=1]"
     rid2 = "test::Resource[agent1,name=2]"
     resources = {
-        ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, [], 5),
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[], version=5),
         ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
     }
 

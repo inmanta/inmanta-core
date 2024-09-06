@@ -96,7 +96,7 @@ class TaskQueueItem:
     insert_order: int
 
     # Mutable state
-    is_active: bool = True
+    deleted: bool = False
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):

@@ -151,7 +151,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     logger.info("first version pushed")
 
     # deploy and wait until one is ready
-    result = await client.release_version(env_id, version1, False)
+    result = await client.release_version(env_id, version1, push=False)
     assert result.code == 200
 
     resource = convert_resources(resources)
@@ -160,7 +160,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     logger.info("first version released")
     # timeout on single thread!
-    await wait_for_resources(version1, 1)
+    await wait_for_resources(version1, n=1)
 
     await resource_container.wait_for_done_with_waiters(client, env_id, version1)
 
