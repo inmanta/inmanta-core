@@ -208,12 +208,10 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
     result = await client.list_agent_processes(env_id)
     assert result.code == 200
 
-    async def done():
+    async def done() -> bool:
         result = await client.list_agent_processes(env_id)
         assert result.code == 200
-        if len(result.result["processes"]) != 1:
-            return False
-        return True
+        return len(result.result["processes"]) == 1
 
     await retry_limited(done, 5)
 
@@ -274,12 +272,10 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
     result = await client.list_agent_processes(new_env_id)
     assert result.code == 200
 
-    async def done():
+    async def done() -> bool:
         result = await client.list_agent_processes(new_env_id)
         assert result.code == 200
-        if len(result.result["processes"]) != 1:
-            return False
-        return True
+        return len(result.result["processes"]) == 1
 
     await retry_limited(done, 5)
 
