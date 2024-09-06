@@ -27,7 +27,7 @@ from inmanta.agent import executor, forking_executor
 from inmanta.agent.forking_executor import MPExecutor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
-from inmanta.signals import context_dump, dump_ioloop_running, dump_threads
+from inmanta.signals import dump_ioloop_running, dump_threads
 from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
 
 logger = logging.getLogger(__name__)
