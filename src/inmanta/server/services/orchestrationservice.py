@@ -62,11 +62,11 @@ from inmanta.server import (
     SLICE_ORCHESTRATION,
     SLICE_RESOURCE,
     SLICE_TRANSPORT,
+    agentmanager,
 )
 from inmanta.server import config as opt
 from inmanta.server import diff, protocol
-from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
-from inmanta.server.services.resourceservice import ResourceService
+from inmanta.server.services import resourceservice
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple
 
@@ -379,9 +379,9 @@ class PartialUpdateMerger:
 class OrchestrationService(protocol.ServerSlice):
     """Resource Manager service"""
 
-    agentmanager_service: "AgentManager"
-    autostarted_agent_manager: AutostartedAgentManager
-    resource_service: ResourceService
+    agentmanager_service: "agentmanager.AgentManager"
+    autostarted_agent_manager: "agentmanager.AutostartedAgentManager"
+    resource_service: "resourceservice.ResourceService"
 
     def __init__(self) -> None:
         super().__init__(SLICE_ORCHESTRATION)
@@ -394,9 +394,11 @@ class OrchestrationService(protocol.ServerSlice):
 
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
-        self.agentmanager_service = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
-        self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
-        self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
+        self.agentmanager_service = cast("agentmanager.AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
+        self.autostarted_agent_manager = cast(
+            agentmanager.AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+        )
+        self.resource_service = cast("resourceservice.ResourceService", server.get_slice(SLICE_RESOURCE))
 
     async def start(self) -> None:
         if PERFORM_CLEANUP:

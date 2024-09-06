@@ -19,27 +19,27 @@
 from inmanta.data import model
 
 
-class EnvironmentListener:
+class AutoStartedAgentManagerListener:
     """
     Base class for environment listeners
     Exceptions from the listeners are dropped, the listeners are responsible for handling them
     """
 
-    async def environment_action_created(self, env: model.Environment) -> None:
+    async def environment_settings_changed(self, env: model.Environment) -> None:
         """
         Will be called when a new environment is created
 
         :param env: The new environment
         """
 
-    async def environment_action_cleared(self, env: model.Environment) -> None:
+    async def environment_agent_map_changed(self, env: model.Environment) -> None:
         """
         Will be called when the environment is cleared
 
         :param env: The environment that is cleared
         """
 
-    async def environment_action_deleted(self, env: model.Environment) -> None:
+    async def environment_halted(self, env: model.Environment) -> None:
         """
         Will be called when the environment is deleted
 

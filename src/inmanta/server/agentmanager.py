@@ -50,15 +50,16 @@ from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
+    SLICE_ENVIRONMENT,
     SLICE_SERVER,
     SLICE_SESSION_MANAGER,
     SLICE_TRANSPORT,
 )
 from inmanta.server import config as opt
 from inmanta.server import protocol
-from inmanta.server.listener import EnvironmentListener
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
 from inmanta.server.server import Server
+from inmanta.server.services import environmentservice
 from inmanta.types import Apireturn, ArgumentTypes, ReturnTupple
 
 from ..data.dataview import AgentView
@@ -938,11 +939,13 @@ class AgentManager(ServerSlice, SessionListener):
         return dto
 
 
-class AutostartedAgentManager(ServerSlice, EnvironmentListener):
+class AutostartedAgentManager(ServerSlice, environmentservice.EnvironmentListener):
     """
     An instance of this class manages autostarted agent instance processes. It does not manage the logical agents as those
     are managed by `:py:class:AgentManager`.
     """
+
+    environment_service: environmentservice.EnvironmentService
 
     def __init__(self) -> None:
         super().__init__(SLICE_AUTOSTARTED_AGENT_MANAGER)
@@ -962,6 +965,9 @@ class AutostartedAgentManager(ServerSlice, EnvironmentListener):
         agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
         assert isinstance(agent_manager, AgentManager)
         self._agent_manager = agent_manager
+
+        self.environment_service = cast(environmentservice.EnvironmentService, server.get_slice(SLICE_ENVIRONMENT))
+        self.environment_service.register_listener(self, environmentservice.EnvironmentAction.created)
 
     async def start(self) -> None:
         await super().start()
@@ -1498,3 +1504,35 @@ ssl=True
         await self._ensure_scheduler(env_db)
         # We need to make sure that the AGENT_SCHEDULER is registered to be up and running
         await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
+
+    async def environment_action_settings_updated(self, env: model.Environment) -> None:
+        """
+        Will be called when one setting of the environment has changed (except `AUTOSTART_AGENT_MAP`)
+
+        :param env: The environment that is updated
+        """
+        await self.restart_agents(env)
+
+    async def environment_action_agent_map_updated(self, env: model.Environment) -> None:
+        """
+        Will be called when the `AUTOSTART_AGENT_MAP` of the environment has changed
+
+        :param env: The environment that is updated
+        """
+        await self.notify_agent_about_agent_map_update(env)
+
+    async def environment_action_halted(self, env: model.Environment, delete_agent_venv: bool) -> None:
+        """
+        Will be called when the environment is halted
+
+        :param env: The environment that is halted
+        """
+        await self.stop_agents(env, delete_venv=delete_agent_venv)
+
+    async def environment_action_resumed(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is resumed
+
+        :param env: The environment that is resumed
+        """
+        await self.restart_agents(env)

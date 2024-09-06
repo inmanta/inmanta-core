@@ -50,14 +50,11 @@ from inmanta.server import (
     SLICE_RESOURCE,
     SLICE_SERVER,
     SLICE_TRANSPORT,
-    listener,
+    agentmanager,
     protocol,
 )
-from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager  # TODO h change that
 from inmanta.server.server import Server
-from inmanta.server.services import compilerservice
-from inmanta.server.services.orchestrationservice import OrchestrationService
-from inmanta.server.services.resourceservice import ResourceService
+from inmanta.server.services import orchestrationservice, resourceservice
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
@@ -75,17 +72,80 @@ class EnvironmentAction(str, Enum):
     deleted = "deleted"
     cleared = "cleared"
     updated = "updated"
+    halted = "halted"
+    resumed = "resumed"
+    setting_updated = "setting_updated"
+    agent_map_updated = "agent_map_updated"
+
+
+class EnvironmentListener:
+    """
+    Base class for environment listeners
+    Exceptions from the listeners are dropped, the listeners are responsible for handling them
+    """
+
+    async def environment_action_created(self, env: model.Environment) -> None:
+        """
+        Will be called when a new environment is created
+        :param env: The new environment
+        """
+
+    async def environment_action_cleared(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is cleared
+        :param env: The environment that is cleared
+        """
+
+    async def environment_action_deleted(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is deleted
+        :param env: The environment that is deleted
+        """
+
+    async def environment_action_updated(self, updated_env: model.Environment, original_env: model.Environment) -> None:
+        """
+        Will be called when an environment is updated
+        :param updated_env: The updated environment
+        :param original_env: The original environment
+        """
+
+    async def environment_action_settings_updated(self, env: model.Environment) -> None:
+        """
+        Will be called when one setting of the environment has changed (except `AUTOSTART_AGENT_MAP`)
+
+        :param env: The environment that is updated
+        """
+
+    async def environment_action_agent_map_updated(self, env: model.Environment) -> None:
+        """
+        Will be called when the `AUTOSTART_AGENT_MAP` of the environment has changed
+
+        :param env: The environment that is updated
+        """
+
+    async def environment_action_halted(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is halted
+
+        :param env: The environment that is halted
+        """
+
+    async def environment_action_resumed(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is resumed
+
+        :param env: The environment that is resumed
+        """
 
 
 class EnvironmentService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
     server_slice: Server
-    agent_manager: AgentManager
-    autostarted_agent_manager: AutostartedAgentManager
-    orchestration_service: OrchestrationService
-    resource_service: ResourceService
-    listeners: dict[EnvironmentAction, list[listener.EnvironmentListener]]
+    agent_manager: "agentmanager.AgentManager"
+    orchestration_service: "orchestrationservice.OrchestrationService"
+    resource_service: "resourceservice.ResourceService"
+    listeners: dict[EnvironmentAction, list[EnvironmentListener]]
     # environment_state_operation_lock is to prevent concurrent execution of
     # operations that modify the state of an environment, such as halting, resuming, or deleting.
     # This lock helps prevent race conditions and ensures that state changes are carried out in a safe and
@@ -117,15 +177,9 @@ class EnvironmentService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
-        self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
-        self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
-        self.compiler_service = cast(compilerservice.CompilerService, server.get_slice(SLICE_COMPILER))
-        self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
-        self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
-        self.register_listener_for_multiple_actions(
-            self.compiler_service, {EnvironmentAction.cleared, EnvironmentAction.deleted}
-        )
-        self.register_listener(self.autostarted_agent_manager, EnvironmentAction.created)
+        self.agent_manager = cast(agentmanager.AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
+        self.orchestration_service = cast(orchestrationservice.OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
+        self.resource_service = cast(resourceservice.ResourceService, server.get_slice(SLICE_RESOURCE))
 
     async def start(self) -> None:
         await super().start()
@@ -148,13 +202,13 @@ class EnvironmentService(protocol.ServerSlice):
         if setting is None or setting.name == data.AUTO_FULL_COMPILE:
             if setting is not None:
                 LOGGER.info("Environment setting %s changed. Rescheduling full compiles.", setting.name)
-            self.compiler_service.schedule_full_compile(env, str(await env.get(data.AUTO_FULL_COMPILE)))
+            self.server_slice.compiler.schedule_full_compile(env, str(await env.get(data.AUTO_FULL_COMPILE)))
 
     def _disable_schedules(self, env: data.Environment) -> None:
         """
         Removes scheduling of all appropriate actions for a single environment.
         """
-        self.compiler_service.schedule_full_compile(env, schedule_cron="")
+        self.server_slice.compiler.schedule_full_compile(env, schedule_cron="")
 
     async def _setting_change(self, env: data.Environment, key: str) -> Warnings:
         setting = env._settings[key]
@@ -170,10 +224,10 @@ class EnvironmentService(protocol.ServerSlice):
         if setting.agent_restart:
             if key == data.AUTOSTART_AGENT_MAP:  # TODO h check to change them as listener
                 LOGGER.info("Environment setting %s changed. Notifying agents.", key)
-                self.add_background_task(self.autostarted_agent_manager.notify_agent_about_agent_map_update(env))
+                self.add_background_task(self.notify_listeners(EnvironmentAction.agent_map_updated, env.to_dto()))
             else:
                 LOGGER.info("Environment setting %s changed. Restarting agents.", key)
-                self.add_background_task(self.autostarted_agent_manager.restart_agents(env))
+                self.add_background_task(self.notify_listeners(EnvironmentAction.setting_updated, env.to_dto()))
 
         self.add_background_task(self._enable_schedules(env, setting))
 
@@ -255,7 +309,7 @@ class EnvironmentService(protocol.ServerSlice):
 
                 await refreshed_env.update_fields(halted=True, connection=con)
                 await self.agent_manager.halt_agents(refreshed_env, connection=con)
-        await self.autostarted_agent_manager.stop_agents(refreshed_env, delete_venv=delete_agent_venv)
+        await self.notify_listeners(EnvironmentAction.halted, env.to_dto(), delete_agent_venv=delete_agent_venv)
 
     @handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
@@ -279,7 +333,7 @@ class EnvironmentService(protocol.ServerSlice):
 
                 await refreshed_env.update_fields(halted=False, connection=con)
                 await self.agent_manager.resume_agents(refreshed_env, connection=con)
-        await self.autostarted_agent_manager.restart_agents(refreshed_env)
+        await self.notify_listeners(EnvironmentAction.resumed, env.to_dto())
         await self.server_slice.compiler.resume_environment(refreshed_env.id)
 
     @handle(methods.clear_environment, env="id")
@@ -488,7 +542,7 @@ class EnvironmentService(protocol.ServerSlice):
                     await self._halt(env, connection=connection, delete_agent_venv=True)
 
                 self._disable_schedules(env)
-                await self.compiler_service.cancel_compile(env.id)
+                await self.server_slice.compiler.cancel_compile(env.id)
                 # Delete the environment directory before deleting the database records. This ensures that
                 # this operation can be retried if the deletion of the environment directory fails. Otherwise,
                 # the environment directory would be left in an inconsistent state. This can cause problems if
@@ -518,7 +572,7 @@ class EnvironmentService(protocol.ServerSlice):
 
                 # Keep this method call under the self.environment_state_operation_lock lock, because cancel_compile()
                 # must be called on halted environments only.
-                await self.compiler_service.cancel_compile(env.id)
+                await self.server_slice.compiler.cancel_compile(env.id)
                 # Delete the environment directory before deleting the database records. This ensures that
                 # this operation can be retried if the deletion of the environment directory fails. Otherwise,
                 # the environment directory would be left in an inconsistent state. This can cause problems if
@@ -590,7 +644,7 @@ class EnvironmentService(protocol.ServerSlice):
             raise NotFound()
 
     def register_listener_for_multiple_actions(
-        self, current_listener: listener.EnvironmentListener, actions: Set[EnvironmentAction]
+        self, current_listener: EnvironmentListener, actions: Set[EnvironmentAction]
     ) -> None:
         """
             Should only be called during pre-start
@@ -600,7 +654,7 @@ class EnvironmentService(protocol.ServerSlice):
         for action in actions:
             self.register_listener(current_listener, action)
 
-    def register_listener(self, current_listener: listener.EnvironmentListener, action: EnvironmentAction) -> None:
+    def register_listener(self, current_listener: EnvironmentListener, action: EnvironmentAction) -> None:
         """
             Should only be called during pre-start
         :param current_listener: The listener to register
@@ -608,7 +662,7 @@ class EnvironmentService(protocol.ServerSlice):
         """
         self.listeners[action].append(current_listener)
 
-    def remove_listener(self, action: EnvironmentAction, current_listener: listener.EnvironmentListener) -> None:
+    def remove_listener(self, action: EnvironmentAction, current_listener: EnvironmentListener) -> None:
         self.listeners[action].remove(current_listener)
 
     async def _delete_environment_dir(self, environment_id: uuid.UUID) -> None:
@@ -641,7 +695,11 @@ class EnvironmentService(protocol.ServerSlice):
                 )
 
     async def notify_listeners(
-        self, action: EnvironmentAction, updated_env: model.Environment, original_env: Optional[model.Environment] = None
+        self,
+        action: EnvironmentAction,
+        updated_env: model.Environment,
+        original_env: Optional[model.Environment] = None,
+        delete_agent_venv: Optional[bool] = None,
     ) -> None:
         for current_listener in self.listeners[action]:
             try:
@@ -653,6 +711,14 @@ class EnvironmentService(protocol.ServerSlice):
                     await current_listener.environment_action_cleared(updated_env)
                 if action == EnvironmentAction.updated and original_env:
                     await current_listener.environment_action_updated(updated_env, original_env)
+                if action == EnvironmentAction.halted:
+                    await current_listener.environment_action_halted(updated_env)
+                if action == EnvironmentAction.resumed:
+                    await current_listener.environment_action_resumed(updated_env)
+                if action == EnvironmentAction.setting_updated:
+                    await current_listener.environment_action_settings_updated(updated_env)
+                if action == EnvironmentAction.agent_map_updated:
+                    await current_listener.environment_action_agent_map_updated(updated_env)
             except Exception:
                 LOGGER.warning("Notifying listener of %s failed with the following exception", action.value, exc_info=True)
 

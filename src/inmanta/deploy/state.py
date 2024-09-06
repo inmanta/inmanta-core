@@ -124,7 +124,6 @@ class ModelState:
         attributes: ResourceDetails,
     ) -> None:
         # FIXME[#8008]: raise KeyError if already lives in state?
-        # TODO h not flag everythign
         self.resources[resource] = attributes
         if resource in self.resource_state:
             self.resource_state[resource].status = ResourceStatus.HAS_UPDATE

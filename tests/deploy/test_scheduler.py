@@ -114,7 +114,6 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
         expected_resource_attributes = copy.deepcopy(resource)
         expected_resource_attributes.pop("id")
         current_attributes = scheduler._state.resources[id_without_version].attributes
-        # TODO h ResourceScheduler -> loose version information on requires?
 
         if current_attributes["value"] == "<<undefined>>" and isinstance(
             expected_resource_attributes["value"], inmanta.execute.util.Unknown
@@ -126,7 +125,11 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
             new_requires.append(require_without_version)
         expected_resource_attributes["requires"] = new_requires
         assert current_attributes == expected_resource_attributes
-        assert scheduler._state.requires._primary[id_without_version] == set(expected_resource_attributes["requires"])
+        # This resource has no requirements
+        if id_without_version not in scheduler._state.requires._primary:
+            assert expected_resource_attributes["requires"] == []
+        else:
+            assert scheduler._state.requires._primary[id_without_version] == set(expected_resource_attributes["requires"])
 
     version = await ClientHelper(client, env_id).get_version()
 
@@ -196,7 +199,10 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
             new_requires.append(require_without_version)
         expected_resource_attributes["requires"] = new_requires
         assert current_attributes == expected_resource_attributes
-        assert scheduler._state.requires._primary[id_without_version] == set(expected_resource_attributes["requires"])
+        if id_without_version not in scheduler._state.requires._primary:
+            assert expected_resource_attributes["requires"] == []
+        else:
+            assert scheduler._state.requires._primary[id_without_version] == set(expected_resource_attributes["requires"])
 
     # Now we make sure that the agent is up and running for this environment
     result = await client.list_agent_processes(env_id)

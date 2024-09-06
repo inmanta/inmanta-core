@@ -65,8 +65,7 @@ class ResourceScheduler:
         self._environment = environment
 
     async def start(self) -> None:
-        resource_mapping, require_mapping = await self.build_resource_mappings_from_db()
-        self._state.construct(resource_mapping, require_mapping)
+        await self.new_version()
 
     async def stop(self) -> None:
         pass
@@ -98,7 +97,6 @@ class ResourceScheduler:
         """
         Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
 
-        :param environment_id: The environment ID we need to filter the resources on
         :return: resource_mapping {id -> resource details} and require_mapping {id -> requires}
         """
         resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(environment=self._environment)

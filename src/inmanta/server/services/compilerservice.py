@@ -50,8 +50,8 @@ from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
-from inmanta.server import listener
 from inmanta.server.protocol import ServerSlice
+from inmanta.server.services import environmentservice
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import TaskMethod, ensure_directory_exist
@@ -490,7 +490,7 @@ class CompileRun:
             return success, None
 
 
-class CompilerService(ServerSlice, listener.EnvironmentListener):
+class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     """
     Compiler services offers:
 
@@ -519,6 +519,7 @@ class CompilerService(ServerSlice, listener.EnvironmentListener):
     """
 
     _env_folder: str
+    environment_service: environmentservice.EnvironmentService
 
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)
@@ -559,6 +560,10 @@ class CompilerService(ServerSlice, listener.EnvironmentListener):
         state_dir: str = config.state_dir.get()
         server_state_dir = ensure_directory_exist(state_dir, "server")
         self._env_folder = ensure_directory_exist(server_state_dir, "environments")
+        self.environment_service = cast(environmentservice.EnvironmentService, server.get_slice(SLICE_ENVIRONMENT))
+        self.environment_service.register_listener_for_multiple_actions(
+            self, {environmentservice.EnvironmentAction.cleared, environmentservice.EnvironmentAction.deleted}
+        )
 
     async def start(self) -> None:
         await super().start()
