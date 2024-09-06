@@ -1169,9 +1169,6 @@ src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument "agents" to "_trigger_auto_deploy" of "OrchestrationService" has incompatible type "Collection[str]"; expected "Sequence[str] | None"  [arg-type]
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible return value type (got "ReturnValueWithMeta[Sequence[DesiredStateVersion]]", expected "ReturnValue[list[DesiredStateVersion]]")  [return-value]
 src/inmanta/server/services/compilerservice.py:0: error: Incompatible types in assignment (expression has type "bool | int | float | str | dict[str, str | int | bool]", variable has type "int")  [assignment]
-src/inmanta/agent/agent_new.py:0: error: Argument 1 to "ResourceScheduler" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
-src/inmanta/agent/agent_new.py:0: error: Argument 3 to "MPManager" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
-src/inmanta/agent/agent_new.py:0: error: Argument 1 to "collect_report" has incompatible type "inmanta.agent.agent_new.Agent"; expected "inmanta.agent.agent.Agent"  [arg-type]
 src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for + ("None" and "timedelta")  [operator]
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"
 src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for > ("timedelta" and "datetime")  [operator]

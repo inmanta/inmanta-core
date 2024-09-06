@@ -65,11 +65,14 @@ class Agent(SessionEndpoint):
                 raise Exception("The agent requires an environment to be set.")
         self.set_environment(environment)
 
+        assert self._env_id is not None
+
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
         self.scheduler = ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
+        assert self._env_id is not None
         return forking_executor.MPManager(
             self.thread_pool,
             self.sessionid,
