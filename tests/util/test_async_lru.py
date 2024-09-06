@@ -68,7 +68,7 @@ async def test_async_lru_raising():
 
     with pytest.raises(Exception, match="A"):
         await coro("A")
-     assert len(hit_count) == 1
+    assert len(hit_count) == 1
 
     with pytest.raises(Exception, match="B"):
         await coro("B")
