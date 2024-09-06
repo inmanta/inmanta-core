@@ -82,7 +82,7 @@ class ResourceScheduler:
         self._environment = environment
         self._client = client
 
-    def reset(self):
+    def reset(self) -> None:
         """
         Clear out all state and start empty
 
