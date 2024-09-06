@@ -22,7 +22,6 @@ import importlib.util
 import json
 import logging
 import os
-import pathlib
 import re
 import site
 import subprocess
@@ -45,7 +44,7 @@ import pkg_resources
 
 import packaging.utils
 import packaging.version
-from inmanta import const
+from inmanta import const, util
 from inmanta.ast import CompilerException
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
@@ -63,62 +62,6 @@ class PackageNotFound(Exception):
 
 class PipInstallError(Exception):
     pass
-
-
-def remove_comment_part(to_clean: str) -> str:
-    """
-    Remove the comment part of a given string and ensure that the lenght of the string is greater than 0
-
-    :param to_clean: The string to clean
-    :return: A cleaned string
-    """
-    drop_comment, _, _ = to_clean.partition("#")
-    if len(drop_comment) == 0:
-        raise ValueError("The name of the requirement cannot be an empty string!")
-    return drop_comment
-
-
-def safe_parse_requirement(requirement: str) -> Requirement:
-    """
-    To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
-    could arise when checking if packages are installed in a particular Venv.
-
-    :param requirement: The requirement's name
-    :return: A new requirement instance
-    """
-    # Packaging Requirement is not able to parse requirements with comment. Therefore, we need to remove the `comment` part
-    drop_comment = remove_comment_part(to_clean=requirement)
-    # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
-    # already installed
-    requirement_instance = Requirement(requirement_string=drop_comment)
-    requirement_instance.name = packaging.utils.canonicalize_name(requirement_instance.name)
-    return requirement_instance
-
-
-def safe_parse_requirements(requirements: Sequence[str]) -> Sequence[Requirement]:
-    """
-    To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
-    could arise when checking if packages are installed in a particular Venv.
-
-    :param requirements: The names of the different requirements
-    :return: Sequence[Requirement]
-    """
-    return [safe_parse_requirement(requirement=e) for e in requirements]
-
-
-def safe_parse_requirements_from_file(file_path: pathlib.Path) -> Sequence[Requirement]:
-    """
-    To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
-    could arise when checking if packages are installed in a particular Venv.
-
-    :param file_path: The path to the read the requirements from
-    :return: Sequence[Requirement]
-    """
-    requirements = []
-    with open(file_path) as f:
-        for line in f.readlines():
-            requirements.append(safe_parse_requirement(line))
-    return requirements
 
 
 @dataclass(eq=True, frozen=True)
@@ -226,7 +169,7 @@ class PythonWorkingSet:
         Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
         """
         if isinstance(requirements[0], str):
-            return safe_parse_requirements(requirements)
+            return util.parse_canonical_requirements(requirements)
         else:
             return requirements
 
@@ -278,8 +221,8 @@ class PythonWorkingSet:
                             return False
 
                         pkgs_required_by_extra: set[Requirement] = set(
-                            [safe_parse_requirement(str(e)) for e in distribution.requires(extras=(extra,))]
-                        ) - set([safe_parse_requirement(str(e)) for e in distribution.requires(extras=())])
+                            [util.parse_canonical_requirement(str(e)) for e in distribution.requires(extras=(extra,))]
+                        ) - set([util.parse_canonical_requirement(str(e)) for e in distribution.requires(extras=())])
                         if not _are_installed_recursive(
                             reqs=list(pkgs_required_by_extra),
                             seen_requirements=list(seen_requirements) + list(reqs),
@@ -908,7 +851,7 @@ import sys
         use_pip_config was ignored on ISO6 and it still is
         """
         self.install_from_index(
-            requirements=safe_parse_requirements(requirements_list),
+            requirements=util.parse_canonical_requirements(requirements_list),
             upgrade=upgrade,
             upgrade_strategy=upgrade_strategy,
             use_pip_config=True,
@@ -936,7 +879,7 @@ import sys
         protected_inmanta_packages: list[str] = cls.get_protected_inmanta_packages()
         workingset: dict[str, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
         return [
-            safe_parse_requirement(requirement=f"{pkg}=={workingset[pkg]}")
+            util.parse_canonical_requirement(requirement=f"{pkg}=={workingset[pkg]}")
             for pkg in workingset
             if pkg in protected_inmanta_packages
         ]
@@ -1069,7 +1012,7 @@ class ActiveEnv(PythonEnvironment):
 
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(safe_parse_requirement(requirement=str(requirement)), dist_info.key)
+            OwnedRequirement(util.parse_canonical_requirement(requirement=str(requirement)), dist_info.key)
             for dist_info in pkg_resources.working_set
             for requirement in dist_info.requires()
         )
@@ -1167,7 +1110,7 @@ class ActiveEnv(PythonEnvironment):
         working_set: abc.Iterable[Distribution] = importlib.metadata.distributions()
         # add all requirements of all in scope packages installed in this environment
         all_constraints: set[Requirement] = set(constraints if constraints is not None else []).union(
-            safe_parse_requirement(requirement=requirement)
+            util.parse_canonical_requirement(requirement=requirement)
             for dist_info in working_set
             if in_scope.fullmatch(dist_info.name)
             for requirement in dist_info.requires or []

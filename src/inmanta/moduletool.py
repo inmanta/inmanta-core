@@ -55,7 +55,7 @@ from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
-from inmanta.env import safe_parse_requirements
+from inmanta.util import parse_canonical_requirements
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -485,7 +485,7 @@ compatible with the dependencies specified by the updated modules.
                 # Because for pip not every valid -r is a valid -c
                 current_requires = my_project.get_strict_python_requirements_as_list()
                 env.process_env.install_for_config(
-                    v2_python_specs + safe_parse_requirements(current_requires),
+                    v2_python_specs + parse_canonical_requirements(current_requires),
                     my_project.metadata.pip,
                     upgrade=True,
                 )

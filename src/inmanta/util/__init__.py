@@ -27,6 +27,7 @@ import inspect
 import itertools
 import logging
 import os
+import pathlib
 import socket
 import threading
 import time
@@ -40,15 +41,18 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import BinaryIO, Callable, Generic, Optional, TypeVar, Union
+from typing import BinaryIO, Callable, Generic, Optional, Sequence, TypeVar, Union
 
 import asyncpg
 from tornado import gen
 
+import packaging
+import packaging.utils
 from crontab import CronTab
 from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
+from packaging.requirements import Requirement
 from pydantic_core import Url
 
 LOGGER = logging.getLogger(__name__)
@@ -863,3 +867,61 @@ class ExhaustedPoolWatcher:
 
     def _reset_counter(self) -> None:
         self._exhausted_pool_events_count = 0
+
+
+def remove_comment_part(to_clean: str) -> str:
+    """
+    Remove the comment part of a given string and ensure that the lenght of the string is greater than 0
+
+    :param to_clean: The string to clean
+    :return: A cleaned string
+    """
+    drop_comment, _, _ = to_clean.partition("#")
+    if len(drop_comment) == 0:
+        raise ValueError("The name of the requirement cannot be an empty string!")
+    return drop_comment
+
+
+def parse_canonical_requirement(requirement: str) -> Requirement:
+    """
+    To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
+    could arise when checking if packages are installed in a particular Venv.
+
+    :param requirement: The requirement's name
+    :return: A new requirement instance
+    """
+    # Packaging Requirement is not able to parse requirements with comment. Therefore, we need to remove the `comment` part
+    drop_comment = remove_comment_part(to_clean=requirement)
+    # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
+    # already installed
+    # This instance is considered as doomed because we are not supposed to modify directly the instance
+    doomed_requirement_instance = Requirement(requirement_string=drop_comment)
+    canonical_name = str(doomed_requirement_instance).replace(doomed_requirement_instance.name, packaging.utils.canonicalize_name(doomed_requirement_instance.name))
+    requirement_instance = Requirement(requirement_string=canonical_name)
+    return requirement_instance
+
+
+def parse_canonical_requirements(requirements: Sequence[str]) -> Sequence[Requirement]:
+    """
+    To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
+    could arise when checking if packages are installed in a particular Venv.
+
+    :param requirements: The names of the different requirements
+    :return: Sequence[Requirement]
+    """
+    return [parse_canonical_requirement(requirement=e) for e in requirements]
+
+
+def parse_canonical_requirements_from_file(file_path: pathlib.Path) -> Sequence[Requirement]:
+    """
+    To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
+    could arise when checking if packages are installed in a particular Venv.
+
+    :param file_path: The path to the read the requirements from
+    :return: Sequence[Requirement]
+    """
+    requirements = []
+    with open(file_path) as f:
+        for line in f.readlines():
+            requirements.append(parse_canonical_requirement(line))
+    return requirements

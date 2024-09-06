@@ -120,7 +120,8 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import CommandRunner, LocalPackagePath, VirtualEnv, mock_process_env, safe_parse_requirement
+from inmanta.env import CommandRunner, LocalPackagePath, VirtualEnv, mock_process_env
+from inmanta.util import parse_canonical_requirement
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -1919,10 +1920,10 @@ def index_with_pkgs_containing_optional_deps() -> str:
             path=os.path.join(tmpdirname, "pkg"),
             publish_index=pip_index,
             optional_dependencies={
-                "optional-a": [safe_parse_requirement(requirement="dep-a")],
+                "optional-a": [parse_canonical_requirement(requirement="dep-a")],
                 "optional-b": [
-                    safe_parse_requirement(requirement="dep-b"),
-                    safe_parse_requirement(requirement="dep-c"),
+                    parse_canonical_requirement(requirement="dep-b"),
+                    parse_canonical_requirement(requirement="dep-c"),
                 ],
             },
         )

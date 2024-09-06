@@ -41,7 +41,8 @@ from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
-from inmanta.env import PythonEnvironment, safe_parse_requirements
+from inmanta.env import PythonEnvironment
+from inmanta.util import parse_canonical_requirements
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
 from inmanta.types import JsonType
@@ -294,7 +295,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         self.init_env()
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             self.install_for_config(
-                requirements=safe_parse_requirements(req),
+                requirements=parse_canonical_requirements(req),
                 config=blueprint.pip_config,
             )
 
