@@ -1062,7 +1062,7 @@ class CommandRunner:
 
         try:
             return_code = await asyncio.wait_for(process.wait(), timeout=timeout)
-        except subprocess.TimeoutExpired:
+        except TimeoutError:
             process.kill()
             return -1, full_output
         else:
