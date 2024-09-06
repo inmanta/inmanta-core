@@ -285,7 +285,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         self.folder_name: str = pathlib.Path(self.env_path).name
         self.io_threadpool = io_threadpool
 
-    def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
+    async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
         Creates and configures the virtual environment according to the provided blueprint.
 
@@ -293,9 +293,9 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
             the pip installation and the requirements to install.
         """
         req: list[str] = list(blueprint.requirements)
-        self.init_env()
+        await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
-            self.install_for_config(
+            await self.async_install_for_config(
                 requirements=list(pkg_resources.parse_requirements(req)),
                 config=blueprint.pip_config,
             )
@@ -463,7 +463,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
 
         if is_new:
             LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), interal_id)
-            await loop.run_in_executor(self.thread_pool, process_environment.create_and_install_environment, member_id)
+            await process_environment.create_and_install_environment(member_id)
         return process_environment
 
 

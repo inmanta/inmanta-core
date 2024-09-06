@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
 import enum
 import importlib.util
 import json
@@ -36,7 +37,7 @@ from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import NamedTuple, Optional, TypeVar
+from typing import NamedTuple, Optional, TypeVar, Tuple
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
@@ -389,10 +390,60 @@ class Pip(PipCommandBuilder):
         :param upgrade_strategy: what upgrade strategy to use
         """
 
+        cmd, constraints_files_clean, requirements_files_clean, sub_env = cls._prepare_command(
+            python_path, config, requirements, requirements_files, upgrade, upgrade_strategy, constraints_files, paths,
+        )
+
+        cls.run_pip(cmd, sub_env, constraints_files_clean, requirements_files_clean)
+
+    @classmethod
+    async def async_run_pip_install_command_from_config(
+        cls,
+        python_path: str,
+        config: PipConfig,
+        requirements: Optional[Sequence[Requirement]] = None,
+        requirements_files: Optional[list[str]] = None,
+        upgrade: bool = False,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        constraints_files: Optional[list[str]] = None,
+        paths: Optional[list[LocalPackagePath]] = None,
+    ) -> None:
+        """
+        Perform a pip install according to the given config
+
+        :param python_path: the python path to use
+        :param config: the pip config to use
+
+        :param requirements: which requirements to install
+        :param requirements_files: which requirements_files to install (-r)
+        :param paths: which paths to install
+
+        :param constraints_files: pass along the following constraint files
+
+        :param upgrade: make pip do an upgrade
+        :param upgrade_strategy: what upgrade strategy to use
+        """
+
+        cmd, constraints_files_clean, requirements_files_clean, sub_env = cls._prepare_command(
+            python_path, config, requirements, requirements_files, upgrade, upgrade_strategy, constraints_files, paths,
+        )
+        await cls.async_run_pip(cmd, sub_env, constraints_files_clean, requirements_files_clean)
+
+    @classmethod
+    def _prepare_command(
+        cls,
+        python_path: str,
+        config: PipConfig,
+        requirements: Optional[Sequence[Requirement]] = None,
+        requirements_files: Optional[list[str]] = None,
+        upgrade: bool = False,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        constraints_files: Optional[list[str]] = None,
+        paths: Optional[list[LocalPackagePath]] = None,
+    ) -> Tuple[list[str], list[str], list[str], dict[str,str]]:
         # What
         requirements = requirements if requirements is not None else []
-        requirements_files = requirements_files if requirements_files is not None else []
-
+        clean_requirements_files = requirements_files if requirements_files is not None else []
         paths = paths if paths is not None else []
         local_paths: Iterator[LocalPackagePath] = (
             # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
@@ -400,13 +451,11 @@ class Pip(PipCommandBuilder):
             LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable)
             for path in paths
         )
-
         install_args = [
             *(str(requirement) for requirement in requirements),
-            *chain.from_iterable(["-r", f] for f in requirements_files),
+            *chain.from_iterable(["-r", f] for f in clean_requirements_files),
             *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in local_paths),
         ]
-
         # From where
         if paths:
             # For local installs, we allow not having an index set.
@@ -414,7 +463,6 @@ class Pip(PipCommandBuilder):
         else:
             # All others need an index
             assert_pip_has_source(config, " ".join(install_args))
-
         index_args: list[str] = []
         if config.index_url:
             index_args.append("--index-url")
@@ -425,13 +473,10 @@ class Pip(PipCommandBuilder):
             # then we need to disable the index.
             # This can only happen if paths is also set.
             index_args.append("--no-index")
-
         for extra_index_url in config.extra_index_url:
             index_args.append("--extra-index-url")
             index_args.append(extra_index_url)
-
-        constraints_files = constraints_files if constraints_files is not None else []
-
+        clean_constraints_files = constraints_files if constraints_files is not None else []
         # Command
         cmd = [
             python_path,
@@ -440,14 +485,12 @@ class Pip(PipCommandBuilder):
             "install",
             *(["--upgrade", "--upgrade-strategy", upgrade_strategy.value] if upgrade else []),
             *(["--pre"] if config.pre else []),
-            *chain.from_iterable(["-c", f] for f in constraints_files),
+            *chain.from_iterable(["-c", f] for f in clean_constraints_files),
             *install_args,
             *index_args,
         ]
-
         # ISOLATION!
         sub_env = os.environ.copy()
-
         if not config.use_system_config:
             # If we don't use system config, unset env vars
             if "PIP_EXTRA_INDEX_URL" in sub_env:
@@ -461,17 +504,29 @@ class Pip(PipCommandBuilder):
 
             # setting this env_var to os.devnull disables the loading of all pip configuration file
             sub_env["PIP_CONFIG_FILE"] = os.devnull
-
         if config.pre is not None:
             # Make sure that IF pip pre is set, we enforce it
             # The `--pre` option can only enable it
             # The env var can both enable and disable
             sub_env["PIP_PRE"] = str(config.pre)
-
-        cls.run_pip(cmd, sub_env, constraints_files, requirements_files)
+        return cmd, clean_constraints_files, clean_requirements_files, sub_env
 
     @classmethod
     def run_pip(cls, cmd: list[str], env: dict[str, str], constraints_files: list[str], requirements_files: list[str]) -> None:
+        cls._log_before_run(cmd, constraints_files, requirements_files)
+        return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=env)
+        cls._process_return(cmd, env, full_output, return_code)
+
+    @classmethod
+    async def async_run_pip(
+        cls, cmd: list[str], env: dict[str, str], constraints_files: list[str], requirements_files: list[str]
+    ) -> None:
+        cls._log_before_run(cmd, constraints_files, requirements_files)
+        return_code, full_output = await CommandRunner(LOGGER_PIP).async_run_command_and_stream_output(cmd, env_vars=env)
+        cls._process_return(cmd, env, full_output, return_code)
+
+    @classmethod
+    def _log_before_run(cls, cmd: list[str], constraints_files: list[str], requirements_files: list[str]) -> None:
         def create_log_content_files(title: str, files: list[str]) -> list[str]:
             """
             Log the content of a list of files with indentations in the following format:
@@ -506,7 +561,9 @@ class Pip(PipCommandBuilder):
             log_msg.extend(create_log_content_files("constraints files", constraints_files))
         log_msg.append("Pip command: " + " ".join(cmd))
         LOGGER_PIP.debug("".join(log_msg).strip())
-        return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=env)
+
+    @classmethod
+    def _process_return(cls, cmd: list[str], env: dict[str, str], full_output: list[str], return_code: int) -> None:
         if return_code != 0:
             not_found: list[str] = []
             conflicts: list[str] = []
@@ -767,6 +824,43 @@ import sys
             paths=paths,
         )
 
+    async def async_install_for_config(
+        self,
+        requirements: list[Requirement],
+        config: PipConfig,
+        upgrade: bool = False,
+        constraint_files: Optional[list[str]] = None,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        paths: list[LocalPackagePath] = [],
+    ) -> None:
+        """
+        Perform a pip install in this environment, according to the given config
+
+        :param requirements: which requirements to install
+        :param paths: which paths to install
+        :param config: the pip config to use
+        :param constraint_files: pass along the following constraint files
+        :param upgrade: make pip do an upgrade
+        :param upgrade_strategy: what upgrade strategy to use
+
+        limitation:
+         - When upgrade is false, if requirements are already installed constraints from constraint files may not be verified.
+        """
+        if len(requirements) == 0 and len(paths) == 0:
+            raise Exception("install_for_config requires at least one requirement or path to install")
+        constraint_files = constraint_files if constraint_files is not None else []
+        inmanta_requirements = self._get_requirements_on_inmanta_package()
+
+        await Pip.async_run_pip_install_command_from_config(
+            python_path=self.python_path,
+            config=config,
+            requirements=[*requirements, *inmanta_requirements],
+            constraints_files=constraint_files,
+            upgrade=upgrade,
+            upgrade_strategy=upgrade_strategy,
+            paths=paths,
+        )
+
     def install_from_index(
         self,
         requirements: list[Requirement],
@@ -925,6 +1019,35 @@ class CommandRunner:
 
         try:
             return_code = process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            return -1, full_output
+        else:
+            return return_code, full_output
+
+    async def async_run_command_and_stream_output(
+        self,
+        cmd: list[str],
+        timeout: float = 10,
+        env_vars: Optional[Mapping[str, str]] = None,
+    ) -> tuple[int, list[str]]:
+        """
+        Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
+        of the sub-process.
+        """
+        full_output = []
+        process = await asyncio.create_subprocess_exec(
+            cmd[0], *cmd[1:], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env_vars
+        )
+        assert process.stdout is not None  # Make mypy happy
+        async for line in process.stdout:
+            # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
+            output = line.decode().strip()
+            full_output.append(output)
+            self.logger.debug(output)
+
+        try:
+            return_code = await asyncio.wait_for(process.wait(), timeout=timeout)
         except subprocess.TimeoutExpired:
             process.kill()
             return -1, full_output
