@@ -7,9 +7,9 @@ crontab==1.0.1
 cryptography==43.0.1
 docstring-parser==0.16
 email-validator==2.2.0
-logfire==0.51.0
+logfire==0.52.0
 jinja2==3.1.4
-more-itertools==10.4.0
+more-itertools==10.5.0
 opentelemetry-instrumentation-asyncpg>=0.46b,<0.49
 packaging==24.1
 pip==24.2
