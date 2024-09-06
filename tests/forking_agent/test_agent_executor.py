@@ -226,8 +226,8 @@ def trace_error_26(func):
             return await func(*args, **kwds)
         except OSError as e:
             if e.errno == 26:
-                out = subprocess.check_output(["lsof", e.filename])
-                raise RuntimeError(f"OSERROR 26 for {e.filename}\n" + out.decode())
+                subprocess.call(["lsof", e.filename], stderr=subprocess.STDOUT, stdout=subprocess.STDOUT)
+            raise
 
     return wrapper
 
