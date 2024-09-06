@@ -1,0 +1,4 @@
+---
+description: "Fix broken mypy-baseline file"
+change-type: patch
+destination-branches: [iso7]
