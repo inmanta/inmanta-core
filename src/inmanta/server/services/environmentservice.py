@@ -125,7 +125,7 @@ class EnvironmentService(protocol.ServerSlice):
         self.register_listener_for_multiple_actions(
             self.compiler_service, {EnvironmentAction.cleared, EnvironmentAction.deleted}
         )
-        self.register_listener_for_multiple_actions(self.autostarted_agent_manager, {EnvironmentAction.created})
+        self.register_listener(self.autostarted_agent_manager, EnvironmentAction.created)
 
     async def start(self) -> None:
         await super().start()

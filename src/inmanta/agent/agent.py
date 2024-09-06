@@ -1331,16 +1331,12 @@ class Agent(SessionEndpoint):
         )
         return 200
 
-    @protocol.handle(methods.trigger_release_version, env="tid", agent="id")
-    async def release_version(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
+    @protocol.handle(methods.trigger_release_version, env="tid")
+    async def release_version(self, env: uuid.UUID) -> Apireturn:
         """
         Trigger an update
         """
-        return await self.trigger_update(
-            env=env,
-            agent=agent,
-            incremental_deploy=incremental_deploy,
-        )
+        pass
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")
     async def resource_event(

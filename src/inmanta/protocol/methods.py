@@ -1043,13 +1043,11 @@ def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
     arg_options=AGENT_ENV_OPTS,
     client_types=[],
 )
-def trigger_release_version(tid: uuid.UUID, id: str, incremental_deploy: bool) -> int:
+def trigger_release_version(tid: uuid.UUID) -> int:
     """
     Notify the scheduler that a new version has been released
 
     :param tid: The environment this agent is defined in
-    :param id: The name of the agent
-    :param incremental_deploy: Indicates whether the agent should perform an incremental deploy or a full deploy
     """
 
 

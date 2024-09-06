@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2024 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -130,6 +130,7 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
 
     version = await ClientHelper(client, env_id).get_version()
 
+    # The purged status has been changed for: - `test::Resource[agent2,key=key2]` and `test::Resource[agent2,key=key4]`
     updated_resources = [
         {
             "key": "key1",
@@ -153,7 +154,7 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
             "id": "test::Resource[agent2,key=key4],v=%d" % version,
             "send_event": False,
             "requires": ["test::Resource[agent2,key=key1],v=%d" % version, "test::Resource[agent2,key=key2],v=%d" % version],
-            "purged": False,
+            "purged": True,
         },
         {
             "key": "key5",
