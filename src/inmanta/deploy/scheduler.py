@@ -259,7 +259,9 @@ class ResourceScheduler:
             return
 
         # Get executor
-        my_executor: executor.Executor = await self._executor_manager.get_executor(agent_name=agent, agent_uri="NO_URI", code=code)
+        my_executor: executor.Executor = await self._executor_manager.get_executor(
+            agent_name=agent, agent_uri="NO_URI", code=code
+        )
         failed_resources = my_executor.failed_resources
 
         # Bail out if this failed

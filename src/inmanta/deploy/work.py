@@ -164,7 +164,7 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         """
         tasks: dict[Task, TaskQueueItem] = self._tasks_by_resource.get(task.resource, {})
         queue_item: TaskQueueItem = tasks[task]
-        queue_item.is_active = False
+        queue_item.deleted = True
         del tasks[task]
         if not tasks:
             del self._tasks_by_resource[task.resource]
@@ -188,7 +188,7 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         queue: asyncio.PriorityQueue[TaskQueueItem] = self._agent_queues[agent]
         backing_heapq: list[TaskQueueItem] = queue._queue  # type: ignore [attr-defined]
         backing_heapq.sort()
-        return [item.task for item in backing_heapq if item.is_active]
+        return [item.task for item in backing_heapq if not item.deleted]
 
     ########################################
     # asyncio.PriorityQueue-like interface #
@@ -206,7 +206,7 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
             return
         # reschedule with new priority, no need to explicitly remove, this is achieved by setting self._tasks_by_resource
         if already_queued is not None:
-            already_queued.is_active = False
+            already_queued.deleted = True
         item: TaskQueueItem = TaskQueueItem(task=prioritized_task, insert_order=self._entry_count)
         self._entry_count += 1
         if task.resource not in self._tasks_by_resource:
@@ -233,7 +233,7 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         queue: asyncio.PriorityQueue[TaskQueueItem] = self._agent_queues[agent]
         while True:
             item: TaskQueueItem = await queue.get()
-            if not item.is_active:
+            if item.deleted:
                 # task was marked as removed, ignore it and consume the next item from the queue
                 queue.task_done()
                 continue

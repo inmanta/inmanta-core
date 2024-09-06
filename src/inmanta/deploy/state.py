@@ -105,6 +105,8 @@ class ModelState:
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict[ResourceIdStr, ResourceState] = dataclasses.field(default_factory=dict)
     update_pending: set[ResourceIdStr] = dataclasses.field(default_factory=set)
+    # types per agent keeps track of which resource types live on which agent by doing a reference count
+    # the dict is agent_name -> resource_type -> resource_count
     types_per_agent: dict[str, dict[ResourceType, int]] = dataclasses.field(
         default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
     )
@@ -151,9 +153,8 @@ class ModelState:
 
         parsed_id = Id.parse_id(resource)
         self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] -= 1
+        if self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] == 0:
+            del self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type]
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
-        unfiltered = self.types_per_agent[agent]
-        filtered = {k: v for k, v in unfiltered.items() if v > 0}
-        self.types_per_agent[agent] = defaultdict(lambda: 0, filtered)
-        return list(filtered.keys())
+        return list(self.types_per_agent[agent])

@@ -29,6 +29,7 @@ async def test_async_lru():
     @async_lru_cache
     async def coro(arg: str) -> str:
         hit_count.append(arg)
+        # sleep to make the second parallel "A" hit the cache while the first is still in-flight
         await asyncio.sleep(0.01)
         return arg
 
@@ -52,6 +53,7 @@ async def test_async_lru_raising():
     @async_lru_cache
     async def coro(arg: str) -> str:
         hit_count.append(arg)
+        # sleep to make the second parallel "A" hit the cache while the first is still in-flight
         await asyncio.sleep(0.01)
         raise Exception(arg)
 

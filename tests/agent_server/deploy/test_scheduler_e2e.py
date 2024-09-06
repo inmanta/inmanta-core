@@ -28,7 +28,7 @@ from inmanta.agent.agent_new import Agent
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version, groupby
-from utils import resource_action_consistency_check
+from utils import resource_action_consistency_check, retry_limited
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             )
         return version, resources
 
-    async def wait_for_resources(version, n):
+    async def wait_for_resources(version: int, n: int) -> None:
         result = await client.get_version(env_id, version)
         assert result.code == 200
 
@@ -135,10 +135,11 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                 return 0
             return min(alllist)
 
-        while mindone(result) < n:
-            await asyncio.sleep(0.1)
+        async def done():
             result = await client.get_version(env_id, version)
-        assert mindone(result) >= n
+            return mindone(result) < n
+
+        await retry_limited(done, 10)
 
     logger.info("setup done")
 
