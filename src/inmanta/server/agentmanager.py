@@ -33,10 +33,8 @@ from uuid import UUID
 import asyncpg.connection
 
 import inmanta.config
-import logfire
-import logfire.propagate
 from inmanta import config as global_config
-from inmanta import const, data
+from inmanta import const, data, tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
 from inmanta.const import UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
@@ -387,7 +385,7 @@ class AgentManager(ServerSlice, SessionListener):
         await self._session_listener_actions.put(session_action)
 
     # Seen
-    @logfire.instrument("AgentManager.seen_session", extract_args=True)
+    @tracing.instrument("AgentManager.seen_session", extract_args=True)
     async def _seen_session(self, session: protocol.Session, endpoint_names_snapshot: set[str]) -> None:
         endpoints_with_new_primary: list[tuple[str, Optional[uuid.UUID]]] = []
         async with self.session_lock:
@@ -672,7 +670,7 @@ class AgentManager(ServerSlice, SessionListener):
             await asyncio.gather(*[s.expire_and_abort(timeout=0) for s in self.sessions.values()])
 
     # Agent Management
-    @logfire.instrument("AgentManager.ensure_agent_registered")
+    @tracing.instrument("AgentManager.ensure_agent_registered")
     async def ensure_agent_registered(
         self, env: data.Environment, nodename: str, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> data.Agent:
@@ -1303,7 +1301,7 @@ ssl=True
                 errhandle = open(errfile, "wb+")
 
             env = os.environ.copy()
-            env.update(logfire.propagate.get_context())
+            env.update(tracing.get_context())
             return await asyncio.create_subprocess_exec(
                 sys.executable, *full_args, cwd=cwd, env=env, stdout=outhandle, stderr=errhandle
             )
