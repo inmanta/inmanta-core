@@ -147,55 +147,54 @@ class ResourceAction(ResourceActionBase):
 
     async def execute(self, dummy: "ResourceActionBase", generation: Mapping[ResourceIdStr, ResourceActionBase]) -> None:
         self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
-        async with self.executor.cache(self.resource.model_version):
-            self.dependencies = [generation[resource_id.resource_str()] for resource_id in self.resource.requires]
-            waiters = [x.future for x in self.dependencies]
-            waiters.append(dummy.future)
-            # Explicit cast is required because mypy has issues with * and generics
-            results: list[ResourceActionResult] = cast(list[ResourceActionResult], await asyncio.gather(*waiters))
+        self.dependencies = [generation[resource_id.resource_str()] for resource_id in self.resource.requires]
+        waiters = [x.future for x in self.dependencies]
+        waiters.append(dummy.future)
+        # Explicit cast is required because mypy has issues with * and generics
+        results: list[ResourceActionResult] = cast(list[ResourceActionResult], await asyncio.gather(*waiters))
 
-            if self.undeployable:
-                self.running = True
-                try:
-                    if self.is_done():
-                        # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
-                        return
-                    result = sum(results, ResourceActionResult(cancel=False))
-                    if result.cancel:
-                        # self.running will be set to false when self.cancel is called
-                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                        return
-                    self.future.set_result(ResourceActionResult(cancel=False))
+        if self.undeployable:
+            self.running = True
+            try:
+                if self.is_done():
+                    # Action is cancelled
+                    self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
                     return
-                finally:
-                    self.running = False
+                result = sum(results, ResourceActionResult(cancel=False))
+                if result.cancel:
+                    # self.running will be set to false when self.cancel is called
+                    # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
+                    return
+                self.future.set_result(ResourceActionResult(cancel=False))
+                return
+            finally:
+                self.running = False
 
-            async with self.scheduler.ratelimiter:
-                self.running = True
+        async with self.scheduler.ratelimiter:
+            self.running = True
 
-                try:
-                    if self.is_done():
-                        # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
-                        return
+            try:
+                if self.is_done():
+                    # Action is cancelled
+                    self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
+                    return
 
-                    result = sum(results, ResourceActionResult(cancel=False))
+                result = sum(results, ResourceActionResult(cancel=False))
 
-                    if result.cancel:
-                        # self.running will be set to false when self.cancel is called
-                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                        return
+                if result.cancel:
+                    # self.running will be set to false when self.cancel is called
+                    # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
+                    return
 
-                    await self.executor.execute(
-                        gid=self.gid,
-                        resource_details=self.resource,
-                        reason=self.reason,
-                    )
+                await self.executor.execute(
+                    gid=self.gid,
+                    resource_details=self.resource,
+                    reason=self.reason,
+                )
 
-                    self.future.set_result(ResourceActionResult(cancel=False))
-                finally:
-                    self.running = False
+                self.future.set_result(ResourceActionResult(cancel=False))
+            finally:
+                self.running = False
 
 
 class RemoteResourceAction(ResourceActionBase):
@@ -1330,6 +1329,13 @@ class Agent(SessionEndpoint):
             )
         )
         return 200
+
+    @protocol.handle(methods.trigger_read_version, env="tid")
+    async def read_version(self, env: uuid.UUID) -> Apireturn:
+        """
+        Send a notification to the agent that a new version has been released
+        """
+        pass
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")
     async def resource_event(

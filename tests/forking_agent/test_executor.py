@@ -224,8 +224,12 @@ def test():
 
     await simplest.request_shutdown()
     await simplest.join()
+
+    async def check_connection_lost() -> bool:
+        return await simplest.call(GetName()) != simplest_blueprint.blueprint_hash()
+
     with pytest.raises(ConnectionLost):
-        await simplest.call(GetName())
+        await retry_limited(check_connection_lost, 1)
 
     with pytest.raises(ImportError):
         # we aren't leaking into this venv

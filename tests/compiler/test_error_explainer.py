@@ -30,7 +30,7 @@ entity Thing:
     string name
 end
 
-implement Thing using std::none
+implement Thing using none
 
 Thing.other [0:1] -- Thing
 
@@ -41,6 +41,9 @@ end
 implement Thing using setother when not (other is defined)
 
 Thing(name="a")
+
+implementation none for Thing:
+end
 """
     )
     with pytest.raises(AttributeException) as e:
@@ -88,7 +91,7 @@ entity Thing:
     string name
 end
 
-implement Thing using std::none
+implement Thing using none
 
 Thing.other [0:1] -- Thing
 
@@ -99,6 +102,9 @@ end
 implement Thing using setother when not (other is defined)
 
 Thing(name="a")
+
+implementation none for Thing:
+end
 """
     )
     with pytest.raises(AttributeException) as e:
@@ -148,7 +154,7 @@ entity Thing:
     string name
 end
 
-implement Thing using std::none
+implement Thing using none
 
 Thing.other [0:1] -- Thing.that [0:]
 
@@ -160,6 +166,9 @@ end
 implement Thing using setother when not (other is defined)
 
 Thing(name="a")
+
+implementation none for Thing:
+end
 """
     )
     with pytest.raises(AttributeException) as e:
@@ -220,7 +229,8 @@ implement Thing using setother when std::count(other) == 1
 
 t = Thing(name="a")
 t.other = Thing(name="b")
-"""
+""",
+        autostd=True,
     )
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()

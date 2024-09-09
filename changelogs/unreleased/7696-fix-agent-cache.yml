@@ -1,0 +1,4 @@
+description: Fix agent cache
+issue-nr: 7696
+change-type: patch
+destination-branches: [master]

@@ -106,11 +106,14 @@ end
 
 
 implement TestC using parents
-implement TestC using std::none, parents
-implement TestC using std::none
+implement TestC using none, parents
+implement TestC using none
 implement Test using test
 
 a = TestC()
+
+implementation none for std::Entity:
+end
 """
     )
     (_, scopes) = compiler.do_compile()
@@ -434,6 +437,7 @@ std::print(hi_world)
             "The ** operator can only be applied to dictionaries (reported in "
             "std::replace(hello_world,**dct) ({dir}/main.cf:4))"
         ),
+        autostd=True,
     )
 
 
@@ -673,6 +677,7 @@ implement Test using test
 Test()
 """,
         r"variable n not found (reported in Format('This is test {{{{n}}}}') ({dir}/main.cf:5))",
+        ministd=True,
     )
 
 
@@ -709,6 +714,7 @@ implement B using b
 A(x=B())
 """,
         r"variable u not found (reported in std::print(u) ({dir}/main.cf:11))",
+        ministd=True,
     )
 
 

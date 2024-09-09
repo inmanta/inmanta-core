@@ -31,8 +31,7 @@ from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overl
 from tornado import concurrent
 
 import inmanta
-import logfire
-from inmanta import const, data, protocol, resources
+from inmanta import const, data, protocol, resources, tracing
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, LinkedDiscoveredResource, ResourceIdStr
@@ -121,15 +120,16 @@ def cache(
 
     The name of the method + the arguments of the method form the cache key
 
-    If an argument named version is present and for_version is True,
-    the cache entry is flushed after this version has been deployed
     If an argument named resource is present,
     it is assumed to be a resource and its ID is used, without the version information
 
-    :param timeout: the number of second this cache entry should live
-    :param for_version: if true, this value is evicted from the cache when this deploy is ready
+    :param timeout: Hard timeout for non-lingering cache item i.e. when `for_version=False`.
+        Ignored otherwise.
+    :param for_version: When True, this cache item will linger in the cache for 60s after its last use.
+        When False, this cache item will be evicted from the cache <timeout> seconds after
+        entering the cache.
     :param ignore: a list of argument names that should not be part of the cache key
-    :param cache_none: cache returned none values
+    :param cache_none: allow the caching of None values
     :param call_on_delete: A callback function that is called when the value is removed from the cache,
             with the value as argument.
     """
@@ -137,7 +137,7 @@ def cache(
     def actual(f: Callable[..., object]) -> T_FUNC:
         myignore = set(ignore)
         sig = inspect.signature(f)
-        myargs = list(sig.parameters.keys())[1:]
+        myargs = list(sig.parameters.keys())[1:]  # Starts at 1 because 0 is self.
 
         def wrapper(self: HandlerAPI[TResource], *args: object, **kwds: object) -> object:
             kwds.update(dict(zip(myargs, args)))
@@ -761,18 +761,18 @@ class ResourceHandler(HandlerAPI[TResource]):
         """
         raise NotImplementedError()
 
-    @logfire.instrument("ResourceHandler.execute", extract_args=True)
+    @tracing.instrument("ResourceHandler.execute", extract_args=True)
     def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
         try:
-            with logfire.span("pre"):
+            with tracing.span("pre"):
                 self.pre(ctx, resource)
 
-            with logfire.span("list_changes"):
+            with tracing.span("list_changes"):
                 changes = self.list_changes(ctx, resource)
                 ctx.update_changes(changes)
 
             if not dry_run:
-                with logfire.span("do_changes"):
+                with tracing.span("do_changes"):
                     self.do_changes(ctx, resource, changes)
                     ctx.set_status(const.ResourceState.deployed)
             else:
@@ -797,7 +797,7 @@ class ResourceHandler(HandlerAPI[TResource]):
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
-    @logfire.instrument("ResourceHandler.check_facts", extract_args=True)
+    @tracing.instrument("ResourceHandler.check_facts", extract_args=True)
     def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
         """
         This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.HandlerAPI.pre`
@@ -895,7 +895,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
         """
         return self._diff(current, desired)
 
-    @logfire.instrument("CRUDHandler.execute", extract_args=True)
+    @tracing.instrument("CRUDHandler.execute", extract_args=True)
     def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
         try:
             self.pre(ctx, resource)
@@ -907,10 +907,10 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             changes: dict[str, dict[str, typing.Any]] = {}
             try:
                 ctx.debug("Calling read_resource")
-                with logfire.span("read_resource"):
+                with tracing.span("read_resource"):
                     self.read_resource(ctx, current)
 
-                with logfire.span("calculate_diff"):
+                with tracing.span("calculate_diff"):
                     changes = self.calculate_diff(ctx, current, desired)
 
             except ResourcePurged:
@@ -924,16 +924,16 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                 if "purged" in changes:
                     if not changes["purged"]["desired"]:
                         ctx.debug("Calling create_resource")
-                        with logfire.span("create_resource"):
+                        with tracing.span("create_resource"):
                             self.create_resource(ctx, desired)
                     else:
                         ctx.debug("Calling delete_resource")
-                        with logfire.span("delete_resource"):
+                        with tracing.span("delete_resource"):
                             self.delete_resource(ctx, desired)
 
                 elif not desired.purged and len(changes) > 0:
                     ctx.debug("Calling update_resource", changes=changes)
-                    with logfire.span("update_resource"):
+                    with tracing.span("update_resource"):
                         self.update_resource(ctx, dict(changes), desired)
 
                 ctx.set_status(const.ResourceState.deployed)

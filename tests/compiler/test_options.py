@@ -61,7 +61,7 @@ entity Test2:
     bool flag=false
 end
 
-implement Test2 using std::none
+implement Test2 using none
 
 Test1.other [0:1] -- Test2.test1 [1]
 
@@ -72,6 +72,9 @@ end
 implement Test1 using tt when self.other is defined and self.other.flag == false
 
 Test1(other=Test2())
+
+implementation none for std::Entity:
+end
 """
     )
     compiler.do_compile()

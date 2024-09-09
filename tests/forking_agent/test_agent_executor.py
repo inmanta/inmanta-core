@@ -27,7 +27,7 @@ from inmanta.agent import executor, forking_executor
 from inmanta.agent.forking_executor import MPExecutor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
-from inmanta.signals import context_dump, dump_ioloop_running, dump_threads
+from inmanta.signals import dump_ioloop_running, dump_threads
 from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
 
 logger = logging.getLogger(__name__)
@@ -226,8 +226,8 @@ def trace_error_26(func):
             return await func(*args, **kwds)
         except OSError as e:
             if e.errno == 26:
-                out = subprocess.check_output(["lsof", e.filename])
-                raise RuntimeError(f"OSERROR 26 for {e.filename}\n" + out.decode())
+                subprocess.call(["lsof", e.filename], stderr=subprocess.STDOUT, stdout=subprocess.STDOUT)
+            raise
 
     return wrapper
 

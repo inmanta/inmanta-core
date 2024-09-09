@@ -122,7 +122,8 @@ implement A using std::none
 x = A(a = 1)
 
 {condition_block("x.a")}
-"""
+""",
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -142,7 +143,8 @@ implement A using std::none
 x = A()
 
 {condition_block_with_self("a")}
-"""
+""",
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -177,7 +179,8 @@ def test_is_defined_null(snippetcompiler, capsys, condition_block, relation: boo
     a = A(attr=null)
 
     {condition_block("a.attr")}
-    """
+    """,
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -197,7 +200,8 @@ def test_is_defined_attribute_not_3(snippetcompiler, capsys, condition_block):
     x = A()
 
    {condition_block("x.a")}
-    """
+    """,
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -221,7 +225,8 @@ def test_is_defined_attribute_2(snippetcompiler, capsys):
     else:
         std::print("false")
     end
-    """
+    """,
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -242,7 +247,8 @@ A.a [0:1] -- A
 x = A(a=A())
 
 {condition_block("x.a")}
-"""
+""",
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -262,7 +268,8 @@ A.a [0:1] -- A
 
 x = A()
 {condition_block("x.a")}
-"""
+""",
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -287,7 +294,8 @@ if x.a is defined:
 else:
     std::print("false")
 end
-"""
+""",
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -312,7 +320,8 @@ if x is defined:
 else:
     std::print("false")
 end
-"""
+""",
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -337,7 +346,8 @@ if x is defined:
 else:
     std::print("false")
 end
-"""
+""",
+        ministd=True,
     )
     with pytest.raises(OptionalValueException):
         compiler.do_compile()
@@ -357,7 +367,8 @@ y = A()
 
 {condition_block_with_self("a")}
 
-"""
+""",
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -379,7 +390,8 @@ y = A()
 
 {condition_block_with_self("b")}
 
-"""
+""",
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -400,11 +412,14 @@ implementation a for A:
     self.optional = A()
 end
 
-implement A using std::none
+implement A using none
 implement A using a when self.list is defined
 
 a = A(list=A())
 test = a.optional
+
+implementation none for std::Entity:
+end
 """
     )
     # assert this does not fail:
@@ -427,8 +442,9 @@ def test_5458_is_defined_progress_potential(snippetcompiler) -> None:
             A.x [0:] -- A
             A.y [0:] -- A
 
-            implement A using std::none
-
+            implement A using none
+            implementation none for std::Entity:
+            end
 
             a = A()
             if not a.x is defined:
@@ -451,11 +467,14 @@ def test_is_defined_below_null(snippetcompiler):
 entity A:
 end
 A.other [0:1] -- A
-implement A using std::none
+implement A using none
 
 a = A(other=null)
 
 isdef = a.other.other is defined
+
+implementation none for std::Entity:
+end
         """,
         shouldbe=(
             "Optional variable accessed that has no value (attribute `__config__::A.other` of `__config__::A (instantiated at"
@@ -472,8 +491,10 @@ def test_is_defined(snippetcompiler) -> None:
             A.x [0:] -- A
             A.y [0:] -- A
 
-            implement A using std::none
+            implement A using none
 
+            implementation none for std::Entity:
+            end
 
             a = A()
             if not a.x is defined:
@@ -533,6 +554,7 @@ def test_is_defined_unknown(snippetcompiler) -> None:
             assert = std::is_unknown(rel_unknown_list.others is defined)
             assert = rel_partially_known_list.others is defined
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()

@@ -16,14 +16,23 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
+import datetime
+import sys
 from threading import Lock, Thread
 from time import sleep
 
 import pytest
 from pytest import fixture
 
+import time_machine
+from inmanta.agent import Agent
+from inmanta.agent import config as agent_config
+from inmanta.agent import executor
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import cache
+from inmanta.config import is_float
+from inmanta.data import PipConfig
 from inmanta.resources import Id, Resource, resource
 
 
@@ -39,37 +48,93 @@ def my_resource():
 
 
 def test_base():
+    """
+    Basic test:
+        - cache write
+        - cache read
+    """
     cache = AgentCache()
     value = "test too"
     cache.cache_value("test", value)
     assert value == cache.find("test")
 
 
-def test_timout():
+@pytest.fixture
+def set_custom_cache_cleanup_policy(monkeypatch, server_config):
+    """
+    Fixture to temporarily set the policy for cache cleanup.
+    """
+    old_value = agent_config.agent_cache_cleanup_tick_rate.get()
+
+    monkeypatch.setattr(agent_config.agent_cache_cleanup_tick_rate, "validator", is_float)
+    agent_config.agent_cache_cleanup_tick_rate.set("0.1")
+
+    yield
+
+    agent_config.agent_cache_cleanup_tick_rate.set(str(old_value))
+
+
+@pytest.fixture(scope="function")
+async def agent_cache(agent: Agent):
+    pip_config = PipConfig()
+
+    blueprint1 = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=(), sources=[], python_version=sys.version_info[:2]
+    )
+
+    myagent_instance = await agent.executor_manager.get_executor(
+        "agent1", "local:", [executor.ResourceInstallSpec("test::Test", 5, blueprint1)]
+    )
+    yield myagent_instance._cache
+
+
+async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent_cache: AgentCache):
+    """
+    Test timeout parameter: test that expired entry is removed from the cache
+    """
+    cache = agent_cache
+    value = "test too"
+    cache.cache_value("test", value, timeout=0.1, for_version=False)
+    cache.cache_value("test2", value)
+
+    assert value == cache.find("test")
+    # Cache cleanup job is periodically triggered with a 0.1s delay
+    await asyncio.sleep(0.3)
+    with pytest.raises(KeyError):
+        cache.find("test")
+
+    assert value == cache.find("test2")
+
+
+def test_timeout_manual_cleanup():
     cache = AgentCache()
     value = "test too"
-    cache.cache_value("test", value, timeout=0.1)
+    cache.cache_value("test", value, timeout=0.1, for_version=False)
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
     sleep(0.2)
-    try:
+    cache.clean_stale_entries()
+    with pytest.raises(KeyError):
         assert value == cache.find("test")
-        raise AssertionError("Should get exception")
-    except KeyError:
-        pass
 
     assert value == cache.find("test2")
 
 
 def test_base_fail():
+    """
+    Test cache read on non-existing entry
+    """
     cache = AgentCache()
     value = "test too"
     with pytest.raises(KeyError):
         assert value == cache.find("test")
 
 
-def test_resource():
+def test_resource(my_resource):
+    """
+    Test writing and reading a resource from the agent cache
+    """
     cache = AgentCache()
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
@@ -78,71 +143,56 @@ def test_resource():
 
 
 def test_resource_fail(my_resource):
+    """
+    Test that caching a resource correctly creates a single entry in the cache for the full key (args+resource_id)
+    """
     cache = AgentCache()
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     cache.cache_value("test", value, resource=resource)
 
     with pytest.raises(KeyError):
-        assert value == cache.find("test")
+        cache.find("test")
 
 
-def test_version_closed():
+def test_default_timeout(my_resource):
+    """
+    Test default timeout of cache entries for a regular entry (key='test') and
+    for an entry associated with a resource (key=('testx', resource))
+    """
     cache = AgentCache()
     value = "test too"
-    version = 200
-    with pytest.raises(Exception):
-        cache.cache_value("test", value, version=version)
-        assert value == cache.find("test", version=version)
 
+    cache.cache_value("test", value)
+    assert value == cache.find("test")
 
-def test_version():
-    cache = AgentCache()
-    value = "test too"
-    version = 200
-    cache.open_version(version)
-    cache.cache_value("test", value, version=version)
-    assert value == cache.find("test", version=version)
-
-
-def test_version_close():
-    cache = AgentCache()
-    value = "test too"
-    version = 200
-    cache.open_version(version)
-    cache.cache_value("test", value, version=version)
-    cache.cache_value("test0", value, version=version)
-    cache.cache_value("test4", value, version=version)
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     cache.cache_value("testx", value, resource=resource)
-    assert value == cache.find("test", version=version)
     assert value == cache.find("testx", resource=resource)
-    cache.close_version(version)
     assert value, cache.find("testx", resource=resource)
+
     with pytest.raises(KeyError):
-        assert value == cache.find("test", version=version)
-        raise AssertionError("Should get exception")
+        cache.find("testx")
 
+    # default timeout is 5000s
+    traveller = time_machine.travel(datetime.datetime.now() + datetime.timedelta(seconds=5001))
+    traveller.start()
 
-def test_context_manager():
-    cache = AgentCache()
-    value = "test too"
-    version = 200
-    with cache.manager(version):
-        cache.cache_value("test", value, version=version)
-        cache.cache_value("test0", value, version=version)
-        cache.cache_value("test4", value, version=version)
-        resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-        cache.cache_value("testx", value, resource=resource)
-        assert value == cache.find("test", version=version)
-        assert value == cache.find("testx", resource=resource)
+    # Check that values are still in the cache before running the cleanup job:
+    assert value == cache.find("test")
+    assert value == cache.find("testx", resource=resource)
 
-    assert value, cache.find("testx", resource=resource)
+    # Run the cleanup job and check removal
+    cache.clean_stale_entries()
     with pytest.raises(KeyError):
-        assert value == cache.find("test", version=version)
+        cache.find("test")
+
+    with pytest.raises(KeyError):
+        cache.find("testx")
 
 
-def test_multi_threaded():
+async def test_multi_threaded(agent_cache: AgentCache):
+
     class Spy:
         def __init__(self):
             self.created = 0
@@ -157,23 +207,24 @@ def test_multi_threaded():
         def delete(self):
             self.deleted += 1
 
-    cache = AgentCache()
-    version = 200
+    cache = agent_cache
 
-    cache.open_version(version)
+    # Cache entry will be considered stale after 0.1s
+    cache_entry_expiry = 0.1
 
     alpha = Spy()
     beta = Spy()
     alpha.lock.acquire()
 
-    t1 = Thread(
-        target=lambda: cache.get_or_else(
-            "test", lambda version: alpha.create(), version=version, call_on_delete=lambda x: x.delete()
+    def target_1():
+        cache.get_or_else(
+            "test", lambda: alpha.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete(), for_version=False
         )
-    )
+
+    t1 = Thread(target=target_1)
     t2 = Thread(
         target=lambda: cache.get_or_else(
-            "test", lambda version: beta.create(), version=version, call_on_delete=lambda x: x.delete()
+            "test", lambda: beta.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete(), for_version=False
         )
     )
 
@@ -189,83 +240,18 @@ def test_multi_threaded():
     assert alpha.deleted == 0
     assert beta.deleted == 0
 
-    cache.close_version(version)
+    await asyncio.sleep(0.3)
+    cache.clean_stale_entries()
 
     assert alpha.created + beta.created == 1
-    assert alpha.deleted == alpha.created
     assert beta.deleted == beta.created
-
-
-def test_timout_and_version():
-    cache = AgentCache()
-    version = 200
-
-    cache.open_version(version)
-    value = "test too"
-    cache.cache_value("test", value, version=version, timeout=0.1)
-    cache.cache_value("testx", value)
-
-    assert value == cache.find("test", version=version)
-    assert value == cache.find("testx")
-
-    sleep(0.2)
-    assert value == cache.find("testx")
-
-    cache.close_version(version)
-    assert value == cache.find("testx")
-
-    with pytest.raises(KeyError):
-        cache.find("test", version=version)
-    assert value == cache.find("testx")
-
-
-def test_version_and_timout():
-    cache = AgentCache()
-    version = 200
-
-    cache.open_version(version)
-    value = "test too"
-    cache.cache_value("test", value, version=version, timeout=0.1)
-    cache.cache_value("testx", value)
-
-    assert value == cache.find("test", version=version)
-    assert value == cache.find("testx")
-
-    cache.close_version(version)
-    assert value == cache.find("testx")
-
-    sleep(0.2)
-    assert value == cache.find("testx")
-
-    with pytest.raises(KeyError):
-        cache.find("test", version=version)
-
-
-def test_version_fail():
-    cache = AgentCache()
-    value = "test too"
-    version = 200
-    cache.open_version(version)
-    cache.cache_value("test", value, version=version)
-
-    with pytest.raises(KeyError):
-        assert value == cache.find("test")
-
-
-def test_resource_and_version():
-    cache = AgentCache()
-    value = "test too"
-    resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-    version = 200
-    cache.open_version(version)
-    cache.cache_value("test", value, resource=resource, version=version)
-    assert value == cache.find("test", resource=resource, version=version)
+    assert alpha.deleted == alpha.created
 
 
 def test_get_or_else(my_resource):
     called = []
 
-    def creator(param, resource, version):
+    def creator(param, resource):
         called.append("x")
         return param
 
@@ -275,20 +261,24 @@ def test_get_or_else(my_resource):
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     resourcev2 = Id("test::Resource", "test", "key", "test", 200).get_instance()
     assert 200 == resourcev2.id.version
-    version = 200
-    cache.open_version(version)
-    assert value == cache.get_or_else("test", creator, resource=resource, version=version, param=value)
-    assert value == cache.get_or_else("test", creator, resource=resource, version=version, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resource, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resource, param=value)
     assert len(called) == 1
-    assert value == cache.get_or_else("test", creator, resource=resourcev2, version=version, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resourcev2, param=value)
     assert len(called) == 1
-    assert value2 == cache.get_or_else("test", creator, resource=resource, version=version, param=value2)
+    assert value2 == cache.get_or_else("test", creator, resource=resource, param=value2)
 
 
-def test_get_or_else_none():
+def test_get_or_else_none(my_resource):
+    """
+    Test the get_or_else cache_none parameter. This parameter controls
+    whether None values are valid cache entries.
+    """
+
+    # This list is extended for each cache miss on the "creator" function
     called = []
 
-    def creator(param, resource, version):
+    def creator(param, resource):
         called.append("x")
         return param
 
@@ -305,30 +295,395 @@ def test_get_or_else_none():
     cache = AgentCache()
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
-    version = 100
-    cache.open_version(version)
-    assert None is cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=None)
+
+    # Check for 2 successive cache miss since caching None is disabled
+    assert None is cache.get_or_else("test", creator, resource=resource, cache_none=False, param=None)
     assert len(called) == 1
-    assert None is cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=None)
+    assert None is cache.get_or_else("test", creator, resource=resource, cache_none=False, param=None)
     assert len(called) == 2
-    assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
-    assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
+
+    # Check for 1 cache miss and then a hit.
+    assert value == cache.get_or_else("test", creator, resource=resource, cache_none=False, param=value)
+    assert value == cache.get_or_else("test", creator, resource=resource, cache_none=False, param=value)
     assert len(called) == 3
 
+    # The Sequencer will return the next item in the sequence on each cache miss
     seq = Sequencer([None, None, "A"])
-    assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+
+    # Check that we have cache misses until the sequencer returns a non-None value.
+    assert None is cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 1
-    assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert None is cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 2
-    assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert "A" == cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 3
-    assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert "A" == cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 3
-    assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+    assert "A" == cache.get_or_else("testx", seq, resource=resource, cache_none=False)
     assert seq.count == 3
 
 
-def test_decorator():
+class CacheMissCounter:
+    """
+    Utility class wrapper around AgentCache providing
+    functionality to count cache misses.
+    """
+
+    def __init__(self, cache: AgentCache):
+        self.cache = cache
+        self._counter = 0
+
+    @property
+    def cache_miss_counter(self):
+        return self._counter
+
+    def increment_miss_counter(self):
+        self._counter += 1
+
+    def reset_miss_counter(self):
+        self._counter = 0
+
+    def check_n_cache_misses(self, n: int):
+        assert self._counter == n, f"Expected {n} cache misses, but counted {self._counter}."
+
+
+async def test_cache_decorator_basics():
+    """
+    Test basic caching / retrieval functionalities of the @cache decorator
+    """
+
+    class BasicTest(CacheMissCounter):
+        @cache
+        def test_method(self):
+            self.increment_miss_counter()
+            return "x"
+
+        @cache
+        def test_method_2(self, dummy_arg):
+            self.increment_miss_counter()
+            return "x2"
+
+    agent_cache = AgentCache()
+    test = BasicTest(agent_cache)
+
+    with time_machine.travel(datetime.datetime.now().astimezone(), tick=False) as traveller:
+        with agent_cache:
+            # 1 cache miss and 2 hits:
+            assert "x" == test.test_method()  # +1 miss
+            assert "x" == test.test_method()
+            assert "x" == test.test_method()
+            test.check_n_cache_misses(1)
+
+            # 1 cache miss and 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")  # +1 miss
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            test.check_n_cache_misses(2)
+
+            # 1 cache miss :
+            assert "x2" == test.test_method_2(dummy_arg="BBB")  # +1 miss
+            test.check_n_cache_misses(3)
+
+        # Wait out lingering time of 60s after last read
+        traveller.shift(datetime.timedelta(seconds=61))
+
+        # The cache cleanup method is called upon entering the AgentCache context manager
+        with agent_cache:
+            # 1 cache miss and 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")  # +1 miss
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            test.check_n_cache_misses(4)
+
+        traveller.shift(datetime.timedelta(seconds=31))
+
+        with agent_cache:
+            # 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            test.check_n_cache_misses(4)
+
+        traveller.shift(datetime.timedelta(seconds=31))
+
+        with agent_cache:
+            # 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            test.check_n_cache_misses(4)
+
+        # Wait out lingering time of 60s after last read
+        traveller.shift(datetime.timedelta(seconds=61))
+
+        with agent_cache:
+            # 1 cache miss and 1 hit:
+            assert "x2" == test.test_method_2(dummy_arg="AAA")  # +1 miss
+            assert "x2" == test.test_method_2(dummy_arg="AAA")
+            test.check_n_cache_misses(5)
+
+
+async def test_cache_decorator_lingering_entries():
+    """
+    Test the behaviour of lingering cache entries.
+
+    Cache entries are considered lingering as long as for_version=True (default).
+    The timeout argument is ignored for lingering entries.
+    Lingering entries are considered stale 60s after their last use.
+    Stale entries are cleaned up on the next call to `clean_stale_entries`.
+
+    This test checks that this behaviour is consistent for the 4 combinations
+    of (timeout, for_version) via `linger_test_method_1` to `linger_test_method_4`.
+
+    `linger_test_method_5` is used to test that
+        - a lingering entry is properly cleaned up if it is not being used ("initial_read" entry).
+        - the expiry time of a lingering entry is properly reset to 60s when
+          it is read ("recurring_read" entry).
+
+    """
+
+    class LingeringTest(CacheMissCounter):
+        @cache
+        def linger_test_method_1(self):
+            self.increment_miss_counter()
+            return "x1"
+
+        @cache(for_version=True)
+        def linger_test_method_2(self):
+            self.increment_miss_counter()
+            return "x2"
+
+        @cache(timeout=1)
+        def linger_test_method_3(self):
+            self.increment_miss_counter()
+            return "x3"
+
+        @cache(timeout=1, for_version=True)
+        def linger_test_method_4(self):
+            self.increment_miss_counter()
+            return "x4"
+
+        @cache
+        def linger_test_method_5(self, dummy_arg: str):
+            self.increment_miss_counter()
+            return dummy_arg
+
+    agent_cache = AgentCache()
+    test = LingeringTest(agent_cache)
+
+    with time_machine.travel(datetime.datetime.now().astimezone(), tick=False) as traveller:
+
+        with agent_cache:
+            assert "initial_read" == test.linger_test_method_5(dummy_arg="initial_read")  # +1 miss
+            test.check_n_cache_misses(1)
+
+        test.reset_miss_counter()
+
+        with agent_cache:
+            # Populate the cache
+            assert "x1" == test.linger_test_method_1()  # +1 miss
+            assert "x2" == test.linger_test_method_2()  # +1 miss
+            assert "x3" == test.linger_test_method_3()  # +1 miss
+            assert "x4" == test.linger_test_method_4()  # +1 miss
+            test.check_n_cache_misses(4)
+
+            assert "recurring_read" == test.linger_test_method_5(dummy_arg="recurring_read")  # +1 miss
+            test.check_n_cache_misses(5)
+
+        test.reset_miss_counter()
+
+        # Check that the timeout parameter is correctly ignored
+        traveller.shift(datetime.timedelta(seconds=50))
+
+        # The cache cleanup method is called upon entering the AgentCache context manager
+        # All entries are lingering, check that we have 0 miss
+        with agent_cache:
+            assert "x1" == test.linger_test_method_1()  # cache hit
+            assert "x2" == test.linger_test_method_2()  # cache hit
+            assert "x3" == test.linger_test_method_3()  # cache hit
+            assert "x4" == test.linger_test_method_4()  # cache hit
+            assert "recurring_read" == test.linger_test_method_5(dummy_arg="recurring_read")  # cache hit
+            test.check_n_cache_misses(0)
+
+        # Check that the "initial_read" entry was properly cleaned up but all other
+        # entries lingered on.
+        traveller.shift(datetime.timedelta(seconds=50))
+
+        with agent_cache:
+            assert "x1" == test.linger_test_method_1()  # cache hit
+            assert "x2" == test.linger_test_method_2()  # cache hit
+            assert "x3" == test.linger_test_method_3()  # cache hit
+            assert "x4" == test.linger_test_method_4()  # cache hit
+            assert "recurring_read" == test.linger_test_method_5(dummy_arg="recurring_read")  # cache hit
+            test.check_n_cache_misses(0)
+
+            assert "initial_read" == test.linger_test_method_5(dummy_arg="initial_read")  # +1 miss
+            test.check_n_cache_misses(1)
+
+        test.reset_miss_counter()
+
+        # Wait out lingering time of 60s after last read, all entries should miss
+        traveller.shift(datetime.timedelta(seconds=61))
+
+        with agent_cache:
+            assert "x1" == test.linger_test_method_1()  # +1 miss
+            assert "x2" == test.linger_test_method_2()  # +1 miss
+            assert "x3" == test.linger_test_method_3()  # +1 miss
+            assert "x4" == test.linger_test_method_4()  # +1 miss
+            assert "recurring_read" == test.linger_test_method_5(dummy_arg="recurring_read")  # +1 miss
+            assert "initial_read" == test.linger_test_method_5(dummy_arg="initial_read")  # +1 miss
+            test.check_n_cache_misses(6)
+
+
+async def test_cache_decorator_hard_expiry_entries():
+    """
+    Test the behaviour of non-lingering cache entries.
+
+    Cache entries are considered non-lingering when for_version=False.
+    The timeout argument controls the lifetime of the entry since it entered the cache.
+    Stale entries are cleaned up on the next call to `clean_stale_entries`.
+
+    This test checks that this behaviour is consistent for the 4 combinations
+    of (timeout, for_version) via `linger_test_method_1` to `linger_test_method_4`.
+
+    `linger_test_method_5` is used to test that
+        - a lingering entry is properly cleaned up if it is not being used ("initial_read" entry).
+        - the expiry time of a lingering entry is properly reset to 60s when
+          it is read ("recurring_read" entry).
+
+    """
+
+    class NonLingeringTest(CacheMissCounter):
+        @cache(for_version=False)
+        def non_linger_test_method_1(self):
+            self.increment_miss_counter()
+            return "x1"
+
+        @cache(timeout=80, for_version=False)
+        def non_linger_test_method_2(self):
+            self.increment_miss_counter()
+            return "x2"
+
+        @cache(timeout=80, for_version=False)
+        def non_linger_test_method_3(self, dummy_arg: str):
+            self.increment_miss_counter()
+            return dummy_arg
+
+        @cache
+        def linger_test_method(self):
+            self.increment_miss_counter()
+            return "x3"
+
+        @cache(timeout=20, for_version=False)
+        def short_lived_non_linger(self):
+            self.increment_miss_counter()
+            return "x4"
+
+    agent_cache = AgentCache()
+    test = NonLingeringTest(agent_cache)
+
+    with time_machine.travel(datetime.datetime.now().astimezone(), tick=False) as traveller:
+
+        with agent_cache:
+            assert "initial_read" == test.non_linger_test_method_3(dummy_arg="initial_read")  # +1 miss
+            test.check_n_cache_misses(1)
+
+        test.reset_miss_counter()
+
+        with agent_cache:
+            # Populate the cache
+            assert "x1" == test.non_linger_test_method_1()  # +1 miss
+            assert "x2" == test.non_linger_test_method_2()  # +1 miss
+            assert "x3" == test.linger_test_method()  # +1 miss
+            assert "x4" == test.short_lived_non_linger()  # +1 miss
+            test.check_n_cache_misses(4)
+
+            assert "recurring_read" == test.non_linger_test_method_3(dummy_arg="recurring_read")  # +1 miss
+            test.check_n_cache_misses(5)
+
+        test.reset_miss_counter()
+
+        # Check that entries are not cleaned up
+        traveller.shift(datetime.timedelta(seconds=61))
+
+        # The cache cleanup method is called upon entering the AgentCache context manager
+        with agent_cache:
+            assert "x1" == test.non_linger_test_method_1()  # cache hit
+            assert "x2" == test.non_linger_test_method_2()  # cache hit
+            assert "recurring_read" == test.non_linger_test_method_3(dummy_arg="recurring_read")  # cache hit
+            assert "x3" == test.linger_test_method()  # +1 miss
+            assert "x4" == test.short_lived_non_linger()  # +1 miss
+            test.check_n_cache_misses(2)
+
+        test.reset_miss_counter()
+
+        traveller.shift(datetime.timedelta(seconds=20))
+
+        with agent_cache:
+            # Check that non-lingering entries with an 80s timeout got cleaned up:
+            assert "x2" == test.non_linger_test_method_2()  # +1 miss
+            assert "recurring_read" == test.non_linger_test_method_3(dummy_arg="recurring_read")  # +1 miss
+            assert "initial_read" == test.non_linger_test_method_3(dummy_arg="initial_read")  # +1 miss
+            test.check_n_cache_misses(3)
+            # Check that entry with default timeout of 5000s wasn't cleaned up:
+            assert "x1" == test.non_linger_test_method_1()  # cache hit
+            test.check_n_cache_misses(3)
+
+        test.reset_miss_counter()
+
+        # Wait out longer than the default timeout and check that the cache entry was cleaned up:
+        traveller.shift(datetime.timedelta(seconds=5000))
+
+        with agent_cache:
+            assert "x1" == test.non_linger_test_method_1()  # +1 miss
+            test.check_n_cache_misses(1)
+
+
+async def test_cache_decorator_cache_none():
+    """
+    Test the cache_none argument of the @cache decorator and the cacheNone legacy variant
+    """
+
+    class CacheNoneTest(CacheMissCounter):
+        @cache(cache_none=False)
+        def test_cache_none(self):
+            self.increment_miss_counter()
+            if self.cache_miss_counter < 2:
+                return None
+            else:
+                return "X"
+
+    agent_cache = AgentCache()
+    test = CacheNoneTest(agent_cache)
+
+    with agent_cache:
+        assert None is test.test_cache_none()
+        test.check_n_cache_misses(1)
+        assert "X" == test.test_cache_none()
+        test.check_n_cache_misses(2)
+        assert "X" == test.test_cache_none()
+        test.check_n_cache_misses(2)
+
+    class CacheNoneTestLegacy(CacheMissCounter):
+        @cache(cacheNone=False)
+        def test_cacheNone(self):
+            self.increment_miss_counter()
+            if self.cache_miss_counter < 2:
+                return None
+            else:
+                return "X"
+
+    agent_cache = AgentCache()
+    test = CacheNoneTestLegacy(agent_cache)
+
+    with agent_cache:
+        assert None is test.test_cacheNone()
+        test.check_n_cache_misses(1)
+        assert "X" == test.test_cacheNone()
+        test.check_n_cache_misses(2)
+        assert "X" == test.test_cacheNone()
+        test.check_n_cache_misses(2)
+
+
+async def test_cache_decorator_call_on_delete():
+    """
+    Test the call_on_delete argument of the cache decorator
+    """
+
     class Closeable:
         def __init__(self):
             self.closed = False
@@ -337,103 +692,54 @@ def test_decorator():
             self.closed = True
 
     my_closable = Closeable()
-    my_closable_2 = Closeable()
 
-    xcache = AgentCache()
+    agent_cache = AgentCache()
 
-    class DT:
-        def __init__(self, cache):
-            self.cache = cache
-            self.count = 0
-            self.c2 = 0
-            self.c3 = 0
-
-        @cache()
-        def test_method(self):
-            self.count += 1
-            return "x"
-
-        @cache
-        def test_method_2(self, version):
-            self.count += 1
-            return "x2"
-
-        @cache(cacheNone=False)
-        def test_method_3(self):
-            self.c2 += 1
-            if self.c2 < 2:
-                return None
-            else:
-                return "X"
-
-        @cache(cache_none=False)
-        def test_method_4(self):
-            self.c3 += 1
-            if self.c3 < 2:
-                return None
-            else:
-                return "X"
-
+    class CallOnDeleteTest(CacheMissCounter):
         @cache(call_on_delete=lambda x: x.close())
-        def test_close(self, version):
-            self.count += 1
+        def test_close(self):
+            self.increment_miss_counter()
             return my_closable
 
-        @cache(call_on_delete=lambda x: x.close())
-        def test_close_2(self):
-            self.count += 1
-            return my_closable_2
+    test = CallOnDeleteTest(agent_cache)
 
-    test = DT(xcache)
+    with time_machine.travel(datetime.datetime.now().astimezone(), tick=False) as traveller:
+        # Test call_on_delete
+        with agent_cache:
+            test.test_close()
 
-    xcache.open_version(3)
-    test.test_close(version=3)
-    test.test_close_2()
-    xcache.close()
-    assert my_closable.closed
-    assert my_closable_2.closed
+        assert not my_closable.closed
+        agent_cache.close()
+        assert my_closable.closed
 
-    test.count = 0
-    my_closable.closed = False
+        test.reset_miss_counter()
+        my_closable.closed = False
 
-    assert "x" == test.test_method()
-    assert "x" == test.test_method()
-    assert "x" == test.test_method()
-    assert 1 == test.count
+        with agent_cache:
+            test.test_close()
+            test.check_n_cache_misses(1)
+            test.test_close()
+            test.check_n_cache_misses(1)
+            assert not my_closable.closed
 
-    xcache.open_version(1)
-    xcache.open_version(2)
-    assert "x2" == test.test_method_2(version=1)
-    assert "x2" == test.test_method_2(version=1)
-    assert 2 == test.count
-    assert "x2" == test.test_method_2(version=2)
-    assert 3 == test.count
-    xcache.close_version(1)
-    xcache.open_version(1)
-    assert "x2" == test.test_method_2(version=1)
-    assert "x2" == test.test_method_2(version=1)
-    assert 4 == test.count
+        traveller.shift(datetime.timedelta(seconds=61))
+        agent_cache.clean_stale_entries()
 
-    assert None is test.test_method_3()
-    assert 1 == test.c2
-    assert "X" == test.test_method_3()
-    assert 2 == test.c2
-    assert "X" == test.test_method_3()
-    assert 2 == test.c2
+        assert my_closable.closed
 
-    assert None is test.test_method_4()
-    assert 1 == test.c3
-    assert "X" == test.test_method_4()
-    assert 2 == test.c3
-    assert "X" == test.test_method_4()
-    assert 2 == test.c3
+        test.reset_miss_counter()
+        my_closable.closed = False
 
-    test.count = 0
-    xcache.open_version(3)
-    test.test_close(version=3)
-    assert test.count == 1
-    test.test_close(version=3)
-    assert test.count == 1
-    assert not my_closable.closed
-    xcache.close_version(3)
-    assert my_closable.closed
+        with agent_cache:
+            test.test_close()
+            test.check_n_cache_misses(1)
+            assert not my_closable.closed
+
+        traveller.shift(datetime.timedelta(seconds=61))
+        # The cache entry is stale but still in the cache since
+        # clean_stale_entries wasn't called yet.
+        assert not my_closable.closed
+
+        # Upon entering the cache we call clean_stale_entries:
+        with agent_cache:
+            assert my_closable.closed

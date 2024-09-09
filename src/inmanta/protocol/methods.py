@@ -1034,6 +1034,23 @@ def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
     """
 
 
+@typedmethod(
+    path="/scheduler/",
+    operation="POST",
+    server_agent=True,
+    enforce_auth=False,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+)
+def trigger_read_version(tid: uuid.UUID) -> int:
+    """
+    Notify the scheduler that a new version has been released
+
+    :param tid: The environment this agent is defined in
+    """
+
+
 # Methods to send event to the server
 
 

@@ -2543,9 +2543,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         if self.strict_deps_check:
             constraints: list[Requirement] = [Requirement.parse(item) for item in self.collect_python_requirements()]
-            env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
+            env.process_env.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
-            if not env.ActiveEnv.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
+            if not env.process_env.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
                 raise CompilerException(
                     "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts"
                     " before attempting another compile. Run `pip check` to check for any incompatibilities."

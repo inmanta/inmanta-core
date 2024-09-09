@@ -184,7 +184,7 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
             self._tasks_by_resource[task.resource] = {}
         self._tasks_by_resource[task.resource][task] = item
         # FIXME[#8008]: parse agent
-        self._agent_queues["TODO"].put_nowait(item)
+        # self._agent_queues["TODO"].put_nowait(item)
 
     async def queue_get(self, agent: str) -> Task:
         """

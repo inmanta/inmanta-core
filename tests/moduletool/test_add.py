@@ -25,8 +25,8 @@ import py
 import pytest
 from pkg_resources import Requirement
 
+from inmanta import env
 from inmanta.command import CLIException
-from inmanta.env import process_env
 from inmanta.module import ModuleV1, ModuleV1Metadata, ModuleV2, ModuleV2Source, Project, ProjectMetadata
 from inmanta.moduletool import ModuleTool
 from packaging.version import Version
@@ -105,7 +105,7 @@ def test_module_add_v2_module_to_project(
         project_requires_constraint: str,
         expected_pkg_from_extra: Optional[str] = None,
     ) -> None:
-        installed_packages = process_env.get_installed_packages()
+        installed_packages = env.process_env.get_installed_packages()
         assert pkg_name in installed_packages
         if expected_pkg_from_extra:
             assert expected_pkg_from_extra in installed_packages
@@ -118,7 +118,7 @@ def test_module_add_v2_module_to_project(
 
     module_name = "elaboratev2module"
     pkg_name = "inmanta-module-elaboratev2module"
-    assert pkg_name not in process_env.get_installed_packages().keys()
+    assert pkg_name not in env.process_env.get_installed_packages().keys()
 
     version_constraint = f"{module_name}==1.2.3"
     ModuleTool().add(module_req=version_constraint, v2=True, override=False)
@@ -160,7 +160,7 @@ def test_module_add_v2_module_to_v2_module(tmpdir: py.path.local, monkeypatch, m
         assert not os.path.exists(os.path.join(module_dir, "requirements.txt"))
 
     _assert_module_requirements(expected_requirements=[])
-    installed_packages = process_env.get_installed_packages()
+    installed_packages = env.process_env.get_installed_packages()
 
     name_dependent_module = "a_module"
     ModuleTool().add(module_req="a_module", v2=True, override=False)
@@ -174,7 +174,7 @@ def test_module_add_v2_module_to_v2_module(tmpdir: py.path.local, monkeypatch, m
     _assert_module_requirements(expected_requirements=[f"{ModuleV2Source.get_package_name_for(name_dependent_module)}==1.1.1"])
 
     # Ensure no new packages were installed as a side-effect of `inmanta modules add`
-    assert process_env.get_installed_packages() == installed_packages
+    assert env.process_env.get_installed_packages() == installed_packages
 
 
 def test_module_add_v2_module_to_v1_module(tmpdir: py.path.local, modules_dir: str, monkeypatch) -> None:
@@ -194,7 +194,7 @@ def test_module_add_v2_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
             assert fd.read().strip() == expected_requirement
 
     assert not os.path.exists(requirements_txt_file)
-    installed_packages = process_env.get_installed_packages()
+    installed_packages = env.process_env.get_installed_packages()
 
     name_dependent_module = "a_module"
     ModuleTool().add(module_req=name_dependent_module, v2=True, override=False)
@@ -208,7 +208,7 @@ def test_module_add_v2_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
     _assert_module_requirements(expected_requirement=f"{ModuleV2Source.get_package_name_for(name_dependent_module)}==1.1.1")
 
     # Ensure no new packages were installed as a side-effect of `inmanta modules add`
-    assert process_env.get_installed_packages() == installed_packages
+    assert env.process_env.get_installed_packages() == installed_packages
 
 
 def test_module_add_v1_module_to_v1_module(tmpdir: py.path.local, modules_dir: str, monkeypatch) -> None:

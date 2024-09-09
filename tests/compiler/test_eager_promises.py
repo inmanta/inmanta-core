@@ -77,7 +77,8 @@ def test_eager_promises_if(snippetcompiler, swap_order: bool, nested: bool) -> N
             assert = true
             assert = a.optional is defined
             assert = not a.optional.optional is defined
-        """
+        """,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -123,6 +124,7 @@ def test_eager_promises_cross_namespace(
             assert = mymod::a.optional is defined
             assert = not mymod::a.optional.optional is defined
         """,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -166,7 +168,8 @@ def test_eager_promises_implementation(snippetcompiler, swap_order: bool, when: 
             assert = true
             assert = a.optional is defined
             assert = not a.optional.optional is defined
-        """
+        """,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -212,7 +215,8 @@ def test_eager_promises_implementation_implicit_self(snippetcompiler, swap_order
             assert = true
             assert = a.optional is defined
             assert = not a.optional.optional is defined
-        """
+        """,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -256,7 +260,8 @@ def test_eager_promises_paired_lists(snippetcompiler) -> None:
             assert = true
             assert = std::select(std::key_sort(l1.elements, "n"), "n") == [1, 2, 3, 5, 20]
             assert = std::select(std::key_sort(l2.elements, "n"), "n") == [1, 4, 9, 25, 400]
-        """
+        """,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -304,7 +309,8 @@ def test_eager_promises_promise_cleanup(snippetcompiler, compiler_keep_promise_s
                     a2.others += A()
                 end
             end
-        """
+        """,
+        autostd=True,
     )
     root_ns: Namespace
     _, root_ns = compiler.do_compile()

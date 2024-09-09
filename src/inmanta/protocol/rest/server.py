@@ -31,10 +31,8 @@ from pyformance import timer
 from tornado import httpserver, iostream, routing, web
 
 import inmanta.protocol.endpoints
-import logfire
-import logfire.propagate
 from inmanta import config as inmanta_config
-from inmanta import const
+from inmanta import const, tracing
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.rest import RESTBase
 from inmanta.server import config as server_config
@@ -112,10 +110,10 @@ class RESTHandler(tornado.web.RequestHandler):
         if not self._transport.running:
             return
 
-        with logfire.propagate.attach_context(
+        with tracing.attach_context(
             {const.TRACEPARENT: self.request.headers[const.TRACEPARENT]} if const.TRACEPARENT in self.request.headers else {}
         ):
-            with logfire.span("rpc." + call_config.method_name, _tags={"rpc-call"}):
+            with tracing.span("rpc." + call_config.method_name, _tags=["rpc-call"]):
                 with timer("rpc." + call_config.method_name).time():
                     self._transport.start_request()
                     try:
