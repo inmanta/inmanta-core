@@ -54,7 +54,7 @@ LOGGER = logging.getLogger(__name__)
 LOGGER_PIP = logging.getLogger("inmanta.pip")  # Use this logger to log pip commands or data related to pip commands.
 
 if typing.TYPE_CHECKING:
-    from _typeshed.importlib import PathEntryFinderProtocol, MetaPathFinderProtocol
+    from _typeshed.importlib import MetaPathFinderProtocol, PathEntryFinderProtocol
 
 
 class PackageNotFound(Exception):
