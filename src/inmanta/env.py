@@ -30,7 +30,7 @@ from collections import abc
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
-from importlib.abc import Loader
+from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from re import Pattern
@@ -854,9 +854,8 @@ class ActiveEnv(PythonEnvironment):
         finally:
             self.notify_change()
 
-    @classmethod
     def get_constraint_violations_for_check(
-        cls,
+        self,
         strict_scope: Optional[Pattern[str]] = None,
         constraints: Optional[list[Requirement]] = None,
     ) -> tuple[set[VersionConflict], set[VersionConflict]]:
@@ -879,7 +878,7 @@ class ActiveEnv(PythonEnvironment):
             for requirement in dist_info.requires()
         )
         inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(r, owner="inmanta-core") for r in cls._get_requirements_on_inmanta_package()
+            OwnedRequirement(r, owner="inmanta-core") for r in self._get_requirements_on_inmanta_package()
         )
         extra_constraints: abc.Set[OwnedRequirement] = frozenset(
             (OwnedRequirement(r) for r in constraints) if constraints is not None else []
@@ -920,9 +919,8 @@ class ActiveEnv(PythonEnvironment):
 
         return constraint_violations, constraint_violations_strict
 
-    @classmethod
     def check(
-        cls,
+        self,
         strict_scope: Optional[Pattern[str]] = None,
         constraints: Optional[list[Requirement]] = None,
     ) -> None:
@@ -936,7 +934,9 @@ class ActiveEnv(PythonEnvironment):
         :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
             packages meet the given constraints. All listed packages are expected to be installed.
         """
-        constraint_violations, constraint_violations_strict = cls.get_constraint_violations_for_check(strict_scope, constraints)
+        constraint_violations, constraint_violations_strict = self.get_constraint_violations_for_check(
+            strict_scope, constraints
+        )
 
         if len(constraint_violations_strict) != 0:
             raise ConflictingRequirements(
@@ -947,8 +947,7 @@ class ActiveEnv(PythonEnvironment):
         for violation in constraint_violations:
             LOGGER.warning("%s", violation)
 
-    @classmethod
-    def check_legacy(cls, in_scope: Pattern[str], constraints: Optional[list[Requirement]] = None) -> bool:
+    def check_legacy(self, in_scope: Pattern[str], constraints: Optional[list[Requirement]] = None) -> bool:
         """
         Check this Python environment for incompatible dependencies in installed packages. This method is a legacy method
         in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
@@ -961,7 +960,7 @@ class ActiveEnv(PythonEnvironment):
             packages meet the given constraints. All listed packages are expected to be installed.
         :return: True iff the check succeeds.
         """
-        constraint_violations_non_strict, constraint_violations_strict = cls.get_constraint_violations_for_check(
+        constraint_violations_non_strict, constraint_violations_strict = self.get_constraint_violations_for_check(
             in_scope, constraints
         )
 
@@ -1052,6 +1051,8 @@ class ActiveEnv(PythonEnvironment):
 process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)
 """
 Singleton representing the Python environment this process is running in.
+
+Should not be imported directly, as it can be updated
 """
 
 
@@ -1061,11 +1062,26 @@ def mock_process_env(*, python_path: Optional[str] = None, env_path: Optional[st
     Overrides the process environment information. This forcefully sets the environment that is recognized as the outer Python
     environment. This function should only be called when a Python environment has been set up dynamically and this environment
     should be treated as if this process was spawned from it, and even then with great care.
-
     :param python_path: The path to the python binary. Only one of `python_path` and `env_path` should be set.
     :param env_path: The path to the python environment directory. Only one of `python_path` and `env_path` should be set.
+
+    When using this method in a fixture to set and reset virtualenv, it is preferable to use `store_venv()`
     """
     process_env.__init__(python_path=python_path, env_path=env_path)  # type: ignore
+
+
+def swap_process_env(env: ActiveEnv) -> ActiveEnv:
+    """
+    Overrides the process environment information.
+
+    Returns the old active env
+
+    For use in testing. Test as expected to swap the old process env back in place
+    """
+    global process_env
+    old_env = process_env
+    process_env = env
+    return old_env
 
 
 @stable_api
@@ -1284,3 +1300,64 @@ class VenvActivationFailedError(Exception):
     def __init__(self, msg: str) -> None:
         super().__init__(msg)
         self.msg = msg
+
+
+@dataclass
+class VenvSnapshot:
+    old_os_path: str
+    old_prefix: str
+    old_path: list[str]
+    old_meta_path: list[Finder]
+    old_path_hooks: list
+    old_pythonpath: str
+    old_os_venv: Optional[str]
+    old_process_env_path: str
+    old_process_env: ActiveEnv
+    old_working_set: PythonWorkingSet
+
+    def restore(self):
+        os.environ["PATH"] = self.old_os_path
+        sys.prefix = self.old_prefix
+        sys.path = self.old_path
+        # reset sys.meta_path because it might contain finders for editable installs, make sure to keep the same object
+        sys.meta_path.clear()
+        sys.meta_path.extend(self.old_meta_path)
+        sys.path_hooks.clear()
+        sys.path_hooks.extend(self.old_path_hooks)
+        # Clear cache for sys.path_hooks
+        sys.path_importer_cache.clear()
+        pkg_resources.working_set = self.old_working_set
+        # Restore PYTHONPATH
+        if self.old_pythonpath is not None:
+            os.environ["PYTHONPATH"] = self.old_pythonpath
+        elif "PYTHONPATH" in os.environ:
+            del os.environ["PYTHONPATH"]
+        # Restore VIRTUAL_ENV
+        if self.old_os_venv is not None:
+            os.environ["VIRTUAL_ENV"] = self.old_os_venv
+        elif "VIRTUAL_ENV" in os.environ:
+            del os.environ["VIRTUAL_ENV"]
+
+        # We reset the process_env both ways: we put the reference back and we do an in_place update
+        swap_process_env(self.old_process_env)
+        mock_process_env(env_path=self.old_process_env_path)
+
+
+def store_venv():
+    """
+    Create a snapshot of the venv environment, for use in testing, to resest the test
+    """
+
+    self = VenvSnapshot(
+        old_os_path=os.environ.get("PATH", ""),
+        old_prefix=sys.prefix,
+        old_path=list(sys.path),
+        old_meta_path=sys.meta_path.copy(),
+        old_path_hooks=sys.path_hooks.copy(),
+        old_pythonpath=os.environ.get("PYTHONPATH", None),
+        old_os_venv=os.environ.get("VIRTUAL_ENV", None),
+        old_process_env=process_env,
+        old_process_env_path=process_env.env_path,
+        old_working_set=pkg_resources.working_set,
+    )
+    return self

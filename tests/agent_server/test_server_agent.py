@@ -2026,7 +2026,8 @@ async def test_export_duplicate(resource_container, snippetcompiler):
 
         test::Resource(key="test", value="foo")
         test::Resource(key="test", value="bar")
-    """
+    """,
+        autostd=True,
     )
 
     with pytest.raises(CompilerException) as exc:

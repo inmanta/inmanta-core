@@ -117,7 +117,8 @@ def test_plus(snippetcompiler) -> None:
             std::assert(10 in filtered)
             std::assert(11 not in filtered)
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -215,7 +216,8 @@ def test_min(snippetcompiler) -> None:
             std::assert(0 in filtered)
             std::assert(1 not in filtered)
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -313,7 +315,8 @@ def test_multiplication(snippetcompiler) -> None:
             std::assert(10 in filtered)
             std::assert(20 not in filtered)
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -413,7 +416,8 @@ def test_division(snippetcompiler) -> None:
             std::assert(1 in filtered)
             std::assert(2 not in filtered)
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -475,7 +479,8 @@ def test_modulo(snippetcompiler) -> None:
             std::assert(1 in filtered)
             std::assert(0 not in filtered)
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -573,7 +578,8 @@ def test_exponentiation(snippetcompiler) -> None:
             std::assert(4 in filtered)
             std::assert(9 not in filtered)
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 

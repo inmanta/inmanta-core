@@ -27,7 +27,8 @@ def test_order_of_execution(snippetcompiler, capsys):
 for i in std::sequence(10):
     std::print(i)
 end
-        """
+        """,
+        autostd=True,
     )
 
     capsys.readouterr()
@@ -43,9 +44,12 @@ def test_for_error(snippetcompiler):
         entity A:
             string a = ""
         end
-        implement A using std::none
+        implement A using none
         a = A()
         for i in a:
+        end
+
+        implementation none for std::Entity:
         end
     """,
         "A for loop can only be applied to lists and relations. Hint: 'a' resolves to "
@@ -80,6 +84,7 @@ def test_for_error_nullable_list(snippetcompiler):
     """,
         "A for loop can only be applied to lists and relations. "
         "Hint: 'a.elements' resolves to 'null'. (reported in For(element) ({dir}/main.cf:8))",
+        ministd=True,
     )
 
 
@@ -94,14 +99,14 @@ def test_for_loop_on_list_attribute(snippetcompiler) -> None:
                 list l
             end
 
-            implement A using std::none
+            implement A using none
 
             a = A(l=[1, 2])
 
             entity Assert:
                 bool success  # no default -> trigger not-set exception if for loop is not executed
             end
-            implement Assert using std::none
+            implement Assert using none
             assert = Assert()
 
             for x in a.l:
@@ -110,6 +115,9 @@ def test_for_loop_on_list_attribute(snippetcompiler) -> None:
                     # trigger exception
                     assert.success = false
                 end
+            end
+
+            implementation none for std::Entity:
             end
             """
         )
@@ -147,7 +155,8 @@ def test_for_loop_unknown(snippetcompiler) -> None:
                 end
             end
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -162,7 +171,7 @@ def test_resultcollector_receive_result_flatten(snippetcompiler) -> None:
             entity Assert:
                 bool success = true
             end
-            implement Assert using std::none
+            implement Assert using none
             assert = Assert()
 
             # nested list containing a string
@@ -180,6 +189,9 @@ def test_resultcollector_receive_result_flatten(snippetcompiler) -> None:
                 if x != "test":
                     assert.success = false
                 end
+            end
+
+            implementation none for std::Entity:
             end
             """
         )
@@ -218,6 +230,7 @@ def test_for_loop_fully_gradual(snippetcompiler):
                 std::print(y)
             end
             """
-        )
+        ),
+        ministd=True,
     )
     compiler.do_compile()
