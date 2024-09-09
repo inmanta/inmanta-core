@@ -163,6 +163,7 @@ src/inmanta/data/model.py:0: note: def __new__(cls, object: object = ...) -> Str
 src/inmanta/data/model.py:0: note: def __new__(cls, object: Buffer, encoding: str = ..., errors: str = ...) -> StrEnum
 src/inmanta/data/model.py:0: error: "str" has no attribute "name"  [attr-defined]
 src/inmanta/data/model.py:0: error: "str" has no attribute "value"  [attr-defined]
+src/inmanta/data/model.py:0: error: Unused "type: ignore" comment, use narrower [prop-decorator] instead of [misc] code  [unused-ignore]
 src/inmanta/ast/attribute.py:0: error: Incompatible types in assignment (expression has type "property", variable has type "Type")  [assignment]
 src/inmanta/ast/attribute.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]
 src/inmanta/ast/attribute.py:0: error: Need type annotation for "source_annotations" (hint: "source_annotations: list[<type>] = ...")  [var-annotated]
@@ -186,8 +187,9 @@ src/inmanta/protocol/common.py:0: error: Returning Any from function declared to
 src/inmanta/protocol/common.py:0: error: No overload variant of "create_model" matches argument types "str", "dict[str, tuple[object, object | None]]", "type[DateTimeNormalizerModel]"  [call-overload]
 src/inmanta/protocol/common.py:0: note: Possible overload variants:
 src/inmanta/protocol/common.py:0: note: def create_model(str, /, *, __config__: ConfigDict | None = ..., __doc__: str | None = ..., __base__: None = ..., __module__: str = ..., __validators__: dict[str, Callable[..., Any]] | None = ..., __cls_kwargs__: dict[str, Any] | None = ..., **field_definitions: Any) -> type[BaseModel]
-src/inmanta/protocol/common.py:0: note: def [ModelT <: BaseModel] create_model(str, /, *, __config__: ConfigDict | None = ..., __doc__: str | None = ..., __base__: type[ModelT] | tuple[type[ModelT], ...], __module__: str = ..., __validators__: dict[str, Callable[..., Any]] | None = ..., __cls_kwargs__: dict[str, Any] | None = ..., **field_definitions: Any) -> type[ModelT]
+src/inmanta/protocol/common.py:0: note: def [ModelT: BaseModel] create_model(str, /, *, __config__: ConfigDict | None = ..., __doc__: str | None = ..., __base__: type[ModelT] | tuple[type[ModelT], ...], __module__: str = ..., __validators__: dict[str, Callable[..., Any]] | None = ..., __cls_kwargs__: dict[str, Any] | None = ..., **field_definitions: Any) -> type[ModelT]
 src/inmanta/protocol/common.py:0: error: "type" has no attribute "__supertype__"  [attr-defined]
+src/inmanta/protocol/common.py:0: error: Non-overlapping identity check (left operand type: "type", right operand type: "<typing special form>")  [comparison-overlap]
 src/inmanta/protocol/common.py:0: error: Returning Any from function declared to return "int"  [no-any-return]
 src/inmanta/protocol/common.py:0: error: Argument 1 to "_get_http_status_code_for_exception" of "MethodProperties" has incompatible type "str | None"; expected "str"  [arg-type]
 src/inmanta/protocol/common.py:0: error: Need type annotation for "params_to_add" (hint: "params_to_add: dict[<type>, <type>] = ...")  [var-annotated]
@@ -223,6 +225,8 @@ src/inmanta/ast/statements/__init__.py:0: note: Use "-> None" if function does n
 src/inmanta/protocol/rest/__init__.py:0: error: Returning Any from function declared to return "object | None"  [no-any-return]
 src/inmanta/protocol/rest/__init__.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/protocol/rest/__init__.py:0: error: Call to untyped function "_validate_argument_consistency" in typed context  [no-untyped-call]
+src/inmanta/protocol/rest/__init__.py:0: error: Non-overlapping identity check (left operand type: "type[object]", right operand type: "<typing special form>")  [comparison-overlap]
+src/inmanta/protocol/rest/__init__.py:0: error: Non-overlapping identity check (left operand type: "type[object]", right operand type: "<typing special form>")  [comparison-overlap]
 src/inmanta/protocol/rest/__init__.py:0: error: Argument "status_code" to "ReturnValue" has incompatible type "int | BaseModel | UUID | float | datetime | str"; expected "int"  [arg-type]
 src/inmanta/protocol/rest/__init__.py:0: error: Argument "status_code" to "ReturnValue" has incompatible type "int | BaseModel | UUID | float | datetime | str"; expected "int"  [arg-type]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
@@ -967,7 +971,7 @@ src/inmanta/app.py:0: error: Argument 2 to "safe_shutdown" has incompatible type
 src/inmanta/app.py:0: error: Incompatible types in assignment (expression has type "str | None", variable has type "int | None")  [assignment]
 src/inmanta/app.py:0: error: Incompatible types in assignment (expression has type "str | None", variable has type "int | None")  [assignment]
 src/inmanta/app.py:0: error: Argument 1 to "run" of "Exporter" has incompatible type "dict[str, Type]"; expected "dict[str, Entity] | None"  [arg-type]
-src/inmanta/app.py:0: error: No overload variant of "print" matches argument types "str", "TextIO", "dict[str, object]"  [call-overload]
+src/inmanta/app.py:0: error: No overload variant of "print" matches argument types "str", "TextIO | Any", "dict[str, object]"  [call-overload]
 src/inmanta/app.py:0: note: Possible overload variants:
 src/inmanta/app.py:0: note: def print(*values: object, sep: str | None = ..., end: str | None = ..., file: SupportsWrite[str] | None = ..., flush: Literal[False] = ...) -> None
 src/inmanta/app.py:0: note: def print(*values: object, sep: str | None = ..., end: str | None = ..., file: _SupportsWriteAndFlush[str] | None = ..., flush: bool) -> None
