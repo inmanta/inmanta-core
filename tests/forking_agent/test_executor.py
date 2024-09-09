@@ -276,7 +276,11 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     await asyncio.get_running_loop().run_in_executor(None, child1.process.process.kill)
     print("Kill sent")
 
-    await asyncio.get_running_loop().run_in_executor(None, child1.process.process.join)
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, child1.process.process.join)
+    except ValueError:
+        # to be expected
+        logging.exception("Process already gone!")
     print("Child gone")
 
     with pytest.raises(ConnectionLost):
