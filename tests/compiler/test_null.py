@@ -27,9 +27,11 @@ def test_null(snippetcompiler):
         entity A:
             string? a = null
         end
-        implement A using std::none
+        implement A using none
         a = A()
 
+        implementation none for std::Entity:
+end
     """
     )
 
@@ -45,8 +47,11 @@ def test_null_on_list(snippetcompiler):
         entity A:
             string[]? a = null
         end
-        implement A using std::none
+        implement A using none
         a = A()
+
+        implementation none for std::Entity:
+end
     """
     )
 
@@ -62,8 +67,11 @@ def test_null_on_dict(snippetcompiler):
         entity A:
             dict? a = null
         end
-        implement A using std::none
+        implement A using none
         a = A()
+
+        implementation none for std::Entity:
+        end
     """
     )
 
@@ -92,9 +100,11 @@ def test_null_err(snippetcompiler):
         entity A:
             string a = null
         end
-        implement A using std::none
+        implement A using none
         a = A()
 
+        implementation none for std::Entity:
+end
     """,
         "Invalid value 'null', expected string (reported in string a = null ({dir}/main.cf:3:20))",
     )
@@ -106,8 +116,11 @@ def test_null_on_list_err(snippetcompiler):
         entity A:
             string[] a = null
         end
-        implement A using std::none
+        implement A using none
         a = A()
+
+        implementation none for std::Entity:
+end
     """,
         "Invalid value 'null', expected string[] (reported in string[] a = null ({dir}/main.cf:3:22))",
     )
@@ -120,10 +133,13 @@ entity A:
     int? n
 end
 
-implement A using std::none
+implement A using none
 
 A()
 A(n = null)
+
+implementation none for std::Entity:
+end
         """
     )
     try:

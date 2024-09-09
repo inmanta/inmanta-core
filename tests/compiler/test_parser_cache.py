@@ -29,7 +29,8 @@ def test_caching(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 a=1
-"""
+""",
+        autostd=True,
     )
     # don't know hit count, may vary on previous testcases
     assert parser.cache_manager.misses >= 1
