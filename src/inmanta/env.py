@@ -26,21 +26,22 @@ import re
 import site
 import subprocess
 import sys
+import typing
 import venv
 from collections import abc
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
-from importlib.abc import Finder, Loader
+from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import NamedTuple, Optional, Tuple, TypeVar
+from typing import Callable, NamedTuple, Optional, Tuple, TypeVar
 
 import pkg_resources
-from pkg_resources import DistInfoDistribution, Distribution, Requirement
+from pkg_resources import DistInfoDistribution, Distribution, Requirement, WorkingSet
 
 from inmanta import const
 from inmanta.ast import CompilerException
@@ -52,6 +53,9 @@ from packaging import version
 
 LOGGER = logging.getLogger(__name__)
 LOGGER_PIP = logging.getLogger("inmanta.pip")  # Use this logger to log pip commands or data related to pip commands.
+
+if typing.TYPE_CHECKING:
+    from _typeshed.importlib import MetaPathFinderProtocol, PathEntryFinderProtocol
 
 
 class PackageNotFound(Exception):
@@ -1441,15 +1445,15 @@ class VenvSnapshot:
     old_os_path: str
     old_prefix: str
     old_path: list[str]
-    old_meta_path: list[Finder]
-    old_path_hooks: list
-    old_pythonpath: str
+    old_meta_path: "list[MetaPathFinderProtocol]"
+    old_path_hooks: "list[Callable[[str], PathEntryFinderProtocol]]"
+    old_pythonpath: Optional[str]
     old_os_venv: Optional[str]
     old_process_env_path: str
     old_process_env: ActiveEnv
-    old_working_set: PythonWorkingSet
+    old_working_set: WorkingSet
 
-    def restore(self):
+    def restore(self) -> None:
         os.environ["PATH"] = self.old_os_path
         sys.prefix = self.old_prefix
         sys.path = self.old_path
@@ -1477,7 +1481,7 @@ class VenvSnapshot:
         mock_process_env(env_path=self.old_process_env_path)
 
 
-def store_venv():
+def store_venv() -> VenvSnapshot:
     """
     Create a snapshot of the venv environment, for use in testing, to resest the test
     """
