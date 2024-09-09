@@ -19,7 +19,6 @@
 import abc
 import asyncio
 import concurrent.futures
-import contextlib
 import dataclasses
 import datetime
 import hashlib
@@ -28,7 +27,6 @@ import logging
 import os
 import pathlib
 import shutil
-import types
 import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -467,28 +465,6 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         return process_environment
 
 
-class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):
-    """
-    A context manager to ensure the cache version is properly closed
-    """
-
-    def __init__(self, executor: "Executor", version: int) -> None:
-        self.version = version
-        self.executor = executor
-
-    async def __aenter__(self) -> None:
-        await self.executor.open_version(self.version)
-
-    async def __aexit__(
-        self,
-        __exc_type: typing.Type[BaseException] | None,
-        __exc_value: BaseException | None,
-        __traceback: types.TracebackType | None,
-    ) -> None:
-        await self.executor.close_version(self.version)
-        return None
-
-
 class Executor(abc.ABC):
     """
     Represents an executor responsible for deploying resources within a specified virtual environment.
@@ -500,13 +476,6 @@ class Executor(abc.ABC):
     """
 
     failed_resources: FailedResources
-
-    def cache(self, model_version: int) -> CacheVersionContext:
-        """
-        Context manager responsible for opening and closing the handler cache
-        for the given model_version during deployment.
-        """
-        return CacheVersionContext(self, model_version)
 
     @abc.abstractmethod
     async def execute(
@@ -543,20 +512,6 @@ class Executor(abc.ABC):
         """
         Get facts for a given resource
         :param resource: The resource for which to get facts.
-        """
-        pass
-
-    @abc.abstractmethod
-    async def open_version(self, version: int) -> None:
-        """
-        Open a version on the cache
-        """
-        pass
-
-    @abc.abstractmethod
-    async def close_version(self, version: int) -> None:
-        """
-        Close a version on the cache
         """
         pass
 
