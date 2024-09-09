@@ -851,11 +851,11 @@ import sys
         Perform a pip install in this environment, according to the given config
 
         :param requirements: which requirements to install
-        :param paths: which paths to install
         :param config: the pip config to use
-        :param constraint_files: pass along the following constraint files
         :param upgrade: make pip do an upgrade
+        :param constraint_files: pass along the following constraint files
         :param upgrade_strategy: what upgrade strategy to use
+        :param paths: which paths to install
 
         limitation:
          - When upgrade is false, if requirements are already installed constraints from constraint files may not be verified.
@@ -1062,7 +1062,7 @@ class CommandRunner:
 
         try:
             return_code = await asyncio.wait_for(process.wait(), timeout=timeout)
-        except subprocess.TimeoutExpired:
+        except TimeoutError:
             process.kill()
             return -1, full_output
         else:
