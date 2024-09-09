@@ -1,0 +1,3 @@
+description: Remove the broken dump export plugin
+change-type: major
+destination-branches: [master]
