@@ -28,7 +28,6 @@ import warnings
 from collections import defaultdict
 from collections.abc import Set
 from concurrent import futures
-from enum import Enum
 from re import Pattern
 from typing import Optional, cast
 
@@ -55,6 +54,10 @@ from inmanta.server import (
 )
 from inmanta.server.server import Server
 from inmanta.server.services import orchestrationservice, resourceservice
+from inmanta.server.services.environmentlistener import (  # These were moved from this module, important to keep them in place
+    EnvironmentAction,
+    EnvironmentListener,
+)
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
@@ -65,45 +68,6 @@ def rename_fields(env: model.Environment) -> JsonType:
     env_dict["project"] = env_dict["project_id"]
     del env_dict["project_id"]
     return env_dict
-
-
-class EnvironmentAction(str, Enum):
-    created = "created"
-    deleted = "deleted"
-    cleared = "cleared"
-    updated = "updated"
-
-
-class EnvironmentListener:
-    """
-    Base class for environment listeners
-    Exceptions from the listeners are dropped, the listeners are responsible for handling them
-    """
-
-    async def environment_action_created(self, env: model.Environment) -> None:
-        """
-        Will be called when a new environment is created
-        :param env: The new environment
-        """
-
-    async def environment_action_cleared(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is cleared
-        :param env: The environment that is cleared
-        """
-
-    async def environment_action_deleted(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is deleted
-        :param env: The environment that is deleted
-        """
-
-    async def environment_action_updated(self, updated_env: model.Environment, original_env: model.Environment) -> None:
-        """
-        Will be called when an environment is updated
-        :param updated_env: The updated environment
-        :param original_env: The original environment
-        """
 
 
 class EnvironmentService(protocol.ServerSlice):

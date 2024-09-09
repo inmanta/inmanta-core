@@ -33,6 +33,7 @@ from uuid import UUID
 import asyncpg.connection
 
 import inmanta.config
+import inmanta.server.services.environmentlistener
 import logfire
 import logfire.propagate
 from inmanta import config as global_config
@@ -939,13 +940,13 @@ class AgentManager(ServerSlice, SessionListener):
         return dto
 
 
-class AutostartedAgentManager(ServerSlice, environmentservice.EnvironmentListener):
+class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentlistener.EnvironmentListener):
     """
     An instance of this class manages autostarted agent instance processes. It does not manage the logical agents as those
     are managed by `:py:class:AgentManager`.
     """
 
-    environment_service: environmentservice.EnvironmentService
+    environment_service: "environmentservice.EnvironmentService"
 
     def __init__(self) -> None:
         super().__init__(SLICE_AUTOSTARTED_AGENT_MANAGER)
@@ -967,7 +968,7 @@ class AutostartedAgentManager(ServerSlice, environmentservice.EnvironmentListene
         self._agent_manager = agent_manager
 
         self.environment_service = cast(environmentservice.EnvironmentService, server.get_slice(SLICE_ENVIRONMENT))
-        self.environment_service.register_listener(self, environmentservice.EnvironmentAction.created)
+        self.environment_service.register_listener(self, inmanta.server.services.environmentlistener.EnvironmentAction.created)
 
     async def start(self) -> None:
         await super().start()
