@@ -373,6 +373,7 @@ src/inmanta/protocol/methods.py:0: error: Function is missing a return type anno
 src/inmanta/protocol/methods.py:0: note: Use "-> None" if function does not return a value
 src/inmanta/protocol/methods.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/protocol/methods.py:0: error: Function is missing a return type annotation  [no-untyped-def]
+src/inmanta/protocol/methods.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/protocol/methods.py:0: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
 src/inmanta/protocol/methods.py:0: error: Function is missing a return type annotation  [no-untyped-def]
@@ -971,6 +972,7 @@ src/inmanta/app.py:0: error: Missing type parameters for generic type "Future"  
 src/inmanta/app.py:0: error: Argument 2 to "safe_shutdown" has incompatible type "Callable[[int | None], Coroutine[Any, Any, None]]"; expected "Callable[[], None]"  [arg-type]
 src/inmanta/app.py:0: error: Argument 2 to "safe_shutdown" has incompatible type "Callable[[int | None], Coroutine[Any, Any, None]]"; expected "Callable[[], None]"  [arg-type]
 src/inmanta/app.py:0: error: Incompatible types in assignment (expression has type "str | None", variable has type "int | None")  [assignment]
+src/inmanta/app.py:0: error: Incompatible types in assignment (expression has type "str | None", variable has type "int | None")  [assignment]
 src/inmanta/app.py:0: error: Argument 1 to "run" of "Exporter" has incompatible type "dict[str, Type]"; expected "dict[str, Entity] | None"  [arg-type]
 src/inmanta/app.py:0: error: No overload variant of "print" matches argument types "str", "TextIO | Any", "dict[str, object]"  [call-overload]
 src/inmanta/app.py:0: note: Possible overload variants:
@@ -991,9 +993,16 @@ src/inmanta/compiler/help/explainer.py:0: error: Item "None" of "RelationAttribu
 src/inmanta/agent/resourcepool.py:0: error: Missing type parameters for generic type "PoolMember"  [type-arg]
 src/inmanta/agent/resourcepool.py:0: error: Argument 1 to "append" of "list" has incompatible type "Callable[[TPoolMember], Coroutine[Any, Any, bool]]"; expected "Callable[[PoolMember[TPoolID]], Coroutine[Any, Any, Any]]"  [arg-type]
 src/inmanta/agent/resourcepool.py:0: error: Missing type parameters for generic type "PoolMember"  [type-arg]
+src/inmanta/deploy/scheduler.py:0: error: Argument "attribute_hash" to "ResourceDetails" has incompatible type "str | None"; expected "str"  [arg-type]
+src/inmanta/deploy/scheduler.py:0: error: No overload variant of "list" matches argument type "object"  [call-overload]
+src/inmanta/deploy/scheduler.py:0: note: Possible overload variants:
+src/inmanta/deploy/scheduler.py:0: note: def [_T] __init__(self) -> list[_T]
+src/inmanta/deploy/scheduler.py:0: note: def [_T] __init__(self, Iterable[_T], /) -> list[_T]
 src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/agent/forking_executor.py:0: note: This violates the Liskov substitution principle
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+src/inmanta/agent/agent_new.py:0: error: Argument 3 to "MPManager" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
+src/inmanta/agent/agent_new.py:0: error: Argument 1 to "collect_report" has incompatible type "inmanta.agent.agent_new.Agent"; expected "inmanta.agent.agent.Agent"  [arg-type]
 src/inmanta/agent/agent.py:0: error: Cannot determine type of "ratelimiter"  [has-type]
 src/inmanta/validation_type.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "Mapping[str, object] | None")  [assignment]
 src/inmanta/server/validate_filter.py:0: error: Incompatible return value type (got "Callable[[object], list[tuple[RangeOperator, int]] | None]", expected "Callable[[object, object], list[tuple[RangeOperator, int]] | None]")  [return-value]
@@ -1141,7 +1150,10 @@ src/inmanta/data/dataview.py:0: error: Return type "Sequence[dict[str, str]]" of
 src/inmanta/data/dataview.py:0: error: Argument "discovered_resource_id" to "DiscoveredResource" has incompatible type "object"; expected "ResourceIdStr"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument 1 to "loads" has incompatible type "object"; expected "str | bytes | bytearray"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument "discovery_resource_id" to "DiscoveredResource" has incompatible type "object"; expected "ResourceIdStr | None"  [arg-type]
+src/inmanta/server/services/compilerservice.py:0: error: Incompatible types in assignment (expression has type "bool | int | float | str | dict[str, str | int | bool]", variable has type "int")  [assignment]
 src/inmanta/server/server.py:0: error: Argument 1 to "get_global_url_map" of "RESTServer" has incompatible type "dict_values[str, ServerSlice]"; expected "list[CallTarget]"  [arg-type]
+src/inmanta/server/agentmanager.py:0: error: Argument 1 to "_ensure_scheduler" of "AutostartedAgentManager" has incompatible type "Environment | None"; expected "Environment"  [arg-type]
+src/inmanta/server/agentmanager.py:0: error: Argument 1 to "ensure_agent_registered" of "AgentManager" has incompatible type "Environment | None"; expected "Environment"  [arg-type]
 src/inmanta/server/services/resourceservice.py:0: error: Argument "args" to "__init__" of "LogRecord" has incompatible type "list[Never]"; expected "tuple[object, ...] | Mapping[str, object] | None"  [arg-type]
 src/inmanta/server/services/resourceservice.py:0: error: Module has no attribute "_startTime"  [attr-defined]
 src/inmanta/server/services/resourceservice.py:0: error: Missing type parameters for generic type "Feature"  [type-arg]
@@ -1152,6 +1164,10 @@ src/inmanta/server/services/resourceservice.py:0: error: Value of type variable 
 src/inmanta/server/services/resourceservice.py:0: error: Unsupported target for indexed assignment ("Mapping[str, BaseModel | UUID | bool | int | float | datetime | str | Sequence[BaseModel | UUID | bool | int | float | datetime | str] | Mapping[str, BaseModel | UUID | bool | int | float | datetime | str]] | None")  [index]
 src/inmanta/server/services/resourceservice.py:0: error: Incompatible return value type (got "dict[ResourceIdStr, ResourceState]", expected "dict[str, ResourceState]")  [return-value]
 src/inmanta/server/services/resourceservice.py:0: error: Module "inmanta.server.protocol" does not explicitly export attribute "handle"  [attr-defined]
+src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for + ("None" and "timedelta")  [operator]
+src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"
+src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for > ("timedelta" and "datetime")  [operator]
+src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | timedelta"
 src/inmanta/server/services/orchestrationservice.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument 1 to "append" of "list" has incompatible type "Resource"; expected "dict[str, Any]"  [arg-type]
 src/inmanta/server/services/orchestrationservice.py:0: error: Unsupported target for indexed assignment ("Resource")  [index]
@@ -1162,8 +1178,3 @@ src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types in assignment (expression has type "set[str | None]", variable has type "set[str]")  [assignment]
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument "agents" to "_trigger_auto_deploy" of "OrchestrationService" has incompatible type "Collection[str]"; expected "Sequence[str] | None"  [arg-type]
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible return value type (got "ReturnValueWithMeta[Sequence[DesiredStateVersion]]", expected "ReturnValue[list[DesiredStateVersion]]")  [return-value]
-src/inmanta/server/services/compilerservice.py:0: error: Incompatible types in assignment (expression has type "bool | int | float | str | dict[str, str | int | bool]", variable has type "int")  [assignment]
-src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for + ("None" and "timedelta")  [operator]
-src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"
-src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for > ("timedelta" and "datetime")  [operator]
-src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | timedelta"

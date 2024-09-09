@@ -1331,6 +1331,13 @@ class Agent(SessionEndpoint):
         )
         return 200
 
+    @protocol.handle(methods.trigger_read_version, env="tid")
+    async def read_version(self, env: uuid.UUID) -> Apireturn:
+        """
+        Send a notification to the agent that a new version has been released
+        """
+        pass
+
     @protocol.handle(methods.resource_event, env="tid", agent="id")
     async def resource_event(
         self,

@@ -356,3 +356,7 @@ INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"
 # It's used to determine whether a venv is only partially created (due to a server crash for example) or to determine when the
 # venv was last used.
 INMANTA_VENV_STATUS_FILENAME = ".inmanta_venv_status"
+
+
+# ID to represent the new scheduler as an agent
+AGENT_SCHEDULER_ID = "$__scheduler"
