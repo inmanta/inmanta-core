@@ -61,6 +61,7 @@ def test_kwargs_in_plugin_call(snippetcompiler):
         """
 str = std::replace("Hello World!", new = "You", old = "World")
         """,
+        autostd=True,
     )
     (_, scopes) = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
@@ -76,6 +77,7 @@ dct = {
 }
 str = std::replace("Hello World!", **dct)
         """,
+        autostd=True,
     )
     (_, scopes) = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
@@ -89,6 +91,7 @@ std::equals(42, desc="they differ")
         """,
         "std::equals() missing 1 required positional argument: 'arg2' "
         "(reported in std::equals(42,desc='they differ') ({dir}/main.cf:2))",
+        autostd=True,
     )
 
 
@@ -98,6 +101,7 @@ def test_kwargs_in_plugin_call_double_arg(snippetcompiler):
 std::equals(42, 42, arg1=42)
         """,
         "std::equals() got multiple values for argument 'arg1' (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
+        autostd=True,
     )
 
 
@@ -129,6 +133,7 @@ import test_1774
 
 test_1774::test_list(test_1774::Test())
         """,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -140,6 +145,7 @@ import test_1774
 
 test_1774::test_dict(test_1774::Test())
         """,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -231,6 +237,7 @@ std::generate_password("pw_id", 42, context=42)
         """,
         "std::generate_password() got an unexpected keyword argument: 'context' "
         "(reported in std::generate_password('pw_id',42,context=42) ({dir}/main.cf:2))",
+        autostd=True,
     )
 
 
@@ -289,7 +296,8 @@ implement A using std::none
 a = A()
 std::attr(a, "other")
 a.other = A()
-            """
+            """,
+            autostd=True,
         )
         compiler.do_compile()
     dir: str = snippetcompiler.project_dir
@@ -313,6 +321,7 @@ std::equals(keyword_only_arguments::sum_all(1, 2, c=3, d=4), 10)
 # Test handling of default values
 std::equals(keyword_only_arguments::sum_all(1, c=3), 7)
         """,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -342,7 +351,8 @@ std::equals(catch_all_arguments::sum_all(1, b=2), 3)
 
 # Test with extra values provided
 std::equals(catch_all_arguments::sum_all(1, 2, 3, b=4, c=5, d=6), 21)
-        """
+        """,
+        autostd=True,
     )
     compiler.do_compile()
 

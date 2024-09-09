@@ -74,6 +74,7 @@ x = %s
 %s
         """
         % (value_string, "\n".join(other_stmts)),
+        autostd=True,
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
     x: AssignableNodeReference = get_dataflow_node(graph, "x")

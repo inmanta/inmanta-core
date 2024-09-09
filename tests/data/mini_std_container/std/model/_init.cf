@@ -1,0 +1,5 @@
+implementation none for Entity:
+    """
+        An empty implementation that can be used as a safe default.
+    """
+end

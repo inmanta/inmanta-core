@@ -137,12 +137,15 @@ entity B extends test_5790::B:
     int n = 1
 end
 
-implement A using std::none
-implement B using std::none
+implement A using none
+implement B using none
 
 
 a = A(b=B())
 n = a.b.n
+
+implementation none for std::Entity:
+end
         """,
     )
     (_, scopes) = compiler.do_compile()
@@ -167,4 +170,5 @@ a = test_5790_follow_up_mod_a::A(b=B())
         "Could not determine namespace for type B. 2 possible candidates exists: [test_5790_follow_up_mod_a::B, "
         "test_5790_follow_up_mod_b::B]. To resolve this, use the fully qualified name instead of the short name. "
         "(reported in a = Construct(test_5790_follow_up_mod_a::A) ({dir}/main.cf:5:36))",
+        autostd=True,
     )
