@@ -1159,8 +1159,6 @@ src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types in assignment (expression has type "set[str | None]", variable has type "set[str]")  [assignment]
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument "agents" to "_trigger_auto_deploy" of "OrchestrationService" has incompatible type "Collection[str]"; expected "Sequence[str] | None"  [arg-type]
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible return value type (got "ReturnValueWithMeta[Sequence[DesiredStateVersion]]", expected "ReturnValue[list[DesiredStateVersion]]")  [return-value]
-src/inmanta/server/agentmanager.py:0: error: Argument 1 to "_ensure_scheduler" of "AutostartedAgentManager" has incompatible type "Environment | None"; expected "Environment"  [arg-type]
-src/inmanta/server/agentmanager.py:0: error: Argument 1 to "ensure_agent_registered" of "AgentManager" has incompatible type "Environment | None"; expected "Environment"  [arg-type]
 src/inmanta/server/services/compilerservice.py:0: error: Incompatible types in assignment (expression has type "bool | int | float | str | dict[str, str | int | bool]", variable has type "int")  [assignment]
 src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for + ("None" and "timedelta")  [operator]
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"
