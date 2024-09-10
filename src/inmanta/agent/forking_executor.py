@@ -105,7 +105,6 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
-from inmanta.util import join_threadpools
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(__name__)
@@ -295,8 +294,12 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             return
 
         while not self.stopping:
+            self.logger.log(
+                const.LOG_LEVEL_TRACE, "Touching venv status files, then sleeping %f", self.timer_venv_scheduler_interval
+            )
             await self.touch_inmanta_venv_status()
             if not self.stopping:
+
                 await asyncio.sleep(self.timer_venv_scheduler_interval)
 
     async def touch_inmanta_venv_status(self) -> None:
