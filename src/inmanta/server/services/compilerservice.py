@@ -40,6 +40,7 @@ import pydantic
 from asyncpg import Connection
 
 import inmanta.data.model as model
+import inmanta.server.services.environmentlistener
 from inmanta import config, const, data, protocol, server, tracing
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
@@ -489,7 +490,7 @@ class CompileRun:
             return success, None
 
 
-class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
+class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.EnvironmentListener):
     """
     Compiler services offers:
 
@@ -518,6 +519,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     """
 
     _env_folder: str
+    environment_service: "environmentservice.EnvironmentService"
 
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)

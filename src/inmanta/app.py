@@ -142,6 +142,31 @@ def start_agent(options: argparse.Namespace) -> None:
     LOGGER.info("Agent Shutdown complete")
 
 
+@command("scheduler", help_msg="Start the resource scheduler")
+def start_scheduler(options: argparse.Namespace) -> None:
+    """
+    Start the new agent with the Resource Scheduler
+    """
+    from inmanta.agent import agent_new
+
+    # The call to configure() should be done as soon as possible.
+    # If an AsyncHTTPClient is started before this call, the max_client
+    # will not be taken into account.
+    max_clients: Optional[int] = Config.get(section="agent_rest_transport", name="max_clients")
+
+    if max_clients:
+        AsyncHTTPClient.configure(None, max_clients=max_clients)
+
+    tracing.configure_logfire("agent_rs")
+    util.ensure_event_loop()
+    a = agent_new.Agent()
+
+    setup_signal_handlers(a.stop)
+    IOLoop.current().add_callback(a.start)
+    IOLoop.current().start()
+    LOGGER.info("Agent with Resource scheduler Shutdown complete")
+
+
 class ExperimentalFeatureFlags:
     """
     Class to expose feature flag configs as options in a uniform matter
