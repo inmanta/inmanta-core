@@ -215,7 +215,10 @@ def test():
         )
 
     # Assert shutdown and back up
-    await mpmanager.stop_for_agent("agent2")
+    stopped = await mpmanager.stop_for_agent("agent2")
+    # prevent leaking futures
+    for x in stopped:
+        await x.join()
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 0, 10)
 
     full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])

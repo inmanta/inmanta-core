@@ -366,6 +366,7 @@ def test():
         pathlib.Path(executor_3.process.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
     )
 
+    logger.warning("Touching %s now", executor_2_venv_status_file)
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
     # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
     # modification override of the inmanta file and the retrieval of the last modification of the file
@@ -379,6 +380,7 @@ def test():
 
     # We wait for the refresh of the venv status files
     await asyncio.sleep(0.2)
+    logger.warning("Sleeping done")
 
     new_check_executor1 = executor_1.process.executor_virtual_env.last_used
     new_check_executor2 = executor_2.process.executor_virtual_env.last_used

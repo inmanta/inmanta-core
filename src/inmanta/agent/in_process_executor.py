@@ -37,7 +37,7 @@ from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVers
 from inmanta.loader import CodeLoader
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn
-from inmanta.util import NamedLock
+from inmanta.util import NamedLock, join_threadpools
 
 if typing.TYPE_CHECKING:
     import inmanta.agent.agent as agent
@@ -119,14 +119,14 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.close)
         self.thread_pool.shutdown(wait=False)
 
-    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
+    async def join(self) -> None:
         """
         Called after stop to ensure complete shutdown
 
         :param thread_pool_finalizer: all threadpools that should be joined should be added here.
         """
         assert self._stopped
-        thread_pool_finalizer.append(self.thread_pool)
+        await join_threadpools([self.thread_pool])
         if self.periodic_cache_cleanup_job:
             try:
                 await self.periodic_cache_cleanup_job
@@ -510,11 +510,10 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             out = self.executors[agent_name]
             del self.executors[agent_name]
             await out.stop()
-            return [out]
         return []
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
-        await asyncio.gather(*(child.join(thread_pool_finalizer) for child in self.executors.values()))
+        await asyncio.gather(*(child.join() for child in self.executors.values()))
 
     async def get_executor(
         self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]

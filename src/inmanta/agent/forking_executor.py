@@ -105,7 +105,6 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
-from inmanta.util import join_threadpools
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(__name__)
@@ -142,9 +141,7 @@ class ExecutorContext:
             # But were stopped
             assert old_one.is_stopped()
             # Make sure old one is down
-            finalizer: list[ThreadPoolExecutor] = []
-            await old_one.join(finalizer)
-            await join_threadpools(finalizer)
+            await old_one.join()
 
         loop = asyncio.get_running_loop()
         parent_logger = logging.getLogger("agent.executor")
@@ -299,6 +296,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         while not self.stopping:
             await self.touch_inmanta_venv_status()
             if not self.stopping:
+
                 await asyncio.sleep(self.timer_venv_scheduler_interval)
 
     async def touch_inmanta_venv_status(self) -> None:
@@ -307,7 +305,11 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """
         # makes mypy happy
         assert self.ctx.venv is not None
-        (pathlib.Path(self.ctx.venv.env_path) / const.INMANTA_VENV_STATUS_FILENAME).touch()
+        path = pathlib.Path(self.ctx.venv.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        path.touch()
+        self.logger.log(
+            const.LOG_LEVEL_TRACE, "Touching venv status %s, then sleeping %f", path, self.timer_venv_scheduler_interval
+        )
 
 
 class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
@@ -523,7 +525,6 @@ def mp_worker_entrypoint(
     config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
 ) -> None:
     """Entry point for child processes"""
-
     set_executor_status(name, "connecting")
     # Set up logging stage 1
     # Basic config, starts on std.out
@@ -776,7 +777,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         # Don't make the parent wait this prevents wait cycles
         async def inner_close() -> None:
             try:
-                self.process.connection.call(StopCommandFor(self.name))
+                await self.process.connection.call(StopCommandFor(self.name))
             except inmanta.protocol.ipc_light.ConnectionLost:
                 # Already gone
                 pass
