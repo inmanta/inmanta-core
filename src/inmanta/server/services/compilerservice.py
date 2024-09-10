@@ -518,7 +518,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     """
 
     _env_folder: str
-    environment_service: environmentservice.EnvironmentService
 
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)

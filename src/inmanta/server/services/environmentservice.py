@@ -50,11 +50,13 @@ from inmanta.server import (
     SLICE_RESOURCE,
     SLICE_SERVER,
     SLICE_TRANSPORT,
-    agentmanager,
     protocol,
 )
+from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.server import Server
-from inmanta.server.services import orchestrationservice, resourceservice
+from inmanta.server.services import compilerservice
+from inmanta.server.services.orchestrationservice import OrchestrationService
+from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
@@ -83,18 +85,21 @@ class EnvironmentListener:
     async def environment_action_created(self, env: model.Environment) -> None:
         """
         Will be called when a new environment is created
+
         :param env: The new environment
         """
 
     async def environment_action_cleared(self, env: model.Environment) -> None:
         """
         Will be called when the environment is cleared
+
         :param env: The environment that is cleared
         """
 
     async def environment_action_deleted(self, env: model.Environment) -> None:
         """
         Will be called when the environment is deleted
+
         :param env: The environment that is deleted
         """
 
@@ -110,10 +115,10 @@ class EnvironmentService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
     server_slice: Server
-    agent_manager: "agentmanager.AgentManager"
-    autostarted_agent_manager: "agentmanager.AutostartedAgentManager"
-    orchestration_service: "orchestrationservice.OrchestrationService"
-    resource_service: "resourceservice.ResourceService"
+    agent_manager: AgentManager
+    autostarted_agent_manager: AutostartedAgentManager
+    orchestration_service: OrchestrationService
+    resource_service: ResourceService
     listeners: dict[EnvironmentAction, list[EnvironmentListener]]
     # environment_state_operation_lock is to prevent concurrent execution of
     # operations that modify the state of an environment, such as halting, resuming, or deleting.
@@ -146,16 +151,15 @@ class EnvironmentService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
-        self.agent_manager = cast(agentmanager.AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
-        self.autostarted_agent_manager = cast(
-            agentmanager.AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-        )
-        self.orchestration_service = cast(orchestrationservice.OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
-        self.resource_service = cast(resourceservice.ResourceService, server.get_slice(SLICE_RESOURCE))
+        self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
+        self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
+        self.compiler_service = cast(compilerservice.CompilerService, server.get_slice(SLICE_COMPILER))
+        self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
+        self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
         # Register the compiler service here to the environment service listener. Registering it within the compiler service
         # would result in a circular dependency between the environment slice and the compiler service slice.
         self.register_listener_for_multiple_actions(
-            self.server_slice.compiler, {EnvironmentAction.cleared, EnvironmentAction.deleted}
+            self.compiler_service, {EnvironmentAction.cleared, EnvironmentAction.deleted}
         )
 
     async def start(self) -> None:
@@ -179,13 +183,13 @@ class EnvironmentService(protocol.ServerSlice):
         if setting is None or setting.name == data.AUTO_FULL_COMPILE:
             if setting is not None:
                 LOGGER.info("Environment setting %s changed. Rescheduling full compiles.", setting.name)
-            self.server_slice.compiler.schedule_full_compile(env, str(await env.get(data.AUTO_FULL_COMPILE)))
+            self.compiler_service.schedule_full_compile(env, str(await env.get(data.AUTO_FULL_COMPILE)))
 
     def _disable_schedules(self, env: data.Environment) -> None:
         """
         Removes scheduling of all appropriate actions for a single environment.
         """
-        self.server_slice.compiler.schedule_full_compile(env, schedule_cron="")
+        self.compiler_service.schedule_full_compile(env, schedule_cron="")
 
     async def _setting_change(self, env: data.Environment, key: str) -> Warnings:
         setting = env._settings[key]
@@ -519,7 +523,7 @@ class EnvironmentService(protocol.ServerSlice):
                     await self._halt(env, connection=connection, delete_agent_venv=True)
 
                 self._disable_schedules(env)
-                await self.server_slice.compiler.cancel_compile(env.id)
+                await self.compiler_service.cancel_compile(env.id)
                 # Delete the environment directory before deleting the database records. This ensures that
                 # this operation can be retried if the deletion of the environment directory fails. Otherwise,
                 # the environment directory would be left in an inconsistent state. This can cause problems if
@@ -549,7 +553,7 @@ class EnvironmentService(protocol.ServerSlice):
 
                 # Keep this method call under the self.environment_state_operation_lock lock, because cancel_compile()
                 # must be called on halted environments only.
-                await self.server_slice.compiler.cancel_compile(env.id)
+                await self.compiler_service.cancel_compile(env.id)
                 # Delete the environment directory before deleting the database records. This ensures that
                 # this operation can be retried if the deletion of the environment directory fails. Otherwise,
                 # the environment directory would be left in an inconsistent state. This can cause problems if
@@ -620,27 +624,25 @@ class EnvironmentService(protocol.ServerSlice):
         except KeyError:
             raise NotFound()
 
-    def register_listener_for_multiple_actions(
-        self, current_listener: EnvironmentListener, actions: Set[EnvironmentAction]
-    ) -> None:
+    def register_listener_for_multiple_actions(self, listener: EnvironmentListener, actions: Set[EnvironmentAction]) -> None:
         """
             Should only be called during pre-start
-        :param current_listener: The listener to register
+        :param listener: The listener to register
         :param actions: type of actions the listener is interested in
         """
         for action in actions:
-            self.register_listener(current_listener, action)
+            self.register_listener(listener, action)
 
-    def register_listener(self, current_listener: EnvironmentListener, action: EnvironmentAction) -> None:
+    def register_listener(self, listener: EnvironmentListener, action: EnvironmentAction) -> None:
         """
             Should only be called during pre-start
-        :param current_listener: The listener to register
+        :param listener: The listener to register
         :param action: type of action the listener is interested in
         """
-        self.listeners[action].append(current_listener)
+        self.listeners[action].append(listener)
 
-    def remove_listener(self, action: EnvironmentAction, current_listener: EnvironmentListener) -> None:
-        self.listeners[action].remove(current_listener)
+    def remove_listener(self, action: EnvironmentAction, listener: EnvironmentListener) -> None:
+        self.listeners[action].remove(listener)
 
     async def _delete_environment_dir(self, environment_id: uuid.UUID) -> None:
         """
@@ -672,21 +674,18 @@ class EnvironmentService(protocol.ServerSlice):
                 )
 
     async def notify_listeners(
-        self,
-        action: EnvironmentAction,
-        updated_env: model.Environment,
-        original_env: Optional[model.Environment] = None,
+        self, action: EnvironmentAction, updated_env: model.Environment, original_env: Optional[model.Environment] = None
     ) -> None:
-        for current_listener in self.listeners[action]:
+        for listener in self.listeners[action]:
             try:
                 if action == EnvironmentAction.created:
-                    await current_listener.environment_action_created(updated_env)
+                    await listener.environment_action_created(updated_env)
                 if action == EnvironmentAction.deleted:
-                    await current_listener.environment_action_deleted(updated_env)
+                    await listener.environment_action_deleted(updated_env)
                 if action == EnvironmentAction.cleared:
-                    await current_listener.environment_action_cleared(updated_env)
+                    await listener.environment_action_cleared(updated_env)
                 if action == EnvironmentAction.updated and original_env:
-                    await current_listener.environment_action_updated(updated_env, original_env)
+                    await listener.environment_action_updated(updated_env, original_env)
             except Exception:
                 LOGGER.warning("Notifying listener of %s failed with the following exception", action.value, exc_info=True)
 
