@@ -539,7 +539,7 @@ class AgentInstance:
         self.ensure_deploy_on_start = ensure_deploy_on_start
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = process.executor_manager
-        self._executors_to_join: Optional[list[executor.Executor]] = None
+        self._executors_to_join: list[executor.Executor] = []
 
     async def stop(self) -> None:
         self._stopped = True
@@ -556,7 +556,6 @@ class AgentInstance:
         """
         assert self._stopped
         await self.executor_manager.join(thread_pool_finalizer, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
-        assert self._executors_to_join is not None
         await asyncio.gather(*(executor.join() for executor in self._executors_to_join))
 
     @property
