@@ -1054,11 +1054,10 @@ class CommandRunner:
         of the sub-process.
         """
         full_output = []
-        # We use close_fds=False to use an alternative path to spawn to avoid
+        # We use shell here to avoid
         # the bug https://github.com/python/cpython/issues/103911#issuecomment-2333963137
-        # This uses spawn instead of fork+execve
-        process = await asyncio.create_subprocess_exec(
-            cmd[0], *cmd[1:], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env_vars, close_fds=False
+        process = await asyncio.create_subprocess_shell(
+            subprocess.list2cmdline(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env_vars
         )
         assert process.stdout is not None  # Make mypy happy
         async for line in process.stdout:
