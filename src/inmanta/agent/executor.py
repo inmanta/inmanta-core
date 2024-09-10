@@ -515,6 +515,10 @@ class Executor(abc.ABC):
         """
         pass
 
+    async def join(self) -> None:
+        """Wait for shutdown to be completed"""
+        pass
+
 
 E = typing.TypeVar("E", bound=Executor, covariant=True)
 

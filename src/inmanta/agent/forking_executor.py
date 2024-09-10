@@ -142,9 +142,7 @@ class ExecutorContext:
             # But were stopped
             assert old_one.is_stopped()
             # Make sure old one is down
-            finalizer: list[ThreadPoolExecutor] = []
-            await old_one.join(finalizer)
-            await join_threadpools(finalizer)
+            await old_one.join()
 
         loop = asyncio.get_running_loop()
         parent_logger = logging.getLogger("agent.executor")
@@ -776,7 +774,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         # Don't make the parent wait this prevents wait cycles
         async def inner_close() -> None:
             try:
-                self.process.connection.call(StopCommandFor(self.name))
+                await self.process.connection.call(StopCommandFor(self.name))
             except inmanta.protocol.ipc_light.ConnectionLost:
                 # Already gone
                 pass
