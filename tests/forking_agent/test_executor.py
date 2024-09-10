@@ -202,8 +202,6 @@ def test():
     async def oldest_gone():
         return oldest_executor not in manager.agent_map["agent2"]
 
-    asyncio.get_running_loop().set_debug(True)
-
     with caplog.at_level(logging.DEBUG):
         _ = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
         assert not oldest_executor.running
