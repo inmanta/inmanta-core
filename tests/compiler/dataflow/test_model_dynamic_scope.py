@@ -43,13 +43,16 @@ implementation i for A:
 end
 
 implement A using i
-implement B using std::none
+implement B using none
 
 n = 0
 
 x = A(n = 42)
 
 b = x.b
+
+implementation none for std::Entity:
+end
         """
         % ("self.n" if explicit else "n"),
     )
@@ -83,9 +86,12 @@ implementation i for A:
 end
 
 implement A using i
-implement B using std::none
+implement B using none
 
 x = A()
+
+implementation none for std::Entity:
+end
         """,
     )
     entity_b: inmanta_type.Type = dataflow_test_helper.get_types()["__config__::B"]

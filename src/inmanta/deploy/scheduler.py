@@ -17,6 +17,10 @@
 """
 
 import asyncio
+import logging
+import uuid
+from collections.abc import Set
+from typing import Any, Mapping, Optional
 import datetime
 import logging
 import traceback
@@ -24,6 +28,8 @@ import uuid
 from collections.abc import Mapping, Set
 from typing import Any, Optional
 
+from inmanta import data, resources
+from inmanta.data import Resource
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
@@ -33,6 +39,9 @@ from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
 from inmanta.deploy.work import PoisonPill
 from inmanta.protocol import Client
+
+LOGGER = logging.getLogger(__name__)
+
 
 # FIXME[#8008] review code structure + functionality + add docstrings
 # FIXME[#8008] add import entry point test case
@@ -72,6 +81,7 @@ class ResourceScheduler:
         self._scheduler_lock: asyncio.Lock = asyncio.Lock()
         # - lock to serialize scheduler state updates (i.e. process new version)
         self._update_lock: asyncio.Lock = asyncio.Lock()
+        self._environment = environment
 
         self._running = False
         # Agent name to worker task
@@ -95,8 +105,8 @@ class ResourceScheduler:
     async def start(self) -> None:
         self.reset()
         self._running = True
-        # FIXME[#8009]: read from DB instead
-        pass
+        await self.new_version()
+
 
     async def stop(self) -> None:
         self._running = False
@@ -127,35 +137,63 @@ class ResourceScheduler:
         # FIXME, also clean up typing of arguments
         pass
 
-    # FIXME[#8009]: design step 2: read new state from DB instead of accepting as parameter
-    #               (method should be notification only, i.e. 0 parameters)
+    async def build_resource_mappings_from_db(
+        self,
+    ) -> tuple[Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
+        """
+        Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
+
+        :return: resource_mapping {id -> resource details} and require_mapping {id -> requires}
+        """
+        resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(environment=self._environment)
+
+        resource_mapping = {
+            resource.resource_id: ResourceDetails(attribute_hash=resource.attribute_hash, attributes=resource.attributes)
+            for resource in resources_from_db
+        }
+        require_mapping = {
+            resource.resource_id: {
+                resources.Id.parse_id(req).resource_str() for req in list(resource.attributes.get("requires", []))
+            }
+            for resource in resources_from_db
+        }
+        return resource_mapping, require_mapping
+
     async def new_version(
         self,
-        version: int,
-        resources: Mapping[ResourceIdStr, ResourceDetails],
-        requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
     ) -> None:
-        """A new version was received, update state and start deploying"""
+        """
+        Method that is used as a notification from the Server to retrieve the latest data concerning the release of the
+        latest version. This method will fetch the latest version and the different resources in their latest version.
+        It will then compute the work that needs to be done (resources to create / delete / update) to be up to date with
+        this new version.
+        """
+        environment = await data.Environment.get_by_id(self._environment)
+        if environment is None:
+            raise ValueError(f"No environment found with this id: `{self._environment}`")
+        version = environment.last_version
+        resources_from_db, requires_from_db = await self.build_resource_mappings_from_db()
+
         async with self._update_lock:
             # Inspect new state and mark resources as "update pending" where appropriate. Since this method is the only writer
             # for "update pending", and a stale read is acceptable, we can do this part before acquiring the exclusive scheduler
             # lock.
-            deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
+            deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources_from_db.keys()
             for resource in deleted_resources:
                 self._work.delete_resource(resource)
 
             new_desired_state: list[ResourceIdStr] = []
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
-            for resource, details in resources.items():
+            for resource, details in resources_from_db.items():
                 if (
                     resource not in self._state.resources
                     or details.attribute_hash != self._state.resources[resource].attribute_hash
                 ):
                     self._state.update_pending.add(resource)
                     new_desired_state.append(resource)
-                new_requires: Set[ResourceIdStr] = requires.get(resource, set())
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
+                new_requires: Set[ResourceIdStr] = requires_from_db.get(resource, set())
                 added: Set[ResourceIdStr] = new_requires - old_requires
                 dropped: Set[ResourceIdStr] = old_requires - new_requires
                 if added:
@@ -176,9 +214,9 @@ class ResourceScheduler:
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in new_desired_state:
-                    self._state.update_desired_state(resources[resource])
+                    self._state.update_desired_state(resources_from_db[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
-                    self._state.update_requires(resource, requires[resource])
+                    self._state.update_requires(resource, requires_from_db[resource])
                 # ensure deploy for ALL dirty resources, not just the new ones
                 # FIXME[#8008]: this is copy-pasted, make into a method?
                 # FIXME: WDB TO SANDER: We should track dirty resources in a collection to not force a scan of the full state

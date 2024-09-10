@@ -139,55 +139,54 @@ class ResourceAction(ResourceActionBase):
 
     async def execute(self, dummy: "ResourceActionBase", generation: Mapping[ResourceIdStr, ResourceActionBase]) -> None:
         self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
-        async with self.executor.cache(self.resource.model_version):
-            self.dependencies = [generation[resource_id.resource_str()] for resource_id in self.resource.requires]
-            waiters = [x.future for x in self.dependencies]
-            waiters.append(dummy.future)
-            # Explicit cast is required because mypy has issues with * and generics
-            results: list[ResourceActionResult] = cast(list[ResourceActionResult], await asyncio.gather(*waiters))
+        self.dependencies = [generation[resource_id.resource_str()] for resource_id in self.resource.requires]
+        waiters = [x.future for x in self.dependencies]
+        waiters.append(dummy.future)
+        # Explicit cast is required because mypy has issues with * and generics
+        results: list[ResourceActionResult] = cast(list[ResourceActionResult], await asyncio.gather(*waiters))
 
-            if self.undeployable:
-                self.running = True
-                try:
-                    if self.is_done():
-                        # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
-                        return
-                    result = sum(results, ResourceActionResult(cancel=False))
-                    if result.cancel:
-                        # self.running will be set to false when self.cancel is called
-                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                        return
-                    self.future.set_result(ResourceActionResult(cancel=False))
+        if self.undeployable:
+            self.running = True
+            try:
+                if self.is_done():
+                    # Action is cancelled
+                    self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
                     return
-                finally:
-                    self.running = False
+                result = sum(results, ResourceActionResult(cancel=False))
+                if result.cancel:
+                    # self.running will be set to false when self.cancel is called
+                    # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
+                    return
+                self.future.set_result(ResourceActionResult(cancel=False))
+                return
+            finally:
+                self.running = False
 
-            async with self.scheduler.ratelimiter:
-                self.running = True
+        async with self.scheduler.ratelimiter:
+            self.running = True
 
-                try:
-                    if self.is_done():
-                        # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
-                        return
+            try:
+                if self.is_done():
+                    # Action is cancelled
+                    self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
+                    return
 
-                    result = sum(results, ResourceActionResult(cancel=False))
+                result = sum(results, ResourceActionResult(cancel=False))
 
-                    if result.cancel:
-                        # self.running will be set to false when self.cancel is called
-                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                        return
+                if result.cancel:
+                    # self.running will be set to false when self.cancel is called
+                    # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
+                    return
 
-                    await self.executor.execute(
-                        gid=self.gid,
-                        resource_details=self.resource,
-                        reason=self.reason,
-                    )
+                await self.executor.execute(
+                    gid=self.gid,
+                    resource_details=self.resource,
+                    reason=self.reason,
+                )
 
-                    self.future.set_result(ResourceActionResult(cancel=False))
-                finally:
-                    self.running = False
+                self.future.set_result(ResourceActionResult(cancel=False))
+            finally:
+                self.running = False
 
 
 class RemoteResourceAction(ResourceActionBase):
@@ -532,13 +531,14 @@ class AgentInstance:
         self.ensure_deploy_on_start = ensure_deploy_on_start
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = process.executor_manager
+        self._executors_to_join: list[executor.Executor] = []
 
     async def stop(self) -> None:
         self._stopped = True
         self._enabled = False
         self._disable_time_triggers()
         self._nq.cancel()
-        await self.executor_manager.stop_for_agent(self.name)
+        self._executors_to_join = await self.executor_manager.stop_for_agent(self.name)
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
         """
@@ -548,6 +548,7 @@ class AgentInstance:
         """
         assert self._stopped
         await self.executor_manager.join(thread_pool_finalizer, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
+        await asyncio.gather(*(executor.join() for executor in self._executors_to_join))
 
     @property
     def environment(self) -> uuid.UUID:
@@ -1248,6 +1249,13 @@ class Agent(SessionEndpoint):
             )
         )
         return 200
+
+    @protocol.handle(methods.trigger_read_version, env="tid")
+    async def read_version(self, env: uuid.UUID) -> Apireturn:
+        """
+        Send a notification to the agent that a new version has been released
+        """
+        pass
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")
     async def resource_event(

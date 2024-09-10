@@ -31,7 +31,6 @@ from typing import Optional
 import pytest
 
 import inmanta
-import time_machine
 from inmanta import util
 from inmanta.util import (
     CronSchedule,
@@ -535,46 +534,46 @@ async def test_threadpool_join():
     assert done.qsize() == 5
 
 
-def test_datetime_iso_format():
+def test_datetime_iso_format(time_machine):
     """
     Unit test for the util.datetime_iso_format function
     """
     # Daylight saving time date (UTC+2)
-    with time_machine.travel(
+    time_machine.move_to(
         datetime.datetime(2023, 10, 3, 9, 00, 00, 000000, tzinfo=zoneinfo.ZoneInfo("Europe/Brussels")), tick=False
-    ):
-        # Naive timestamp:
-        timestamp = datetime.datetime.now()
+    )
+    # Naive timestamp:
+    timestamp = datetime.datetime.now()
 
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=True)
-        assert timestamp_iso_str == "2023-10-03T09:00:00.000000+00:00"
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
-        assert timestamp_iso_str == "2023-10-03T09:00:00.000000"  # Naive timestamps are assumed UTC
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=True)
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000+00:00"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000"  # Naive timestamps are assumed UTC
 
-        # Aware timestamp:
-        timestamp = datetime.datetime.now().astimezone()
+    # Aware timestamp:
+    timestamp = datetime.datetime.now().astimezone()
 
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=True)
-        assert timestamp_iso_str == "2023-10-03T09:00:00.000000+02:00"
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
-        assert timestamp_iso_str == "2023-10-03T07:00:00.000000"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=True)
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000+02:00"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
+    assert timestamp_iso_str == "2023-10-03T07:00:00.000000"
 
     # Non-daylight saving time date (UTC+1)
-    with time_machine.travel(
+    time_machine.move_to(
         datetime.datetime(2023, 12, 3, 9, 00, 00, 000000, tzinfo=zoneinfo.ZoneInfo("Europe/Brussels")), tick=False
-    ):
-        # Naive timestamp
-        timestamp = datetime.datetime.now()
+    )
+    # Naive timestamp
+    timestamp = datetime.datetime.now()
 
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=True)
-        assert timestamp_iso_str == "2023-12-03T09:00:00.000000+00:00"
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
-        assert timestamp_iso_str == "2023-12-03T09:00:00.000000"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=True)
+    assert timestamp_iso_str == "2023-12-03T09:00:00.000000+00:00"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
+    assert timestamp_iso_str == "2023-12-03T09:00:00.000000"
 
-        # Aware timestamp
-        timestamp = datetime.datetime.now().astimezone()
+    # Aware timestamp
+    timestamp = datetime.datetime.now().astimezone()
 
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=True)
-        assert timestamp_iso_str == "2023-12-03T09:00:00.000000+01:00"
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
-        assert timestamp_iso_str == "2023-12-03T08:00:00.000000"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=True)
+    assert timestamp_iso_str == "2023-12-03T09:00:00.000000+01:00"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
+    assert timestamp_iso_str == "2023-12-03T08:00:00.000000"
