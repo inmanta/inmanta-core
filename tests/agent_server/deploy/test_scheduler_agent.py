@@ -60,6 +60,9 @@ class DummyExecutor(executor.Executor):
     async def close_version(self, version: int) -> None:
         pass
 
+    async def join(self) -> None:
+        pass
+
 
 class DummyManager(executor.ExecutorManager[executor.Executor]):
 
@@ -86,6 +89,10 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
 
+async def pass_method():
+    pass
+
+
 class TestAgent(Agent):
 
     def __init__(
@@ -96,6 +103,8 @@ class TestAgent(Agent):
         self.executor_manager = DummyManager()
         self.scheduler._executor_manager = self.executor_manager
         self.scheduler._code_manager = DummyCodeManager(self._client)
+        # Bypass DB
+        self.scheduler.read_version = pass_method
 
 
 @pytest.fixture

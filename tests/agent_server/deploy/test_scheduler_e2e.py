@@ -22,10 +22,11 @@ import logging
 import pytest
 
 import utils
-from agent_server.deploy.scheduler_test_util import DummyCodeManager, convert_resources, make_requires
+from agent_server.deploy.scheduler_test_util import DummyCodeManager
 from inmanta import config
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.in_process_executor import InProcessExecutorManager
+from inmanta.config import Config
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version, groupby
 from utils import resource_action_consistency_check, retry_limited
@@ -59,7 +60,17 @@ async def agent(server, environment):
 
 
 async def test_basics(agent, resource_container, clienthelper, client, environment):
+    """
+    This tests make sure the resource scheduler is working as expected for these parts:
+        - Construction of initial model state
+        - Retrieval of data when a new version is released
+    """
+
     env_id = environment
+
+    # First part - test the ResourceScheduler (retrieval of data from DB)
+    Config.set("config", "agent-deploy-interval", "100")
+    Config.set("server", "new-resource-scheduler", "True")
 
     resource_container.Provider.reset()
     # set the deploy environment
@@ -154,10 +165,6 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     # deploy and wait until one is ready
     result = await client.release_version(env_id, version1, push=False)
     assert result.code == 200
-
-    resource = convert_resources(resources)
-
-    await agent.scheduler.new_version(version1, resource, make_requires(resource))
 
     logger.info("first version released")
     # timeout on single thread!

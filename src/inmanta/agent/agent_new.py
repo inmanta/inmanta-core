@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 import os
 import uuid
@@ -170,14 +169,13 @@ class Agent(SessionEndpoint):
             await self.scheduler.repair()
         return 200
 
-    @protocol.handle(methods.release_version, env="tid", agent="id")
-    async def read_version(self, env: uuid.UUID, agent: str, _: bool) -> Apireturn:
+    @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
+    async def read_version(self, env: uuid.UUID) -> Apireturn:
         """
         Send a notification to the scheduler that a new version has been released
         """
         assert env == self.environment
-        assert agent == AGENT_SCHEDULER_ID
-        await self.scheduler.new_version()
+        await self.scheduler.read_version()
         return 200
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")

@@ -374,7 +374,9 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         ctx.exception("Unable to process resource for dryrun.")
                         changes = {}
                         changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
-                        await self.client.dryrun_update(tid=self.environment, id=dry_run_id, resource=resource_id, changes=changes)
+                        await self.client.dryrun_update(
+                            tid=self.environment, id=dry_run_id, resource=resource_id, changes=changes
+                        )
                     finally:
                         if provider is not None:
                             provider.close()
@@ -396,7 +398,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         Get facts for a given resource
         :param resource: The resource for which to get facts.
         """
-        model_version: int = resource.model_version
         provider = None
         try:
             try:

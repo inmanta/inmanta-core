@@ -133,6 +133,8 @@ async def test_deploy_new_scheduler(server, client, async_finalizer, no_agent_ba
 
     version = await ClientHelper(client, env_id).get_version()
 
+    # TODO: port this part
+
     # The purged status has been changed for: - `test::Resource[agent2,key=key2]` and `test::Resource[agent2,key=key4]`
     updated_resources = [
         {

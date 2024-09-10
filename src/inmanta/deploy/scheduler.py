@@ -17,10 +17,6 @@
 """
 
 import asyncio
-import logging
-import uuid
-from collections.abc import Set
-from typing import Any, Mapping, Optional
 import datetime
 import logging
 import traceback
@@ -28,12 +24,11 @@ import uuid
 from collections.abc import Mapping, Set
 from typing import Any, Optional
 
-from inmanta import data, resources
-from inmanta.data import Resource
-from inmanta import const, data
+from inmanta import const, data, resources
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.const import ResourceAction
+from inmanta.data import Resource
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
@@ -105,8 +100,7 @@ class ResourceScheduler:
     async def start(self) -> None:
         self.reset()
         self._running = True
-        await self.new_version()
-
+        await self.read_version()
 
     async def stop(self) -> None:
         self._running = False
@@ -146,9 +140,9 @@ class ResourceScheduler:
         :return: resource_mapping {id -> resource details} and require_mapping {id -> requires}
         """
         resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(environment=self._environment)
-
+        # TODO: optimize away to_dict
         resource_mapping = {
-            resource.resource_id: ResourceDetails(attribute_hash=resource.attribute_hash, attributes=resource.attributes)
+            resource.resource_id: ResourceDetails(attribute_hash=resource.attribute_hash, resource_dict=resource.to_dict())
             for resource in resources_from_db
         }
         require_mapping = {
@@ -159,7 +153,7 @@ class ResourceScheduler:
         }
         return resource_mapping, require_mapping
 
-    async def new_version(
+    async def read_version(
         self,
     ) -> None:
         """
@@ -173,19 +167,26 @@ class ResourceScheduler:
             raise ValueError(f"No environment found with this id: `{self._environment}`")
         version = environment.last_version
         resources_from_db, requires_from_db = await self.build_resource_mappings_from_db()
+        await self.new_version(version, resources_from_db, requires_from_db)
 
+    async def new_version(
+        self,
+        version: int,
+        resources: Mapping[ResourceIdStr, ResourceDetails],
+        requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
+    ) -> None:
         async with self._update_lock:
             # Inspect new state and mark resources as "update pending" where appropriate. Since this method is the only writer
             # for "update pending", and a stale read is acceptable, we can do this part before acquiring the exclusive scheduler
             # lock.
-            deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources_from_db.keys()
+            deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
             for resource in deleted_resources:
                 self._work.delete_resource(resource)
 
             new_desired_state: list[ResourceIdStr] = []
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
-            for resource, details in resources_from_db.items():
+            for resource, details in resources.items():
                 if (
                     resource not in self._state.resources
                     or details.attribute_hash != self._state.resources[resource].attribute_hash
@@ -193,7 +194,7 @@ class ResourceScheduler:
                     self._state.update_pending.add(resource)
                     new_desired_state.append(resource)
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
-                new_requires: Set[ResourceIdStr] = requires_from_db.get(resource, set())
+                new_requires: Set[ResourceIdStr] = requires.get(resource, set())
                 added: Set[ResourceIdStr] = new_requires - old_requires
                 dropped: Set[ResourceIdStr] = old_requires - new_requires
                 if added:
@@ -214,9 +215,9 @@ class ResourceScheduler:
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in new_desired_state:
-                    self._state.update_desired_state(resources_from_db[resource])
+                    self._state.update_desired_state(resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
-                    self._state.update_requires(resource, requires_from_db[resource])
+                    self._state.update_requires(resource, requires[resource])
                 # ensure deploy for ALL dirty resources, not just the new ones
                 # FIXME[#8008]: this is copy-pasted, make into a method?
                 # FIXME: WDB TO SANDER: We should track dirty resources in a collection to not force a scan of the full state
