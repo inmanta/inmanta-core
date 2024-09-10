@@ -22,8 +22,8 @@ from inmanta import compiler
 from inmanta.ast import AttributeException
 from inmanta.compiler.help.explainer import ExplainerFactory
 
-@pytest.mark.fundamental
 
+@pytest.mark.fundamental
 def test_optional_loop_forward(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

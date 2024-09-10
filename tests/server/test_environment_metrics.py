@@ -193,6 +193,7 @@ async def test_flush_metrics_gauge(env_metrics_service, env_with_uuid):
     result = await data.EnvironmentMetricsGauge.get_list()
     assert len(result) == 3
 
+
 @pytest.mark.fundamental
 async def test_flush_metrics_gauge_multi(env_metrics_service, env_with_uuid):
     dummy_gauge = DummyGaugeMetricMulti()

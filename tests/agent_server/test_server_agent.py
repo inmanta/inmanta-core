@@ -1101,6 +1101,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
     await agent.stop()
     await resource_action_consistency_check()
 
+
 @pytest.mark.fundamental
 async def test_cross_agent_deps(
     resource_container,

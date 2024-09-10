@@ -18,6 +18,7 @@
 
 import os
 
+import pytest
 from pkg_resources import Requirement
 
 from inmanta.file_parser import RequirementsTxtParser

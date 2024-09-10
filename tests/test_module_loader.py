@@ -217,7 +217,6 @@ def test_load_module_v1_already_installed(snippetcompiler, modules_dir: str, all
             project.load_module(module_name=module_name, install_v1=False, allow_v1=allow_v1)
 
 
-
 def test_load_module_v1_module_using_install(snippetcompiler) -> None:
     """
     Test whether the Project.load_module() method works correctly when a module is only available as a V1 module

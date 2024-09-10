@@ -30,6 +30,7 @@ from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
 
 logger = logging.getLogger("inmanta.test.dryrun")
 
+
 @pytest.mark.fundamental
 async def test_dryrun_and_deploy(server, client, resource_container, environment, async_finalizer):
     """
@@ -366,7 +367,6 @@ async def test_dryrun_code_loading_failure(server, client, resource_container, e
 
 
 @pytest.mark.fundamental
-
 async def test_dryrun_v2(server, client, resource_container, environment, agent_factory):
     """
     Dryrun a configuration model with the v2 api, where applicable
