@@ -61,11 +61,11 @@ from inmanta.server import (
     SLICE_ORCHESTRATION,
     SLICE_RESOURCE,
     SLICE_TRANSPORT,
-    agentmanager,
 )
 from inmanta.server import config as opt
 from inmanta.server import diff, protocol
-from inmanta.server.services import resourceservice
+from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
+from inmanta.server.services.resourceservice import ResourceService
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple
 
@@ -378,9 +378,9 @@ class PartialUpdateMerger:
 class OrchestrationService(protocol.ServerSlice):
     """Resource Manager service"""
 
-    agentmanager_service: "agentmanager.AgentManager"
-    autostarted_agent_manager: "agentmanager.AutostartedAgentManager"
-    resource_service: "resourceservice.ResourceService"
+    agentmanager_service: "AgentManager"
+    autostarted_agent_manager: AutostartedAgentManager
+    resource_service: ResourceService
 
     def __init__(self) -> None:
         super().__init__(SLICE_ORCHESTRATION)
@@ -393,11 +393,9 @@ class OrchestrationService(protocol.ServerSlice):
 
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
-        self.agentmanager_service = cast("agentmanager.AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
-        self.autostarted_agent_manager = cast(
-            agentmanager.AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-        )
-        self.resource_service = cast("resourceservice.ResourceService", server.get_slice(SLICE_RESOURCE))
+        self.agentmanager_service = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
+        self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
+        self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
     async def start(self) -> None:
         if PERFORM_CLEANUP:
@@ -819,12 +817,7 @@ class OrchestrationService(protocol.ServerSlice):
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
-            all_agents: abc.Set[str]
-            if opt.server_use_resource_scheduler.get():
-                all_agents = {const.AGENT_SCHEDULER_ID}
-            else:
-                all_agents = {res.agent for res in rid_to_resource.values()}
-
+            all_agents: abc.Set[str] = {res.agent for res in rid_to_resource.values()}
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
@@ -1198,24 +1191,7 @@ class OrchestrationService(protocol.ServerSlice):
                 await model.mark_done(connection=connection)
                 return 200, {"model": model}
 
-            is_using_new_scheduler = opt.server_use_resource_scheduler.get()
-            # New code relying on the ResourceScheduler
-            if is_using_new_scheduler:
-                if connection.is_in_transaction():
-                    raise RuntimeError(
-                        "The release of a new version cannot be in a transaction! "
-                        "The agent would not see the data that as committed"
-                    )
-                await self.autostarted_agent_manager._ensure_scheduler(env)
-                agent = const.AGENT_SCHEDULER_ID
-
-                client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
-                if client is not None:
-                    self.add_background_task(client.trigger_release_version(env.id))
-                else:
-                    LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)
-            # Old code
-            elif push:
+            if push:
                 # We can't be in a transaction here, or the agent will not see the data that as committed
                 # This assert prevents anyone from wrapping this method in a transaction by accident
                 assert not connection.is_in_transaction()
@@ -1225,7 +1201,6 @@ class OrchestrationService(protocol.ServerSlice):
                     agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
                 await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
 
-                assert agents is not None
                 for agent in agents:
                     client = self.agentmanager_service.get_agent_client(env.id, agent)
                     if client is not None:
@@ -1271,14 +1246,11 @@ class OrchestrationService(protocol.ServerSlice):
         if not allagents:
             return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
 
-        is_using_new_scheduler = opt.server_use_resource_scheduler.get()
-        if is_using_new_scheduler:
-            await self.autostarted_agent_manager._ensure_scheduler(env)
-        else:
-            await self.autostarted_agent_manager._ensure_agents(env, allagents)
-
         present = set()
         absent = set()
+
+        await self.autostarted_agent_manager._ensure_agents(env, allagents)
+
         for agent in allagents:
             client = self.agentmanager_service.get_agent_client(env.id, agent)
             if client is not None:

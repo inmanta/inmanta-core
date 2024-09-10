@@ -1,4 +1,0 @@
-description: Integrate scheduler with server
-issue-nr: 8009
-change-type: minor
-destination-branches: [master]
