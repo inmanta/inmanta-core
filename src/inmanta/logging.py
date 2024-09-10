@@ -76,6 +76,8 @@ log_levels = {
     "TRACE": 2,
 }
 
+logging.addLevelName(3, "TRACE")
+
 
 @stable_api
 class LoggingConfigExtension:

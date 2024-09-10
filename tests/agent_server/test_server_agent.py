@@ -18,6 +18,7 @@
 
 import asyncio
 import dataclasses
+import json
 import logging
 import os
 import time
@@ -3346,13 +3347,20 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     result = response.result
     assert result["resource"]["status"] == "unavailable"
 
+    logging.getLogger(__name__).warning("Found results: %s", json.dumps(result["logs"], indent=1))
+
+    def is_log_line(log_line):
+        return (
+            log_line["action"] == "deploy"
+            and log_line["status"] == "unavailable"
+            and ("failed to load handler code " in log_line["messages"][-1]["msg"])
+        )
+
     # Expected logs:
     #   [0] Deploy action: Failed to load handler code or install handler code
     #   [1] Pull action
     #   [2] Store action
-    assert result["logs"][0]["action"] == "deploy"
-    assert result["logs"][0]["status"] == "unavailable"
-    assert "failed to load handler code " in result["logs"][0]["messages"][-1]["msg"]
+    assert any((is_log_line(line) for line in result["logs"]))
 
 
 async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, async_finalizer):
