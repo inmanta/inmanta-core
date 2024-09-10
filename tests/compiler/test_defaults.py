@@ -120,6 +120,7 @@ def test_275_default_override(snippetcompiler):
     assert b.get_value().get_attribute("at").get_value() is False
 
 
+@pytest.mark.fundamental
 def test_275_default_diamond(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

@@ -20,7 +20,6 @@ import textwrap
 
 from inmanta import compiler
 
-
 def test_plus(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
         textwrap.dedent(
@@ -583,7 +582,7 @@ def test_exponentiation(snippetcompiler) -> None:
     )
     compiler.do_compile()
 
-
+@pytest.mark.fundamental
 def test_precedence_rules(snippetcompiler) -> None:
     """
     Verify the precedence rules for the arithmetic operations.

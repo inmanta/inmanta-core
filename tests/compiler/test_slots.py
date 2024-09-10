@@ -64,6 +64,7 @@ def assert_slotted(obj):
     assert not hasattr(obj, "__dict__")
 
 
+@pytest.mark.fundamental
 def test_slots_rt():
     ns = Namespace("root", None)
     rs = Resolver(ns)

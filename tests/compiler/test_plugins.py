@@ -56,6 +56,7 @@ import test_1221
     )
 
 
+@pytest.mark.fundamental
 def test_kwargs_in_plugin_call(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

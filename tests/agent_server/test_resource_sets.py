@@ -27,7 +27,7 @@ from inmanta.protocol.common import Result
 from inmanta.resources import ResourceIdStr
 from inmanta.util import get_compiler_version
 
-
+@pytest.mark.fundamental
 async def test_resource_sets_via_put_version(server, client, environment, clienthelper):
     version = await clienthelper.get_version()
 

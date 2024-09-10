@@ -172,6 +172,10 @@ def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
     )
     config.addinivalue_line(
         "markers",
+        "fundamental",
+    )
+    config.addinivalue_line(
+        "markers",
         "parametrize_any: only execute one of the parameterized cases when in fast mode (see documentation in conftest.py)",
     )
     config.addinivalue_line(
@@ -190,6 +194,11 @@ def pytest_addoption(parser):
         "--fast",
         action="store_true",
         help="Don't run all test, but a representative set",
+    )
+    parser.addoption(
+        "--fundamental",
+        action="store_true",
+        help="Don't run all test, but only fundamental ones, subset of fast",
     )
 
 
@@ -218,9 +227,18 @@ def pytest_runtest_setup(item: "pytest.Item"):
     """
     When in fast mode, skip test marked as slow and db_migration tests that are older than 30 days.
     """
+
     is_fast = item.config.getoption("fast")
-    if not is_fast:
+    is_fundamental = item.config.getoption("fundamental")
+
+    if not is_fast and not is_fundamental:
+        # Full mode
         return
+
+    if is_fundamental and not any(True for mark in item.iter_markers(name="fundamental")):
+        pytest.skip("Skipping not fundamental tests")
+
+    # Fast mode
     if any(True for mark in item.iter_markers(name="slowtest")):
         pytest.skip("Skipping slow tests")
 

@@ -28,7 +28,7 @@ from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
 
 logger = logging.getLogger("inmanta.test.dryrun")
 
-
+@pytest.mark.fundamental
 async def test_dryrun_and_deploy(server, client, resource_container, environment, async_finalizer):
     """
     dryrun and deploy a configuration model
@@ -362,6 +362,8 @@ async def test_dryrun_code_loading_failure(server, client, resource_container, e
         "to_value_compare": "Resource is in an undeployable state",
     }
 
+
+@pytest.mark.fundamental
 
 async def test_dryrun_v2(server, client, resource_container, environment, agent_factory):
     """

@@ -98,6 +98,7 @@ def set_custom_executor_policy(server_config):
     inmanta.agent.config.agent_executor_retention_time.set(str(old_retention_value))
 
 
+@pytest.mark.fundamental
 async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, caplog):
     """
     Test the MPManager, this includes
@@ -289,6 +290,7 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     utils.assert_no_warning(caplog)
 
 
+@pytest.mark.fundamental
 def test_hash_with_duplicates():
     source = inmanta.loader.ModuleSource("test", "aaaaa", False, None, None)
     requirement = "setuptools"

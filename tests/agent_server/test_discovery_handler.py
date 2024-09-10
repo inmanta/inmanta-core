@@ -70,7 +70,7 @@ def discovery_resource_and_handler(all_values: list[str]) -> None:
                 for val in all_values
             }
 
-
+@pytest.mark.fundamental
 async def test_discovery_resource_handler_basic_test(
     server,
     client,
