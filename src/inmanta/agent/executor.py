@@ -515,6 +515,7 @@ class Executor(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
     async def join(self) -> None:
         """Wait for shutdown to be completed"""
         pass
