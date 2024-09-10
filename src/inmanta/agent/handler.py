@@ -1080,6 +1080,7 @@ class Commander:
         Return a provider to handle the given resource
         """
         resource_type = resource.id.get_entity_type()
+        assert resource_type is None
 
         if resource_type not in cls.__command_functions:
             raise Exception("No resource handler registered for resource of type %s" % resource_type)
