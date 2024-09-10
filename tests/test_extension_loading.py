@@ -142,6 +142,7 @@ def test_phase_3():
         ]
 
 
+@pytest.mark.fundamental
 def test_end_to_end():
     with splice_extension_in("test_module_path"):
         ibl = InmantaBootloader(configure_logging=True)

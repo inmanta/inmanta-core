@@ -51,6 +51,7 @@ from utils import PipIndex, create_python_package, log_contains, module_from_tem
 
 
 @pytest.mark.parametrize_any("editable_install", [True, False])
+@pytest.mark.fundamental
 def test_v2_module_loading(
     editable_install: bool,
     tmpdir: py.path.local,
@@ -214,6 +215,7 @@ def test_load_module_v1_already_installed(snippetcompiler, modules_dir: str, all
     else:
         with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
             project.load_module(module_name=module_name, install_v1=False, allow_v1=allow_v1)
+
 
 
 def test_load_module_v1_module_using_install(snippetcompiler) -> None:

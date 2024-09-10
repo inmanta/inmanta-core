@@ -54,6 +54,7 @@ def app(args):
     options.func(options)
 
 
+@pytest.mark.fundamental
 async def install_project(python_env: env.PythonEnvironment, project_dir: py.path.local) -> None:
     """
     Install a project and its modules via the `inmanta project install` command.

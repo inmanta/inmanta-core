@@ -123,6 +123,7 @@ async def test_normal_flow(request):
     assert args == result
 
 
+@pytest.mark.fundamental
 async def test_log_transport(caplog, request):
     """
     Test for the IPC feature of shipping logs

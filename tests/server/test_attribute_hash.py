@@ -18,9 +18,12 @@
 
 import uuid
 
+import pytest
+
 from inmanta.data import Resource
 
 
+@pytest.mark.fundamental
 def test_attribute_hash():
     """
     Increment calculation requires an attribute hash.

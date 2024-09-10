@@ -45,6 +45,7 @@ def auth_client(server_pre_start):
     return auth_client
 
 
+@pytest.mark.fundamental
 async def test_create_and_delete_user(server: protocol.Server, auth_client: endpoints.Client) -> None:
     """test operations on users and login without testing the actual auth"""
     assert server.get_slice(SLICE_USER)

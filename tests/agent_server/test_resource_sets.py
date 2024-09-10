@@ -21,6 +21,8 @@ import uuid
 from collections import abc
 from typing import Optional
 
+import pytest
+
 import utils
 from inmanta import const, data
 from inmanta.protocol.common import Result

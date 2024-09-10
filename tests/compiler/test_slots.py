@@ -21,6 +21,8 @@ from collections import abc
 from itertools import chain
 from typing import TypeVar
 
+import pytest
+
 import utils
 from inmanta.ast import Anchor, LocatableString, Location, Range
 from inmanta.ast.attribute import RelationAttribute

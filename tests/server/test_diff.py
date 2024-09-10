@@ -276,7 +276,7 @@ def assert_resource_added(resource):
         assert attr["from_value"] is None
         assert attr["from_value_compare"] == ""
 
-
+@pytest.mark.fundamental
 async def test_resources_diff(client, environment, env_with_versions):
     """Test the diff functionality on multiple resources across multiple versions"""
     env_id = uuid.UUID(environment)

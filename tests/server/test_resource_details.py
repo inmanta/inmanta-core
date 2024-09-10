@@ -430,6 +430,7 @@ async def assert_matching_attributes(resource_api: dict[str, Any], resource_db: 
     assert attributes_api == attributes_db
 
 
+@pytest.mark.fundamental
 async def test_resource_details(server, client, env_with_resources):
     """Test the resource details endpoint with multiple resources
     The released versions in the test environment are 2, 3 and 4, while 1 and 5 are not released.

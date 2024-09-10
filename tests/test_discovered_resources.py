@@ -67,6 +67,7 @@ async def test_discovery_resource_single(server, client, agent, environment):
     assert result.result["data"]["values"] == values
 
 
+@pytest.mark.fundamental
 async def test_discovered_resource_create_batch(server, client, agent, environment):
     """
     Test that a batch of discovered resources can be created
@@ -130,6 +131,7 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
         assert result.result["data"]["discovery_resource_id"] == discovery_resource_id
 
 
+@pytest.mark.fundamental
 async def test_discovered_resource_get_paging(server, client, agent, environment, clienthelper):
     """
     Test that discovered resources can be retrieved with paging. The test creates multiple resources, retrieves them

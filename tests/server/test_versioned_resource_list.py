@@ -277,6 +277,7 @@ async def test_filter_validation(server, client, env_with_resources):
         assert result.code == expected_status
 
 
+@pytest.mark.fundamental
 async def test_versioned_resource_details(server, client, env_with_resources):
     result = await client.get_resources_in_version(env_with_resources.id, version=3, sort="resource_id_value.asc")
     assert result.code == 200

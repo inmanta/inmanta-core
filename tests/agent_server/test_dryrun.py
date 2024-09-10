@@ -20,6 +20,8 @@ import json
 import logging
 import uuid
 
+import pytest
+
 from inmanta import const, data, execute
 from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER

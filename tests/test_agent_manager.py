@@ -148,6 +148,7 @@ def assert_state_agents_retry(
     return func
 
 
+@pytest.mark.fundamental
 async def test_primary_selection(server, environment):
     env_id = UUID(environment)
     env = await data.Environment.get_by_id(env_id)
@@ -1136,6 +1137,7 @@ async def test_restart_on_environment_setting(server, client, environment, caplo
         )
 
 
+@pytest.mark.fundamental
 async def test_failover_doesnt_make_paused_agent_primary(server, client, environment, agent_factory):
     """
     This test verifies that:

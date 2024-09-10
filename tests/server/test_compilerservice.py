@@ -126,7 +126,8 @@ async def compile_and_assert(
     return cr, stage_by_name
 
 
-async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog):
+@pytest.mark.fundamental
+async def test_schedule(server_config, init_dataclasses_and_load_schema, caplog):
     """Test the scheduler part in isolation, mock out compile runner and listen to state updates"""
 
     class Collector(CompileStateListener):

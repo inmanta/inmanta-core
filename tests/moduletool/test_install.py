@@ -190,7 +190,7 @@ def test_bad_dep_checkout(git_modules_dir, modules_repo):
     with pytest.raises(CompilerException, match="requirement mod2<2016 on module mod2 not fulfilled, now at version 2016.1"):
         ProjectTool().execute("install", [])
 
-
+@pytest.mark.fundamental
 def test_master_checkout(git_modules_dir: str, modules_repo: str, tmpdir):
     coroot = install_project(git_modules_dir, "masterproject", tmpdir)
 

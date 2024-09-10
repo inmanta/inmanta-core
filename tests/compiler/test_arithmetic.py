@@ -18,6 +18,8 @@
 
 import textwrap
 
+import pytest
+
 from inmanta import compiler
 
 def test_plus(snippetcompiler) -> None:

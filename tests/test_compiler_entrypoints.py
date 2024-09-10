@@ -20,6 +20,7 @@ import os
 from collections import defaultdict
 
 import more_itertools
+import pytest
 
 from inmanta import compiler
 from inmanta.ast import Range
@@ -135,6 +136,7 @@ implement Test using a
     verify_anchor(23, 22, 23, 19)
 
 
+@pytest.mark.fundamental
 def test_anchors_two(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

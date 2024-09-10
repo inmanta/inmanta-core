@@ -20,6 +20,8 @@ import asyncio
 import logging
 import uuid
 
+import pytest
+
 from inmanta import const, data, resources
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
