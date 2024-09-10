@@ -294,9 +294,6 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             return
 
         while not self.stopping:
-            self.logger.log(
-                const.LOG_LEVEL_TRACE, "Touching venv status files, then sleeping %f", self.timer_venv_scheduler_interval
-            )
             await self.touch_inmanta_venv_status()
             if not self.stopping:
 
@@ -308,7 +305,11 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """
         # makes mypy happy
         assert self.ctx.venv is not None
-        (pathlib.Path(self.ctx.venv.env_path) / const.INMANTA_VENV_STATUS_FILENAME).touch()
+        path = pathlib.Path(self.ctx.venv.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        path.touch()
+        self.logger.log(
+            const.LOG_LEVEL_TRACE, "Touching venv status %s, then sleeping %f", path, self.timer_venv_scheduler_interval
+        )
 
 
 class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
