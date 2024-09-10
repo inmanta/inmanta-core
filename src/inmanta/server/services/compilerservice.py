@@ -41,8 +41,7 @@ from asyncpg import Connection
 
 import inmanta.data.model as model
 import inmanta.server.services.environmentlistener
-import logfire
-from inmanta import config, const, data, protocol, server
+from inmanta import config, const, data, protocol, server, tracing
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
 from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvCreationFailedError, VirtualEnv
@@ -148,7 +147,7 @@ class CompileRun:
             await self.stage.update_streams(err=part)
 
     async def drain(self, sub_process: asyncio.subprocess.Process) -> int:
-        with logfire.span("drain"):
+        with tracing.span("drain"):
             # pipe, so stream is actual, not optional
             out = cast(asyncio.StreamReader, sub_process.stdout)
             err = cast(asyncio.StreamReader, sub_process.stderr)
@@ -318,7 +317,7 @@ class CompileRun:
                 python_path = PythonEnvironment.get_python_path_for_env_path(venv_dir)
                 assert os.path.exists(python_path)
                 full_cmd = [python_path, "-m", "inmanta.app"] + inmanta_args
-                env.update(logfire.propagate.get_context())
+                env.update(tracing.get_context())
                 return await self._run_compile_stage(stage_name, full_cmd, cwd, env)
 
             async def setup() -> AsyncIterator[Awaitable[Optional[data.Report]]]:

@@ -54,8 +54,6 @@ from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
 
 import inmanta.compiler as compiler
-import logfire
-import logfire.propagate
 from inmanta import const, module, moduletool, protocol, tracing, util
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
@@ -313,7 +311,7 @@ def compile_project(options: argparse.Namespace) -> None:
         )
         module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
-        with logfire.span("compile"):
+        with tracing.span("compile"):
             summary_reporter = CompileSummaryReporter()
             if options.profile:
                 import cProfile
@@ -570,7 +568,7 @@ def export(options: argparse.Namespace) -> None:
 
         from inmanta.export import Exporter  # noqa: H307
 
-        with logfire.span("compiler"):
+        with tracing.span("compiler"):
             summary_reporter = CompileSummaryReporter()
 
             types: Optional[dict[str, inmanta_type.Type]]
@@ -587,7 +585,7 @@ def export(options: argparse.Namespace) -> None:
     with logger_mode_manager.run_in_logger_mode(LoggerMode.EXPORTER):
         # Even if the compile failed we might have collected additional data such as unknowns. So
         # continue the export
-        with logfire.span("exporter"):
+        with tracing.span("exporter"):
             export = Exporter(options)
             with summary_reporter.exporter_exception.capture():
                 results = export.run(
@@ -919,9 +917,7 @@ def app() -> None:
                 print(helpmsg)
 
     # if a traceparent is provided, restore the context
-    with logfire.propagate.attach_context(
-        {const.TRACEPARENT: os.environ[const.TRACEPARENT]} if const.TRACEPARENT in os.environ else {}
-    ):
+    with tracing.attach_context({const.TRACEPARENT: os.environ[const.TRACEPARENT]} if const.TRACEPARENT in os.environ else {}):
         try:
             options.func(options)
         except ShowUsageException as e:

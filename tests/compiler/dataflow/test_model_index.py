@@ -35,11 +35,14 @@ end
 
 index A(n)
 
-implement A using std::none
+implement A using none
 
 
 A(n = 0, m = 0)
 A(n = 0, m = 0)
+
+implementation none for std::Entity:
+end
         """,
     )
     entity: inmanta_type.Type = dataflow_test_helper.get_types()["__config__::A"]

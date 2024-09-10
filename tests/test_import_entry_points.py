@@ -124,6 +124,7 @@ def test_import_compiler(import_entry_point: Callable[[str], Optional[int]]) -> 
     assert import_entry_point("inmanta.compiler") == 0
 
 
+@pytest.mark.slow
 def test_import_server(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.server.extensions") == 0
     assert import_entry_point("inmanta.server.bootloader") == 0
