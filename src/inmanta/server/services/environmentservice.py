@@ -58,9 +58,6 @@ from inmanta.server.services.environmentlistener import (  # These were moved fr
     EnvironmentAction,
     EnvironmentListener,
 )
-from inmanta.server.services.resourceservice import (
-    ResourceService,  # import from LSM, important to keep them in place https://github.com/inmanta/inmanta-lsm/pull/1878
-)
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
@@ -80,7 +77,7 @@ class EnvironmentService(protocol.ServerSlice):
     agent_manager: "agentmanager.AgentManager"
     autostarted_agent_manager: "agentmanager.AutostartedAgentManager"
     orchestration_service: "orchestrationservice.OrchestrationService"
-    resource_service: "ResourceService"
+    resource_service: "resourceservice.ResourceService"
     listeners: dict[EnvironmentAction, list[EnvironmentListener]]
     # environment_state_operation_lock is to prevent concurrent execution of
     # operations that modify the state of an environment, such as halting, resuming, or deleting.
