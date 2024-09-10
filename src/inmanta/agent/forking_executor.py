@@ -524,7 +524,6 @@ def mp_worker_entrypoint(
     config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
 ) -> None:
     """Entry point for child processes"""
-
     set_executor_status(name, "connecting")
     # Set up logging stage 1
     # Basic config, starts on std.out
