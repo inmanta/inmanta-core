@@ -994,8 +994,6 @@ src/inmanta/moduletool.py:0: error: Argument 1 to "get_project_for_module" of "M
 src/inmanta/moduletool.py:0: error: Missing type parameters for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: Missing type parameters for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: "Module[Any]" has no attribute "is_editable"  [attr-defined]
-src/inmanta/moduletool.py:0: error: Argument "distribution" to "get_requires_for_build" of "ProjectBuilder" has incompatible type "str"; expected "Literal['sdist', 'wheel']"  [arg-type]
-src/inmanta/moduletool.py:0: error: Argument "distribution" to "build" of "ProjectBuilder" has incompatible type "str"; expected "Literal['sdist', 'wheel']"  [arg-type]
 src/inmanta/export.py:0: error: Cannot infer type argument 1 of "Option"  [misc]
 src/inmanta/export.py:0: error: Cannot infer type argument 1 of "Option"  [misc]
 src/inmanta/export.py:0: error: Missing type parameters for generic type "tuple"  [type-arg]
