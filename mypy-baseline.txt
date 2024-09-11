@@ -40,6 +40,9 @@ src/inmanta/server/config.py:0: error: Returning Any from function declared to r
 src/inmanta/docstring_parser.py:0: error: Value expression in dictionary comprehension has incompatible type "str | None"; expected type "str"  [misc]
 src/inmanta/docstring_parser.py:0: error: Incompatible types in assignment (expression has type "Docstring", variable has type "str")  [assignment]
 src/inmanta/docstring_parser.py:0: error: Argument 1 to "DocString" has incompatible type "str"; expected "Docstring"  [arg-type]
+src/inmanta/util/async_lru.py:0: error: Function is missing a type annotation  [no-untyped-def]
+src/inmanta/util/async_lru.py:0: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
+src/inmanta/util/async_lru.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/protocol/ipc_light.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/protocol/ipc_light.py:0: note: This violates the Liskov substitution principle
 src/inmanta/protocol/ipc_light.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
@@ -943,8 +946,6 @@ src/inmanta/moduletool.py:0: error: Argument 1 to "get_project_for_module" of "M
 src/inmanta/moduletool.py:0: error: Missing type parameters for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: Missing type parameters for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: "Module[Any]" has no attribute "is_editable"  [attr-defined]
-src/inmanta/moduletool.py:0: error: Argument "distribution" to "get_requires_for_build" of "ProjectBuilder" has incompatible type "str"; expected "Literal['sdist', 'wheel']"  [arg-type]
-src/inmanta/moduletool.py:0: error: Argument "distribution" to "build" of "ProjectBuilder" has incompatible type "str"; expected "Literal['sdist', 'wheel']"  [arg-type]
 src/inmanta/export.py:0: error: Cannot infer type argument 1 of "Option"  [misc]
 src/inmanta/export.py:0: error: Missing type parameters for generic type "tuple"  [type-arg]
 src/inmanta/export.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
@@ -994,8 +995,6 @@ src/inmanta/deploy/scheduler.py:0: note: def [_T] __init__(self, Iterable[_T], /
 src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/agent/forking_executor.py:0: note: This violates the Liskov substitution principle
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
-src/inmanta/agent/agent_new.py:0: error: Argument 3 to "MPManager" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
-src/inmanta/agent/agent_new.py:0: error: Argument 1 to "collect_report" has incompatible type "inmanta.agent.agent_new.Agent"; expected "inmanta.agent.agent.Agent"  [arg-type]
 src/inmanta/agent/agent.py:0: error: Cannot determine type of "ratelimiter"  [has-type]
 src/inmanta/validation_type.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "Mapping[str, object] | None")  [assignment]
 src/inmanta/server/validate_filter.py:0: error: Incompatible return value type (got "Callable[[object], list[tuple[RangeOperator, int]] | None]", expected "Callable[[object, object], list[tuple[RangeOperator, int]] | None]")  [return-value]

@@ -211,11 +211,6 @@ inmanta.test_agent_code_loading = 15
         LogSequence(caplog)
         .contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test version={version_1}")
         .contains("inmanta.agent.agent", DEBUG, f"Installed handler test::Test version={version_1}")
-        .contains(
-            "inmanta.agent.agent",
-            DEBUG,
-            f"Cache hit, using existing ResourceInstallSpec for resource_type=test::Test version={version_1}",
-        )
         .contains("inmanta.agent.agent", DEBUG, f"Handler code already installed for test::Test version={version_1}")
         .assert_not("inmanta", DEBUG, "test::Test ")
     )
