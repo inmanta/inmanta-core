@@ -1435,7 +1435,9 @@ class VirtualEnv(ActiveEnv):
     ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super().install_for_config(requirements, config, upgrade, constraint_files, upgrade_strategy, paths, add_inmanta_requires)
+        super().install_for_config(
+            requirements, config, upgrade, constraint_files, upgrade_strategy, paths, add_inmanta_requires
+        )
 
 
 class VenvCreationFailedError(Exception):
