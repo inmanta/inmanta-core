@@ -24,6 +24,6 @@ async def update(connection: Connection) -> None:
     Add indexes required by the diagnose endpoint.
     """
     schema = """
-    CREATE INDEX report_started_compile_returncode ON report(compile, returncode, started DESC);
+    CREATE INDEX report_started_compile_returncode ON report(compile, returncode);
     """
     await connection.execute(schema)
