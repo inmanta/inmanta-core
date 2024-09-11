@@ -396,7 +396,8 @@ def test_active_env_get_module_file(
         loader.PluginModuleFinder.configure_module_finder([os.path.join(str(tmpdir), "libs")])
 
     assert env.ActiveEnv.get_module_file(module_name) is None
-    env.process_env.install_for_config([Requirement.parse(package_name)], pip_config)
+
+    env.process_env.install_for_config([Requirement.parse(package_name)], pip_config, add_inmanta_requires=False)
     assert package_name in env.process_env.get_installed_packages()
     module_info: Optional[tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
@@ -430,6 +431,7 @@ def test_active_env_get_module_file_editable_namespace_package(
         requirements=[],
         paths=[env.LocalPackagePath(path=project_dir, editable=True)],
         config=PipConfig(use_system_config=False, index_url=local_module_package_index),
+        add_inmanta_requires=False,
     )
     assert package_name in env.process_env.get_installed_packages()
     module_info: Optional[tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
@@ -526,14 +528,14 @@ def test_active_env_check_basic(
         for in_scope, expect in [(in_scope_test, expect_test), (in_scope_nonext, expect_nonext)]:
             caplog.clear()
             if expect[0]:
-                env.ActiveEnv.check(in_scope)
+                env.process_env.check(in_scope)
                 if expect[1] == "":
                     assert error_msg not in {rec.message for rec in caplog.records}
                 else:
                     assert expect[1] in {rec.message for rec in caplog.records}
             else:
                 with pytest.raises(env.ConflictingRequirements) as e:
-                    env.ActiveEnv.check(in_scope)
+                    env.process_env.check(in_scope)
                 assert expect[1] in e.value.get_message()
 
     assert_all_checks()
@@ -562,15 +564,15 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local
     in_scope: Pattern[str] = re.compile("test-package-.*")
     constraints: list[Requirement] = [Requirement.parse("test-package-one~=1.0")]
 
-    env.ActiveEnv.check(in_scope)
+    env.process_env.check(in_scope)
 
     caplog.clear()
     with pytest.raises(env.ConflictingRequirements):
-        env.ActiveEnv.check(in_scope, constraints)
+        env.process_env.check(in_scope, constraints)
 
     caplog.clear()
     create_install_package("test-package-one", version.Version("1.0.0"), [], local_module_package_index)
-    env.ActiveEnv.check(in_scope, constraints)
+    env.process_env.check(in_scope, constraints)
     assert "Incompatibility between constraint" not in caplog.text
 
     # Add an unrelated package to the venv, that should not matter
@@ -579,7 +581,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local
     create_install_package(
         "ext-package-one", version.Version("1.0.0"), [Requirement.parse("test-package-one==1.0")], local_module_package_index
     )
-    env.ActiveEnv.check(in_scope, constraints)
+    env.process_env.check(in_scope, constraints)
     assert "Incompatibility between constraint" not in caplog.text
 
     caplog.clear()
@@ -588,7 +590,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local
     # test for #4761
     # without additional constrain, this is not a hard failure
     # except for the unrelated package, which should produce a warning
-    env.ActiveEnv.check(in_scope, [])
+    env.process_env.check(in_scope, [])
     assert (
         "Incompatibility between constraint test-package-one==1.0 and installed version 2.0.0 (from ext-package-one)"
         in caplog.text
@@ -596,7 +598,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local
 
     caplog.clear()
     with pytest.raises(env.ConflictingRequirements):
-        env.ActiveEnv.check(in_scope, constraints)
+        env.process_env.check(in_scope, constraints)
 
 
 @pytest.mark.slowtest
