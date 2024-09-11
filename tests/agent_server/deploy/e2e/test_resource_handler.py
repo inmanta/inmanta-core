@@ -27,7 +27,8 @@ from inmanta import const
 from inmanta.agent import Agent
 from inmanta.agent.handler import ResourceHandler
 from inmanta.protocol import SessionClient, VersionMatch, common
-from utils import _wait_until_deployment_finishes, log_contains, make_random_file
+from utils import log_contains, make_random_file
+from agent_server.deploy.e2e.util import _wait_until_deployment_finishes
 
 T = TypeVar("T")
 
@@ -111,7 +112,7 @@ async def test_logging_error(resource_container, environment, client, agent, cli
     assert result.code == 200
     assert result.result["status"] == "failed"
 
-    log_contains(caplog, "inmanta.agent", logging.ERROR, "Failed to serialize argument for log message")
+    log_contains(caplog, "conftest.agent1", logging.ERROR, "Failed to serialize argument for log message")
 
 
 @pytest.mark.parametrize(

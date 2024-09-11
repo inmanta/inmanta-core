@@ -33,31 +33,9 @@ from utils import resource_action_consistency_check, retry_limited
 
 logger = logging.getLogger(__name__)
 
-
 @pytest.fixture(scope="function")
-async def agent(server, environment):
-    """Construct an agent that can execute using the resource container"""
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
-    a = Agent(environment)
-
-    executor = InProcessExecutorManager(
-        environment, a._client, asyncio.get_event_loop(), logger, a.thread_pool, a._storage["code"], a._storage["env"], False
-    )
-    a.executor_manager = executor
-    a.scheduler._executor_manager = executor
-    a.scheduler._code_manager = DummyCodeManager(a._client)
-
-    await a.start()
-
-    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-    yield a
-
-    await a.stop()
-
+async def auto_start_agent(server_config):
+    return False
 
 async def test_basics(agent, resource_container, clienthelper, client, environment):
     """
@@ -68,10 +46,6 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     env_id = environment
     scheduler = agent.scheduler
-
-    # First part - test the ResourceScheduler (retrieval of data from DB)
-    Config.set("config", "agent-deploy-interval", "100")
-    Config.set("server", "new-resource-scheduler", "True")
 
     resource_container.Provider.reset()
     # set the deploy environment
@@ -231,3 +205,4 @@ async def check_scheduler_state(resources, scheduler):
             assert expected_resource_attributes["requires"] == []
         else:
             assert scheduler._state.requires._primary[id_without_version] == set(expected_resource_attributes["requires"])
+
