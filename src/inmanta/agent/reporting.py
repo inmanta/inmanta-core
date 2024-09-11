@@ -22,7 +22,7 @@ import platform
 from typing import TYPE_CHECKING, Callable, Union
 
 if TYPE_CHECKING:
-    from inmanta.agent.agent import Agent
+    from inmanta.protocol.endpoints import SessionEndpoint
 
 try:
     import resource
@@ -32,10 +32,10 @@ except ImportError:
 LOGGER = logging.getLogger(__name__)
 
 ReportReturn = Union[dict[str, list[str]], dict[str, str], dict[str, float], str]
-reports: dict[str, Callable[["Agent"], ReportReturn]] = {}
+reports: dict[str, Callable[["SessionEndpoint"], ReportReturn]] = {}
 
 
-def collect_report(agent: "Agent") -> dict[str, ReportReturn]:
+def collect_report(agent: "SessionEndpoint") -> dict[str, ReportReturn]:
     out = {}
     for name, report in reports.items():
         try:
@@ -47,14 +47,14 @@ def collect_report(agent: "Agent") -> dict[str, ReportReturn]:
     return out
 
 
-def report_environment(agent: "Agent") -> str:
+def report_environment(agent: "SessionEndpoint") -> str:
     return str(agent._env_id)
 
 
 reports["environment"] = report_environment
 
 
-def report_platform(agent: "Agent") -> str:
+def report_platform(agent: "SessionEndpoint") -> str:
     value = platform.platform()
     if value is None:
         return "unknown"
@@ -64,28 +64,28 @@ def report_platform(agent: "Agent") -> str:
 reports["platform"] = report_platform
 
 
-def report_hostname(agent: "Agent") -> str:
+def report_hostname(agent: "SessionEndpoint") -> str:
     return platform.node()
 
 
 reports["hostname"] = report_hostname
 
 
-def report_python(agent: "Agent") -> str:
+def report_python(agent: "SessionEndpoint") -> str:
     return f"{platform.python_implementation()} {platform.python_version()} {platform.python_build()}"
 
 
 reports["python"] = report_python
 
 
-def report_pid(agent: "Agent") -> str:
+def report_pid(agent: "SessionEndpoint") -> str:
     return str(os.getpid())
 
 
 reports["pid"] = report_pid
 
 
-def report_resources(agent: "Agent") -> dict[str, float]:
+def report_resources(agent: "SessionEndpoint") -> dict[str, float]:
     if resource is None:
         return {}
 
