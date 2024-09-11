@@ -43,14 +43,14 @@ async def agent(server, environment):
     config.Config.set("config", "agent-repair-interval", "0")
     a = Agent(environment)
 
-    a.scheduler._executor_manager = InProcessExecutorManager(
+    executor = InProcessExecutorManager(
         environment, a._client, asyncio.get_event_loop(), logger, a.thread_pool, a._storage["code"], a._storage["env"], False
     )
+    a.executor_manager = executor
+    a.scheduler._executor_manager = executor
     a.scheduler._code_manager = DummyCodeManager(a._client)
 
     await a.start()
-    # Server doesn
-    await a.start_working()
 
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -67,6 +67,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     """
 
     env_id = environment
+    scheduler = agent.scheduler
 
     # First part - test the ResourceScheduler (retrieval of data from DB)
     Config.set("config", "agent-deploy-interval", "100")
@@ -78,7 +79,12 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     resource_container.Provider.set("agent2", "key", "value")
     resource_container.Provider.set("agent3", "key", "value")
 
-    async def make_version():
+    async def make_version(is_different=False):
+        """
+
+        :param is_different: make the standard version or one with a change
+        :return:
+        """
         version = await clienthelper.get_version()
         resources = []
         for agent in ["agent1", "agent2", "agent3"]:
@@ -87,7 +93,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                     {
                         "key": "key",
                         "value": "value",
-                        "id": "test::Wait[%s,key=key],v=%d" % (agent, version),
+                        "id": "test::Resource[%s,key=key],v=%d" % (agent, version),
                         "requires": ["test::Resource[%s,key=key3],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
@@ -96,8 +102,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                         "key": "key2",
                         "value": "value",
                         "id": "test::Resource[%s,key=key2],v=%d" % (agent, version),
-                        "requires": ["test::Wait[%s,key=key],v=%d" % (agent, version)],
-                        "purged": False,
+                        "requires": ["test::Resource[%s,key=key],v=%d" % (agent, version)],
+                        "purged": not is_different,
                         "send_event": False,
                     },
                     {
@@ -122,7 +128,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                         "id": "test::Resource[%s,key=key5],v=%d" % (agent, version),
                         "requires": [
                             "test::Resource[%s,key=key4],v=%d" % (agent, version),
-                            "test::Wait[%s,key=key],v=%d" % (agent, version),
+                            "test::Resource[%s,key=key],v=%d" % (agent, version),
                         ],
                         "purged": False,
                         "send_event": False,
@@ -170,6 +176,58 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     # timeout on single thread!
     await wait_for_resources(version1, n=1)
 
-    await resource_container.wait_for_done_with_waiters(client, env_id, version1)
+    await check_scheduler_state(resources, scheduler)
+
+    await clienthelper.wait_for_deployed(version1)
 
     await resource_action_consistency_check()
+
+    version1, resources = await make_version(True)
+    result = await client.put_version(
+        tid=env_id, version=version1, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version()
+    )
+    assert result.code == 200
+
+    # deploy and wait until one is ready
+    result = await client.release_version(env_id, version1, push=False)
+    assert result.code == 200
+
+    # all deployed!
+    async def done():
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
+        #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
+        total = summary["total"]
+        deployed = summary["by_state"]["deployed"]
+        return total == deployed
+
+    await retry_limited(done, 10)
+
+    await check_scheduler_state(resources, scheduler)
+
+    await resource_action_consistency_check()
+
+
+async def check_scheduler_state(resources, scheduler):
+    # State consistency check
+    for resource in resources:
+        id_without_version, _, _ = resource["id"].partition(",v=")
+        assert id_without_version in scheduler._state.resources
+        expected_resource_attributes = dict(resource)
+        current_attributes = dict(scheduler._state.resources[id_without_version].attributes)
+        # Id's have different versions
+        del expected_resource_attributes["id"]
+        del current_attributes["id"]
+        new_requires = []
+        for require in expected_resource_attributes["requires"]:
+            require_without_version, _, _ = require.partition(",v=")
+            new_requires.append(require_without_version)
+        expected_resource_attributes["requires"] = new_requires
+        assert current_attributes == expected_resource_attributes
+        # This resource has no requirements
+        if id_without_version not in scheduler._state.requires._primary:
+            assert expected_resource_attributes["requires"] == []
+        else:
+            assert scheduler._state.requires._primary[id_without_version] == set(expected_resource_attributes["requires"])

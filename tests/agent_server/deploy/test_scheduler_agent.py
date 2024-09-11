@@ -142,8 +142,6 @@ def make_resource_minimal(environment):
         """Produce a resource that is valid to the scheduler"""
         attributes = dict(values)
         attributes["requires"] = requires
-        out = dict(attributes=attributes, id=rid + f",v={version}", environment=environment, model=version)
-
         character = json.dumps(
             {k: v for k, v in attributes.items() if k not in ["requires", "provides", "version"]},
             default=custom_json_encoder,
@@ -154,7 +152,7 @@ def make_resource_minimal(environment):
         m.update(character.encode("utf-8"))
         attribute_hash = m.hexdigest()
 
-        return state.ResourceDetails(out, attribute_hash)
+        return state.ResourceDetails(rid, version, attributes, attribute_hash)
 
     return make_resource_minimal
 

@@ -27,7 +27,6 @@ from typing import Collection, TypeAlias
 from inmanta.agent import executor
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.resources import Id
-from inmanta.types import JsonType
 from inmanta.util.collections import BidirectionalManyToManyMapping
 
 
@@ -46,8 +45,8 @@ class ResourceDetails(executor.ResourceDetails):
 
     # FIXME: flatten out inheritance?
 
-    def __init__(self, resource_dict: JsonType, attribute_hash: AttributeHash) -> None:
-        super().__init__(resource_dict)
+    def __init__(self, id: ResourceIdStr, version: int, attributes: dict[str, object], attribute_hash: AttributeHash) -> None:
+        super().__init__(id, version, attributes)
         self.attribute_hash = attribute_hash
 
     attribute_hash: AttributeHash

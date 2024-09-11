@@ -31,7 +31,7 @@ import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence, cast
 
 import pkg_resources
 
@@ -75,14 +75,18 @@ class ResourceDetails:
     requires: Sequence[Id]
     attributes: dict[str, object]
 
-    def __init__(self, resource_dict: JsonType) -> None:
-        self.attributes = resource_dict["attributes"]
-        self.attributes["id"] = resource_dict["id"]
-        self.id = Id.parse_id(resource_dict["id"])
+    def __init__(self, id: ResourceIdStr, version: int, attributes: dict[str, object]) -> None:
+        self.attributes = attributes
+        self.id = Id.parse_id(id).copy(version=version)
         self.rid = self.id.resource_str()
         self.rvid = self.id.resource_version_str()
-        self.requires = [Id.parse_id(resource_id) for resource_id in resource_dict["attributes"]["requires"]]
-        self.model_version = resource_dict["model"]
+        self.attributes["id"] = self.rvid
+        self.model_version = version
+        self.requires = [Id.parse_id(resource_id) for resource_id in cast(list[ResourceIdStr], attributes["requires"])]
+
+    @classmethod
+    def from_json(cls, resource_dict: JsonType) -> "ResourceDetails":
+        return ResourceDetails(resource_dict["id"], resource_dict["model"], resource_dict["attributes"])
 
 
 @dataclasses.dataclass

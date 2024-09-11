@@ -997,8 +997,6 @@ src/inmanta/deploy/scheduler.py:0: note: def [_T] __init__(self, Iterable[_T], /
 src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/agent/forking_executor.py:0: note: This violates the Liskov substitution principle
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
-src/inmanta/agent/agent_new.py:0: error: Argument 3 to "MPManager" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
-src/inmanta/agent/agent_new.py:0: error: Argument 1 to "collect_report" has incompatible type "inmanta.agent.agent_new.Agent"; expected "inmanta.agent.agent.Agent"  [arg-type]
 src/inmanta/agent/agent.py:0: error: Cannot determine type of "ratelimiter"  [has-type]
 src/inmanta/validation_type.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "Mapping[str, object] | None")  [assignment]
 src/inmanta/server/validate_filter.py:0: error: Incompatible return value type (got "Callable[[object], list[tuple[RangeOperator, int]] | None]", expected "Callable[[object, object], list[tuple[RangeOperator, int]] | None]")  [return-value]

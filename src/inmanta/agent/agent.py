@@ -886,7 +886,7 @@ class AgentInstance:
             res_type = res["resource_type"]
 
             if res_type not in invalid_resources:
-                loaded_resources.append(ResourceDetails(res))
+                loaded_resources.append(ResourceDetails.from_json(res))
 
                 state = const.ResourceState[res["status"]]
                 if state in const.UNDEPLOYABLE_STATES:
@@ -907,7 +907,7 @@ class AgentInstance:
                 else:
                     failed_resources[res_type][0].add(res_id)
                 undeployable[res_id] = const.ResourceState.unavailable
-                loaded_resources.append(ResourceDetails(res))
+                loaded_resources.append(ResourceDetails.from_json(res))
 
         if len(failed_resources) > 0:
             for resource_type, (failed_resource_ids, log_line) in failed_resources.items():

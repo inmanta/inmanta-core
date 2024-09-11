@@ -140,9 +140,13 @@ class ResourceScheduler:
         :return: resource_mapping {id -> resource details} and require_mapping {id -> requires}
         """
         resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(environment=self._environment)
-        # TODO: optimize away to_dict
         resource_mapping = {
-            resource.resource_id: ResourceDetails(attribute_hash=resource.attribute_hash, resource_dict=resource.to_dict())
+            resource.resource_id: ResourceDetails(
+                attribute_hash=resource.attribute_hash,
+                id=resource.resource_id,
+                version=resource.model,
+                attributes=resource.attributes,
+            )
             for resource in resources_from_db
         }
         require_mapping = {
