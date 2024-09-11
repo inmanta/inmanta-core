@@ -1504,7 +1504,7 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     LOGGER.info("Locked, Waiting for heartbeat")
 
     def still_sending_heartbeats():
-        count = caplog.text.count("Level 3 sending heartbeat for")
+        count = caplog.text.count("TRACE sending heartbeat for")
         return count > 2
 
     await retry_limited(still_sending_heartbeats, 10)

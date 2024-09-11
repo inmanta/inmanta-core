@@ -37,10 +37,7 @@ from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVers
 from inmanta.loader import CodeLoader
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn
-from inmanta.util import NamedLock
-
-if typing.TYPE_CHECKING:
-    import inmanta.agent.agent as agent
+from inmanta.util import NamedLock, join_threadpools
 
 
 class InProcessExecutor(executor.Executor, executor.AgentInstance):
@@ -119,14 +116,14 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             await asyncio.get_running_loop().run_in_executor(self.thread_pool, self._cache.close)
         self.thread_pool.shutdown(wait=False)
 
-    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
+    async def join(self) -> None:
         """
         Called after stop to ensure complete shutdown
 
         :param thread_pool_finalizer: all threadpools that should be joined should be added here.
         """
         assert self._stopped
-        thread_pool_finalizer.append(self.thread_pool)
+        await join_threadpools([self.thread_pool])
         if self.periodic_cache_cleanup_job:
             try:
                 await self.periodic_cache_cleanup_job
@@ -219,7 +216,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_details.rvid: ctx.changes}
         response = await self.client.resource_deploy_done(
-            tid=resource_details.env_id,
+            tid=self.environment,
             rvid=resource_details.rvid,
             action_id=ctx.action_id,
             status=ctx.status,
@@ -243,7 +240,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             )
 
             await self.client.resource_action_update(
-                tid=resource_details.env_id,
+                tid=self.environment,
                 resource_ids=[resource_details.rvid],
                 action_id=uuid.uuid4(),
                 action=action,
@@ -277,7 +274,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         try:
             requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(
-                ctx.action_id, resource_details.env_id, resource_details.rvid
+                ctx.action_id, self.environment, resource_details.rvid
             )
         except Exception:
             ctx.set_status(const.ResourceState.failed)
@@ -296,7 +293,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         if ctx.facts:
             ctx.debug("Sending facts to the server")
-            set_fact_response = await self.client.set_parameters(tid=resource_details.env_id, parameters=ctx.facts)
+            set_fact_response = await self.client.set_parameters(tid=self.environment, parameters=ctx.facts)
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
@@ -313,16 +310,13 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param resources: Sequence of resources for which to perform a dryrun.
         :param dry_run_id: id for this dryrun
         """
-
-        env_id: uuid.UUID = resources[0].env_id
-
         async with self.activity_lock:
             with self._cache:
                 for resource in resources:
                     try:
                         resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
                     except Exception:
-                        await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource.rvid, changes={})
+                        await self.client.dryrun_update(tid=self.environment, id=dry_run_id, resource=resource.rvid, changes={})
                         continue
                     assert resource_obj is not None
                     ctx = handler.HandlerContext(resource_obj, True)
@@ -343,7 +337,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 exception=str(e),
                             )
                             await self.client.dryrun_update(
-                                tid=env_id,
+                                tid=self.environment,
                                 id=dry_run_id,
                                 resource=resource_id,
                                 changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
@@ -360,7 +354,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 if ctx.status == const.ResourceState.failed:
                                     changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 await self.client.dryrun_update(
-                                    tid=env_id, id=dry_run_id, resource=resource_id, changes=changes
+                                    tid=self.environment, id=dry_run_id, resource=resource_id, changes=changes
                                 )
                             except Exception as e:
                                 ctx.exception(
@@ -373,21 +367,23 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                     changes = {}
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 await self.client.dryrun_update(
-                                    tid=env_id, id=dry_run_id, resource=resource_id, changes=changes
+                                    tid=self.environment, id=dry_run_id, resource=resource_id, changes=changes
                                 )
 
                     except Exception:
                         ctx.exception("Unable to process resource for dryrun.")
                         changes = {}
                         changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
-                        await self.client.dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes=changes)
+                        await self.client.dryrun_update(
+                            tid=self.environment, id=dry_run_id, resource=resource_id, changes=changes
+                        )
                     finally:
                         if provider is not None:
                             provider.close()
 
                         finished = datetime.datetime.now().astimezone()
                         await self.client.resource_action_update(
-                            tid=env_id,
+                            tid=self.environment,
                             resource_ids=[resource_id],
                             action_id=ctx.action_id,
                             action=const.ResourceAction.dryrun,
@@ -402,8 +398,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         Get facts for a given resource
         :param resource: The resource for which to get facts.
         """
-        env_id: uuid.UUID = resource.env_id
-
         provider = None
         try:
             try:
@@ -433,17 +427,17 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         # Add facts set via the set_fact() method of the HandlerContext
                         parameters.extend(ctx.facts)
 
-                        await self.client.set_parameters(tid=env_id, parameters=parameters)
-                        finished = datetime.datetime.now().astimezone()
-                        await self.client.resource_action_update(
-                            tid=env_id,
-                            resource_ids=[resource.rvid],
-                            action_id=ctx.action_id,
-                            action=const.ResourceAction.getfact,
-                            started=started,
-                            finished=finished,
-                            messages=ctx.logs,
-                        )
+                    await self.client.set_parameters(tid=self.environment, parameters=parameters)
+                    finished = datetime.datetime.now().astimezone()
+                    await self.client.resource_action_update(
+                        tid=self.environment,
+                        resource_ids=[resource.rvid],
+                        action_id=ctx.action_id,
+                        action=const.ResourceAction.getfact,
+                        started=started,
+                        finished=finished,
+                        messages=ctx.logs,
+                    )
 
                 except Exception:
                     self.logger.exception("Unable to retrieve fact")
@@ -470,7 +464,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         client: inmanta.protocol.SessionClient,
         eventloop: asyncio.AbstractEventLoop,
         parent_logger: logging.Logger,
-        process: "agent.Agent",
+        thread_pool: ThreadPoolExecutor,
         code_dir: str,
         env_dir: str,
         code_loader: bool = True,
@@ -479,7 +473,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         self.client = client
         self.eventloop = eventloop
         self.logger = parent_logger
-        self.process = process
+        self.thread_pool = thread_pool
 
         self.executors: dict[str, InProcessExecutor] = {}
         self._creation_locks: inmanta.util.NamedLock = inmanta.util.NamedLock()
@@ -510,11 +504,10 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             out = self.executors[agent_name]
             del self.executors[agent_name]
             await out.stop()
-            return [out]
         return []
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
-        await asyncio.gather(*(child.join(thread_pool_finalizer) for child in self.executors.values()))
+        await asyncio.gather(*(child.join() for child in self.executors.values()))
 
     async def get_executor(
         self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
@@ -603,9 +596,9 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         async with self._loader_lock:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
-                self.process.thread_pool,
+                self.thread_pool,
                 self._env.install_for_config,
                 list(pkg_resources.parse_requirements(blueprint.requirements)),
                 blueprint.pip_config,
             )
-            await loop.run_in_executor(self.process.thread_pool, self._loader.deploy_version, blueprint.sources)
+            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)

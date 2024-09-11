@@ -381,7 +381,8 @@ def test_minus_x_option(snippetcompiler, cmd):
 entity Test:
     nuber attr
 end
-"""
+""",
+        autostd=True,
     )
 
     process = do_run([sys.executable, "-m", "inmanta.app"] + cmd, cwd=snippetcompiler.project_dir)

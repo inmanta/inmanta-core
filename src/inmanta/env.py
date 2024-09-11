@@ -813,6 +813,7 @@ import sys
         constraint_files: Optional[list[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
+        add_inmanta_requires: bool = True,
     ) -> None:
         """
         Perform a pip install in this environment, according to the given config
@@ -830,7 +831,10 @@ import sys
         if len(requirements) == 0 and len(paths) == 0:
             raise Exception("install_for_config requires at least one requirement or path to install")
         constraint_files = constraint_files if constraint_files is not None else []
-        inmanta_requirements = self._get_requirements_on_inmanta_package()
+        if add_inmanta_requires:
+            inmanta_requirements = self._get_requirements_on_inmanta_package()
+        else:
+            inmanta_requirements = []
 
         Pip.run_pip_install_command_from_config(
             python_path=self.python_path,
@@ -1054,8 +1058,10 @@ class CommandRunner:
         of the sub-process.
         """
         full_output = []
-        process = await asyncio.create_subprocess_exec(
-            cmd[0], *cmd[1:], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env_vars
+        # We use shell here to avoid
+        # the bug https://github.com/python/cpython/issues/103911#issuecomment-2333963137
+        process = await asyncio.create_subprocess_shell(
+            subprocess.list2cmdline(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env_vars
         )
         assert process.stdout is not None  # Make mypy happy
         async for line in process.stdout:
@@ -1108,11 +1114,14 @@ class ActiveEnv(PythonEnvironment):
         constraint_files: Optional[list[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
+        add_inmanta_requires: bool = True,
     ) -> None:
         if (not upgrade and self.are_installed(requirements)) and not paths:
             return
         try:
-            super().install_for_config(requirements, config, upgrade, constraint_files, upgrade_strategy, paths)
+            super().install_for_config(
+                requirements, config, upgrade, constraint_files, upgrade_strategy, paths, add_inmanta_requires
+            )
         finally:
             self.notify_change()
 
@@ -1422,10 +1431,13 @@ class VirtualEnv(ActiveEnv):
         constraint_files: Optional[list[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
+        add_inmanta_requires: bool = True,
     ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super().install_for_config(requirements, config, upgrade, constraint_files, upgrade_strategy, paths)
+        super().install_for_config(
+            requirements, config, upgrade, constraint_files, upgrade_strategy, paths, add_inmanta_requires
+        )
 
 
 class VenvCreationFailedError(Exception):
