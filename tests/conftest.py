@@ -1678,6 +1678,7 @@ def tmpvenv_active(
 
     # patch env.process_env to recognize this environment as the active one, deactive_venv restores it
     env.mock_process_env(python_path=str(python_path))
+    env.process_env.notify_change()
 
     yield tmpvenv
 
