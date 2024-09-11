@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump importlib-metadata from 8.4.0 to 8.5.0
+destination-branches:
+- iso7
+sections: {}
