@@ -23,12 +23,12 @@ from typing import TypeVar
 
 import pytest
 
+from agent_server.deploy.e2e.util import _wait_until_deployment_finishes
 from inmanta import const
 from inmanta.agent import Agent
 from inmanta.agent.handler import ResourceHandler
 from inmanta.protocol import SessionClient, VersionMatch, common
 from utils import log_contains, make_random_file
-from agent_server.deploy.e2e.util import _wait_until_deployment_finishes
 
 T = TypeVar("T")
 

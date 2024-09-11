@@ -3,7 +3,7 @@ from utils import retry_limited
 
 
 async def _wait_until_deployment_finishes(client: Client, environment: str, version: int = -1, timeout: int = 10) -> None:
-    """ Interface kept for backward compat"""
+    """Interface kept for backward compat"""
 
     async def done():
         result = await client.resource_list(environment, deploy_summary=True)
@@ -15,6 +15,6 @@ async def _wait_until_deployment_finishes(client: Client, environment: str, vers
         total = summary["total"]
         available = summary["by_state"]["available"]
         deploying = summary["by_state"]["deploying"]
-        return available+deploying == 0
+        return available + deploying == 0
 
     await retry_limited(done, 10)

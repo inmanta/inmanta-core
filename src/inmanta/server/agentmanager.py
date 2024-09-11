@@ -1272,7 +1272,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
 
-
         proc: subprocess.Process = await self._fork_inmanta(
             [
                 "--log-file-level",
@@ -1387,7 +1386,7 @@ username={opt.db_username.get()}
 password={opt.db_password.get()}
 
             """
-# TODO: connection pool
+        # TODO: connection pool
         return config
 
     async def _fork_inmanta(
@@ -1517,8 +1516,6 @@ password={opt.db_password.get()}
         await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
         if not no_auto_start_scheduler:
             await self._ensure_scheduler(env_db)
-
-
 
 
 no_auto_start_scheduler = False

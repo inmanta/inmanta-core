@@ -132,6 +132,7 @@ class DatabaseService(protocol.ServerSlice):
         assert self._db_pool_watcher is not None  # Make mypy happy
         self._db_pool_watcher.check_for_pool_exhaustion()
 
+
 async def server_db_connect() -> asyncpg.pool.Pool:
     database_host = opt.db_host.get()
     database_port = opt.db_port.get()

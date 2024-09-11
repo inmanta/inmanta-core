@@ -21,6 +21,7 @@ import logging
 
 import pytest
 
+import inmanta.server.agentmanager as agentmanager
 import utils
 from agent_server.deploy.scheduler_test_util import DummyCodeManager
 from inmanta import config
@@ -28,20 +29,21 @@ from inmanta.agent.agent_new import Agent
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.config import Config
 from inmanta.server import SLICE_AGENT_MANAGER
-import inmanta.server.agentmanager as agentmanager
 from inmanta.server.config import server_use_resource_scheduler
 from inmanta.util import get_compiler_version, groupby
 from utils import resource_action_consistency_check, retry_limited
 
 logger = logging.getLogger(__name__)
 
+
 @pytest.fixture(scope="function")
 async def auto_start_agent(server_config):
     return False
 
+
 @pytest.fixture(scope="function")
 async def server_config(server_config, auto_start_agent):
-    agentmanager.no_auto_start_scheduler= not auto_start_agent
+    agentmanager.no_auto_start_scheduler = not auto_start_agent
     server_use_resource_scheduler.set("True")
     yield server_config
     agentmanager.no_auto_start_scheduler = False

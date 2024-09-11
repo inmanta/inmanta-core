@@ -33,9 +33,11 @@ from utils import resource_action_consistency_check, retry_limited
 
 logger = logging.getLogger(__name__)
 
+
 @pytest.fixture(scope="function")
 async def auto_start_agent(server_config):
     return False
+
 
 async def test_basics(agent, resource_container, clienthelper, client, environment):
     """
@@ -205,4 +207,3 @@ async def check_scheduler_state(resources, scheduler):
             assert expected_resource_attributes["requires"] == []
         else:
             assert scheduler._state.requires._primary[id_without_version] == set(expected_resource_attributes["requires"])
-
