@@ -1211,7 +1211,7 @@ class OrchestrationService(protocol.ServerSlice):
 
                 client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
                 if client is not None:
-                    self.add_background_task(client.trigger_release_version(env.id))
+                    self.add_background_task(client.trigger_read_version(env.id))
                 else:
                     LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)
             # Old code

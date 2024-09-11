@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 import os
 import uuid
@@ -39,13 +38,10 @@ LOGGER = logging.getLogger(__name__)
 
 class Agent(SessionEndpoint):
     """
-    An agent to enact changes upon resources. This agent listens to the
-    message bus for changes.
-    """
+    This is the new scheduler, adapted to the agent protocol
 
-    # cache reference to THIS ioloop for handlers to push requests on it
-    # defer to start, just to be sure
-    _io_loop: asyncio.AbstractEventLoop
+    It serves a single endpoint that allows communications with the scheduler
+    """
 
     def __init__(
         self,
@@ -54,7 +50,7 @@ class Agent(SessionEndpoint):
         """
         :param environment: environment id
         """
-        super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
+        super().__init__(name="agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.thread_pool = ThreadPoolExecutor(1, thread_name_prefix="mainpool")
         self._storage = self.check_storage()
@@ -64,65 +60,53 @@ class Agent(SessionEndpoint):
             if environment is None:
                 raise Exception("The agent requires an environment to be set.")
         self.set_environment(environment)
-        assert self.environment is not None
+
+        assert self._env_id is not None
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
-        self.scheduler = ResourceScheduler(self.environment)
+        self.scheduler = ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
-        # To override in testing
+        assert self._env_id is not None
         return forking_executor.MPManager(
             self.thread_pool,
             self.sessionid,
-            self.environment,
+            self._env_id,
             config.log_dir.get(),
             self._storage["executor"],
             LOGGER.level,
-            False,
+            cli_log=False,
         )
 
     async def stop(self) -> None:
-        await super().stop()
-
         if self.working:
             await self.stop_working()
-
         threadpools_to_join = [self.thread_pool]
-
         await self.executor_manager.join(threadpools_to_join, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
-
         self.thread_pool.shutdown(wait=False)
 
         await join_threadpools(threadpools_to_join)
+        await super().stop()
 
     async def start_connected(self) -> None:
         """
-        This method is required because:
-            1) The client transport is required to retrieve the autostart_agent_map from the server.
-            2) _init_endpoint_names() needs to be an async method and async calls are not possible in a constructor.
+        Setup our single endpoint
         """
         await self.add_end_point_name(AGENT_SCHEDULER_ID)
 
-    async def start(self) -> None:
-        # cache reference to THIS ioloop for handlers to push requests on it
-        self._io_loop = asyncio.get_running_loop()
-        await super().start()
-
     async def start_working(self) -> None:
         """Start working, once we have a session"""
-        # Todo: recycle them when we restart
         if self.working:
             return
         self.working = True
-        await self.scheduler.start()
         await self.executor_manager.start()
+        await self.scheduler.start()
 
     async def stop_working(self) -> None:
-        """Stop working"""
+        """Stop working, connection lost"""
         if not self.working:
             return
-        # Todo: recycle them when we restart
         self.working = False
         await self.executor_manager.stop()
         await self.scheduler.stop()
@@ -133,14 +117,14 @@ class Agent(SessionEndpoint):
         pass
 
     async def unpause(self, name: str) -> Apireturn:
-        if not name == AGENT_SCHEDULER_ID:
+        if name != AGENT_SCHEDULER_ID:
             return 404, "No such agent"
 
         await self.start_working()
         return 200
 
     async def pause(self, name: str) -> Apireturn:
-        if not name == AGENT_SCHEDULER_ID:
+        if name != AGENT_SCHEDULER_ID:
             return 404, "No such agent"
 
         await self.stop_working()
@@ -181,14 +165,13 @@ class Agent(SessionEndpoint):
             await self.scheduler.repair()
         return 200
 
-    @protocol.handle(methods.release_version, env="tid", agent="id")
-    async def read_version(self, env: uuid.UUID, agent: str, _: bool) -> Apireturn:
+    @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
+    async def read_version(self, env: uuid.UUID) -> Apireturn:
         """
         Send a notification to the scheduler that a new version has been released
         """
         assert env == self.environment
-        assert agent == AGENT_SCHEDULER_ID
-        await self.scheduler.new_version()
+        await self.scheduler.read_version()
         return 200
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")

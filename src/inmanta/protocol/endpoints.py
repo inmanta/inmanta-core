@@ -143,10 +143,6 @@ class Endpoint(TaskHandler[None]):
 
     node_name = property(get_node_name)
 
-    async def stop(self) -> None:
-        """Stop this endpoint"""
-        await super().stop()
-
 
 class SessionEndpoint(Endpoint, CallTarget):
     """
