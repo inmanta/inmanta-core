@@ -49,7 +49,8 @@ implement A using a when std::count(self.list) > 0
 
 a = A(list=A())
 test = a.optional
-        """
+        """,
+        autostd=True,
     )
     # fork new Python interpreter to force new Python hash seed, which is a source for nondeterminism
     subprocess.check_output(["python", "-m", "inmanta.app", "compile"], cwd=project.path)
