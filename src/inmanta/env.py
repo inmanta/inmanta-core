@@ -762,8 +762,9 @@ class PythonEnvironment:
 
         with open(pip_path, "w", encoding="utf-8") as fd:
             fd.write(
-                """#!/bin/sh
-$(dirname "$0")/python -m pip $@
+                """#!/usr/bin/env bash
+source "$(dirname "$0")/activate"
+python -m pip $@
                 """.strip()
             )
         os.chmod(pip_path, 0o755)
