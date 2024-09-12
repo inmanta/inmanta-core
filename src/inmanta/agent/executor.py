@@ -337,6 +337,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         Remove the venv of the executor
         """
         try:
+            LOGGER.debug("Removing venv %s", self.env_path)
             shutil.rmtree(self.env_path)
         except Exception:
             LOGGER.exception(

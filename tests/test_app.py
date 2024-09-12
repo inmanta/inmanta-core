@@ -345,7 +345,8 @@ end
 implement Test using std::none
 
 o = Test(attr="1234")
-        """
+        """,
+        autostd=True,
     )
     cwd = snippetcompiler.project_dir if cache_cf_files else "."
 
