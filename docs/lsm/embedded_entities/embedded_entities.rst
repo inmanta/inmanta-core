@@ -73,7 +73,7 @@ of the relationship to the embedding entity starts with an underscore as require
 .. literalinclude:: embedded_entities_sources/example_bidirectional_relationship.cf
     :linenos:
     :language: inmanta
-    :emphasize-lines: 16,17
+    :emphasize-lines: 15
     :caption: main.cf
 
 
@@ -100,7 +100,7 @@ modifiers on relationships:
 
 .. literalinclude:: embedded_entities_sources/example_attribute_modifiers_on_relations.cf
     :linenos:
-    :emphasize-lines: 16,17
+    :emphasize-lines: 15,16
     :language: inmanta
     :caption: main.cf
 
