@@ -23,8 +23,7 @@ import pytest
 
 import inmanta.server.agentmanager as agentmanager
 import utils
-from agent_server.deploy.e2e.util import ClientHelper
-from agent_server.deploy.scheduler_test_util import DummyCodeManager
+from agent_server.deploy.scheduler_test_util import DummyCodeManager, ClientHelper
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.server import SLICE_AGENT_MANAGER

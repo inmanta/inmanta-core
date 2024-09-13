@@ -18,7 +18,7 @@
 
 import logging
 
-from agent_server.deploy.e2e.util import wait_full_success
+from agent_server.deploy.scheduler_test_util import wait_full_success
 from inmanta import const
 from inmanta.deploy.state import DeploymentResult
 from utils import resource_action_consistency_check
