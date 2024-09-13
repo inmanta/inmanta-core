@@ -100,7 +100,7 @@ class Deploy(WithHashMatchTask):
                     my_state.status = state.ResourceStatus.UP_TO_DATE
                     my_state.deployment_result = state.DeploymentResult.DEPLOYED
                 else:
-                    # FIXME: WDB to Sander: do we set status here as well?
+                    # FIXME[#8008]: WDB to Sander: do we set status here as well?
                     my_state.deployment_result = state.DeploymentResult.FAILED
                 scheduler._work.notify_provides(self)
             # The deploy that finished has become stale (state has changed since the deploy started).
