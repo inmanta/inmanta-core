@@ -18,8 +18,6 @@
 
 import logging
 
-import pytest
-
 from agent_server.deploy.e2e.util import wait_full_success
 from inmanta import const
 from inmanta.deploy.state import DeploymentResult
@@ -125,6 +123,17 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     await resource_action_consistency_check()
     await check_server_state_vs_scheduler_state(client, environment, scheduler)
 
+    # check states
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    summary = result.result["metadata"]["deploy_summary"]
+    # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
+    #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
+    print(summary)
+    assert 10 == summary["by_state"]["deployed"]
+    assert 1 == summary["by_state"]["failed"]
+    assert 4 == summary["by_state"]["skipped"]
+
     version1, resources = await make_version(True)
     await clienthelper.put_version_simple(version=version1, resources=resources)
 
@@ -143,6 +152,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     await wait_full_success(client, environment)
 
+
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
@@ -158,7 +168,6 @@ async def check_server_state_vs_scheduler_state(client, environment, scheduler):
         }
 
         assert state_correspondence[status] == state.deployment_result
-
 
 
 async def check_scheduler_state(resources, scheduler):
