@@ -16,47 +16,14 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 
 import pytest
 
-import utils
-from agent_server.deploy.scheduler_test_util import DummyCodeManager
-from inmanta import config
-from inmanta.agent.agent_new import Agent
-from inmanta.agent.in_process_executor import InProcessExecutorManager
-from inmanta.config import Config
-from inmanta.server import SLICE_AGENT_MANAGER
-from inmanta.util import get_compiler_version, groupby
-from utils import resource_action_consistency_check, retry_limited
+from agent_server.deploy.e2e.util import _wait_until_deployment_finishes
+from utils import resource_action_consistency_check
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture(scope="function")
-async def agent(server, environment):
-    """Construct an agent that can execute using the resource container"""
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
-    a = Agent(environment)
-
-    executor = InProcessExecutorManager(
-        environment, a._client, asyncio.get_event_loop(), logger, a.thread_pool, a._storage["code"], a._storage["env"], False
-    )
-    a.executor_manager = executor
-    a.scheduler._executor_manager = executor
-    a.scheduler._code_manager = DummyCodeManager(a._client)
-
-    await a.start()
-
-    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-    yield a
-
-    await a.stop()
 
 
 async def test_basics(agent, resource_container, clienthelper, client, environment):
@@ -68,10 +35,6 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     env_id = environment
     scheduler = agent.scheduler
-
-    # First part - test the ResourceScheduler (retrieval of data from DB)
-    Config.set("config", "agent-deploy-interval", "100")
-    Config.set("server", "new-resource-scheduler", "True")
 
     resource_container.Provider.reset()
     # set the deploy environment
@@ -137,77 +100,51 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             )
         return version, resources
 
-    async def wait_for_resources(version: int, n: int) -> None:
-        result = await client.get_version(env_id, version)
-        assert result.code == 200
-
-        def done_per_agent(result):
-            done = [x for x in result.result["resources"] if x["status"] == "deployed"]
-            peragent = groupby(done, lambda x: x["agent"])
-            return {agent: len([x for x in grp]) for agent, grp in peragent}
-
-        def mindone(result):
-            alllist = done_per_agent(result).values()
-            if len(alllist) == 0:
-                return 0
-            return min(alllist)
-
-        async def done():
-            result = await client.get_version(env_id, version)
-            return mindone(result) < n
-
-        await retry_limited(done, 10)
-
     logger.info("setup done")
 
     version1, resources = await make_version()
-    result = await client.put_version(
-        tid=env_id, version=version1, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version()
-    )
-    assert result.code == 200
+    await clienthelper.put_version_simple(version=version1, resources=resources)
 
     logger.info("first version pushed")
 
     # deploy and wait until one is ready
-    result = await client.release_version(env_id, version1, push=False)
+    result = await client.release_version(env_id, version1)
     assert result.code == 200
+
+    await clienthelper.wait_for_released(version1)
 
     logger.info("first version released")
     # timeout on single thread!
-    await wait_for_resources(version1, n=1)
-
     await check_scheduler_state(resources, scheduler)
 
-    await clienthelper.wait_for_deployed(version1)
+    await _wait_until_deployment_finishes(client, environment)
 
     await resource_action_consistency_check()
 
     version1, resources = await make_version(True)
-    result = await client.put_version(
-        tid=env_id, version=version1, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version()
-    )
-    assert result.code == 200
+    await clienthelper.put_version_simple(version=version1, resources=resources)
 
     # deploy and wait until one is ready
     result = await client.release_version(env_id, version1, push=False)
-    assert result.code == 200
+    await clienthelper.wait_for_released(version1)
 
-    # all deployed!
-    async def done():
-        result = await client.resource_list(environment, deploy_summary=True)
-        assert result.code == 200
-        summary = result.result["metadata"]["deploy_summary"]
-        # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
-        #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
-        total = summary["total"]
-        deployed = summary["by_state"]["deployed"]
-        return total == deployed
-
-    await retry_limited(done, 10)
+    await _wait_until_deployment_finishes(client, environment)
 
     await check_scheduler_state(resources, scheduler)
 
     await resource_action_consistency_check()
+
+
+@pytest.mark.skip("Need failure state awareness")
+async def test_deploy_trigger():
+    # copy from test_deploy_trigger name in test_deploy_trigger.py
+    pass
+
+
+@pytest.mark.skip("Need failure state awareness")
+async def test_increment_interactions():
+    # copy from test_increment_interactions
+    pass
 
 
 async def check_scheduler_state(resources, scheduler):

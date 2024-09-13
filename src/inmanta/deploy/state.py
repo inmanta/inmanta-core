@@ -95,6 +95,9 @@ class ResourceState:
     status: ResourceStatus
     deployment_result: DeploymentResult
 
+    def needs_deploy(self) -> bool:
+        return self.status == ResourceStatus.HAS_UPDATE or self.deployment_result != DeploymentResult.DEPLOYED
+
 
 @dataclass(kw_only=True)
 class ModelState:

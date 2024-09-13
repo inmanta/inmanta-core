@@ -20,47 +20,32 @@ import abc
 import asyncio
 import functools
 import itertools
-import typing
 from collections.abc import Iterator, Mapping, Set
 from dataclasses import dataclass
-from typing import Callable, Generic, Optional, TypeAlias, TypeVar
+from typing import Callable, Generic, Optional, TypeVar
 
 from inmanta.data.model import ResourceIdStr
+from inmanta.deploy import scheduler, tasks
 from inmanta.resources import Id
 
 
 @dataclass(frozen=True, kw_only=True)
-class _Task(abc.ABC):
+class Task(abc.ABC):
     """
     Resource action task. Represents the execution of a specific resource action for a given resource.
     """
 
     resource: ResourceIdStr
 
+    @abc.abstractmethod
+    async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
+        """ the scheduler is considered to be a friend class: access to internal members is expected """
+        pass
 
-class Deploy(_Task):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class DryRun(_Task):
-    version: int
-
-
-class RefreshFact(_Task):
-    pass
+    def delete_with_resource(self) -> bool:
+        return True
 
 
-class PoisonPill(_Task):
-    """
-    Task to signal queue shutdown
-
-    It is used to make sure all workers wake up to observe that they have been closed.
-    It functions mostly as a no-op
-    """
-
-
-Task: TypeAlias = Deploy | DryRun | RefreshFact | PoisonPill
 """
 Type alias for the union of all task types. Allows exhaustive case matches.
 """
@@ -219,7 +204,7 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
     def send_shutdown(self) -> None:
         """Wake up all wrokers after shutdown is signalled"""
         poison_pill = TaskQueueItem(
-            task=PrioritizedTask(task=PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")), priority=0),
+            task=PrioritizedTask(task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")), priority=0),
             insert_order=self._entry_count,
         )
         self._entry_count += 1
@@ -270,7 +255,7 @@ class BlockedDeploy:
     Deploy task that is blocked on one or more of its dependencies (subset of its requires relation).
     """
 
-    task: PrioritizedTask[Deploy]
+    task: PrioritizedTask["tasks.Deploy"]
     blocked_on: set[ResourceIdStr]
 
 
@@ -359,7 +344,7 @@ class ScheduledWork:
                 # definitely not scheduled
                 return False
             # finally, check more expensive agent queue
-            task: Deploy = Deploy(resource=resource)
+            task: tasks.Deploy = tasks.Deploy(resource=resource)
             if task in self.agent_queues:
                 # populate cache
                 queued.add(resource)
@@ -383,7 +368,7 @@ class ScheduledWork:
                 #
                 # discard rather than remove because task may already be running, in which case we leave it run its course
                 # and simply add a new one
-                task: Deploy = Deploy(resource=resource)
+                task: tasks.Deploy = tasks.Deploy(resource=resource)
                 priority: Optional[int] = self.agent_queues.discard(task)
                 queued.remove(resource)
                 self.waiting[resource] = BlockedDeploy(
@@ -408,7 +393,7 @@ class ScheduledWork:
             }
             self.waiting[resource] = BlockedDeploy(
                 # FIXME[#8015]: priority
-                task=PrioritizedTask(task=Deploy(resource=resource), priority=0),
+                task=PrioritizedTask(task=tasks.Deploy(resource=resource), priority=0),
                 blocked_on=blocked_on,
             )
             not_scheduled.discard(resource)
@@ -450,23 +435,10 @@ class ScheduledWork:
         # additionally delete from agent_queues if a task is already queued
         task: Task
         for task in self.agent_queues.get_tasks_for_resource(resource):
-            delete: bool
-            match task:
-                case Deploy():
-                    delete = True
-                case DryRun():
-                    delete = False
-                case RefreshFact():
-                    delete = True
-                case PoisonPill():
-                    # don't care, the end is near
-                    delete = False
-                case _ as _never:
-                    typing.assert_never(_never)
-            if delete:
+            if task.delete_with_resource():
                 self.agent_queues.discard(task)
 
-    def notify_provides(self, finished_deploy: Deploy) -> None:
+    def notify_provides(self, finished_deploy: "tasks.Deploy") -> None:
         # FIXME[#8010]: consider failure scenarios -> check how current agent does it, e.g. skip-for-undefined
         # FIXME[#8008]: docstring + mention under lock + mention only iff not stale
         resource: ResourceIdStr = finished_deploy.resource

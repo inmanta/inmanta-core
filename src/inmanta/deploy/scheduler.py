@@ -17,22 +17,20 @@
 """
 
 import asyncio
-import datetime
 import logging
-import traceback
 import uuid
 from collections.abc import Mapping, Set
-from typing import Any, Optional
+from typing import Any
 
-from inmanta import const, data, resources
+import inmanta.deploy.tasks
+from inmanta import data, resources
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.const import ResourceAction
 from inmanta.data import Resource
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
-from inmanta.deploy.work import PoisonPill
+from inmanta.deploy.work import Task
 from inmanta.protocol import Client
 
 LOGGER = logging.getLogger(__name__)
@@ -113,9 +111,7 @@ class ResourceScheduler:
         """
         async with self._scheduler_lock:
             # FIXME[#8008]: more efficient access to dirty set by caching it on the ModelState
-            dirty: Set[ResourceIdStr] = {
-                r for r, details in self._state.resource_state.items() if details.status == ResourceStatus.HAS_UPDATE
-            }
+            dirty: Set[ResourceIdStr] = {r for r, details in self._state.resource_state.items() if details.needs_deploy()}
             # FIXME[#8008]: pass in running deploys
             self._work.update_state(ensure_scheduled=dirty, running_deploys=set())
 
@@ -248,115 +244,10 @@ class ResourceScheduler:
         """Start processing for the given agent"""
         self._workers[agent] = asyncio.create_task(self._run_for_agent(agent))
 
-    async def _run_task(self, agent: str, task: work.Task, resource_details: ResourceDetails) -> None:
-        """Run a task"""
-        match task:
-            case work.Deploy():
-                await self.perform_deploy(agent, resource_details)
-            case _:
-                print("Nothing here!")
-
-    async def perform_deploy(self, agent: str, resource_details: ResourceDetails) -> None:
-        """
-        Perform an actual deploy on an agent.
-
-        :param agent:
-        :param resource_details:
-        """
-        # FIXME: WDB to Sander: is the version of the state the correct version?
-        #   It may happen that the set of types no longer matches the version?
-        # FIXME: code loading interface is not nice like this,
-        #   - we may want to track modules per agent, instead of types
-        #   - we may also want to track the module version vs the model version
-        #       as it avoid the problem of fast chanfing model versions
-
-        async def report_deploy_failure(excn: Exception) -> None:
-            res_type = resource_details.id.entity_type
-            log_line = data.LogLine.log(
-                logging.ERROR,
-                "All resources of type `%(res_type)s` failed to load handler code or install handler code "
-                "dependencies: `%(error)s`\n%(traceback)s",
-                res_type=res_type,
-                error=str(excn),
-                traceback="".join(traceback.format_tb(excn.__traceback__)),
-            )
-            await self._client.resource_action_update(
-                tid=self._environment,
-                resource_ids=[resource_details.rvid],
-                action_id=uuid.uuid4(),
-                action=ResourceAction.deploy,
-                started=datetime.datetime.now().astimezone(),
-                finished=datetime.datetime.now().astimezone(),
-                messages=[log_line],
-                status=const.ResourceState.unavailable,
-            )
-
-        # Find code
-        code, invalid_resources = await self._code_manager.get_code(
-            environment=self._environment, version=self._state.version, resource_types=self._state.get_types_for_agent(agent)
-        )
-
-        # Bail out if this failed
-        if resource_details.id.entity_type in invalid_resources:
-            await report_deploy_failure(invalid_resources[resource_details.id.entity_type])
-            return
-
-        # Get executor
-        my_executor: executor.Executor = await self._executor_manager.get_executor(
-            agent_name=agent, agent_uri="NO_URI", code=code
-        )
-        failed_resources = my_executor.failed_resources
-
-        # Bail out if this failed
-        if resource_details.id.entity_type in failed_resources:
-            await report_deploy_failure(failed_resources[resource_details.id.entity_type])
-            return
-
-        # DEPLOY!!!
-        gid = uuid.uuid4()
-        # FIXME: reason argument is not used
-        await my_executor.execute(gid, resource_details, "New Scheduler initiated action")
-
-    async def _work_once(self, agent: str) -> None:
-        task: work.Task = await self._work.agent_queues.queue_get(agent)
-        # FIXME[#8008]: skip and reschedule deploy / refresh-fact task if resource marked as update pending?
-        if isinstance(task, PoisonPill):
-            # wake up and return, queue will be shut down
-            return
-        resource_details: ResourceDetails
-        async with self._scheduler_lock:
-            # fetch resource details atomically under lock
-            try:
-                resource_details = self._state.resources[task.resource]
-            except KeyError:
-                # Stale resource, can simply be dropped.
-                # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
-                # because of this check, and an intrinsic part of the locking design because it's preferred over wider
-                # locking for performance reasons.
-                return
-
-        await self._run_task(agent, task, resource_details)
-
-        # post-processing
-        match task:
-            case work.Deploy():
-                async with self._scheduler_lock:
-                    # refresh resource details for latest model state
-                    new_details: Optional[ResourceDetails] = self._state.resources.get(task.resource, None)
-                    if new_details is not None and new_details.attribute_hash == resource_details.attribute_hash:
-                        # FIXME[#8010]: pass success/failure to notify_provides()
-                        # FIXME[#8008]: iff deploy was successful set resource status and deployment result
-                        #               in self.state.resources
-                        self._work.notify_provides(task)
-                    # The deploy that finished has become stale (state has changed since the deploy started).
-                    # Nothing to report on a stale deploy.
-                    # A new deploy for the current model state will have been queued already.
-            case _:
-                # nothing to do
-                pass
-        self._work.agent_queues.task_done(agent)
-
     async def _run_for_agent(self, agent: str) -> None:
         """Main loop for one agent"""
         while self._running:
-            await self._work_once(agent)
+            task: Task = await self._work.agent_queues.queue_get(agent)
+            # FIXME[#8008]: skip and reschedule deploy / refresh-fact task if resource marked as update pending?
+            await task.execute(self, agent)
+            self._work.agent_queues.task_done(agent)

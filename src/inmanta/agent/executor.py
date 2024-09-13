@@ -40,6 +40,7 @@ import inmanta.util
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
+from inmanta.const import ResourceState
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
@@ -486,7 +487,7 @@ class Executor(abc.ABC):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-    ) -> None:
+    ) -> ResourceState:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
 
