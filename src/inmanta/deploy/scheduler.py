@@ -247,6 +247,10 @@ class ResourceScheduler:
         """Main loop for one agent"""
         while self._running:
             task: Task = await self._work.agent_queues.queue_get(agent)
-            # FIXME[#8008]: skip and reschedule deploy / refresh-fact task if resource marked as update pending?
-            await task.execute(self, agent)
+            try:
+                # FIXME[#8008]: skip and reschedule deploy / refresh-fact task if resource marked as update pending?
+                await task.execute(self, agent)
+            except Exception:
+                LOGGER.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
+
             self._work.agent_queues.task_done(agent)

@@ -20,8 +20,9 @@ import logging
 
 import pytest
 
-from agent_server.deploy.e2e.util import _wait_until_deployment_finishes, wait_full_success
+from agent_server.deploy.e2e.util import wait_full_success
 from inmanta import const
+from inmanta.deploy.state import DeploymentResult
 from utils import resource_action_consistency_check
 
 logger = logging.getLogger(__name__)
@@ -119,9 +120,10 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     # timeout on single thread!
     await check_scheduler_state(resources, scheduler)
 
-    await _wait_until_deployment_finishes(client, environment)
+    await clienthelper.wait_for_deployed()
 
     await resource_action_consistency_check()
+    await check_server_state_vs_scheduler_state(client, environment, scheduler)
 
     version1, resources = await make_version(True)
     await clienthelper.put_version_simple(version=version1, resources=resources)
@@ -130,7 +132,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     result = await client.release_version(env_id, version1, push=False)
     await clienthelper.wait_for_released(version1)
 
-    await _wait_until_deployment_finishes(client, environment)
+    await clienthelper.wait_for_deployed()
 
     await check_scheduler_state(resources, scheduler)
 
@@ -141,11 +143,22 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     await wait_full_success(client, environment)
 
+async def check_server_state_vs_scheduler_state(client, environment, scheduler):
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    for item in result.result["data"]:
+        the_id = item["resource_id"]
+        status = item["status"]
+        state = scheduler._state.resource_state[the_id]
 
-@pytest.mark.skip("Need failure state awareness")
-async def test_increment_interactions():
-    # copy from test_increment_interactions
-    pass
+        state_correspondence = {
+            "deployed": DeploymentResult.DEPLOYED,
+            "skipped": DeploymentResult.FAILED,
+            "failed": DeploymentResult.FAILED,
+        }
+
+        assert state_correspondence[status] == state.deployment_result
+
 
 
 async def check_scheduler_state(resources, scheduler):

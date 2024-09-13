@@ -25,7 +25,6 @@ from dataclasses import dataclass
 from typing import Callable, Generic, Optional, TypeVar
 
 from inmanta.data.model import ResourceIdStr
-from inmanta.deploy import scheduler, tasks
 from inmanta.resources import Id
 
 
@@ -450,3 +449,8 @@ class ScheduledWork:
             # remove the finished resource from the blocked on set and check if that unblocks the dependant
             blocked_deploy.blocked_on.discard(resource)
             self._queue_if_ready(blocked_deploy)
+
+
+# Ugly but prevents import loop
+# Pure runtime dependency, so can be here
+from inmanta.deploy import scheduler, tasks
