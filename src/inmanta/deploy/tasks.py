@@ -24,13 +24,30 @@ import uuid
 from dataclasses import dataclass
 from typing import Optional, TypeAlias
 
-import inmanta.deploy.work as work
 from inmanta import const, data
 from inmanta.agent import executor
+from inmanta.data import ResourceIdStr
 from inmanta.deploy import scheduler, state
 
 
-class PoisonPill(work.Task):
+@dataclass(frozen=True, kw_only=True)
+class Task(abc.ABC):
+    """
+    Resource action task. Represents the execution of a specific resource action for a given resource.
+    """
+
+    resource: ResourceIdStr
+
+    @abc.abstractmethod
+    async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
+        """the scheduler is considered to be a friend class: access to internal members is expected"""
+        pass
+
+    def delete_with_resource(self) -> bool:
+        return True
+
+
+class PoisonPill(Task):
     """
     Task to signal queue shutdown
 
@@ -42,7 +59,7 @@ class PoisonPill(work.Task):
         pass
 
 
-class WithHashMatchTask(work.Task):
+class WithHashMatchTask(Task):
 
     async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
         resource_details: "state.ResourceDetails"
@@ -151,7 +168,7 @@ class Deploy(WithHashMatchTask):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DryRun(work.Task):
+class DryRun(Task):
     version: int
 
     def delete_with_resource(self) -> bool:

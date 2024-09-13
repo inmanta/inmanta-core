@@ -29,7 +29,7 @@ from inmanta.data import Resource
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
-from inmanta.deploy.work import Task
+from inmanta.deploy.tasks import Task
 from inmanta.protocol import Client
 
 LOGGER = logging.getLogger(__name__)
