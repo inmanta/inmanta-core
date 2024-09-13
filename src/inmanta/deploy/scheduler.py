@@ -22,7 +22,6 @@ import uuid
 from collections.abc import Mapping, Set
 from typing import Any
 
-import inmanta.deploy.tasks
 from inmanta import data, resources
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager

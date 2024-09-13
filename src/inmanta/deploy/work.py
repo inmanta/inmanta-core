@@ -39,7 +39,7 @@ class Task(abc.ABC):
 
     @abc.abstractmethod
     async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
-        """ the scheduler is considered to be a friend class: access to internal members is expected """
+        """the scheduler is considered to be a friend class: access to internal members is expected"""
         pass
 
     def delete_with_resource(self) -> bool:

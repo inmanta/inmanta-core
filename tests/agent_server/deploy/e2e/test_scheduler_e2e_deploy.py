@@ -20,7 +20,8 @@ import logging
 
 import pytest
 
-from agent_server.deploy.e2e.util import _wait_until_deployment_finishes
+from agent_server.deploy.e2e.util import _wait_until_deployment_finishes, wait_full_success
+from inmanta import const
 from utils import resource_action_consistency_check
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     resource_container.Provider.set("agent1", "key", "value")
     resource_container.Provider.set("agent2", "key", "value")
     resource_container.Provider.set("agent3", "key", "value")
+    resource_container.Provider.set_fail("agent1", "key3", 2)
 
     async def make_version(is_different=False):
         """
@@ -134,11 +136,10 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     await resource_action_consistency_check()
 
+    # deploy trigger
+    await client.deploy(environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy)
 
-@pytest.mark.skip("Need failure state awareness")
-async def test_deploy_trigger():
-    # copy from test_deploy_trigger name in test_deploy_trigger.py
-    pass
+    await wait_full_success(client, environment)
 
 
 @pytest.mark.skip("Need failure state awareness")
