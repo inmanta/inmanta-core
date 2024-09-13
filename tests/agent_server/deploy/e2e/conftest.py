@@ -55,8 +55,6 @@ async def agent(server, environment):
     """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    # First part - test the ResourceScheduler (retrieval of data from DB)
-
     a = Agent(environment)
 
     executor = InProcessExecutorManager(

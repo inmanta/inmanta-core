@@ -22,11 +22,11 @@ import logging
 import traceback
 import uuid
 from dataclasses import dataclass
-from typing import Optional, TypeAlias
+from typing import Optional
 
 from inmanta import const, data
 from inmanta.agent import executor
-from inmanta.data import ResourceIdStr
+from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import scheduler, state
 
 
@@ -177,6 +177,3 @@ class DryRun(Task):
 
 class RefreshFact(WithHashMatchTask):
     pass
-
-
-Task: TypeAlias = Deploy | DryRun | RefreshFact | PoisonPill
