@@ -1949,7 +1949,7 @@ graft inmanta_plugins/{self._module.name}/templates
 
         # add requirements
         module_requirements: list[InmantaModuleRequirement] = [
-            req for req in self._module.get_all_requires() if req.project_name != self._module.name
+            req for req in self._module.get_all_requires() if req.name != self._module.name
         ]
         python_requirements: list[str] = self._module.get_strict_python_requirements_as_list()
         if module_requirements or python_requirements:

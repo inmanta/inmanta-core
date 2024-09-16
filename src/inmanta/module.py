@@ -108,6 +108,8 @@ class InmantaModuleRequirement:
     @property
     def project_name(self) -> str:
         # Requirement converts all "_" to "-". Inmanta modules use "_"
+        warnings.warn(InmantaWarning("The `project_name` property has been deprecated in favor of `name`"))
+
         return self._requirement.name.replace("-", "_")
 
     @property
@@ -117,6 +119,7 @@ class InmantaModuleRequirement:
     @property
     def key(self) -> str:
         # Requirement converts all "_" to "-". Inmanta modules use "_"
+        warnings.warn(InmantaWarning("The `key` property has been deprecated in favor of `name`"))
         return self._requirement.name.replace("-", "_")
 
     @property
@@ -151,7 +154,7 @@ class InmantaModuleRequirement:
         """
         Return a Requirement with the name of the Python distribution package for this module requirement.
         """
-        module_name = self.project_name
+        module_name = self.name
         pkg_name = ModuleV2Source.get_package_name_for(module_name)
         pkg_req_str = str(self).replace(module_name, pkg_name, 1)  # Replace max 1 occurrence
         return parse_requirement(requirement=pkg_req_str)
@@ -591,7 +594,7 @@ class ModuleSource(Generic[TModule]):
         :param module_spec: List of inmanta requirements in which to look for the module.
         """
         constraints_on_module: list[str] = [
-            str(req) for req in module_spec if module_name == req.key and len(req.specifier) > 0
+            str(req) for req in module_spec if module_name == req.name and len(req.specifier) > 0
         ]
         if constraints_on_module:
             from_constraints = f"(with constraints {' '.join(constraints_on_module)})"
@@ -665,7 +668,7 @@ class ModuleSource(Generic[TModule]):
         raise NotImplementedError("Abstract method")
 
     def _get_module_name(self, module_spec: list[InmantaModuleRequirement]) -> str:
-        module_names: set[str] = {req.project_name for req in module_spec}
+        module_names: set[str] = {req.name for req in module_spec}
         module_name: str = more_itertools.one(
             module_names,
             too_short=ValueError("module_spec should contain at least one requirement"),
@@ -1052,7 +1055,7 @@ def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, Rem
 def merge_specs(mainspec: "Dict[str, List[InmantaModuleRequirement]]", new: "List[InmantaModuleRequirement]") -> None:
     """Merge two maps str->[TMetadata] by concatting their lists."""
     for req in new:
-        key = req.project_name
+        key = req.name
         if key not in mainspec:
             mainspec[key] = [req]
         else:
@@ -1829,7 +1832,7 @@ class ModuleLike(ABC, Generic[TMetadata]):
                   declare dependencies module dependencies. This could include the requirements.txt file
                   next to the metadata file of the project or module.
         """
-        return any(module_name == InmantaModuleRequirement.parse(req).key for req in self.get_module_requirements())
+        return any(module_name == InmantaModuleRequirement.parse(req).name for req in self.get_module_requirements())
 
     def _load_file(self, ns: Namespace, file: str) -> tuple[list[Statement], BasicBlock]:
         ns.location = Location(file, 1)
@@ -1901,7 +1904,7 @@ class ModuleLikeWithYmlMetadataFile(ABC):
         # Update requires
         if "requires" in content and content["requires"]:
             existing_matching_reqs: list[str] = [
-                r for r in content["requires"] if InmantaModuleRequirement.parse(r).key == requirement.key
+                r for r in content["requires"] if InmantaModuleRequirement.parse(r).name == requirement.name
             ]
             for r in existing_matching_reqs:
                 content["requires"].remove(r)
@@ -1918,7 +1921,7 @@ class ModuleLikeWithYmlMetadataFile(ABC):
         content: CommentedMap = PreservativeYamlParser.parse(self.get_metadata_file_path())
         if "requires" not in content:
             return False
-        return any(r for r in content["requires"] if InmantaModuleRequirement.parse(r).key == module_name)
+        return any(r for r in content["requires"] if InmantaModuleRequirement.parse(r).name == module_name)
 
     def remove_module_requirement_from_requires_and_write(self, module_name: str) -> None:
         """
@@ -1929,7 +1932,7 @@ class ModuleLikeWithYmlMetadataFile(ABC):
         if not self.has_module_requirement_in_requires(module_name):
             return
         content: CommentedMap = PreservativeYamlParser.parse(self.get_metadata_file_path())
-        content["requires"] = [r for r in content["requires"] if InmantaModuleRequirement.parse(r).key != module_name]
+        content["requires"] = [r for r in content["requires"] if InmantaModuleRequirement.parse(r).name != module_name]
         PreservativeYamlParser.dump(self.get_metadata_file_path(), content)
 
 
@@ -2315,13 +2318,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             for requirement in module_like.get_module_v2_requirements():
                 # load module
                 self.get_module(
-                    requirement.key,
+                    requirement.name,
                     allow_v1=False,
                     install_v2=install,
                     bypass_module_cache=bypass_module_cache,
                 )
                 # queue AST reload
-                require_v2(requirement.key)
+                require_v2(requirement.name)
 
         def setup_module(module: Module) -> None:
             """
@@ -3153,7 +3156,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         :return: all modules required by an import from any sub-modules, with all constraints applied
         """
         # get all constraints
-        spec: dict[str, InmantaModuleRequirement] = {req.project_name: req for req in self.requires()}
+        spec: dict[str, InmantaModuleRequirement] = {req.name: req for req in self.requires()}
         # find all imports
         imports = {imp.name.split("::")[0] for subm in sorted(self.get_all_submodules()) for imp in self.get_imports(subm)}
         return [spec[r] if spec.get(r) else InmantaModuleRequirement.parse(r) for r in imports]
@@ -3291,7 +3294,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
             requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
             # Remove requirement from module.yml file
-            self.remove_module_requirement_from_requires_and_write(requirement.key)
+            self.remove_module_requirement_from_requires_and_write(requirement.name)
 
     def versions(self) -> list[packaging.version.Version]:
         """
