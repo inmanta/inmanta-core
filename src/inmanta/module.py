@@ -97,18 +97,22 @@ class InmantaModuleRequirement:
             used by distinguishing the two on a type level.
     """
 
-    def __init__(self, requirement: packaging.requirements.Requirement) -> None:
+    def __init__(self, requirement: util.CanonicalRequirement) -> None:
         if requirement.name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError(
                 f"InmantaModuleRequirement instances work with inmanta module names, not python package names. "
                 f"Problematic case: {str(requirement)}"
             )
-        self._requirement: packaging.requirements.Requirement = requirement
+        self._requirement: util.CanonicalRequirement = requirement
 
     @property
     def project_name(self) -> str:
         # Requirement converts all "_" to "-". Inmanta modules use "_"
         return self._requirement.name.replace("-", "_")
+
+    @property
+    def name(self) -> str:
+        return self._requirement.name
 
     @property
     def key(self) -> str:
@@ -125,23 +129,13 @@ class InmantaModuleRequirement:
         return self._requirement == other._requirement
 
     def __contains__(self, version: packaging.version.Version | str) -> bool:
-        return version in self._requirement.specifier
+        return version in self._requirement.specifier if len(self._requirement.specifier) > 0 else True
 
     def __str__(self) -> str:
         return str(self._requirement).replace("-", "_")
 
     def __hash__(self) -> int:
         return self._requirement.__hash__()
-
-    @property
-    def specs(self) -> Sequence[tuple[str, str]]:
-        return [(e.operator, e.version) for e in self._requirement.specifier]
-
-    def version_spec_str(self) -> str:
-        """
-        Returns a string representation of this module requirement's version spec. Includes only the version part.
-        """
-        return ",".join("".join(spec) for spec in self.specs)
 
     @classmethod
     def parse(cls: type[TInmantaModuleRequirement], spec: str) -> TInmantaModuleRequirement:
@@ -596,7 +590,9 @@ class ModuleSource(Generic[TModule]):
         :param module_name: The name of the module.
         :param module_spec: List of inmanta requirements in which to look for the module.
         """
-        constraints_on_module: list[str] = [str(req) for req in module_spec if module_name == req.key and req.specs]
+        constraints_on_module: list[str] = [
+            str(req) for req in module_spec if module_name == req.key and len(req.specifier) > 0
+        ]
         if constraints_on_module:
             from_constraints = f"(with constraints {' '.join(constraints_on_module)})"
         else:
@@ -738,7 +734,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                     "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
                     module_name,
                     preinstalled_version,
-                    ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
+                    ",".join(str(constraint.specifier) for constraint in module_spec if len(constraint.specifier) > 0),
                 )
         try:
             self.log_pre_install_information(module_name, module_spec)
@@ -913,7 +909,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
                     "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
                     module_name,
                     preinstalled_version,
-                    ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
+                    ",".join(str(constraint.specifier) for constraint in module_spec if len(constraint.specifier) > 0),
                 )
                 self.log_pre_install_information(module_name, module_spec)
                 modules_pre_install = self.take_modules_snapshot(project, header="Modules versions before installation:")

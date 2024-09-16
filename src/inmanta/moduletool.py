@@ -1003,7 +1003,7 @@ version: 0.0.1dev0"""
                 matches = version == reqv
                 editable = True
             else:
-                reqv = ",".join(req.version_spec_str() for req in specs[name] if req.specs) or "*"
+                reqv = ",".join(str(req.specifier) for req in specs[name] if len(req.specifier) > 0) or "*"
                 matches = all(version in req for req in specs[name])
                 editable = mod.is_editable()
 
