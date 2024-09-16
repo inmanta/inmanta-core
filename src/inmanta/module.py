@@ -114,7 +114,7 @@ class InmantaModuleRequirement:
 
     @property
     def name(self) -> str:
-        return self._requirement.name
+        return self._requirement.name.replace("-", "_")
 
     @property
     def key(self) -> str:
