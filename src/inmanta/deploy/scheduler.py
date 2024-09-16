@@ -29,9 +29,10 @@ from inmanta.data import Resource
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
-from inmanta.deploy.tasks import DryRun, Task
+from inmanta.deploy.tasks import DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask
 from inmanta.protocol import Client
+from inmanta.resources import Id
 
 LOGGER = logging.getLogger(__name__)
 
@@ -135,8 +136,13 @@ class ResourceScheduler:
             )
 
     async def get_facts(self, resource: dict[str, Any]) -> None:
-        # FIXME, also clean up typing of arguments
-        pass
+        rid = Id.parse_id(resource["id"]).resource_str()
+        self._work.agent_queues.queue_put_nowait(
+            PrioritizedTask(
+                task=RefreshFact(resource=rid),
+                priority=10,
+            )
+        )
 
     async def build_resource_mappings_from_db(self, version: int | None = None) -> Mapping[ResourceIdStr, ResourceDetails]:
         """

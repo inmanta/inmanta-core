@@ -32,6 +32,10 @@ from inmanta.deploy import scheduler, state
 LOGGER = logging.getLogger(__name__)
 
 
+def logger_for_agent(agent: str) -> logging.Logger:
+    return logging.getLogger("agent").getChild(agent)
+
+
 @dataclass(frozen=True, kw_only=True)
 class Task(abc.ABC):
     """
@@ -87,7 +91,7 @@ class PoisonPill(Task):
         pass
 
 
-class WithHashMatchTask(Task):
+class OnLatestState(Task):
 
     async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
         resource_details: "state.ResourceDetails"
@@ -110,7 +114,7 @@ class WithHashMatchTask(Task):
         pass
 
 
-class Deploy(WithHashMatchTask):
+class Deploy(OnLatestState):
     async def execute_on_resource(
         self, scheduler: "scheduler.ResourceScheduler", agent: str, resource_details: "state.ResourceDetails"
     ) -> None:
@@ -197,7 +201,7 @@ class DryRun(Task):
             )
             await my_executor.dry_run([self.resource_full], self.dryrun_id)
         except Exception:
-            logging.getLogger("agent").getChild(agent).error(
+            logger_for_agent(agent).error(
                 "Skipping dryrun for resource %s because it is in undeployable state %s",
                 self.resource_full.rvid,
                 exc_info=True,
@@ -210,5 +214,18 @@ class DryRun(Task):
             )
 
 
-class RefreshFact(WithHashMatchTask):
-    pass
+class RefreshFact(OnLatestState):
+
+    async def execute_on_resource(
+        self, scheduler: "scheduler.ResourceScheduler", agent: str, resource_details: "state.ResourceDetails"
+    ) -> None:
+        try:
+            executor = await self.get_executor(scheduler, agent, resource_details.id.entity_type, scheduler._state.version)
+        except Exception:
+            logger_for_agent(agent).warning(
+                "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded",
+                resource_details.rvid,
+            )
+            return
+
+        await executor.get_facts(resource_details)

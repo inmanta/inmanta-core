@@ -45,6 +45,7 @@ class DummyExecutor(executor.Executor):
     def __init__(self):
         self.execute_count = 0
         self.dry_run_count = 0
+        self.facts_count = 0
         self.failed_resources = {}
         self.mock_versions = {}
 
@@ -56,7 +57,7 @@ class DummyExecutor(executor.Executor):
         self.dry_run_count += 1
 
     async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
-        pass
+        self.facts_count += 1
 
     async def open_version(self, version: int) -> None:
         pass
@@ -246,3 +247,32 @@ async def test_dryrun(agent: TestAgent, make_resource_minimal, monkeypatch):
     await retry_limited(done, 5)
 
     assert agent.executor_manager.executors["agent1"].dry_run_count == 2
+
+
+async def test_get_facts(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure the simples deploy scenario works: 2 dependant resources
+    """
+
+    rid1 = "test::Resource[agent1,name=1]"
+    rid2 = "test::Resource[agent1,name=2]"
+    resources = {
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[], version=5),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
+    }
+
+    # FIXME: SANDER: It seems we immediatly deploy if a new version arrives, we don't wait for an explicit deploy call?
+    # Is this by design?
+    await agent.scheduler.new_version(5, resources, make_requires(resources))
+
+    await agent.scheduler.get_facts({"id": rid1})
+
+    async def done():
+        agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent1")
+        if not agent_1_queue:
+            return False
+        return agent_1_queue._unfinished_tasks == 0
+
+    await retry_limited(done, 5)
+
+    assert agent.executor_manager.executors["agent1"].facts_count == 1

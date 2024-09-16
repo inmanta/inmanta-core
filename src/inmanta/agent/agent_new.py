@@ -202,6 +202,7 @@ class Agent(SessionEndpoint):
 
     @protocol.handle(methods.get_parameter, env="tid")
     async def get_facts(self, env: uuid.UUID, agent: str, resource: dict[str, Any]) -> Apireturn:
+        # FIXME: this api is very inefficient: it sends the entire resource, we only need the id now
         assert env == self.environment
         assert agent == AGENT_SCHEDULER_ID
         await self.scheduler.get_facts(resource)
