@@ -55,7 +55,7 @@ from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationE
 import inmanta.data.model
 import packaging.requirements
 import packaging.version
-from inmanta import RUNNING_TESTS, const, env, loader, plugins
+from inmanta import RUNNING_TESTS, const, env, loader, plugins, util
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
@@ -153,7 +153,7 @@ class InmantaModuleRequirement:
             raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
         return cls(parse_requirement(requirement=spec))
 
-    def get_python_package_requirement(self) -> packaging.requirements.Requirement:
+    def get_python_package_requirement(self) -> util.CanonicalRequirement:
         """
         Return a Requirement with the name of the Python distribution package for this module requirement.
         """
@@ -721,7 +721,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
         assert_pip_has_source(project.metadata.pip, f"a v2 module {module_name}")
 
-        requirements: list[packaging.requirements.Requirement] = [req.get_python_package_requirement() for req in module_spec]
+        requirements: list[util.CanonicalRequirement] = [req.get_python_package_requirement() for req in module_spec]
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
 
         # Get known requires and add them to prevent invalidating constraints through updates
@@ -2127,7 +2127,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.verify_module_version_compatibility()
 
         # do python install
-        pyreq: list[packaging.requirements.Requirement] = parse_requirements(self.collect_python_requirements())
+        pyreq: list[util.CanonicalRequirement] = parse_requirements(self.collect_python_requirements())
 
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
@@ -2545,7 +2545,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
         if self.strict_deps_check:
-            constraints: list[packaging.requirements.Requirement] = parse_requirements(self.collect_python_requirements())
+            constraints: list[util.CanonicalRequirement] = parse_requirements(self.collect_python_requirements())
             env.process_env.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
             if not env.process_env.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):

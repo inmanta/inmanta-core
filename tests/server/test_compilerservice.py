@@ -41,7 +41,7 @@ from inmanta import config, data
 from inmanta.const import INMANTA_REMOVED_SET_ID, ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
-from inmanta.env import PythonEnvironment, parse_canonical_requirement
+from inmanta.env import PythonEnvironment
 from inmanta.export import cfg_env
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER, protocol
@@ -49,7 +49,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.services.notificationservice import NotificationService
-from inmanta.util import ensure_directory_exist
+from inmanta.util import ensure_directory_exist, parse_requirement
 from server.conftest import EnvironmentFactory
 from utils import LogSequence, report_db_index_usage, retry_limited, wait_for_version
 
@@ -1806,7 +1806,7 @@ async def test_uninstall_python_packages(
     venv = PythonEnvironment(env_path=venv_path)
     assert name_protected_pkg not in venv.get_installed_packages()
     venv.install_for_config(
-        requirements=[parse_canonical_requirement(requirement=name_protected_pkg)],
+        requirements=[parse_requirement(requirement=name_protected_pkg)],
         config=PipConfig(
             index_url=local_module_package_index,
         ),

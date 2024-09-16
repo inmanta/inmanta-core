@@ -224,7 +224,7 @@ class PythonWorkingSet:
                         if distribution is None:
                             return False
 
-                        pkgs_required_by_extra: set[packaging.requirements.Requirement] = set(
+                        pkgs_required_by_extra: set[util.CanonicalRequirement] = set(
                             [util.parse_requirement(str(e)) for e in distribution.requires(extras=(extra,))]
                         ) - set([util.parse_requirement(str(e)) for e in distribution.requires(extras=())])
                         if not _are_installed_recursive(
@@ -816,7 +816,7 @@ import sys
 
     def install_for_config(
         self,
-        requirements: list[packaging.requirements.Requirement],
+        requirements: list[util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -857,7 +857,7 @@ import sys
 
     async def async_install_for_config(
         self,
-        requirements: list[packaging.requirements.Requirement],
+        requirements: list[util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -894,7 +894,7 @@ import sys
 
     def install_from_index(
         self,
-        requirements: list[packaging.requirements.Requirement],
+        requirements: list[util.CanonicalRequirement],
         index_urls: Optional[list[str]] = None,
         upgrade: bool = False,
         allow_pre_releases: bool = False,
@@ -1121,7 +1121,7 @@ class ActiveEnv(PythonEnvironment):
 
     def install_for_config(
         self,
-        requirements: list[packaging.requirements.Requirement],
+        requirements: list[util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -1141,7 +1141,7 @@ class ActiveEnv(PythonEnvironment):
     def get_constraint_violations_for_check(
         self,
         strict_scope: Optional[Pattern[str]] = None,
-        constraints: Optional[list[packaging.requirements.Requirement]] = None,
+        constraints: Optional[list[util.CanonicalRequirement]] = None,
     ) -> tuple[set[VersionConflict], set[VersionConflict]]:
         """
         Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
@@ -1210,7 +1210,7 @@ class ActiveEnv(PythonEnvironment):
     def check(
         self,
         strict_scope: Optional[Pattern[str]] = None,
-        constraints: Optional[list[packaging.requirements.Requirement]] = None,
+        constraints: Optional[list[util.CanonicalRequirement]] = None,
     ) -> None:
         """
         Check this Python environment for incompatible dependencies in installed packages.
@@ -1235,9 +1235,7 @@ class ActiveEnv(PythonEnvironment):
         for violation in constraint_violations:
             LOGGER.warning("%s", violation)
 
-    def check_legacy(
-        self, in_scope: Pattern[str], constraints: Optional[list[packaging.requirements.Requirement]] = None
-    ) -> bool:
+    def check_legacy(self, in_scope: Pattern[str], constraints: Optional[list[util.CanonicalRequirement]] = None) -> bool:
         """
         Check this Python environment for incompatible dependencies in installed packages. This method is a legacy method
         in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
@@ -1444,7 +1442,7 @@ class VirtualEnv(ActiveEnv):
 
     def install_for_config(
         self,
-        requirements: list[packaging.requirements.Requirement],
+        requirements: list[util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,

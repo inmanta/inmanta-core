@@ -886,7 +886,7 @@ def remove_comment_part(to_clean: str) -> str:
 CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
 
 
-def parse_requirement(requirement: str) -> packaging.requirements.Requirement:
+def parse_requirement(requirement: str) -> CanonicalRequirement:
     """
     To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
     could arise when checking if packages are installed in a particular Venv.
@@ -903,11 +903,11 @@ def parse_requirement(requirement: str) -> packaging.requirements.Requirement:
     canonical_name = str(doomed_requirement_instance).replace(
         doomed_requirement_instance.name, packaging.utils.canonicalize_name(doomed_requirement_instance.name)
     )
-    requirement_instance = packaging.requirements.Requirement(requirement_string=canonical_name)
+    requirement_instance = CanonicalRequirement(packaging.requirements.Requirement(requirement_string=canonical_name))
     return requirement_instance
 
 
-def parse_requirements(requirements: Sequence[str]) -> list[packaging.requirements.Requirement]:
+def parse_requirements(requirements: Sequence[str]) -> list[CanonicalRequirement]:
     """
     To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
     could arise when checking if packages are installed in a particular Venv.
@@ -918,7 +918,7 @@ def parse_requirements(requirements: Sequence[str]) -> list[packaging.requiremen
     return [parse_requirement(requirement=e) for e in requirements]
 
 
-def parse_canonical_requirements_from_file(file_path: pathlib.Path) -> list[packaging.requirements.Requirement]:
+def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequirement]:
     """
     To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
     could arise when checking if packages are installed in a particular Venv.

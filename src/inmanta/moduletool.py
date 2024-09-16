@@ -49,9 +49,10 @@ from cookiecutter.main import cookiecutter
 import build
 import inmanta
 import inmanta.warnings
+import packaging.requirements
 import toml
 from build.env import DefaultIsolatedEnv
-from inmanta import const, env
+from inmanta import const, env, util
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
@@ -76,7 +77,6 @@ from inmanta.module import (
 )
 from inmanta.stable_api import stable_api
 from inmanta.util import parse_requirements
-from packaging.requirements import InvalidRequirement, Requirement
 from packaging.version import Version
 
 LOGGER = logging.getLogger(__name__)
@@ -473,7 +473,7 @@ compatible with the dependencies specified by the updated modules.
         def do_update(specs: Mapping[str, Sequence[InmantaModuleRequirement]], modules: list[str]) -> None:
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
-            v2_python_specs: list[Requirement] = [
+            v2_python_specs: list[util.CanonicalRequirement] = [
                 module_spec.get_python_package_requirement()
                 for module, module_specs in specs.items()
                 for module_spec in module_specs
@@ -805,7 +805,7 @@ When a development release is done using the \--dev option, this command:
             raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
         try:
             module_requirement = InmantaModuleRequirement.parse(module_req)
-        except InvalidRequirement:
+        except packaging.requirements.InvalidRequirement:
             raise CLIException(f"'{module_req}' is not a valid requirement", exitcode=1)
         if not override and module_like.has_module_requirement(module_requirement.key):
             raise CLIException(

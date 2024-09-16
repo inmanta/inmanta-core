@@ -24,9 +24,8 @@ from typing import Optional
 import py
 import pytest
 
-from inmanta import compiler, const, module
+from inmanta import compiler, const, module, util
 from inmanta.ast import DoubleSetException, RuntimeException
-from inmanta.env import parse_canonical_requirement
 from inmanta.module import InstallMode
 from inmanta.plugins import PluginDeprecationWarning
 from packaging import version
@@ -750,7 +749,7 @@ def test_safe_requirement(name) -> None:
     Ensure that empty name requirements are not allowed in `Requirement`
     """
     with pytest.raises(ValueError):
-        parse_canonical_requirement(requirement=name)
+        util.parse_requirement(requirement=name)
 
 
 @pytest.mark.slowtest

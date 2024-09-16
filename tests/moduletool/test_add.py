@@ -26,9 +26,9 @@ import pytest
 
 from inmanta import env
 from inmanta.command import CLIException
-from inmanta.env import parse_canonical_requirement
 from inmanta.module import ModuleV1, ModuleV1Metadata, ModuleV2, ModuleV2Source, Project, ProjectMetadata
 from inmanta.moduletool import ModuleTool
+from inmanta.util import parse_requirement
 from packaging.version import Version
 from utils import PipIndex, module_from_template
 
@@ -89,7 +89,7 @@ def test_module_add_v2_module_to_project(
             dest_dir=os.path.join(tmpdir, f"elaboratev2module-v{version}"),
             new_version=Version(version),
             publish_index=pip_index,
-            new_extras={"optional": [parse_canonical_requirement(requirement="inmanta-module-minimalv2module")]},
+            new_extras={"optional": [parse_requirement(requirement="inmanta-module-minimalv2module")]},
         )
 
     # Create project
