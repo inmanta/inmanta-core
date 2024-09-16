@@ -32,11 +32,10 @@ from inmanta.agent.executor import FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
-from inmanta.util import parse_canonical_requirements
 from inmanta.loader import CodeLoader
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn
-from inmanta.util import NamedLock, join_threadpools
+from inmanta.util import NamedLock, join_threadpools, parse_requirements
 
 
 class InProcessExecutor(executor.Executor, executor.AgentInstance):
@@ -602,7 +601,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             await loop.run_in_executor(
                 self.thread_pool,
                 self._env.install_for_config,
-                parse_canonical_requirements(blueprint.requirements),
+                parse_requirements(blueprint.requirements),
                 blueprint.pip_config,
             )
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)

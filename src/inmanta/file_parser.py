@@ -19,7 +19,7 @@
 import os
 
 import packaging.utils
-from inmanta.util import parse_canonical_requirement
+from inmanta.util import parse_requirement
 from packaging.requirements import Requirement
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
@@ -61,7 +61,7 @@ class RequirementsTxtParser:
         """
         Get all the requirements in `filename` as a list of `Requirement` instances.
         """
-        return [parse_canonical_requirement(requirement=r) for r in cls.parse_requirements_as_strs(filename)]
+        return [parse_requirement(requirement=r) for r in cls.parse_requirements_as_strs(filename)]
 
     @classmethod
     def parse_requirements_as_strs(cls, filename: str) -> list[str]:
@@ -95,14 +95,14 @@ class RequirementsTxtParser:
                 if line_continuation_buffer:
                     line_continuation_buffer += line
                     if not line.endswith("\\"):
-                        if parse_canonical_requirement(requirement=line_continuation_buffer).name != removed_dependency:
+                        if parse_requirement(requirement=line_continuation_buffer).name != removed_dependency:
                             result += line_continuation_buffer
                         line_continuation_buffer = ""
                 elif not line.strip() or line.strip().startswith("#"):
                     result += line
                 elif line.endswith("\\"):
                     line_continuation_buffer = line
-                elif parse_canonical_requirement(requirement=line).name != removed_dependency:
+                elif parse_requirement(requirement=line).name != removed_dependency:
                     result += line
                 else:
                     # Dependency matches `remove_dep_on_pkg` => Remove line from result

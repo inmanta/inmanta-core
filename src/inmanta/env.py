@@ -35,7 +35,6 @@ from dataclasses import dataclass
 from functools import reduce
 from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
-from importlib.metadata import Distribution
 from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
@@ -43,8 +42,8 @@ from textwrap import indent
 from typing import Callable, NamedTuple, Optional, Tuple, TypeVar
 
 import pkg_resources
-from pkg_resources import DistInfoDistribution, Distribution, Requirement, WorkingSet
 
+import packaging.requirements
 import packaging.utils
 import packaging.version
 from inmanta import const, util
@@ -53,7 +52,6 @@ from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from inmanta.util import strtobool
-from packaging.requirements import Requirement
 
 LOGGER = logging.getLogger(__name__)
 LOGGER_PIP = logging.getLogger("inmanta.pip")  # Use this logger to log pip commands or data related to pip commands.
@@ -80,7 +78,7 @@ class VersionConflict:
     :param owner: The package from which the constraint originates
     """
 
-    requirement: Requirement
+    requirement: packaging.requirements.Requirement
     installed_version: Optional[packaging.version.Version] = None
     owner: Optional[str] = None
 
@@ -165,17 +163,17 @@ class ConflictingRequirements(CompilerException):
             )
 
 
-req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
+req_list = TypeVar("req_list", Sequence[str], Sequence[packaging.requirements.Requirement])
 
 
 class PythonWorkingSet:
     @classmethod
-    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
+    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[packaging.requirements.Requirement]:
         """
         Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
         """
         if isinstance(requirements[0], str):
-            return util.parse_canonical_requirements(requirements)
+            return util.parse_requirements(requirements)
         else:
             return requirements
 
@@ -189,8 +187,8 @@ class PythonWorkingSet:
         installed_packages: dict[str, packaging.version.Version] = cls.get_packages_in_working_set()
 
         def _are_installed_recursive(
-            reqs: Sequence[Requirement],
-            seen_requirements: Sequence[Requirement],
+            reqs: Sequence[packaging.requirements.Requirement],
+            seen_requirements: Sequence[packaging.requirements.Requirement],
             contained_in_extra: Optional[str] = None,
         ) -> bool:
             """
@@ -226,9 +224,9 @@ class PythonWorkingSet:
                         if distribution is None:
                             return False
 
-                        pkgs_required_by_extra: set[Requirement] = set(
-                            [util.parse_canonical_requirement(str(e)) for e in distribution.requires(extras=(extra,))]
-                        ) - set([util.parse_canonical_requirement(str(e)) for e in distribution.requires(extras=())])
+                        pkgs_required_by_extra: set[packaging.requirements.Requirement] = set(
+                            [util.parse_requirement(str(e)) for e in distribution.requires(extras=(extra,))]
+                        ) - set([util.parse_requirement(str(e)) for e in distribution.requires(extras=())])
                         if not _are_installed_recursive(
                             reqs=list(pkgs_required_by_extra),
                             seen_requirements=list(seen_requirements) + list(reqs),
@@ -237,7 +235,7 @@ class PythonWorkingSet:
                             return False
             return True
 
-        reqs_as_requirements: Sequence[Requirement] = cls._get_as_requirements_type(requirements)
+        reqs_as_requirements: Sequence[packaging.requirements.Requirement] = cls._get_as_requirements_type(requirements)
         return _are_installed_recursive(reqs_as_requirements, seen_requirements=[])
 
     @classmethod
@@ -383,7 +381,7 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[Requirement]] = None,
+        requirements: Optional[Sequence[packaging.requirements.Requirement]] = None,
         requirements_files: Optional[list[str]] = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
@@ -424,7 +422,7 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[Requirement]] = None,
+        requirements: Optional[Sequence[packaging.requirements.Requirement]] = None,
         requirements_files: Optional[list[str]] = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
@@ -464,7 +462,7 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[Requirement]] = None,
+        requirements: Optional[Sequence[packaging.requirements.Requirement]] = None,
         requirements_files: Optional[list[str]] = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
@@ -818,7 +816,7 @@ import sys
 
     def install_for_config(
         self,
-        requirements: list[Requirement],
+        requirements: list[packaging.requirements.Requirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -859,7 +857,7 @@ import sys
 
     async def async_install_for_config(
         self,
-        requirements: list[Requirement],
+        requirements: list[packaging.requirements.Requirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -896,7 +894,7 @@ import sys
 
     def install_from_index(
         self,
-        requirements: Sequence[Requirement],
+        requirements: list[packaging.requirements.Requirement],
         index_urls: Optional[list[str]] = None,
         upgrade: bool = False,
         allow_pre_releases: bool = False,
@@ -967,7 +965,7 @@ import sys
         use_pip_config was ignored on ISO6 and it still is
         """
         self.install_from_index(
-            requirements=util.parse_canonical_requirements(requirements_list),
+            requirements=util.parse_requirements(requirements_list),
             upgrade=upgrade,
             upgrade_strategy=upgrade_strategy,
             use_pip_config=True,
@@ -987,7 +985,7 @@ import sys
         ]
 
     @classmethod
-    def _get_requirements_on_inmanta_package(cls) -> Sequence[Requirement]:
+    def _get_requirements_on_inmanta_package(cls) -> Sequence[packaging.requirements.Requirement]:
         """
         Returns the content of the requirement file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
@@ -995,7 +993,7 @@ import sys
         protected_inmanta_packages: list[str] = cls.get_protected_inmanta_packages()
         workingset: dict[str, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
         return [
-            util.parse_canonical_requirement(requirement=f"{pkg}=={workingset[pkg]}")
+            util.parse_requirement(requirement=f"{pkg}=={workingset[pkg]}")
             for pkg in workingset
             if pkg in protected_inmanta_packages
         ]
@@ -1123,7 +1121,7 @@ class ActiveEnv(PythonEnvironment):
 
     def install_for_config(
         self,
-        requirements: list[Requirement],
+        requirements: list[packaging.requirements.Requirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -1143,7 +1141,7 @@ class ActiveEnv(PythonEnvironment):
     def get_constraint_violations_for_check(
         self,
         strict_scope: Optional[Pattern[str]] = None,
-        constraints: Optional[list[Requirement]] = None,
+        constraints: Optional[list[packaging.requirements.Requirement]] = None,
     ) -> tuple[set[VersionConflict], set[VersionConflict]]:
         """
         Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
@@ -1151,7 +1149,7 @@ class ActiveEnv(PythonEnvironment):
         """
 
         class OwnedRequirement(NamedTuple):
-            requirement: Requirement
+            requirement: packaging.requirements.Requirement
             owner: Optional[str] = None
 
             def is_owned_by(self, owners: abc.Set[str]) -> bool:
@@ -1159,7 +1157,7 @@ class ActiveEnv(PythonEnvironment):
 
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(util.parse_canonical_requirement(requirement=str(requirement)), dist_info.key)
+            OwnedRequirement(util.parse_requirement(requirement=str(requirement)), dist_info.key)
             for dist_info in pkg_resources.working_set
             for requirement in dist_info.requires()
         )
@@ -1212,7 +1210,7 @@ class ActiveEnv(PythonEnvironment):
     def check(
         self,
         strict_scope: Optional[Pattern[str]] = None,
-        constraints: Optional[list[Requirement]] = None,
+        constraints: Optional[list[packaging.requirements.Requirement]] = None,
     ) -> None:
         """
         Check this Python environment for incompatible dependencies in installed packages.
@@ -1237,7 +1235,9 @@ class ActiveEnv(PythonEnvironment):
         for violation in constraint_violations:
             LOGGER.warning("%s", violation)
 
-    def check_legacy(self, in_scope: Pattern[str], constraints: Optional[list[Requirement]] = None) -> bool:
+    def check_legacy(
+        self, in_scope: Pattern[str], constraints: Optional[list[packaging.requirements.Requirement]] = None
+    ) -> bool:
         """
         Check this Python environment for incompatible dependencies in installed packages. This method is a legacy method
         in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
@@ -1254,10 +1254,10 @@ class ActiveEnv(PythonEnvironment):
             in_scope, constraints
         )
 
-        working_set: abc.Iterable[Distribution] = importlib.metadata.distributions()
+        working_set: abc.Iterable[importlib.metadata.Distribution] = importlib.metadata.distributions()
         # add all requirements of all in scope packages installed in this environment
-        all_constraints: set[Requirement] = set(constraints if constraints is not None else []).union(
-            util.parse_canonical_requirement(requirement=requirement)
+        all_constraints: set[packaging.requirements.Requirement] = set(constraints if constraints is not None else []).union(
+            util.parse_requirement(requirement=requirement)
             for dist_info in working_set
             if in_scope.fullmatch(dist_info.name)
             for requirement in dist_info.requires or []
@@ -1444,7 +1444,7 @@ class VirtualEnv(ActiveEnv):
 
     def install_for_config(
         self,
-        requirements: list[Requirement],
+        requirements: list[packaging.requirements.Requirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -1482,7 +1482,7 @@ class VenvSnapshot:
     old_os_venv: Optional[str]
     old_process_env_path: str
     old_process_env: ActiveEnv
-    old_working_set: WorkingSet
+    old_working_set: pkg_resources.WorkingSet
 
     def restore(self) -> None:
         os.environ["PATH"] = self.old_os_path

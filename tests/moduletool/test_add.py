@@ -26,7 +26,7 @@ import pytest
 
 from inmanta import env
 from inmanta.command import CLIException
-from inmanta.env import process_env, parse_canonical_requirement
+from inmanta.env import parse_canonical_requirement
 from inmanta.module import ModuleV1, ModuleV1Metadata, ModuleV2, ModuleV2Source, Project, ProjectMetadata
 from inmanta.moduletool import ModuleTool
 from packaging.version import Version

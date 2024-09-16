@@ -41,10 +41,10 @@ from inmanta.agent import resourcepool
 from inmanta.const import ResourceState
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
-from inmanta.util import parse_canonical_requirements
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
 from inmanta.types import JsonType
+from inmanta.util import parse_requirements
 
 LOGGER = logging.getLogger(__name__)
 
@@ -296,7 +296,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
-                requirements=list(parse_canonical_requirements(req)),
+                requirements=parse_requirements(req),
                 config=blueprint.pip_config,
             )
 

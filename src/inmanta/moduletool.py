@@ -38,7 +38,7 @@ from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import IO, TYPE_CHECKING, Any, Literal, Optional
+from typing import IO, Any, Literal, Optional
 
 import click
 import more_itertools
@@ -55,7 +55,6 @@ from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
-from inmanta.util import parse_canonical_requirements
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -76,6 +75,7 @@ from inmanta.module import (
     gitprovider,
 )
 from inmanta.stable_api import stable_api
+from inmanta.util import parse_requirements
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.version import Version
 
@@ -485,7 +485,7 @@ compatible with the dependencies specified by the updated modules.
                 # Because for pip not every valid -r is a valid -c
                 current_requires = my_project.get_strict_python_requirements_as_list()
                 env.process_env.install_for_config(
-                    v2_python_specs + parse_canonical_requirements(current_requires),
+                    v2_python_specs + parse_requirements(current_requires),
                     my_project.metadata.pip,
                     upgrade=True,
                 )

@@ -24,7 +24,7 @@ import pytest
 from inmanta import env
 from inmanta.config import Config
 from inmanta.data.model import PipConfig
-from inmanta.env import LocalPackagePath, process_env, parse_canonical_requirement, parse_canonical_requirements
+from inmanta.env import LocalPackagePath, parse_canonical_requirement, parse_canonical_requirements
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2Source
 from inmanta.moduletool import ProjectTool
 from inmanta.parser import ParserException
