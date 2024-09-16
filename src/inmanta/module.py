@@ -3085,12 +3085,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
         return loader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
-    def execute_command(self, cmd: str) -> None:
-        print(f"executing {cmd} on {self.name} in {self._path}")
-        print("=" * 10)
-        subprocess.call(cmd, shell=True, cwd=self._path)
-        print("=" * 10)
-
     def unload(self) -> None:
         """
         Unloads this module instance from the project, the registered plugins and the loaded Python modules.
