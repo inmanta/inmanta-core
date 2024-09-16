@@ -215,7 +215,10 @@ def test():
         )
 
     # Assert shutdown and back up
-    await mpmanager.stop_for_agent("agent2")
+    stopped = await mpmanager.stop_for_agent("agent2")
+    # prevent leaking futures
+    for x in stopped:
+        await x.join()
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 0, 10)
 
     full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
@@ -224,8 +227,12 @@ def test():
 
     await simplest.request_shutdown()
     await simplest.join()
+
+    async def check_connection_lost() -> bool:
+        return await simplest.call(GetName()) != simplest_blueprint.blueprint_hash()
+
     with pytest.raises(ConnectionLost):
-        await simplest.call(GetName())
+        await retry_limited(check_connection_lost, 1)
 
     with pytest.raises(ImportError):
         # we aren't leaking into this venv
@@ -272,7 +279,11 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     await asyncio.get_running_loop().run_in_executor(None, child1.process.process.kill)
     print("Kill sent")
 
-    await asyncio.get_running_loop().run_in_executor(None, child1.process.process.join)
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, child1.process.process.join)
+    except ValueError:
+        # to be expected
+        logging.exception("Process already gone!")
     print("Child gone")
 
     with pytest.raises(ConnectionLost):

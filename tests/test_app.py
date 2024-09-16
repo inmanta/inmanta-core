@@ -345,7 +345,8 @@ end
 implement Test using std::none
 
 o = Test(attr="1234")
-        """
+        """,
+        autostd=True,
     )
     cwd = snippetcompiler.project_dir if cache_cf_files else "."
 
@@ -381,7 +382,8 @@ def test_minus_x_option(snippetcompiler, cmd):
 entity Test:
     nuber attr
 end
-"""
+""",
+        autostd=True,
     )
 
     process = do_run([sys.executable, "-m", "inmanta.app"] + cmd, cwd=snippetcompiler.project_dir)

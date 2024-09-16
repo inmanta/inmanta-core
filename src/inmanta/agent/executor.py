@@ -19,7 +19,6 @@
 import abc
 import asyncio
 import concurrent.futures
-import contextlib
 import dataclasses
 import datetime
 import hashlib
@@ -28,18 +27,18 @@ import logging
 import os
 import pathlib
 import shutil
-import types
 import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence, cast
 
 import inmanta.types
 import inmanta.util
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
+from inmanta.const import ResourceState
 from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.util import parse_canonical_requirements
@@ -72,20 +71,22 @@ class ResourceDetails:
     id: Id
     rid: ResourceIdStr
     rvid: ResourceVersionIdStr
-    env_id: uuid.UUID
     model_version: int
     requires: Sequence[Id]
     attributes: dict[str, object]
 
-    def __init__(self, resource_dict: JsonType) -> None:
-        self.attributes = resource_dict["attributes"]
-        self.attributes["id"] = resource_dict["id"]
-        self.id = Id.parse_id(resource_dict["id"])
+    def __init__(self, id: ResourceIdStr, version: int, attributes: dict[str, object]) -> None:
+        self.attributes = attributes
+        self.id = Id.parse_id(id).copy(version=version)
         self.rid = self.id.resource_str()
         self.rvid = self.id.resource_version_str()
-        self.env_id = resource_dict["environment"]
-        self.requires = [Id.parse_id(resource_id) for resource_id in resource_dict["attributes"]["requires"]]
-        self.model_version = resource_dict["model"]
+        self.attributes["id"] = self.rvid
+        self.model_version = version
+        self.requires = [Id.parse_id(resource_id) for resource_id in cast(list[ResourceIdStr], attributes["requires"])]
+
+    @classmethod
+    def from_json(cls, resource_dict: JsonType) -> "ResourceDetails":
+        return ResourceDetails(resource_dict["id"], resource_dict["model"], resource_dict["attributes"])
 
 
 @dataclasses.dataclass
@@ -284,7 +285,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         self.folder_name: str = pathlib.Path(self.env_path).name
         self.io_threadpool = io_threadpool
 
-    def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
+    async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
         Creates and configures the virtual environment according to the provided blueprint.
 
@@ -292,10 +293,10 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
             the pip installation and the requirements to install.
         """
         req: list[str] = list(blueprint.requirements)
-        self.init_env()
+        await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
-            self.install_for_config(
-                requirements=parse_canonical_requirements(req),
+            await self.async_install_for_config(
+                requirements=list(parse_canonical_requirements(req)),
                 config=blueprint.pip_config,
             )
 
@@ -336,6 +337,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         Remove the venv of the executor
         """
         try:
+            LOGGER.debug("Removing venv %s", self.env_path)
             shutil.rmtree(self.env_path)
         except Exception:
             LOGGER.exception(
@@ -462,30 +464,8 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
 
         if is_new:
             LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), interal_id)
-            await loop.run_in_executor(self.thread_pool, process_environment.create_and_install_environment, member_id)
+            await process_environment.create_and_install_environment(member_id)
         return process_environment
-
-
-class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):
-    """
-    A context manager to ensure the cache version is properly closed
-    """
-
-    def __init__(self, executor: "Executor", version: int) -> None:
-        self.version = version
-        self.executor = executor
-
-    async def __aenter__(self) -> None:
-        await self.executor.open_version(self.version)
-
-    async def __aexit__(
-        self,
-        __exc_type: typing.Type[BaseException] | None,
-        __exc_value: BaseException | None,
-        __traceback: types.TracebackType | None,
-    ) -> None:
-        await self.executor.close_version(self.version)
-        return None
 
 
 class Executor(abc.ABC):
@@ -500,20 +480,13 @@ class Executor(abc.ABC):
 
     failed_resources: FailedResources
 
-    def cache(self, model_version: int) -> CacheVersionContext:
-        """
-        Context manager responsible for opening and closing the handler cache
-        for the given model_version during deployment.
-        """
-        return CacheVersionContext(self, model_version)
-
     @abc.abstractmethod
     async def execute(
         self,
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-    ) -> None:
+    ) -> ResourceState:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
 
@@ -546,17 +519,8 @@ class Executor(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def open_version(self, version: int) -> None:
-        """
-        Open a version on the cache
-        """
-        pass
-
-    @abc.abstractmethod
-    async def close_version(self, version: int) -> None:
-        """
-        Close a version on the cache
-        """
+    async def join(self) -> None:
+        """Wait for shutdown to be completed"""
         pass
 
 

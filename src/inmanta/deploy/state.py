@@ -18,12 +18,15 @@
 
 import dataclasses
 import enum
+from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TypeAlias
+from typing import Collection, TypeAlias
 
-from inmanta.data.model import ResourceIdStr
+from inmanta.agent import executor
+from inmanta.data.model import ResourceIdStr, ResourceType
+from inmanta.resources import Id
 from inmanta.util.collections import BidirectionalManyToManyMapping
 
 
@@ -38,10 +41,15 @@ class RequiresProvidesMapping(BidirectionalManyToManyMapping[ResourceIdStr, Reso
 AttributeHash: TypeAlias = str
 
 
-@dataclass(frozen=True)
-class ResourceDetails:
+class ResourceDetails(executor.ResourceDetails):
+
+    # FIXME: flatten out inheritance?
+
+    def __init__(self, id: ResourceIdStr, version: int, attributes: dict[str, object], attribute_hash: AttributeHash) -> None:
+        super().__init__(id, version, attributes)
+        self.attribute_hash = attribute_hash
+
     attribute_hash: AttributeHash
-    attributes: Mapping[str, object]
 
 
 class ResourceStatus(StrEnum):
@@ -87,6 +95,9 @@ class ResourceState:
     status: ResourceStatus
     deployment_result: DeploymentResult
 
+    def needs_deploy(self) -> bool:
+        return self.status == ResourceStatus.HAS_UPDATE or self.deployment_result != DeploymentResult.DEPLOYED
+
 
 @dataclass(kw_only=True)
 class ModelState:
@@ -96,25 +107,39 @@ class ModelState:
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict[ResourceIdStr, ResourceState] = dataclasses.field(default_factory=dict)
     update_pending: set[ResourceIdStr] = dataclasses.field(default_factory=set)
+    # types per agent keeps track of which resource types live on which agent by doing a reference count
+    # the dict is agent_name -> resource_type -> resource_count
+    types_per_agent: dict[str, dict[ResourceType, int]] = dataclasses.field(
+        default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
+    )
     """
     Resources that have a new desired state (might be simply a change of its dependencies), which are still being processed by
     the resource scheduler. This is a shortlived transient state, used for internal concurrency control. Kept separate from
     ResourceStatus so that it lives outside of the scheduler lock's scope.
     """
 
+    def reset(self) -> None:
+        self.version = 0
+        self.resources.clear()
+        self.requires.clear()
+        self.resource_state.clear()
+        self.update_pending.clear()
+        self.types_per_agent.clear()
+
     def update_desired_state(
         self,
-        resource: ResourceIdStr,
-        attributes: ResourceDetails,
+        resource: ResourceDetails,
     ) -> None:
         # FIXME[#8008]: raise KeyError if already lives in state?
-        self.resources[resource] = attributes
-        if resource in self.resource_state:
-            self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
+        resource_id = resource.rid
+        self.resources[resource_id] = resource
+        if resource_id in self.resource_state:
+            self.resource_state[resource_id].status = ResourceStatus.HAS_UPDATE
         else:
-            self.resource_state[resource] = ResourceState(
+            self.resource_state[resource_id] = ResourceState(
                 status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW
             )
+            self.types_per_agent[resource.id.agent_name][resource.id.entity_type] += 1
 
     def update_requires(
         self,
@@ -122,3 +147,16 @@ class ModelState:
         requires: Set[ResourceIdStr],
     ) -> None:
         self.requires[resource] = requires
+
+    def drop(self, resource: ResourceIdStr) -> None:
+        del self.resources[resource]
+        del self.resource_state[resource]
+        del self.requires[resource]
+
+        parsed_id = Id.parse_id(resource)
+        self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] -= 1
+        if self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] == 0:
+            del self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type]
+
+    def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
+        return list(self.types_per_agent[agent])

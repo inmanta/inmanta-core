@@ -17,12 +17,23 @@
 """
 
 import asyncio
+import logging
+import uuid
 from collections.abc import Mapping, Set
-from typing import Optional
+from typing import Any
 
+from inmanta import data, resources
+from inmanta.agent import executor
+from inmanta.agent.code_manager import CodeManager
+from inmanta.data import Resource
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
+from inmanta.deploy.tasks import Task
+from inmanta.protocol import Client
+
+LOGGER = logging.getLogger(__name__)
+
 
 # FIXME[#8008] review code structure + functionality + add docstrings
 # FIXME[#8008] add import entry point test case
@@ -36,12 +47,22 @@ class ResourceScheduler:
     The scheduler expects to be notified by the server whenever a new version is released.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self, environment: uuid.UUID, executor_manager: executor.ExecutorManager[executor.Executor], client: Client
+    ) -> None:
+        """
+        :param environment: the environment we work for
+        :param executor_manager: the executor manager that will provide us with executors
+        :param client: connection to the server
+        """
         self._state: ModelState = ModelState(version=0)
         self._work: work.ScheduledWork = work.ScheduledWork(
             requires=self._state.requires.requires_view(),
             provides=self._state.requires.provides_view(),
+            consumer_factory=self.start_for_agent,
         )
+
+        self._executor_manager = executor_manager
 
         # We uphold two locks to prevent concurrency conflicts between external events (e.g. new version or deploy request)
         # and the task executor background tasks.
@@ -52,17 +73,44 @@ class ResourceScheduler:
         self._scheduler_lock: asyncio.Lock = asyncio.Lock()
         # - lock to serialize scheduler state updates (i.e. process new version)
         self._update_lock: asyncio.Lock = asyncio.Lock()
+        self._environment = environment
+
+        self._running = False
+        # Agent name to worker task
+        # here to prevent it from being GC-ed
+        self._workers: dict[str, asyncio.Task[None]] = {}
+
+        self._code_manager = CodeManager(client)
+        self._environment = environment
+        self._client = client
+
+    def reset(self) -> None:
+        """
+        Clear out all state and start empty
+
+        only allowed when ResourceScheduler is not running
+        """
+        assert not self._running
+        self._state.reset()
+        self._work.reset()
 
     async def start(self) -> None:
-        # FIXME[#8009]: read from DB instead
-        pass
+        self.reset()
+        self._running = True
+        await self.read_version()
+
+    async def stop(self) -> None:
+        self._running = False
+        self._work.agent_queues.send_shutdown()
+        await asyncio.gather(*self._workers.values())
 
     async def deploy(self) -> None:
+        """
+        Trigger a deploy
+        """
         async with self._scheduler_lock:
             # FIXME[#8008]: more efficient access to dirty set by caching it on the ModelState
-            dirty: Set[ResourceIdStr] = {
-                r for r, details in self._state.resource_state.items() if details.status == ResourceStatus.HAS_UPDATE
-            }
+            dirty: Set[ResourceIdStr] = {r for r, details in self._state.resource_state.items() if details.needs_deploy()}
             # FIXME[#8008]: pass in running deploys
             self._work.update_state(ensure_scheduled=dirty, running_deploys=set())
 
@@ -70,8 +118,56 @@ class ResourceScheduler:
         # FIXME[#8008]: implement repair
         pass
 
-    # FIXME[#8009]: design step 2: read new state from DB instead of accepting as parameter
-    #               (method should be notification only, i.e. 0 parameters)
+    async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
+        # FIXME
+        pass
+
+    async def get_facts(self, resource: dict[str, Any]) -> None:
+        # FIXME, also clean up typing of arguments
+        pass
+
+    async def build_resource_mappings_from_db(
+        self,
+    ) -> tuple[Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
+        """
+        Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
+
+        :return: resource_mapping {id -> resource details} and require_mapping {id -> requires}
+        """
+        resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(environment=self._environment)
+        resource_mapping = {
+            resource.resource_id: ResourceDetails(
+                attribute_hash=resource.attribute_hash,
+                id=resource.resource_id,
+                version=resource.model,
+                attributes=resource.attributes,
+            )
+            for resource in resources_from_db
+        }
+        require_mapping = {
+            resource.resource_id: {
+                resources.Id.parse_id(req).resource_str() for req in list(resource.attributes.get("requires", []))
+            }
+            for resource in resources_from_db
+        }
+        return resource_mapping, require_mapping
+
+    async def read_version(
+        self,
+    ) -> None:
+        """
+        Method that is used as a notification from the Server to retrieve the latest data concerning the release of the
+        latest version. This method will fetch the latest version and the different resources in their latest version.
+        It will then compute the work that needs to be done (resources to create / delete / update) to be up to date with
+        this new version.
+        """
+        environment = await data.Environment.get_by_id(self._environment)
+        if environment is None:
+            raise ValueError(f"No environment found with this id: `{self._environment}`")
+        version = environment.last_version
+        resources_from_db, requires_from_db = await self.build_resource_mappings_from_db()
+        await self.new_version(version, resources_from_db, requires_from_db)
+
     async def new_version(
         self,
         version: int,
@@ -96,8 +192,8 @@ class ResourceScheduler:
                 ):
                     self._state.update_pending.add(resource)
                     new_desired_state.append(resource)
-                new_requires: Set[ResourceIdStr] = requires.get(resource, set())
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
+                new_requires: Set[ResourceIdStr] = requires.get(resource, set())
                 added: Set[ResourceIdStr] = new_requires - old_requires
                 dropped: Set[ResourceIdStr] = old_requires - new_requires
                 if added:
@@ -118,11 +214,12 @@ class ResourceScheduler:
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in new_desired_state:
-                    self._state.update_desired_state(resource, resources[resource])
+                    self._state.update_desired_state(resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
                 # ensure deploy for ALL dirty resources, not just the new ones
                 # FIXME[#8008]: this is copy-pasted, make into a method?
+                # FIXME: WDB TO SANDER: We should track dirty resources in a collection to not force a scan of the full state
                 dirty: Set[ResourceIdStr] = {
                     r for r, details in self._state.resource_state.items() if details.status == ResourceStatus.HAS_UPDATE
                 }
@@ -133,6 +230,8 @@ class ResourceScheduler:
                     added_requires=added_requires,
                     dropped_requires=dropped_requires,
                 )
+                for resource in deleted_resources:
+                    self._state.drop(resource)
                 # FIXME[#8008]: design step 7: drop update_pending
             # FIXME[#8008]: design step 10: Once more, drop all resources that do not exist in this version from the scheduled
             #               work, in case they got added again by a deploy trigger
@@ -140,44 +239,18 @@ class ResourceScheduler:
     # FIXME[#8008]: set up background workers for each agent, calling _run_for_agent(). Make sure to somehow respond to new
     #           agents or removed ones
 
-    async def _run_task(self, agent: str, task: work.Task, resource_details: ResourceDetails) -> None:
-        # FIXME[#8010]: send task to agent process (not under lock)
-        pass
+    def start_for_agent(self, agent: str) -> None:
+        """Start processing for the given agent"""
+        self._workers[agent] = asyncio.create_task(self._run_for_agent(agent))
 
     async def _run_for_agent(self, agent: str) -> None:
-        # FIXME[#8008]: end condition
-        while True:
-            task: work.Task = await self._work.agent_queues.queue_get(agent)
-            # FIXME[#8008]: skip and reschedule deploy / refresh-fact task if resource marked as update pending?
-            resource_details: ResourceDetails
-            async with self._scheduler_lock:
-                # fetch resource details atomically under lock
-                try:
-                    resource_details = self._state.resources[task.resource]
-                except KeyError:
-                    # Stale resource, can simply be dropped.
-                    # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
-                    # because of this check, and an intrinsic part of the locking design because it's preferred over wider
-                    # locking for performance reasons.
-                    continue
+        """Main loop for one agent"""
+        while self._running:
+            task: Task = await self._work.agent_queues.queue_get(agent)
+            try:
+                # FIXME[#8008]: skip and reschedule deploy / refresh-fact task if resource marked as update pending?
+                await task.execute(self, agent)
+            except Exception:
+                LOGGER.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
 
-            await self._run_task(agent, task, resource_details)
-
-            # post-processing
-            match task:
-                case work.Deploy():
-                    async with self._scheduler_lock:
-                        # refresh resource details for latest model state
-                        new_details: Optional[ResourceDetails] = self._state.resources.get(task.resource, None)
-                        if new_details is not None and new_details.attribute_hash == resource_details.attribute_hash:
-                            # FIXME[#8010]: pass success/failure to notify_provides()
-                            # FIXME[#8008]: iff deploy was successful set resource status and deployment result
-                            #               in self.state.resources
-                            self._work.notify_provides(task)
-                        # The deploy that finished has become stale (state has changed since the deploy started).
-                        # Nothing to report on a stale deploy.
-                        # A new deploy for the current model state will have been queued already.
-                case _:
-                    # nothing to do
-                    pass
             self._work.agent_queues.task_done(agent)

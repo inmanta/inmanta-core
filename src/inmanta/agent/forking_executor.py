@@ -26,7 +26,7 @@
        - ExecutorServer main driver of the remote process:
             - handles IPC,
             - manages the connection
-             - controls the remote process shutdown
+            - controls the remote process shutdown
        - ExecutorClient agent side handle of the IPC connection, also receives logs from the remote side
        - Commands: every IPC command has its own class
 
@@ -105,7 +105,6 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
-from inmanta.util import join_threadpools
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(__name__)
@@ -142,9 +141,7 @@ class ExecutorContext:
             # But were stopped
             assert old_one.is_stopped()
             # Make sure old one is down
-            finalizer: list[ThreadPoolExecutor] = []
-            old_one.join(finalizer)
-            await join_threadpools(finalizer)
+            await old_one.join()
 
         loop = asyncio.get_running_loop()
         parent_logger = logging.getLogger("agent.executor")
@@ -158,22 +155,22 @@ class ExecutorContext:
             eventloop=loop,
             parent_logger=parent_logger,
         )
+        await executor.start()
+
         self.executors[name] = executor
 
     async def stop_for(self, name: str) -> None:
         """Stop an executor in this proces, returns before shutdown is completed"""
         try:
             LOGGER.info("Stopping for %s", name)
-            self.get(name).stop()
+            await self.get(name).stop()
         except Exception:
             LOGGER.exception("Stop failed for %s", name)
 
     async def stop(self) -> None:
         """Request the process to stop"""
-        for my_executor in self.executors.values():
-            my_executor.stop()
-        # threadpool finalizer is not used, we expect threadpools to be terminated with the process
-        # self.executor.join([])
+        await asyncio.gather(*(my_executor.stop() for my_executor in self.executors.values()))
+
         await self.server.stop()
 
 
@@ -299,6 +296,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         while not self.stopping:
             await self.touch_inmanta_venv_status()
             if not self.stopping:
+
                 await asyncio.sleep(self.timer_venv_scheduler_interval)
 
     async def touch_inmanta_venv_status(self) -> None:
@@ -307,7 +305,11 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """
         # makes mypy happy
         assert self.ctx.venv is not None
-        (pathlib.Path(self.ctx.venv.env_path) / const.INMANTA_VENV_STATUS_FILENAME).touch()
+        path = pathlib.Path(self.ctx.venv.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        path.touch()
+        self.logger.log(
+            const.LOG_LEVEL_TRACE, "Touching venv status %s, then sleeping %f", path, self.timer_venv_scheduler_interval
+        )
 
 
 class ExecutorClient(FinalizingIPCClient[ExecutorContext], LogReceiver):
@@ -461,28 +463,6 @@ class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
         await context.init_for(self.name, self.uri)
 
 
-class OpenVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
-    """Open a cache version in an executor"""
-
-    def __init__(self, agent_name: str, version: int) -> None:
-        self.version = version
-        self.agent_name = agent_name
-
-    async def call(self, context: ExecutorContext) -> None:
-        await context.get(self.agent_name).open_version(self.version)
-
-
-class CloseVersionCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
-    """Close a cache version in an executor"""
-
-    def __init__(self, agent_name: str, version: int) -> None:
-        self.version = version
-        self.agent_name = agent_name
-
-    async def call(self, context: ExecutorContext) -> None:
-        await context.get(self.agent_name).close_version(self.version)
-
-
 class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
     """Run a dryrun in an executor"""
 
@@ -500,7 +480,7 @@ class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None])
         await context.get(self.agent_name).dry_run(self.resources, self.dry_run_id)
 
 
-class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, const.ResourceState]):
     """Run a deploy in an executor"""
 
     def __init__(
@@ -515,8 +495,8 @@ class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
         self.resource_details = resource_details
         self.reason = reason
 
-    async def call(self, context: ExecutorContext) -> None:
-        await context.get(self.agent_name).execute(self.gid, self.resource_details, self.reason)
+    async def call(self, context: ExecutorContext) -> const.ResourceState:
+        return await context.get(self.agent_name).execute(self.gid, self.resource_details, self.reason)
 
 
 class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta.types.Apireturn]):
@@ -545,7 +525,6 @@ def mp_worker_entrypoint(
     config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
 ) -> None:
     """Entry point for child processes"""
-
     set_executor_status(name, "connecting")
     # Set up logging stage 1
     # Basic config, starts on std.out
@@ -798,7 +777,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         # Don't make the parent wait this prevents wait cycles
         async def inner_close() -> None:
             try:
-                self.process.connection.call(StopCommandFor(self.name))
+                await self.process.connection.call(StopCommandFor(self.name))
             except inmanta.protocol.ipc_light.ConnectionLost:
                 # Already gone
                 pass
@@ -812,12 +791,6 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         """Inhibit close if the are active"""
         return self.in_flight == 0
 
-    async def close_version(self, version: int) -> None:
-        await self.call(CloseVersionCommand(self.id.agent_name, version))
-
-    async def open_version(self, version: int) -> None:
-        await self.call(OpenVersionCommand(self.id.agent_name, version))
-
     async def dry_run(
         self,
         resources: typing.Sequence["inmanta.agent.executor.ResourceDetails"],
@@ -830,8 +803,8 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         gid: uuid.UUID,
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
-    ) -> None:
-        await self.call(ExecuteCommand(self.id.agent_name, gid, resource_details, reason))
+    ) -> const.ResourceState:
+        return await self.call(ExecuteCommand(self.id.agent_name, gid, resource_details, reason))
 
     async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> inmanta.types.Apireturn:
         return await self.call(FactsCommand(self.id.agent_name, resource))

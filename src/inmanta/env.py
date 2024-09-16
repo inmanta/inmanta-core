@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
 import enum
 import importlib.metadata
 import importlib.util
@@ -26,6 +27,7 @@ import re
 import site
 import subprocess
 import sys
+import typing
 import venv
 from collections import abc
 from collections.abc import Iterator, Mapping, Sequence
@@ -38,9 +40,10 @@ from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import NamedTuple, Optional, TypeVar
+from typing import Callable, NamedTuple, Optional, Tuple, TypeVar
 
 import pkg_resources
+from pkg_resources import DistInfoDistribution, Distribution, Requirement, WorkingSet
 
 import packaging.utils
 import packaging.version
@@ -54,6 +57,9 @@ from packaging.requirements import Requirement
 
 LOGGER = logging.getLogger(__name__)
 LOGGER_PIP = logging.getLogger("inmanta.pip")  # Use this logger to log pip commands or data related to pip commands.
+
+if typing.TYPE_CHECKING:
+    from _typeshed.importlib import MetaPathFinderProtocol, PathEntryFinderProtocol
 
 
 class PackageNotFound(Exception):
@@ -400,10 +406,74 @@ class Pip(PipCommandBuilder):
         :param upgrade_strategy: what upgrade strategy to use
         """
 
+        cmd, constraints_files_clean, requirements_files_clean, sub_env = cls._prepare_command(
+            python_path,
+            config,
+            requirements,
+            requirements_files,
+            upgrade,
+            upgrade_strategy,
+            constraints_files,
+            paths,
+        )
+
+        cls.run_pip(cmd, sub_env, constraints_files_clean, requirements_files_clean)
+
+    @classmethod
+    async def async_run_pip_install_command_from_config(
+        cls,
+        python_path: str,
+        config: PipConfig,
+        requirements: Optional[Sequence[Requirement]] = None,
+        requirements_files: Optional[list[str]] = None,
+        upgrade: bool = False,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        constraints_files: Optional[list[str]] = None,
+        paths: Optional[list[LocalPackagePath]] = None,
+    ) -> None:
+        """
+        Perform a pip install according to the given config
+
+        :param python_path: the python path to use
+        :param config: the pip config to use
+
+        :param requirements: which requirements to install
+        :param requirements_files: which requirements_files to install (-r)
+        :param paths: which paths to install
+
+        :param constraints_files: pass along the following constraint files
+
+        :param upgrade: make pip do an upgrade
+        :param upgrade_strategy: what upgrade strategy to use
+        """
+
+        cmd, constraints_files_clean, requirements_files_clean, sub_env = cls._prepare_command(
+            python_path,
+            config,
+            requirements,
+            requirements_files,
+            upgrade,
+            upgrade_strategy,
+            constraints_files,
+            paths,
+        )
+        await cls.async_run_pip(cmd, sub_env, constraints_files_clean, requirements_files_clean)
+
+    @classmethod
+    def _prepare_command(
+        cls,
+        python_path: str,
+        config: PipConfig,
+        requirements: Optional[Sequence[Requirement]] = None,
+        requirements_files: Optional[list[str]] = None,
+        upgrade: bool = False,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        constraints_files: Optional[list[str]] = None,
+        paths: Optional[list[LocalPackagePath]] = None,
+    ) -> Tuple[list[str], list[str], list[str], dict[str, str]]:
         # What
         requirements = requirements if requirements is not None else []
-        requirements_files = requirements_files if requirements_files is not None else []
-
+        clean_requirements_files = requirements_files if requirements_files is not None else []
         paths = paths if paths is not None else []
         local_paths: Iterator[LocalPackagePath] = (
             # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
@@ -411,13 +481,11 @@ class Pip(PipCommandBuilder):
             LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable)
             for path in paths
         )
-
         install_args = [
             *(str(requirement) for requirement in requirements),
-            *chain.from_iterable(["-r", f] for f in requirements_files),
+            *chain.from_iterable(["-r", f] for f in clean_requirements_files),
             *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in local_paths),
         ]
-
         # From where
         if paths:
             # For local installs, we allow not having an index set.
@@ -425,7 +493,6 @@ class Pip(PipCommandBuilder):
         else:
             # All others need an index
             assert_pip_has_source(config, " ".join(install_args))
-
         index_args: list[str] = []
         if config.index_url:
             index_args.append("--index-url")
@@ -436,13 +503,10 @@ class Pip(PipCommandBuilder):
             # then we need to disable the index.
             # This can only happen if paths is also set.
             index_args.append("--no-index")
-
         for extra_index_url in config.extra_index_url:
             index_args.append("--extra-index-url")
             index_args.append(extra_index_url)
-
-        constraints_files = constraints_files if constraints_files is not None else []
-
+        clean_constraints_files = constraints_files if constraints_files is not None else []
         # Command
         cmd = [
             python_path,
@@ -451,14 +515,12 @@ class Pip(PipCommandBuilder):
             "install",
             *(["--upgrade", "--upgrade-strategy", upgrade_strategy.value] if upgrade else []),
             *(["--pre"] if config.pre else []),
-            *chain.from_iterable(["-c", f] for f in constraints_files),
+            *chain.from_iterable(["-c", f] for f in clean_constraints_files),
             *install_args,
             *index_args,
         ]
-
         # ISOLATION!
         sub_env = os.environ.copy()
-
         if not config.use_system_config:
             # If we don't use system config, unset env vars
             if "PIP_EXTRA_INDEX_URL" in sub_env:
@@ -472,17 +534,29 @@ class Pip(PipCommandBuilder):
 
             # setting this env_var to os.devnull disables the loading of all pip configuration file
             sub_env["PIP_CONFIG_FILE"] = os.devnull
-
         if config.pre is not None:
             # Make sure that IF pip pre is set, we enforce it
             # The `--pre` option can only enable it
             # The env var can both enable and disable
             sub_env["PIP_PRE"] = str(config.pre)
-
-        cls.run_pip(cmd, sub_env, constraints_files, requirements_files)
+        return cmd, clean_constraints_files, clean_requirements_files, sub_env
 
     @classmethod
     def run_pip(cls, cmd: list[str], env: dict[str, str], constraints_files: list[str], requirements_files: list[str]) -> None:
+        cls._log_before_run(cmd, constraints_files, requirements_files)
+        return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=env)
+        cls._process_return(cmd, env, full_output, return_code)
+
+    @classmethod
+    async def async_run_pip(
+        cls, cmd: list[str], env: dict[str, str], constraints_files: list[str], requirements_files: list[str]
+    ) -> None:
+        cls._log_before_run(cmd, constraints_files, requirements_files)
+        return_code, full_output = await CommandRunner(LOGGER_PIP).async_run_command_and_stream_output(cmd, env_vars=env)
+        cls._process_return(cmd, env, full_output, return_code)
+
+    @classmethod
+    def _log_before_run(cls, cmd: list[str], constraints_files: list[str], requirements_files: list[str]) -> None:
         def create_log_content_files(title: str, files: list[str]) -> list[str]:
             """
             Log the content of a list of files with indentations in the following format:
@@ -517,7 +591,9 @@ class Pip(PipCommandBuilder):
             log_msg.extend(create_log_content_files("constraints files", constraints_files))
         log_msg.append("Pip command: " + " ".join(cmd))
         LOGGER_PIP.debug("".join(log_msg).strip())
-        return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=env)
+
+    @classmethod
+    def _process_return(cls, cmd: list[str], env: dict[str, str], full_output: list[str], return_code: int) -> None:
         if return_code != 0:
             not_found: list[str] = []
             conflicts: list[str] = []
@@ -698,9 +774,8 @@ class PythonEnvironment:
 
         with open(pip_path, "w", encoding="utf-8") as fd:
             fd.write(
-                """#!/usr/bin/env bash
-source "$(dirname "$0")/activate"
-python -m pip $@
+                """#!/bin/sh
+"$(dirname "$0")/python" -m pip $@
                 """.strip()
             )
         os.chmod(pip_path, 0o755)
@@ -749,6 +824,7 @@ import sys
         constraint_files: Optional[list[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
+        add_inmanta_requires: bool = True,
     ) -> None:
         """
         Perform a pip install in this environment, according to the given config
@@ -766,9 +842,49 @@ import sys
         if len(requirements) == 0 and len(paths) == 0:
             raise Exception("install_for_config requires at least one requirement or path to install")
         constraint_files = constraint_files if constraint_files is not None else []
-        inmanta_requirements = self._get_requirements_on_inmanta_package()
+        if add_inmanta_requires:
+            inmanta_requirements = self._get_requirements_on_inmanta_package()
+        else:
+            inmanta_requirements = []
 
         Pip.run_pip_install_command_from_config(
+            python_path=self.python_path,
+            config=config,
+            requirements=[*requirements, *inmanta_requirements],
+            constraints_files=constraint_files,
+            upgrade=upgrade,
+            upgrade_strategy=upgrade_strategy,
+            paths=paths,
+        )
+
+    async def async_install_for_config(
+        self,
+        requirements: list[Requirement],
+        config: PipConfig,
+        upgrade: bool = False,
+        constraint_files: Optional[list[str]] = None,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        paths: list[LocalPackagePath] = [],
+    ) -> None:
+        """
+        Perform a pip install in this environment, according to the given config
+
+        :param requirements: which requirements to install
+        :param config: the pip config to use
+        :param upgrade: make pip do an upgrade
+        :param constraint_files: pass along the following constraint files
+        :param upgrade_strategy: what upgrade strategy to use
+        :param paths: which paths to install
+
+        limitation:
+         - When upgrade is false, if requirements are already installed constraints from constraint files may not be verified.
+        """
+        if len(requirements) == 0 and len(paths) == 0:
+            raise Exception("install_for_config requires at least one requirement or path to install")
+        constraint_files = constraint_files if constraint_files is not None else []
+        inmanta_requirements = self._get_requirements_on_inmanta_package()
+
+        await Pip.async_run_pip_install_command_from_config(
             python_path=self.python_path,
             config=config,
             requirements=[*requirements, *inmanta_requirements],
@@ -946,6 +1062,37 @@ class CommandRunner:
         else:
             return return_code, full_output
 
+    async def async_run_command_and_stream_output(
+        self,
+        cmd: list[str],
+        timeout: float = 10,
+        env_vars: Optional[Mapping[str, str]] = None,
+    ) -> tuple[int, list[str]]:
+        """
+        Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
+        of the sub-process.
+        """
+        full_output = []
+        # We use shell here to avoid
+        # the bug https://github.com/python/cpython/issues/103911#issuecomment-2333963137
+        process = await asyncio.create_subprocess_shell(
+            subprocess.list2cmdline(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env_vars
+        )
+        assert process.stdout is not None  # Make mypy happy
+        async for line in process.stdout:
+            # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
+            output = line.decode().strip()
+            full_output.append(output)
+            self.logger.debug(output)
+
+        try:
+            return_code = await asyncio.wait_for(process.wait(), timeout=timeout)
+        except TimeoutError:
+            process.kill()
+            return -1, full_output
+        else:
+            return return_code, full_output
+
 
 class ActiveEnv(PythonEnvironment):
     """
@@ -982,19 +1129,19 @@ class ActiveEnv(PythonEnvironment):
         constraint_files: Optional[list[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
+        add_inmanta_requires: bool = True,
     ) -> None:
         if (not upgrade and self.are_installed(requirements)) and not paths:
             return
         try:
-            super().install_for_config(requirements, config, upgrade, constraint_files, upgrade_strategy, paths)
+            super().install_for_config(
+                requirements, config, upgrade, constraint_files, upgrade_strategy, paths, add_inmanta_requires
+            )
         finally:
             self.notify_change()
 
-    from pkg_resources.__init__ import Requirement
-
-    @classmethod
     def get_constraint_violations_for_check(
-        cls,
+        self,
         strict_scope: Optional[Pattern[str]] = None,
         constraints: Optional[list[Requirement]] = None,
     ) -> tuple[set[VersionConflict], set[VersionConflict]]:
@@ -1018,7 +1165,7 @@ class ActiveEnv(PythonEnvironment):
         )
 
         inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(r, owner="inmanta-core") for r in cls._get_requirements_on_inmanta_package()
+            OwnedRequirement(r, owner="inmanta-core") for r in self._get_requirements_on_inmanta_package()
         )
         extra_constraints: abc.Set[OwnedRequirement] = frozenset(
             (OwnedRequirement(r) for r in constraints) if constraints is not None else []
@@ -1062,9 +1209,8 @@ class ActiveEnv(PythonEnvironment):
 
         return constraint_violations, constraint_violations_strict
 
-    @classmethod
     def check(
-        cls,
+        self,
         strict_scope: Optional[Pattern[str]] = None,
         constraints: Optional[list[Requirement]] = None,
     ) -> None:
@@ -1078,7 +1224,9 @@ class ActiveEnv(PythonEnvironment):
         :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
             packages meet the given constraints. All listed packages are expected to be installed.
         """
-        constraint_violations, constraint_violations_strict = cls.get_constraint_violations_for_check(strict_scope, constraints)
+        constraint_violations, constraint_violations_strict = self.get_constraint_violations_for_check(
+            strict_scope, constraints
+        )
 
         if len(constraint_violations_strict) != 0:
             raise ConflictingRequirements(
@@ -1089,8 +1237,7 @@ class ActiveEnv(PythonEnvironment):
         for violation in constraint_violations:
             LOGGER.warning("%s", violation)
 
-    @classmethod
-    def check_legacy(cls, in_scope: Pattern[str], constraints: Optional[list[Requirement]] = None) -> bool:
+    def check_legacy(self, in_scope: Pattern[str], constraints: Optional[list[Requirement]] = None) -> bool:
         """
         Check this Python environment for incompatible dependencies in installed packages. This method is a legacy method
         in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
@@ -1103,7 +1250,7 @@ class ActiveEnv(PythonEnvironment):
             packages meet the given constraints. All listed packages are expected to be installed.
         :return: True iff the check succeeds.
         """
-        constraint_violations_non_strict, constraint_violations_strict = cls.get_constraint_violations_for_check(
+        constraint_violations_non_strict, constraint_violations_strict = self.get_constraint_violations_for_check(
             in_scope, constraints
         )
 
@@ -1194,6 +1341,8 @@ class ActiveEnv(PythonEnvironment):
 process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)
 """
 Singleton representing the Python environment this process is running in.
+
+Should not be imported directly, as it can be updated
 """
 
 
@@ -1203,11 +1352,26 @@ def mock_process_env(*, python_path: Optional[str] = None, env_path: Optional[st
     Overrides the process environment information. This forcefully sets the environment that is recognized as the outer Python
     environment. This function should only be called when a Python environment has been set up dynamically and this environment
     should be treated as if this process was spawned from it, and even then with great care.
-
     :param python_path: The path to the python binary. Only one of `python_path` and `env_path` should be set.
     :param env_path: The path to the python environment directory. Only one of `python_path` and `env_path` should be set.
+
+    When using this method in a fixture to set and reset virtualenv, it is preferable to use `store_venv()`
     """
     process_env.__init__(python_path=python_path, env_path=env_path)  # type: ignore
+
+
+def swap_process_env(env: ActiveEnv) -> ActiveEnv:
+    """
+    Overrides the process environment information.
+
+    Returns the old active env
+
+    For use in testing. Test as expected to swap the old process env back in place
+    """
+    global process_env
+    old_env = process_env
+    process_env = env
+    return old_env
 
 
 @stable_api
@@ -1286,10 +1450,13 @@ class VirtualEnv(ActiveEnv):
         constraint_files: Optional[list[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
+        add_inmanta_requires: bool = True,
     ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super().install_for_config(requirements, config, upgrade, constraint_files, upgrade_strategy, paths)
+        super().install_for_config(
+            requirements, config, upgrade, constraint_files, upgrade_strategy, paths, add_inmanta_requires
+        )
 
 
 class VenvCreationFailedError(Exception):
@@ -1302,3 +1469,64 @@ class VenvActivationFailedError(Exception):
     def __init__(self, msg: str) -> None:
         super().__init__(msg)
         self.msg = msg
+
+
+@dataclass
+class VenvSnapshot:
+    old_os_path: str
+    old_prefix: str
+    old_path: list[str]
+    old_meta_path: "list[MetaPathFinderProtocol]"
+    old_path_hooks: "list[Callable[[str], PathEntryFinderProtocol]]"
+    old_pythonpath: Optional[str]
+    old_os_venv: Optional[str]
+    old_process_env_path: str
+    old_process_env: ActiveEnv
+    old_working_set: WorkingSet
+
+    def restore(self) -> None:
+        os.environ["PATH"] = self.old_os_path
+        sys.prefix = self.old_prefix
+        sys.path = self.old_path
+        # reset sys.meta_path because it might contain finders for editable installs, make sure to keep the same object
+        sys.meta_path.clear()
+        sys.meta_path.extend(self.old_meta_path)
+        sys.path_hooks.clear()
+        sys.path_hooks.extend(self.old_path_hooks)
+        # Clear cache for sys.path_hooks
+        sys.path_importer_cache.clear()
+        pkg_resources.working_set = self.old_working_set
+        # Restore PYTHONPATH
+        if self.old_pythonpath is not None:
+            os.environ["PYTHONPATH"] = self.old_pythonpath
+        elif "PYTHONPATH" in os.environ:
+            del os.environ["PYTHONPATH"]
+        # Restore VIRTUAL_ENV
+        if self.old_os_venv is not None:
+            os.environ["VIRTUAL_ENV"] = self.old_os_venv
+        elif "VIRTUAL_ENV" in os.environ:
+            del os.environ["VIRTUAL_ENV"]
+
+        # We reset the process_env both ways: we put the reference back and we do an in_place update
+        swap_process_env(self.old_process_env)
+        mock_process_env(env_path=self.old_process_env_path)
+
+
+def store_venv() -> VenvSnapshot:
+    """
+    Create a snapshot of the venv environment, for use in testing, to resest the test
+    """
+
+    self = VenvSnapshot(
+        old_os_path=os.environ.get("PATH", ""),
+        old_prefix=sys.prefix,
+        old_path=list(sys.path),
+        old_meta_path=sys.meta_path.copy(),
+        old_path_hooks=sys.path_hooks.copy(),
+        old_pythonpath=os.environ.get("PYTHONPATH", None),
+        old_os_venv=os.environ.get("VIRTUAL_ENV", None),
+        old_process_env=process_env,
+        old_process_env_path=process_env.env_path,
+        old_working_set=pkg_resources.working_set,
+    )
+    return self

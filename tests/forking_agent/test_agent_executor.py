@@ -19,6 +19,7 @@ import hashlib
 import logging
 import os
 import pathlib
+import subprocess
 import sys
 
 from inmanta import const
@@ -26,6 +27,7 @@ from inmanta.agent import executor, forking_executor
 from inmanta.agent.forking_executor import MPExecutor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
+from inmanta.signals import dump_ioloop_running, dump_threads
 from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
 
 logger = logging.getLogger(__name__)
@@ -204,15 +206,34 @@ def with_timeout(delay):
     def decorator(func):
         @functools.wraps(func)
         async def new_func(*args, **kwargs):
-            async with asyncio.timeout(delay):
-                return await func(*args, **kwargs)
+            try:
+                async with asyncio.timeout(delay):
+                    return await func(*args, **kwargs)
+            except TimeoutError:
+                dump_threads()
+                await dump_ioloop_running()
+                raise TimeoutError(f"Test case got interrupted, because it didn't finish in {delay} seconds.")
 
         return new_func
 
     return decorator
 
 
+def trace_error_26(func):
+    @functools.wraps(func)
+    async def wrapper(*args, **kwds):
+        try:
+            return await func(*args, **kwds)
+        except OSError as e:
+            if e.errno == 26:
+                subprocess.call(["lsof", e.filename], stderr=subprocess.STDOUT, stdout=subprocess.STDOUT)
+            raise
+
+    return wrapper
+
+
 @with_timeout(30)
+@trace_error_26
 async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
@@ -252,6 +273,20 @@ def test():
         pip_config=pip_config, requirements=requirements2, sources=sources2, python_version=sys.version_info[:2]
     )
 
+    logging.info(
+        """
+    Blueprint1: hash: %s, env hash: %s,
+    Blueprint2: hash: %s, env hash: %s,
+    Blueprint3: hash: %s, env hash: %s,
+    """,
+        blueprint1.blueprint_hash(),
+        blueprint1.to_env_blueprint().blueprint_hash(),
+        blueprint2.blueprint_hash(),
+        blueprint2.to_env_blueprint().blueprint_hash(),
+        blueprint3.blueprint_hash(),
+        blueprint3.to_env_blueprint().blueprint_hash(),
+    )
+
     executor_manager = mpmanager_light
     executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.wait_for(
         asyncio.gather(
@@ -260,7 +295,7 @@ def test():
             executor_manager.get_executor("agent1", "local:", code_for(blueprint2)),
             executor_manager.get_executor("agent1", "local:", code_for(blueprint3)),
         ),
-        10,
+        20,
     )
 
     assert executor_1 is executor_1_reuse, "Expected the same executor instance for identical blueprint"
@@ -270,6 +305,7 @@ def test():
 
 
 @with_timeout(30)
+@trace_error_26
 async def test_executor_creation_and_venv_usage(
     server_config, pip_index: PipIndex, mpmanager_light: forking_executor.MPManager
 ) -> None:
@@ -312,9 +348,6 @@ def test():
     blueprint3 = executor.ExecutorBlueprint(
         pip_config=pip_config, requirements=requirements3, sources=sources3, python_version=initial_version
     )
-    blueprint3_updated = executor.ExecutorBlueprint(
-        pip_config=pip_config, requirements=requirements3, sources=sources3, python_version=initial_version
-    )
 
     executor_manager = mpmanager_light
     executor_1, executor_2, executor_3 = await asyncio.gather(
@@ -333,6 +366,7 @@ def test():
         pathlib.Path(executor_3.process.executor_virtual_env.env_path) / const.INMANTA_VENV_STATUS_FILENAME
     )
 
+    logger.warning("Touching %s now", executor_2_venv_status_file)
     old_datetime = datetime.datetime(year=2022, month=9, day=22, hour=12, minute=51, second=42)
     # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
     # modification override of the inmanta file and the retrieval of the last modification of the file
@@ -346,6 +380,7 @@ def test():
 
     # We wait for the refresh of the venv status files
     await asyncio.sleep(0.2)
+    logger.warning("Sleeping done")
 
     new_check_executor1 = executor_1.process.executor_virtual_env.last_used
     new_check_executor2 = executor_2.process.executor_virtual_env.last_used
@@ -398,7 +433,9 @@ def test():
         (datetime.datetime.now().timestamp(), old_datetime.timestamp()),
     )
     # A new version would run
-    blueprint3_updated.python_version = (3, 12)
+    blueprint3_updated = executor.ExecutorBlueprint(
+        pip_config=pip_config, requirements=requirements3, sources=sources3, python_version=(3, 12)
+    )
     await executor_manager.get_executor("agent3", "local:", code_for(blueprint3_updated))
     venvs = [str(e) for e in venv_dir.iterdir()]
     assert len(venvs) == 2, "Only two Virtual Environment should exist!"

@@ -38,7 +38,7 @@ from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import IO, Any, Optional
+from typing import IO, TYPE_CHECKING, Any, Literal, Optional
 
 import click
 import more_itertools
@@ -1791,7 +1791,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         """
         try:
             with self._get_isolated_env_builder() as env:
-                distribution = "wheel"
+                distribution: Literal["wheel"] = "wheel"
                 builder = build.ProjectBuilder(source_dir=build_path, python_executable=env.python_executable)
                 env.install(builder.build_system_requires)
                 env.install(builder.get_requires_for_build(distribution=distribution))

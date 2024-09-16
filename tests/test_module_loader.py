@@ -577,7 +577,7 @@ def test_module_v2_load_installed_without_required(snippetcompiler_clean, local_
     """
     # set up venv
     snippetcompiler_clean.setup_for_snippet("", autostd=False)
-    process_env.install_for_config(
+    env.process_env.install_for_config(
         [InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement()],
         config=PipConfig(
             index_url=local_module_package_index,
@@ -605,7 +605,7 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     but with another version. The requirements of core should not be
     overwritten. The module gets installed from source
     """
-    if "inmanta-core" in process_env.get_installed_packages(only_editable=True):
+    if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
         pytest.skip(
             "This test would fail if it runs against an inmanta-core installed in editable mode, because the build tag "
             "on the development branch is set to .dev0. The inmanta package protection feature would make pip "
@@ -649,7 +649,7 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     but with another version. The requirements of core should not be
     overwritten. The module gets installed from index.
     """
-    if "inmanta-core" in process_env.get_installed_packages(only_editable=True):
+    if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
         pytest.skip(
             "This test would fail if it runs against an inmanta-core installed in editable mode, because the build tag "
             "on the development branch is set to .dev0. The inmanta package protection feature would make pip "
@@ -872,7 +872,7 @@ def test_module_install_extra_on_project_level_v2_dep(
         autostd=False,
     )
 
-    installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+    installed: abc.Mapping[str, Version] = env.process_env.get_installed_packages()
     assert package_name in installed
     assert package_name_extra in installed
 
@@ -928,7 +928,7 @@ def test_module_install_extra_on_dep_of_v2_module(
         autostd=False,
     )
 
-    installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+    installed: abc.Mapping[str, Version] = env.process_env.get_installed_packages()
     package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}depmod"
     assert package_name in installed
     assert package_name_extra in installed
@@ -982,7 +982,7 @@ def test_module_install_extra_on_dep_of_v1_module(
         autostd=False,
     )
 
-    installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+    installed: abc.Mapping[str, Version] = env.process_env.get_installed_packages()
     package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}depmod"
     assert package_name in installed
     assert package_name_extra in installed
@@ -1020,7 +1020,7 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
     package_name: str = str(package_without_extra)
 
     def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
-        installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+        installed: abc.Mapping[str, Version] = env.process_env.get_installed_packages()
         assert (package_name in installed) == module_installed
         assert (package_name_extra in installed) == extra_installed
 
@@ -1089,7 +1089,7 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
     package_name: str = str(package_without_extra)
 
     def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
-        installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+        installed: abc.Mapping[str, Version] = env.process_env.get_installed_packages()
         assert (package_name in installed) == module_installed
         assert (package_name_extra in installed) == extra_installed
 
@@ -1181,7 +1181,7 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
     )
 
     def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
-        installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+        installed: abc.Mapping[str, Version] = env.process_env.get_installed_packages()
         assert (package_name in installed) == module_installed
         assert (package_name_extra in installed) == extra_installed
 
@@ -1383,7 +1383,7 @@ class Test(Resource):
 
 
 @pytest.mark.skipif(
-    "inmanta-core" in process_env.get_installed_packages(only_editable=True),
+    "inmanta-core" in env.process_env.get_installed_packages(only_editable=True),
     reason="Inmanta package protection in env.install_* not compatible with editable core in non-inherited venv.",
 )
 @pytest.mark.slowtest
@@ -1398,12 +1398,12 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
     module_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     # start with non-editable install to populate site-packages with appropriate metadata (editable install would create pth
     # files if a different mechanism is picked so we want to avoid that).
-    process_env.install_for_config(
+    env.process_env.install_for_config(
         requirements=[], paths=[LocalPackagePath(path=module_dir, editable=False)], config=PipConfig(use_system_config=True)
     )
     # replace module dir in site-packages with symlink
     rel_path_src: str = os.path.join(const.PLUGINS_PACKAGE, "minimalv2module")
-    module_dir_site_packages: str = os.path.join(process_env.site_packages_dir, rel_path_src)
+    module_dir_site_packages: str = os.path.join(env.process_env.site_packages_dir, rel_path_src)
     shutil.rmtree(module_dir_site_packages)
     os.symlink(os.path.join(module_dir, rel_path_src), module_dir_site_packages)
 

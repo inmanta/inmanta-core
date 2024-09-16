@@ -1,0 +1,91 @@
+import lsm
+import lsm::fsm
+import ip
+
+entity InterfaceIPAssignment extends lsm::ServiceEntity:
+    """
+        Interface details.
+
+        :attr service_id: A unique ID for this service.
+
+        :attr router_ip: The IP address of the SR linux router that should be configured.
+        :attr router_name: The name of the SR linux router that should be configured.
+        :attr interface_name: The name of the interface of the router that should be configured.
+        :attr address: The IP-address to assign to the given interface.
+    """
+    string service_id
+
+    string router_ip
+    string router_name
+    string interface_name
+
+    string address
+    lsm::attribute_modifier address__modifier="rw+"
+
+end
+
+entity InterfaceIPAssignmentV2 extends lsm::ServiceEntity:
+    """
+        Interface details. With a few less attributes
+
+        :attr router_ip: The IP address of the SR linux router that should be configured.
+        :attr interface_name: The name of the interface of the router that should be configured.
+        :attr address: The IP-address to assign to the given interface.
+        :attr description: A description to associate to this interface.
+    """
+    string router_ip
+    string interface_name
+    string description
+
+    string address
+    lsm::attribute_modifier address__modifier="rw+"
+
+end
+
+index InterfaceIPAssignmentV2(router_ip, interface_name)
+
+implement InterfaceIPAssignment using parents
+implement InterfaceIPAssignmentV2 using parents
+
+binding = lsm::ServiceBinding(
+    service_entity_name="service_simple",
+    default_version=0,
+    versions=[
+        lsm::ServiceBindingVersion(
+            service_entity="__config__::InterfaceIPAssignment",
+            lifecycle=lsm::fsm::service,
+            version=0,
+        ),
+        lsm::ServiceBindingVersion(
+            service_entity="__config__::InterfaceIPAssignment",
+            lifecycle=lsm::fsm::simple,
+            version=1,
+        ),
+        lsm::ServiceBindingVersion(
+            service_entity="__config__::InterfaceIPAssignmentV2",
+            lifecycle=lsm::fsm::simple,
+            version=2,
+        ),
+
+    ]
+)
+
+for instance in lsm::all(binding, min_version=1, max_version=2):
+    InterfaceIPAssignmentV2(
+        instance_id=instance["id"],
+        entity_binding=lsm::get_service_binding_version(binding, instance["service_entity_version"]),
+        router_ip=instance["attributes"]["router_ip"],
+        interface_name=instance["attributes"]["interface_name"],
+        description=instance["service_entity_version"] == 1 ? "old version" : instance["attributes"]["description"],
+        address=instance["attributes"]["address"],
+    )
+end
+
+for instance in lsm::all(binding, max_version=0):
+    InterfaceIPAssignment(
+        instance_id=instance["id"],
+        entity_binding=lsm::get_service_binding_version(binding, instance["service_entity_version"]),
+        **instance["attributes"]
+    )
+end
+

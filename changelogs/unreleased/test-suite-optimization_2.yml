@@ -1,0 +1,3 @@
+description: Cleanup test suite fixes
+change-type: patch
+destination-branches: [master, iso7]
