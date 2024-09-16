@@ -23,7 +23,7 @@ import json
 import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, Sequence
+from typing import Mapping, Optional, Sequence
 
 import pytest
 
@@ -44,14 +44,16 @@ class DummyExecutor(executor.Executor):
 
     def __init__(self):
         self.execute_count = 0
+        self.dry_run_count = 0
         self.failed_resources = {}
+        self.mock_versions = {}
 
     async def execute(self, gid: uuid.UUID, resource_details: ResourceDetails, reason: str) -> const.ResourceState:
         self.execute_count += 1
         return const.ResourceState.deployed
 
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
-        pass
+        self.dry_run_count += 1
 
     async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
         pass
@@ -107,6 +109,12 @@ class TestAgent(Agent):
         self.scheduler._code_manager = DummyCodeManager(self._client)
         # Bypass DB
         self.scheduler.read_version = pass_method
+        self.scheduler.mock_versions = {}
+
+        async def build_resource_mappings_from_db(version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:
+            return self.scheduler.mock_versions[version]
+
+        self.scheduler.build_resource_mappings_from_db = build_resource_mappings_from_db
 
 
 @pytest.fixture
@@ -209,3 +217,32 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
 
     assert len(agent.scheduler._state.get_types_for_agent("agent1")) == 1
     assert len(agent.scheduler._state.resources) == 1
+
+
+async def test_dryrun(agent: TestAgent, make_resource_minimal, monkeypatch):
+    """
+    Ensure the simples deploy scenario works: 2 dependant resources
+    """
+
+    rid1 = "test::Resource[agent1,name=1]"
+    rid2 = "test::Resource[agent1,name=2]"
+    resources = {
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[], version=5),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
+    }
+
+    agent.scheduler.mock_versions[5] = resources
+
+    dryrun = uuid.uuid4()
+    await agent.scheduler.dryrun(dryrun, 5)
+
+    async def done():
+        agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent1")
+        if not agent_1_queue:
+            return False
+        print(agent_1_queue._unfinished_tasks)
+        return agent_1_queue._unfinished_tasks == 0
+
+    await retry_limited(done, 5)
+
+    assert agent.executor_manager.executors["agent1"].dry_run_count == 2
