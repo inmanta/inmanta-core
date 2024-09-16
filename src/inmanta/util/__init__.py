@@ -45,6 +45,9 @@ from types import TracebackType
 from typing import BinaryIO, Callable, Generic, Optional, Sequence, TypeVar, Union
 
 import asyncpg
+import click
+import importlib_metadata
+from click import Group
 from tornado import gen
 
 import packaging
@@ -904,7 +907,7 @@ def parse_requirement(requirement: str) -> CanonicalRequirement:
     drop_comment = remove_comment_part(to_clean=requirement)
     # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
     # already installed
-    # This instance is considered as doomed because we are not supposed to modify directly the instance
+    # This instance is considered as doomed because the requirement name that this instance is using is not "canonicalized"
     doomed_requirement_instance = packaging.requirements.Requirement(requirement_string=drop_comment)
     canonical_name = str(doomed_requirement_instance).replace(
         doomed_requirement_instance.name, packaging.utils.canonicalize_name(doomed_requirement_instance.name)
@@ -941,3 +944,43 @@ def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequi
                 # This line was empty or only containing a comment
                 continue
     return requirements
+
+
+# Retaken from the `click-plugins` repo which is now unmaintained
+def with_plugins(plugins: Iterator[importlib_metadata.EntryPoint]) -> Callable[[Group], Group]:
+    """
+    A decorator to register external CLI commands to an instance of
+    `click.Group()`.
+
+    Parameters
+    ----------
+    plugins : iter
+        An iterable producing one `pkg_resources.EntryPoint()` per iteration.
+    attrs : **kwargs, optional
+        Additional keyword arguments for instantiating `click.Group()`.
+
+    Returns
+    -------
+    click.Group()
+    """
+
+    def decorator(group: click.Group) -> click.Group:
+        if not isinstance(group, click.Group):
+            raise TypeError("Plugins can only be attached to an instance of click.Group()")
+
+        for entry_point in plugins or ():
+            try:
+                group.add_command(entry_point.load())
+            except Exception as e:
+                # Catch this so a busted plugin doesn't take down the CLI.
+                # Handled by registering a dummy command that does nothing
+                # other than explain the error.
+                def print_error(error: Exception) -> None:
+                    click.echo(f"Error: could not load this plugin for the following reason: {error}")
+
+                new_print_error = functools.partial(print_error, e)
+                group.add_command(click.Command(name=entry_point.name, callback=new_print_error))
+
+        return group
+
+    return decorator

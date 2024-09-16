@@ -95,6 +95,7 @@ setup(
             "inmanta-cli = inmanta.main:main",
             "inmanta = inmanta.app:app",
             "inmanta-initial-user-setup = inmanta.user_setup:main",
+            "inmanta-cli_plugins = inmanta.main:cmd",
         ],
     },
 )
