@@ -38,10 +38,13 @@ T = TypeVar("T", bound=tasks.Task, covariant=True)
 @dataclass(frozen=True, kw_only=True)
 class PrioritizedTask(Generic[T]):
     """
-    Resource action task with a priority attached. Lower values represent a higher priority.
+    Resource action task with a priority attached. Lower values represent a higher priority. Negative priorities are reserved
+    for internal use.
+
+    This is a stateless representation of a task with a priority attached, unlike TaskQueueItem, which is a stateful element
+    in the task queue.
     """
 
-    # FIXME[#8008]: merge with TaskQueueItem
     task: T
     priority: int
 
@@ -87,9 +90,9 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
     # FIXME[#8019]: relies on undocumented asyncio.PriorityQueue._queue field and the fact that it's a heapq,
     #               can we do something about that?
 
-    def __init__(self, consumer_factory: Callable[[str], None]) -> None:
+    def __init__(self, new_agent_notify: Callable[[str], None]) -> None:
         """
-        :param consumer_factory: the method that will cause the queue to be consumed, called with agent name as argument
+        :param new_agent_notify: method to notify consumer about a new agent, called with agent name as argument.
         """
         self._agent_queues: dict[str, asyncio.PriorityQueue[TaskQueueItem]] = {}
         # can not drop tasks from queue without breaking the heap invariant, or potentially breaking asyncio.Queue invariants
@@ -100,7 +103,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         # monotonically rising value for item insert order
         # use simple counter rather than time.monotonic_ns() for performance reasons
         self._entry_count: int = 0
-        self._consumer_factory = consumer_factory
+        self._new_agent_notify: Callable[[str], None] = new_agent_notify
 
     def reset(self) -> None:
         self._agent_queues.clear()
@@ -108,13 +111,18 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         self._entry_count = 0
 
     def _get_queue(self, agent_name: str) -> asyncio.PriorityQueue[TaskQueueItem]:
+        """
+        Return the queue for an agent, creating it if it does not exist.
+
+        For internal use only. Queues must not be exposed to end user.
+        """
         # All we do is sync and on the io loop, no need for locks!
         out = self._agent_queues.get(agent_name, None)
         if out is not None:
             return out
         out = asyncio.PriorityQueue()
         self._agent_queues[agent_name] = out
-        self._consumer_factory(agent_name)
+        self._new_agent_notify(agent_name)
         return out
 
     def get_tasks_for_resource(self, resource: ResourceIdStr) -> set[tasks.Task]:
@@ -183,12 +191,13 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         self._get_queue(agent_name).put_nowait(item)
 
     def send_shutdown(self) -> None:
-        """Wake up all wrokers after shutdown is signalled"""
+        """
+        Wake up all wrokers after shutdown is signalled
+        """
         poison_pill = TaskQueueItem(
-            task=PrioritizedTask(task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")), priority=0),
-            insert_order=self._entry_count,
+            task=PrioritizedTask(task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")), priority=-1),
+            insert_order=0,
         )
-        self._entry_count += 1
         for queue in self._agent_queues.values():
             queue.put_nowait(poison_pill)
 
@@ -256,18 +265,19 @@ class ScheduledWork:
     Expects to be informed by task runners of finished tasks through notify_provides().
 
     :param requires: Live, read-only view on requires-provides mapping for the latest model state.
-    :param consumer_factory: Method to call to start draining the queue when created
+    :param new_agent_trigger: Method to notify client of newly created agent queues. When notified about a queue, client is
+        expected to start consuming its tasks.
     """
 
     def __init__(
         self,
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
         provides: Mapping[ResourceIdStr, Set[ResourceIdStr]],
-        consumer_factory: Callable[[str], None],
+        new_agent_notify: Callable[[str], None],
     ) -> None:
         self.requires: Mapping[ResourceIdStr, Set[ResourceIdStr]] = requires
         self.provides: Mapping[ResourceIdStr, Set[ResourceIdStr]] = provides
-        self.agent_queues: AgentQueues = AgentQueues(consumer_factory)
+        self.agent_queues: AgentQueues = AgentQueues(new_agent_notify)
         self.waiting: dict[ResourceIdStr, BlockedDeploy] = {}
 
     def reset(self) -> None:

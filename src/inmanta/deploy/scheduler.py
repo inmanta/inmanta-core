@@ -59,7 +59,7 @@ class ResourceScheduler:
         self._work: work.ScheduledWork = work.ScheduledWork(
             requires=self._state.requires.requires_view(),
             provides=self._state.requires.provides_view(),
-            consumer_factory=self.start_for_agent,
+            new_agent_notify=self.start_for_agent,
         )
 
         self._executor_manager = executor_manager
@@ -134,9 +134,14 @@ class ResourceScheduler:
 
         :return: resource_mapping {id -> resource details} and require_mapping {id -> requires}
         """
+        # TODO: BUG: not necessarily released
         resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(environment=self._environment)
         resource_mapping = {
             resource.resource_id: ResourceDetails(
+                # TODO: version does not belong here, id a bit out of place but OK
+                #   -> either way, different ResourceDetails than inmanta.agent.executor.ResourceDetails!
+                #   -> actually, it inherits now, but I'm not sure it should. It complicates atomicity and the import feels off
+                #   => should be injected only when communicating with the executor
                 attribute_hash=resource.attribute_hash,
                 id=resource.resource_id,
                 version=resource.model,
@@ -164,6 +169,8 @@ class ResourceScheduler:
         environment = await data.Environment.get_by_id(self._environment)
         if environment is None:
             raise ValueError(f"No environment found with this id: `{self._environment}`")
+        # TODO BUG: version does not necessarily correspond to resources' version + last_version is reserved, not necessarily released
+        #       -> call ConfigurationModel.get_version_nr_latest_version() instead?
         version = environment.last_version
         resources_from_db, requires_from_db = await self.build_resource_mappings_from_db()
         await self.new_version(version, resources_from_db, requires_from_db)
@@ -219,6 +226,7 @@ class ResourceScheduler:
                     self._state.update_requires(resource, requires[resource])
                 # ensure deploy for ALL dirty resources, not just the new ones
                 # FIXME[#8008]: this is copy-pasted, make into a method?
+                # TODO: implement suggestion
                 # FIXME: WDB TO SANDER: We should track dirty resources in a collection to not force a scan of the full state
                 dirty: Set[ResourceIdStr] = {
                     r for r, details in self._state.resource_state.items() if details.status == ResourceStatus.HAS_UPDATE
