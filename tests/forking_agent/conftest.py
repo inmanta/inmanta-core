@@ -32,6 +32,7 @@ import inmanta.loader
 import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
+from inmanta import const
 from inmanta.agent.forking_executor import MPManager
 from packaging import version
 
@@ -40,7 +41,6 @@ from packaging import version
 async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.UUID], MPManager]]:
     managers = []
     threadpools: list[concurrent.futures.thread.ThreadPoolExecutor] = []
-    MPManager.init_once()
 
     def make_mpmanager(agent_session_id: uuid.UUID) -> MPManager:
         log_folder = tmp_path / "logs"
@@ -52,17 +52,18 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
             uuid.uuid4(),
             log_folder=str(log_folder),
             storage_folder=str(storage_folder),
+            log_level=const.LOG_LEVEL_TRACE,
             cli_log=True,
         )
         # We only want to override it in the test suite
-        manager.environment_manager.retention_time = 7
+        manager.process_pool.environment_manager.retention_time = 7
         managers.append(manager)
         threadpools.append(threadpool)
         return manager
 
     yield make_mpmanager
     await asyncio.wait_for(asyncio.gather(*(manager.stop() for manager in managers)), 10)
-    await asyncio.wait_for(asyncio.gather(*(manager.join(threadpools, 3) for manager in managers)), 10)
+    await asyncio.wait_for(asyncio.gather(*(manager.join() for manager in managers)), 10)
     for threadpool in threadpools:
         threadpool.shutdown(wait=False)
 

@@ -44,6 +44,7 @@ from inmanta.data.model import (
     AttributeStateChange,
     DiscoveredResource,
     LatestReleasedResource,
+    LinkedDiscoveredResource,
     LogLine,
     ReleasedResourceDetails,
     Resource,
@@ -62,10 +63,9 @@ from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, Forbidden, NotFound, ServerError
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
 from inmanta.server import config as opt
 from inmanta.server import extensions, protocol
-from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 from inmanta.util import parse_timestamp
@@ -114,7 +114,7 @@ class ResourceActionLogLine(logging.LogRecord):
 class ResourceService(protocol.ServerSlice):
     """Resource Manager service"""
 
-    agentmanager_service: "AgentManager"
+    agentmanager_service: "agentmanager.AgentManager"
 
     def __init__(self) -> None:
         super().__init__(SLICE_RESOURCE)
@@ -147,7 +147,7 @@ class ResourceService(protocol.ServerSlice):
 
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
-        self.agentmanager_service = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
+        self.agentmanager_service = cast("agentmanager.AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
 
     async def start(self) -> None:
         self.schedule(
@@ -1318,9 +1318,17 @@ class ResourceService(protocol.ServerSlice):
         return resource
 
     @handle(methods_v2.discovered_resource_create, env="tid")
-    async def discovered_resource_create(self, env: data.Environment, discovered_resource_id: str, values: JsonType) -> None:
+    async def discovered_resource_create(
+        self,
+        env: data.Environment,
+        discovered_resource_id: ResourceIdStr,
+        values: JsonType,
+        discovery_resource_id: ResourceIdStr,
+    ) -> None:
         try:
-            discovered_resource = DiscoveredResource(discovered_resource_id=discovered_resource_id, values=values)
+            discovered_resource = LinkedDiscoveredResource(
+                discovered_resource_id=discovered_resource_id, values=values, discovery_resource_id=discovery_resource_id
+            )
         except ValidationError as e:
             # this part was copy/pasted from protocol.common.MethodProperties.validate_arguments.
             error_msg = f"Failed to validate argument\n{str(e)}"
@@ -1332,7 +1340,7 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods_v2.discovered_resource_create_batch, env="tid")
     async def discovered_resources_create_batch(
-        self, env: data.Environment, discovered_resources: list[DiscoveredResource]
+        self, env: data.Environment, discovered_resources: list[LinkedDiscoveredResource]
     ) -> None:
         dao_list = [res.to_dao(env.id) for res in discovered_resources]
         await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
@@ -1366,6 +1374,7 @@ class ResourceService(protocol.ServerSlice):
         try:
             handler = DiscoveredResourceView(environment=env, limit=limit, sort=sort, start=start, end=end, filter=filter)
             out = await handler.execute()
+
             return out
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e

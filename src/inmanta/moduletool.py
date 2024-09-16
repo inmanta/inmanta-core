@@ -38,7 +38,7 @@ from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import IO, TYPE_CHECKING, Any, Optional
+from typing import IO, TYPE_CHECKING, Any, Literal, Optional
 
 import click
 import more_itertools
@@ -1750,14 +1750,25 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         Copy all files that have to be packaged into the Python package of the module
         """
         python_pkg_dir: str = os.path.join(build_path, "inmanta_plugins", self._module.name)
-        model_dir: str = os.path.join(python_pkg_dir, "model")
-        if os.path.exists(model_dir):
-            raise ModuleBuildFailedError(
-                msg="There is already a model directory in %s. "
-                "The `inmanta_plugins.%s.model` package is reserved for bundling the inmanta model files. "
-                "Please use a different name for this Python package."
-                % (os.path.join(self._module.path, "inmanta_plugins", self._module.name), self._module.name)
-            )
+        dir_path_bundling_description_mapping = {
+            ("model", "the inmanta model files"),
+            ("files", "inmanta files for managed machines"),
+            ("templates", "inmanta templates that will be used to generate configuration files"),
+        }
+        for problematic_dir, bundling_description in dir_path_bundling_description_mapping:
+            if os.path.exists(os.path.join(python_pkg_dir, problematic_dir)):
+                raise ModuleBuildFailedError(
+                    msg="There is already a `%s` directory in %s. "
+                    "The `inmanta_plugins.%s.%s` package is reserved for bundling %s. "
+                    "Please use a different name for this Python package."
+                    % (
+                        problematic_dir,
+                        os.path.join(self._module.path, "inmanta_plugins", self._module.name),
+                        self._module.name,
+                        problematic_dir,
+                        bundling_description,
+                    )
+                )
 
         for dir_name in ["model", "files", "templates"]:
             fq_dir_name = os.path.join(build_path, dir_name)
@@ -1784,7 +1795,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         """
         try:
             with self._get_isolated_env_builder() as env:
-                distribution = "wheel"
+                distribution: Literal["wheel"] = "wheel"
                 builder = build.ProjectBuilder(source_dir=build_path, python_executable=env.python_executable)
                 env.install(builder.build_system_requires)
                 env.install(builder.get_requires_for_build(distribution=distribution))

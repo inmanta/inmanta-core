@@ -35,18 +35,11 @@ from typing import Any, Collection, Dict, Optional, Union, cast
 from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor, in_process_executor
+from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.agent.reporting import collect_report
-from inmanta.data.model import (
-    LEGACY_PIP_DEFAULT,
-    AttributeStateChange,
-    PipConfig,
-    ResourceIdStr,
-    ResourceType,
-    ResourceVersionIdStr,
-)
-from inmanta.loader import ModuleSource
-from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
+from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.resources import Id
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, TaskMethod, TaskSchedule, add_future, join_threadpools
@@ -146,55 +139,54 @@ class ResourceAction(ResourceActionBase):
 
     async def execute(self, dummy: "ResourceActionBase", generation: Mapping[ResourceIdStr, ResourceActionBase]) -> None:
         self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
-        async with self.executor.cache(self.resource.model_version):
-            self.dependencies = [generation[resource_id.resource_str()] for resource_id in self.resource.requires]
-            waiters = [x.future for x in self.dependencies]
-            waiters.append(dummy.future)
-            # Explicit cast is required because mypy has issues with * and generics
-            results: list[ResourceActionResult] = cast(list[ResourceActionResult], await asyncio.gather(*waiters))
+        self.dependencies = [generation[resource_id.resource_str()] for resource_id in self.resource.requires]
+        waiters = [x.future for x in self.dependencies]
+        waiters.append(dummy.future)
+        # Explicit cast is required because mypy has issues with * and generics
+        results: list[ResourceActionResult] = cast(list[ResourceActionResult], await asyncio.gather(*waiters))
 
-            if self.undeployable:
-                self.running = True
-                try:
-                    if self.is_done():
-                        # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
-                        return
-                    result = sum(results, ResourceActionResult(cancel=False))
-                    if result.cancel:
-                        # self.running will be set to false when self.cancel is called
-                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                        return
-                    self.future.set_result(ResourceActionResult(cancel=False))
+        if self.undeployable:
+            self.running = True
+            try:
+                if self.is_done():
+                    # Action is cancelled
+                    self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
                     return
-                finally:
-                    self.running = False
+                result = sum(results, ResourceActionResult(cancel=False))
+                if result.cancel:
+                    # self.running will be set to false when self.cancel is called
+                    # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
+                    return
+                self.future.set_result(ResourceActionResult(cancel=False))
+                return
+            finally:
+                self.running = False
 
-            async with self.scheduler.ratelimiter:
-                self.running = True
+        async with self.scheduler.ratelimiter:
+            self.running = True
 
-                try:
-                    if self.is_done():
-                        # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
-                        return
+            try:
+                if self.is_done():
+                    # Action is cancelled
+                    self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
+                    return
 
-                    result = sum(results, ResourceActionResult(cancel=False))
+                result = sum(results, ResourceActionResult(cancel=False))
 
-                    if result.cancel:
-                        # self.running will be set to false when self.cancel is called
-                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                        return
+                if result.cancel:
+                    # self.running will be set to false when self.cancel is called
+                    # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
+                    return
 
-                    await self.executor.execute(
-                        gid=self.gid,
-                        resource_details=self.resource,
-                        reason=self.reason,
-                    )
+                await self.executor.execute(
+                    gid=self.gid,
+                    resource_details=self.resource,
+                    reason=self.reason,
+                )
 
-                    self.future.set_result(ResourceActionResult(cancel=False))
-                finally:
-                    self.running = False
+                self.future.set_result(ResourceActionResult(cancel=False))
+            finally:
+                self.running = False
 
 
 class RemoteResourceAction(ResourceActionBase):
@@ -539,13 +531,14 @@ class AgentInstance:
         self.ensure_deploy_on_start = ensure_deploy_on_start
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = process.executor_manager
+        self._executors_to_join: list[executor.Executor] = []
 
     async def stop(self) -> None:
         self._stopped = True
         self._enabled = False
         self._disable_time_triggers()
         self._nq.cancel()
-        await self.executor_manager.stop_for_agent(self.name)
+        self._executors_to_join = await self.executor_manager.stop_for_agent(self.name)
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor]) -> None:
         """
@@ -555,6 +548,7 @@ class AgentInstance:
         """
         assert self._stopped
         await self.executor_manager.join(thread_pool_finalizer, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
+        await asyncio.gather(*(executor.join() for executor in self._executors_to_join))
 
     @property
     def environment(self) -> uuid.UUID:
@@ -787,7 +781,7 @@ class AgentInstance:
                             undeployable[resource.rvid],
                         )
                         await self.get_client().dryrun_update(
-                            tid=resource.env_id,
+                            tid=self.environment,
                             id=dry_run_id,
                             resource=resource.rvid,
                             changes={"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}},
@@ -892,7 +886,7 @@ class AgentInstance:
             res_type = res["resource_type"]
 
             if res_type not in invalid_resources:
-                loaded_resources.append(ResourceDetails(res))
+                loaded_resources.append(ResourceDetails.from_json(res))
 
                 state = const.ResourceState[res["status"]]
                 if state in const.UNDEPLOYABLE_STATES:
@@ -913,7 +907,7 @@ class AgentInstance:
                 else:
                     failed_resources[res_type][0].add(res_id)
                 undeployable[res_id] = const.ResourceState.unavailable
-                loaded_resources.append(ResourceDetails(res))
+                loaded_resources.append(ResourceDetails.from_json(res))
 
         if len(failed_resources) > 0:
             for resource_type, (failed_resource_ids, log_line) in failed_resources.items():
@@ -983,6 +977,8 @@ class Agent(SessionEndpoint):
 
         self.agent_map: Optional[dict[str, str]] = agent_map
 
+        self.code_manager = CodeManager(self._client)
+
         remote_executor = cfg.agent_executor_mode.get() == cfg.AgentExecutorMode.forking
         can_have_remote_executor = code_loader
 
@@ -1010,7 +1006,7 @@ class Agent(SessionEndpoint):
                 self._client,
                 asyncio.get_event_loop(),
                 LOGGER,
-                self,
+                self.thread_pool,
                 self._storage["code"],
                 self._storage["env"],
                 code_loader,
@@ -1227,76 +1223,7 @@ class Agent(SessionEndpoint):
         if not self._code_loader:
             return [], {}
 
-        # store it outside the loop, but only load when required
-        pip_config: Optional[PipConfig] = None
-
-        resource_install_specs: list[ResourceInstallSpec] = []
-        invalid_resources: executor.FailedResources = {}
-        for resource_type in set(resource_types):
-            cached_spec: Optional[ResourceInstallSpec] = self._code_cache.get((resource_type, version))
-            if cached_spec:
-                LOGGER.debug(
-                    "Cache hit, using existing ResourceInstallSpec for resource_type=%s version=%d", resource_type, version
-                )
-                resource_install_specs.append(cached_spec)
-                continue
-            result: protocol.Result = await self._client.get_source_code(environment, version, resource_type)
-            if result.code == 200 and result.result is not None:
-                sync_client = SyncClient(client=self._client, ioloop=self._io_loop)
-                requirements: set[str] = set()
-                sources: list["ModuleSource"] = []
-                # Encapsulate source code details in ``ModuleSource`` objects
-                for source in result.result["data"]:
-                    sources.append(
-                        ModuleSource(
-                            name=source["module_name"],
-                            is_byte_code=source["is_byte_code"],
-                            hash_value=source["hash"],
-                            _client=sync_client,
-                        )
-                    )
-                    requirements.update(source["requirements"])
-
-                if pip_config is None:
-                    try:
-                        pip_config = await self._get_pip_config(environment, version)
-                    except Exception as e:
-                        LOGGER.exception("Failed to load resources due to missing pip config for type %s", resource_type)
-                        invalid_resources[resource_type] = Exception(
-                            f"Failed to load resources due to missing pip config for type {resource_type}: {e}"
-                        ).with_traceback(e.__traceback__)
-                        continue
-
-                resource_install_spec = ResourceInstallSpec(
-                    resource_type, version, executor.ExecutorBlueprint(pip_config, list(requirements), sources)
-                )
-                resource_install_specs.append(resource_install_spec)
-                # Update the ``_code_cache`` cache to indicate that the given resource type's ResourceInstallSpec
-                # was constructed successfully at the specified version.
-                # TODO: this cache is a slight memory leak, to be phased out on new executor
-                self._code_cache[(resource_type, version)] = resource_install_spec
-            else:
-                LOGGER.error(
-                    "Failed to get source code for %s version=%d\n%s",
-                    resource_type,
-                    version,
-                    result.result,
-                )
-                invalid_resources[resource_type] = Exception(
-                    f"Failed to get source code for {resource_type} version={version}, result={result.get_result()}"
-                )
-
-        return resource_install_specs, invalid_resources
-
-    async def _get_pip_config(self, environment: uuid.UUID, version: int) -> PipConfig:
-        response = await self._client.get_pip_config(tid=environment, version=version)
-        if response.code != 200:
-            raise Exception("Could not get pip config from server " + str(response.result))
-        assert response.result is not None  # mypy
-        pip_config = response.result["data"]
-        if pip_config is None:
-            return LEGACY_PIP_DEFAULT
-        return PipConfig(**pip_config)
+        return await self.code_manager.get_code(environment, version, resource_types)
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
@@ -1322,6 +1249,13 @@ class Agent(SessionEndpoint):
             )
         )
         return 200
+
+    @protocol.handle(methods.trigger_read_version, env="tid")
+    async def read_version(self, env: uuid.UUID) -> Apireturn:
+        """
+        Send a notification to the agent that a new version has been released
+        """
+        pass
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")
     async def resource_event(

@@ -2543,9 +2543,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         if self.strict_deps_check:
             constraints: list[Requirement] = [Requirement.parse(item) for item in self.collect_python_requirements()]
-            env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
+            env.process_env.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
-            if not env.ActiveEnv.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
+            if not env.process_env.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
                 raise CompilerException(
                     "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts"
                     " before attempting another compile. Run `pip check` to check for any incompatibilities."
@@ -2976,18 +2976,24 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         Generate a list of all Python files in the given plugin directory.
         This method prioritizes .pyc files over .py files, uses caching to avoid duplicate directory walks,
-        includes namespace packages and excludes the model directory.
+        includes namespace packages and excludes the `model`, `files` and `templates` directories.
         """
         # Return cached results if this directory has been processed before
         if plugin_dir in self._dir_cache:
             return self._dir_cache[plugin_dir]
 
         files: dict[str, str] = {}
-        model_dir_path: str = os.path.join(plugin_dir, "inmanta_plugins", self.name, "model")
+        model_dir_path: str = os.path.join(plugin_dir, "model")
+        files_dir_path: str = os.path.join(plugin_dir, "files")
+        templates_dir_path: str = os.path.join(plugin_dir, "templates")
 
         for dirpath, dirnames, filenames in os.walk(plugin_dir, topdown=True):
             # Modify dirnames in-place to stop os.walk from descending into any more subdirectories of the model directory
-            if dirpath.startswith(model_dir_path):
+            if (
+                dirpath.startswith(model_dir_path)
+                or dirpath.startswith(files_dir_path)
+                or dirpath.startswith(templates_dir_path)
+            ):
                 dirnames[:] = []
                 continue
 

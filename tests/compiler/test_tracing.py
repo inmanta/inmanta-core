@@ -40,9 +40,12 @@ entity Test2:
     string name
 end
 
-implement Test2 using std::none
+implement Test2 using none
 
 Test1()
+
+implementation none for std::Entity:
+end
         """
     )
     (types, _) = compiler.do_compile()
@@ -123,7 +126,8 @@ end
 implement D using d
 
 D()
-"""
+""",
+        autostd=True,
     )
     (types, _) = compiler.do_compile()
     files = types["__config__::C"].get_all_instances()
