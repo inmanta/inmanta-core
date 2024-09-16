@@ -213,8 +213,7 @@ class PythonWorkingSet:
                 if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
                     # The marker of the requirement doesn't apply on this environment
                     continue
-                # If no specifiers are provided, the `in` operation will return `False`
-                if r.name not in installed_packages or (len(r.specifier) > 0 and installed_packages[r.name] not in r.specifier):
+                if r.name not in installed_packages or not r.specifier.contains(installed_packages[r.name], prereleases=True):
                     return False
                 if r.extras:
                     for extra in r.extras:
@@ -1190,9 +1189,11 @@ class ActiveEnv(PythonEnvironment):
         constraint_violations_strict: set[VersionConflict] = set()
         for c in all_constraints:
             requirement = c.requirement
-            # If no specifiers are provided, the `in` operation will return `False`
             if requirement.name not in installed_versions or (
-                (len(requirement.specifier) > 0 and installed_versions[requirement.name] not in requirement.specifier)
+                (
+                    len(requirement.specifier) > 0
+                    and not requirement.specifier.contains(installed_versions[requirement.name], prereleases=True)
+                )
                 and (not requirement.marker or (requirement.marker and requirement.marker.evaluate()))
             ):
                 version_conflict = VersionConflict(

@@ -872,12 +872,18 @@ class ExhaustedPoolWatcher:
 
 def remove_comment_part(to_clean: str) -> str:
     """
-    Remove the comment part of a given string and ensure that the lenght of the string is greater than 0
+    Remove the comment part of a given string and ensure that the length of the string is greater than 0
 
     :param to_clean: The string to clean
     :return: A cleaned string
     """
-    drop_comment, _, _ = to_clean.partition("#")
+    # Refer to PEP 508. A requirement could contain a hashtag
+    to_clean = to_clean.strip()
+    if to_clean.startswith("#"):
+        raise ValueError("The name of the requirement cannot be a comment!")
+    drop_comment, _, _ = to_clean.partition(" #")
+    # We make sure whitespaces are not counted in the length of this string, e.g. "        #"
+    drop_comment = drop_comment.strip()
     if len(drop_comment) == 0:
         raise ValueError("The name of the requirement cannot be an empty string!")
     return drop_comment
@@ -929,5 +935,9 @@ def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequi
     requirements = []
     with open(file_path) as f:
         for line in f.readlines():
-            requirements.append(parse_requirement(line))
+            try:
+                requirements.append(parse_requirement(line))
+            except ValueError:
+                # This line was empty or only containing a comment
+                continue
     return requirements
