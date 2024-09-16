@@ -480,7 +480,7 @@ class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None])
         await context.get(self.agent_name).dry_run(self.resources, self.dry_run_id)
 
 
-class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, const.ResourceState]):
     """Run a deploy in an executor"""
 
     def __init__(
@@ -495,8 +495,8 @@ class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
         self.resource_details = resource_details
         self.reason = reason
 
-    async def call(self, context: ExecutorContext) -> None:
-        await context.get(self.agent_name).execute(self.gid, self.resource_details, self.reason)
+    async def call(self, context: ExecutorContext) -> const.ResourceState:
+        return await context.get(self.agent_name).execute(self.gid, self.resource_details, self.reason)
 
 
 class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta.types.Apireturn]):
@@ -803,8 +803,8 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         gid: uuid.UUID,
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
-    ) -> None:
-        await self.call(ExecuteCommand(self.id.agent_name, gid, resource_details, reason))
+    ) -> const.ResourceState:
+        return await self.call(ExecuteCommand(self.id.agent_name, gid, resource_details, reason))
 
     async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> inmanta.types.Apireturn:
         return await self.call(FactsCommand(self.id.agent_name, resource))

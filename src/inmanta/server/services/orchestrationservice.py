@@ -1274,6 +1274,7 @@ class OrchestrationService(protocol.ServerSlice):
         is_using_new_scheduler = opt.server_use_resource_scheduler.get()
         if is_using_new_scheduler:
             await self.autostarted_agent_manager._ensure_scheduler(env)
+            allagents = [const.AGENT_SCHEDULER_ID]
         else:
             await self.autostarted_agent_manager._ensure_agents(env, allagents)
 

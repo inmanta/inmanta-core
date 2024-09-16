@@ -16,57 +16,23 @@
     Contact: code@inmanta.com
 """
 
-import abc
 import asyncio
 import functools
 import itertools
-import typing
 from collections.abc import Iterator, Mapping, Set
 from dataclasses import dataclass
-from typing import Callable, Generic, Optional, TypeAlias, TypeVar
+from typing import Callable, Generic, Optional, TypeVar
 
 from inmanta.data.model import ResourceIdStr
+from inmanta.deploy import tasks
 from inmanta.resources import Id
 
-
-@dataclass(frozen=True, kw_only=True)
-class _Task(abc.ABC):
-    """
-    Resource action task. Represents the execution of a specific resource action for a given resource.
-    """
-
-    resource: ResourceIdStr
-
-
-class Deploy(_Task):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class DryRun(_Task):
-    version: int
-
-
-class RefreshFact(_Task):
-    pass
-
-
-class PoisonPill(_Task):
-    """
-    Task to signal queue shutdown
-
-    It is used to make sure all workers wake up to observe that they have been closed.
-    It functions mostly as a no-op
-    """
-
-
-Task: TypeAlias = Deploy | DryRun | RefreshFact | PoisonPill
 """
 Type alias for the union of all task types. Allows exhaustive case matches.
 """
 
 
-T = TypeVar("T", bound=Task, covariant=True)
+T = TypeVar("T", bound=tasks.Task, covariant=True)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -92,7 +58,7 @@ class TaskQueueItem:
     allowed.
     """
 
-    task: PrioritizedTask[Task]
+    task: PrioritizedTask[tasks.Task]
     insert_order: int
 
     # Mutable state
@@ -109,7 +75,7 @@ class TaskQueueItem:
         return (self.task.priority, self.insert_order) < (other.task.priority, other.insert_order)
 
 
-class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
+class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
     """
     Per-agent priority queue for ready-to-execute tasks. Clients must not interact with the underlying priority queues directly,
     only through the queue manipulation methods offered by this class.
@@ -130,7 +96,7 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         # => take approach suggested in heapq docs: simply mark as deleted.
         # => Keep view on all active tasks for a given resource, which also doubles as lookup for client operations
         # Only tasks in this collection are considered queued, as far as this class' client interface is concerned.
-        self._tasks_by_resource: dict[ResourceIdStr, dict[Task, TaskQueueItem]] = {}
+        self._tasks_by_resource: dict[ResourceIdStr, dict[tasks.Task, TaskQueueItem]] = {}
         # monotonically rising value for item insert order
         # use simple counter rather than time.monotonic_ns() for performance reasons
         self._entry_count: int = 0
@@ -151,26 +117,26 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         self._consumer_factory(agent_name)
         return out
 
-    def get_tasks_for_resource(self, resource: ResourceIdStr) -> set[Task]:
+    def get_tasks_for_resource(self, resource: ResourceIdStr) -> set[tasks.Task]:
         """
         Returns all queued tasks for a given resource id.
         """
         return set(self._tasks_by_resource.get(resource, {}).keys())
 
-    def remove(self, task: Task) -> int:
+    def remove(self, task: tasks.Task) -> int:
         """
         Removes the given task from its associated agent queue. Raises KeyError if it is not in the queue.
         Returns the priority at which the deleted task was queued.
         """
-        tasks: dict[Task, TaskQueueItem] = self._tasks_by_resource.get(task.resource, {})
-        queue_item: TaskQueueItem = tasks[task]
+        the_tasks: dict[tasks.Task, TaskQueueItem] = self._tasks_by_resource.get(task.resource, {})
+        queue_item: TaskQueueItem = the_tasks[task]
         queue_item.deleted = True
-        del tasks[task]
-        if not tasks:
+        del the_tasks[task]
+        if not the_tasks:
             del self._tasks_by_resource[task.resource]
         return queue_item.task.priority
 
-    def discard(self, task: Task) -> Optional[int]:
+    def discard(self, task: tasks.Task) -> Optional[int]:
         """
         Removes the given task from its associated agent queue if it is present.
         Returns the priority at which the deleted task was queued, if it was at all.
@@ -180,10 +146,10 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
         except KeyError:
             return None
 
-    def _queue_item_for_task(self, task: Task) -> Optional[TaskQueueItem]:
+    def _queue_item_for_task(self, task: tasks.Task) -> Optional[TaskQueueItem]:
         return self._tasks_by_resource.get(task.resource, {}).get(task, None)
 
-    def sorted(self, agent: str) -> list[PrioritizedTask[Task]]:
+    def sorted(self, agent: str) -> list[PrioritizedTask[tasks.Task]]:
         # FIXME[#8008]: remove this method: it's only a PoC to hightlight how to achieve a sorted view
         queue: asyncio.PriorityQueue[TaskQueueItem] = self._agent_queues[agent]
         backing_heapq: list[TaskQueueItem] = queue._queue  # type: ignore [attr-defined]
@@ -194,11 +160,11 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
     # asyncio.PriorityQueue-like interface #
     ########################################
 
-    def queue_put_nowait(self, prioritized_task: PrioritizedTask[Task]) -> None:
+    def queue_put_nowait(self, prioritized_task: PrioritizedTask[tasks.Task]) -> None:
         """
         Add a new task to the associated agent's queue.
         """
-        task: Task = prioritized_task.task
+        task: tasks.Task = prioritized_task.task
         priority: int = prioritized_task.priority
         already_queued: Optional[TaskQueueItem] = self._queue_item_for_task(task)
         if already_queued is not None and already_queued.task.priority <= priority:
@@ -219,14 +185,14 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
     def send_shutdown(self) -> None:
         """Wake up all wrokers after shutdown is signalled"""
         poison_pill = TaskQueueItem(
-            task=PrioritizedTask(task=PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")), priority=0),
+            task=PrioritizedTask(task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")), priority=0),
             insert_order=self._entry_count,
         )
         self._entry_count += 1
         for queue in self._agent_queues.values():
             queue.put_nowait(poison_pill)
 
-    async def queue_get(self, agent: str) -> Task:
+    async def queue_get(self, agent: str) -> tasks.Task:
         """
         Consume a task from an agent's queue. If the queue is empty, blocks until a task becomes available.
         """
@@ -254,10 +220,10 @@ class AgentQueues(Mapping[Task, PrioritizedTask[Task]]):
     # Mapping implementation#
     #########################
 
-    def __getitem__(self, key: Task) -> PrioritizedTask[Task]:
+    def __getitem__(self, key: tasks.Task) -> PrioritizedTask[tasks.Task]:
         return self._tasks_by_resource.get(key.resource, {})[key].task
 
-    def __iter__(self) -> Iterator[Task]:
+    def __iter__(self) -> Iterator[tasks.Task]:
         return itertools.chain.from_iterable(self._tasks_by_resource.values())
 
     def __len__(self) -> int:
@@ -270,7 +236,7 @@ class BlockedDeploy:
     Deploy task that is blocked on one or more of its dependencies (subset of its requires relation).
     """
 
-    task: PrioritizedTask[Deploy]
+    task: PrioritizedTask["tasks.Deploy"]
     blocked_on: set[ResourceIdStr]
 
 
@@ -359,7 +325,7 @@ class ScheduledWork:
                 # definitely not scheduled
                 return False
             # finally, check more expensive agent queue
-            task: Deploy = Deploy(resource=resource)
+            task: tasks.Deploy = tasks.Deploy(resource=resource)
             if task in self.agent_queues:
                 # populate cache
                 queued.add(resource)
@@ -383,7 +349,7 @@ class ScheduledWork:
                 #
                 # discard rather than remove because task may already be running, in which case we leave it run its course
                 # and simply add a new one
-                task: Deploy = Deploy(resource=resource)
+                task: tasks.Deploy = tasks.Deploy(resource=resource)
                 priority: Optional[int] = self.agent_queues.discard(task)
                 queued.remove(resource)
                 self.waiting[resource] = BlockedDeploy(
@@ -408,7 +374,7 @@ class ScheduledWork:
             }
             self.waiting[resource] = BlockedDeploy(
                 # FIXME[#8015]: priority
-                task=PrioritizedTask(task=Deploy(resource=resource), priority=0),
+                task=PrioritizedTask(task=tasks.Deploy(resource=resource), priority=0),
                 blocked_on=blocked_on,
             )
             not_scheduled.discard(resource)
@@ -448,25 +414,12 @@ class ScheduledWork:
         if resource in self.waiting:
             del self.waiting[resource]
         # additionally delete from agent_queues if a task is already queued
-        task: Task
+        task: tasks.Task
         for task in self.agent_queues.get_tasks_for_resource(resource):
-            delete: bool
-            match task:
-                case Deploy():
-                    delete = True
-                case DryRun():
-                    delete = False
-                case RefreshFact():
-                    delete = True
-                case PoisonPill():
-                    # don't care, the end is near
-                    delete = False
-                case _ as _never:
-                    typing.assert_never(_never)
-            if delete:
+            if task.delete_with_resource():
                 self.agent_queues.discard(task)
 
-    def notify_provides(self, finished_deploy: Deploy) -> None:
+    def notify_provides(self, finished_deploy: "tasks.Deploy") -> None:
         # FIXME[#8010]: consider failure scenarios -> check how current agent does it, e.g. skip-for-undefined
         # FIXME[#8008]: docstring + mention under lock + mention only iff not stale
         resource: ResourceIdStr = finished_deploy.resource

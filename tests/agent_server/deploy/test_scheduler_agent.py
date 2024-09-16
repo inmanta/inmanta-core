@@ -29,6 +29,7 @@ import pytest
 
 import inmanta.types
 from agent_server.deploy.scheduler_test_util import DummyCodeManager, make_requires
+from inmanta import const
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
@@ -45,8 +46,9 @@ class DummyExecutor(executor.Executor):
         self.execute_count = 0
         self.failed_resources = {}
 
-    async def execute(self, gid: uuid.UUID, resource_details: ResourceDetails, reason: str) -> None:
+    async def execute(self, gid: uuid.UUID, resource_details: ResourceDetails, reason: str) -> const.ResourceState:
         self.execute_count += 1
+        return const.ResourceState.deployed
 
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
         pass
