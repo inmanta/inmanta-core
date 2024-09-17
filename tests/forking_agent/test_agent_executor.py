@@ -411,20 +411,22 @@ def test():
     logger.debug("cleanup_virtual_environments ended")
 
     venvs = [str(e) for e in venv_dir.iterdir()]
-    assert len(venvs) == 2, "Only two Virtual Environment should exist!"
+    assert len(venvs) == 2, "Only two Virtual Environment should exist!"  # Venv one is gone
     assert [executor_2.process.executor_virtual_env.env_path, executor_3.process.executor_virtual_env.env_path] == venvs
 
     # Let's stop the other agent and pretend that the venv is broken
-    await executor_manager.stop_for_agent("agent2")
+    executors = await executor_manager.stop_for_agent("agent2")
+    await asyncio.gather(*(e.join() for e in executors))
     await retry_limited(wait_for_agent_stop_running, executor=executor_2, timeout=10)
     executor_2_venv_status_file.unlink()
 
     await environment_manager.cleanup_inactive_pool_members()
     venvs = [str(e) for e in venv_dir.iterdir()]
-    assert len(venvs) == 1, "Only one Virtual Environment should exist!"
+    assert len(venvs) == 1, "Only one Virtual Environment should exist!"  # Only nr 3
 
     # Let's stop the other agent and pretend that the venv is outdated
-    await executor_manager.stop_for_agent("agent3")
+    executors = await executor_manager.stop_for_agent("agent3")
+    await asyncio.gather(*(e.join() for e in executors))
     await retry_limited(wait_for_agent_stop_running, executor=executor_3, timeout=10)
     # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
     # modification override of the inmanta file and the retrieval of the last modification of the file
