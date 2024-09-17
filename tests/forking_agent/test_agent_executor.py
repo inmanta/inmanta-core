@@ -422,7 +422,7 @@ def test():
 
     await environment_manager.cleanup_inactive_pool_members()
     venvs = [str(e) for e in venv_dir.iterdir()]
-    assert len(venvs) == 1, "Only one Virtual Environment should exist!" # Only nr 3
+    assert len(venvs) == 1, "Only one Virtual Environment should exist!"  # Only nr 3
 
     # Let's stop the other agent and pretend that the venv is outdated
     await executor_manager.stop_for_agent("agent3")
