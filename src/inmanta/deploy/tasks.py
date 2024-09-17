@@ -188,8 +188,8 @@ class Deploy(OnLatestState):
 @dataclass(frozen=True, kw_only=True)
 class DryRun(Task):
     version: int
-    resource_full: state.ResourceDetails
-    dryrun_id: uuid.UUID
+    resource_details: state.ResourceDetails
+    dry_run_id: uuid.UUID
 
     def delete_with_resource(self) -> bool:
         return False
@@ -197,19 +197,19 @@ class DryRun(Task):
     async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
         try:
             my_executor: executor.Executor = await self.get_executor(
-                scheduler, agent, self.resource_full.id.entity_type, self.version
+                scheduler, agent, self.resource_details.id.entity_type, self.version
             )
-            await my_executor.dry_run([self.resource_full], self.dryrun_id)
+            await my_executor.dry_run([self.resource_details], self.dry_run_id)
         except Exception:
             logger_for_agent(agent).error(
                 "Skipping dryrun for resource %s because it is in undeployable state %s",
-                self.resource_full.rvid,
+                self.resource_details.rvid,
                 exc_info=True,
             )
             await scheduler._client.dryrun_update(
                 tid=scheduler._environment,
-                id=self.dryrun_id,
-                resource=self.resource_full.rvid,
+                id=self.dry_run_id,
+                resource=self.resource_details.rvid,
                 changes={"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}},
             )
 

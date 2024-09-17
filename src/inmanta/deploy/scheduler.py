@@ -128,8 +128,8 @@ class ResourceScheduler:
                     task=DryRun(
                         resource=rid,
                         version=version,
-                        resource_full=resource,
-                        dryrun_id=dry_run_id,
+                        resource_details=resource,
+                        dry_run_id=dry_run_id,
                     ),
                     priority=10,
                 )
