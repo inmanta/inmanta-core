@@ -177,9 +177,6 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
 
 
 async def test_dryrun_failures(resource_container, server, agent, client, environment, clienthelper):
-    """
-    test dryrun scaling
-    """
     env_id = environment
 
     version = await clienthelper.get_version()

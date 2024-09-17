@@ -148,7 +148,7 @@ class ResourceScheduler:
         """
         Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
 
-        :return: resource_mapping {id -> resource details} and require_mapping {id -> requires}
+        :return: resource_mapping {id -> resource details}
         """
         if version is None:
             resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(
