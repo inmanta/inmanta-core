@@ -110,8 +110,10 @@ class ProjectService(protocol.ServerSlice):
             raise NotFound("The project with given id does not exist.")
 
         environments = await data.Environment.get_list(project=project.id)
-        for env in environments:
-            await asyncio.gather(self.autostarted_agent_manager.stop_agents(env, delete_venv=True), env.delete_cascade())
+        if len(environments) > 0:
+            raise ServerError(
+                f"Cannot remove the project `{project_id}` because it still contains some environments: {','.join([str((env.name, str(env.id))) for env in environments])}"
+            )
 
         await project.delete()
 

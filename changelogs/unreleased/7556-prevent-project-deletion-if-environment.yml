@@ -1,0 +1,8 @@
+---
+description: Prevent the deletion of a project if this project contains one or multiple environments attached to it.
+issue-nr: 7556
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  feature: "{{description}}"

@@ -83,6 +83,42 @@ async def test_project_api_v1(client):
     assert response.code == 404
 
 
+async def test_delete_environment_project(client):
+    """Test modifying the project of an environment"""
+
+    # Create two projects and two environments
+    result = await client.create_project("project-test")
+    assert result.code == 200
+    assert "project" in result.result
+    assert "id" in result.result["project"]
+    project_id_a = result.result["project"]["id"]
+
+    result = await client.create_environment(project_id=project_id_a, name="env")
+    assert result.code == 200
+    env1_id = result.result["environment"]["id"]
+
+    # Delete project a
+    response = await client.delete_project(project_id_a)
+    assert response.code == 500
+    assert (
+        response.result["message"]
+        == "An unexpected error occurred in the server while processing the request: "
+           f"Cannot remove the project `{project_id_a}` because it still contains some environments: "
+           f"('env', '{env1_id}')"
+    )
+
+    result = await client.delete_environment(id=env1_id)
+    assert result.code == 200
+
+    response = await client.delete_project(project_id_a)
+    assert response.code == 200
+
+    response = await client.list_projects()
+    assert response.code == 200
+    assert response.result["projects"] == []
+
+
+
 async def test_project_api_v2_project_list_ordering(client_v2):
     """
     Creates a few projects with several environments each.
@@ -260,6 +296,46 @@ async def test_modify_environment_project(client_v2):
     assert result.code == 200
 
 
+async def test_delete_environment_project_v2(client_v2):
+    """Test modifying the project of an environment"""
+
+    # Create two projects and two environments
+    result = await client_v2.project_create("dev-project")
+    assert result.code == 200
+    project_id_a = result.result["data"]["id"]
+
+    result = await client_v2.environment_create(project_id=project_id_a, name="env")
+    assert result.code == 200
+    env1_id = result.result["data"]["id"]
+
+    result = await client_v2.environment_create(project_id=project_id_a, name="env2")
+    assert result.code == 200
+    env2_id = result.result["data"]["id"]
+
+    # Delete project a
+    response = await client_v2.project_delete(project_id_a)
+    assert response.code == 500
+    assert (
+        response.result["message"]
+        == "An unexpected error occurred in the server while processing the request: "
+           f"Cannot remove the project `{project_id_a}` because it still contains some environments: "
+           f"('env', '{env1_id}'),('env2', '{env2_id}')"
+    )
+
+    result = await client_v2.environment_delete(id=env1_id)
+    assert result.code == 200
+
+    result = await client_v2.environment_delete(id=env2_id)
+    assert result.code == 200
+
+    response = await client_v2.project_delete(project_id_a)
+    assert response.code == 200
+
+    response = await client_v2.project_list()
+    assert response.code == 200
+    assert response.result["data"] == []
+
+
 async def test_env_api(client):
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -331,20 +407,6 @@ async def test_create_env_same_name(client):
     result = await client.modify_environment(id=env_id, name="dev1")
     assert result.code == 400
     assert f"Project with id={project_id} already has an environment with name dev1" in result.result["message"]
-
-
-async def test_project_cascade(client):
-    result = await client.create_project("env-test")
-    project_id = result.result["project"]["id"]
-
-    result = await client.create_environment(project_id=project_id, name="dev")
-    result = await client.create_environment(project_id=project_id, name="prod")
-
-    result = await client.delete_project(project_id)
-    assert result.code == 200
-
-    result = await client.list_environments()
-    assert len(result.result["environments"]) == 0
 
 
 async def test_create_with_id(client):
