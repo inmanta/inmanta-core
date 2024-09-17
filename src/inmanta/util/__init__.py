@@ -933,12 +933,16 @@ def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequi
     :param file_path: The path to the read the requirements from
     :return: Sequence[Requirement]
     """
+    if not file_path.exists():
+        raise RuntimeError(f"The provided path does not exist: `{file_path}`!")
+
     requirements = []
     with open(file_path) as f:
         for line in f.readlines():
             try:
                 requirements.append(parse_requirement(line))
             except ValueError:
+                LOGGER.warning("This line was skipped because the requirement could not be parsed: %s", line)
                 # This line was empty or only containing a comment
                 continue
     return requirements

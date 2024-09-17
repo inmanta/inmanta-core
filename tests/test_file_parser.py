@@ -17,8 +17,10 @@
 """
 
 import os
+import pathlib
 
 import packaging.requirements
+from inmanta import util
 from inmanta.file_parser import RequirementsTxtParser
 from inmanta.util import parse_requirements
 
@@ -44,6 +46,9 @@ dep
     assert requirements == parse_requirements(expected_requirements)
     requirements_as_str = RequirementsTxtParser.parse_requirements_as_strs(requirements_txt_file)
     assert requirements_as_str == expected_requirements
+
+    parsed_canonical_requirements = util.parse_requirements_from_file(pathlib.Path(requirements_txt_file))
+    assert len(parsed_canonical_requirements) == len(expected_requirements)
 
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="test")
     expected_content = """
