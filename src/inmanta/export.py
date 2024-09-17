@@ -19,7 +19,6 @@
 import argparse
 import base64
 import logging
-import os
 import time
 import uuid
 from collections.abc import Sequence
@@ -36,7 +35,6 @@ from inmanta.const import ResourceState
 from inmanta.data.model import PipConfig, ResourceVersionIdStr
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance
-from inmanta.execute.util import Unknown
 from inmanta.module import Project
 from inmanta.protocol import Result
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
@@ -179,20 +177,22 @@ class Exporter:
     def _load_resources(self, types: dict[str, Entity]) -> None:
         """
         Load all registered resources and resource_sets
+
+        :param types: All Inmanta types present in the model. Maps the name of the type to the corresponding entity.
         """
         resource.validate()
-        entities = resource.get_entity_resources()
+        resource_types = resource.get_entity_resources()
         resource_mapping: dict[Instance, Resource] = {}
         ignored_set = set()
 
-        for entity in entities:
-            if entity not in types:
+        for resource_type in resource_types:
+            if resource_type not in types:
                 continue
-            instances = types[entity].get_all_instances()
+            instances = types[resource_type].get_all_instances()
             if len(instances) > 0:
                 for instance in instances:
                     try:
-                        res = Resource.create_from_model(self, entity, DynamicProxy.return_value(instance))
+                        res = Resource.create_from_model(self, resource_type, DynamicProxy.return_value(instance))
                         resource_mapping[instance] = res
                         self.add_resource(res)
                     except UnknownException:
@@ -201,7 +201,7 @@ class Exporter:
                         # We can safely ignore this resource == prune it
                         LOGGER.debug(
                             "Skipped resource of type %s because its id contains an unknown (location: %s)",
-                            entity,
+                            resource_type,
                             instance.location,
                         )
 
@@ -209,7 +209,7 @@ class Exporter:
                         ignored_set.add(instance)
                         LOGGER.info(
                             "Ignoring resource of type %s because it requested to ignore it. (location: %s)",
-                            entity,
+                            resource_type,
                             instance.location,
                         )
 
@@ -221,6 +221,9 @@ class Exporter:
         load the resource_sets in a dict with as keys resource_ids and as values the name of the resource_set
         the resource belongs to.
         This method should only be called after all resources have been extracted from the model.
+
+        :param types: All Inmanta types present in the model. Maps the name of the type to the corresponding entity.
+        :param resource_mapping: Maps in-model instances of resources to their deserialized Resource representation.
         """
         resource_sets: dict[str, Optional[str]] = {}
         resource_set_instances: list["Instance"] = (
@@ -690,29 +693,3 @@ class export:  # noqa: N801
         """
         Exporter.add(self.name, self.types, function)
         return function
-
-
-@export("dump", "std::File", "std::Service", "std::Package")
-def export_dumpfiles(exporter: Exporter, types: ProxiedType) -> None:
-    prefix = "dump"
-
-    if not os.path.exists(prefix):
-        os.mkdir(prefix)
-
-    for file in types["std::File"]:
-        path = os.path.join(prefix, file.host.name + file.path.replace("/", "+"))  # type: ignore
-        with open(path, "w+", encoding="utf-8") as fd:
-            if isinstance(file.content, Unknown):  # type: ignore
-                fd.write("UNKNOWN -> error")
-            else:
-                fd.write(file.content)  # type: ignore
-
-    path = os.path.join(prefix, "services")
-    with open(path, "w+", encoding="utf-8") as fd:
-        for svc in types["std::Service"]:
-            fd.write(f"{svc.host.name} -> {svc.name}\n")  # type: ignore
-
-    path = os.path.join(prefix, "packages")
-    with open(path, "w+", encoding="utf-8") as fd:
-        for pkg in types["std::Package"]:
-            fd.write(f"{pkg.host.name} -> {pkg.name}\n")  # type: ignore

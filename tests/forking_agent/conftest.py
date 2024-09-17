@@ -32,6 +32,7 @@ import inmanta.loader
 import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
+from inmanta import const
 from inmanta.agent.forking_executor import MPManager
 from packaging import version
 
@@ -39,33 +40,32 @@ from packaging import version
 @pytest.fixture
 async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.UUID], MPManager]]:
     managers = []
-    threadpools = []
-    MPManager.init_once()
+    threadpools: list[concurrent.futures.thread.ThreadPoolExecutor] = []
 
     def make_mpmanager(agent_session_id: uuid.UUID) -> MPManager:
         log_folder = tmp_path / "logs"
         storage_folder = tmp_path / "executors"
-        venvs = tmp_path / "venvs"
         threadpool = concurrent.futures.thread.ThreadPoolExecutor()
-        venv_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venvs))
         manager = MPManager(
             threadpool,
-            venv_manager,
             agent_session_id,
             uuid.uuid4(),
             log_folder=str(log_folder),
             storage_folder=str(storage_folder),
+            log_level=const.LOG_LEVEL_TRACE,
             cli_log=True,
         )
+        # We only want to override it in the test suite
+        manager.process_pool.environment_manager.retention_time = 7
         managers.append(manager)
         threadpools.append(threadpool)
         return manager
 
     yield make_mpmanager
+    await asyncio.wait_for(asyncio.gather(*(manager.stop() for manager in managers)), 10)
+    await asyncio.wait_for(asyncio.gather(*(manager.join() for manager in managers)), 10)
     for threadpool in threadpools:
         threadpool.shutdown(wait=False)
-    await asyncio.gather(*(manager.stop() for manager in managers))
-    await asyncio.gather(*(manager.join([], 10) for manager in managers))
 
 
 @pytest.fixture

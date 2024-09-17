@@ -18,6 +18,7 @@
 
 import datetime
 import typing
+import urllib
 import uuid
 from collections import abc
 from collections.abc import Sequence
@@ -27,7 +28,7 @@ from typing import ClassVar, NewType, Optional, Self, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -267,7 +268,7 @@ class Environment(BaseModel):
 
 class Project(BaseModel):
     """
-    An inmanta environment.
+    An inmanta project.
     """
 
     id: uuid.UUID
@@ -747,31 +748,60 @@ class LoginReturn(BaseModel):
     user: User
 
 
+def _check_resource_id_str(v: str) -> ResourceIdStr:
+    if resources.Id.is_resource_id(v):
+        return ResourceIdStr(v)
+    raise ValueError("Invalid id for resource %s" % v)
+
+
+ResourceId: typing.TypeAlias = typing.Annotated[ResourceIdStr, pydantic.AfterValidator(_check_resource_id_str)]
+
+
 class DiscoveredResource(BaseModel):
     """
     :param discovered_resource_id: The name of the resource
     :param values: The actual resource
     :param managed_resource_uri: URI of the resource with the same ID that is already
         managed by the orchestrator e.g. "/api/v2/resource/<rid>". Or None if the resource is not managed.
+    :param discovery_resource_id: Resource id of the (managed) discovery resource that reported this
+        discovered resource.
     """
 
-    discovered_resource_id: ResourceIdStr
+    discovered_resource_id: ResourceId
     values: dict[str, object]
     managed_resource_uri: Optional[str] = None
 
-    @field_validator("discovered_resource_id")
-    @classmethod
-    def discovered_resource_id_is_resource_id(cls, v: str) -> str:
-        if resources.Id.is_resource_id(v):
-            return v
-        raise ValueError(f"id {v} is not of type ResourceIdStr")
+    discovery_resource_id: Optional[ResourceId]
 
-    def to_dao(self, env: uuid) -> "data.DiscoveredResource":
+    @computed_field  # type: ignore[misc]
+    @property
+    def discovery_resource_uri(self) -> str | None:
+        if self.discovery_resource_id is None:
+            return None
+        return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id, safe='')}"
+
+
+class LinkedDiscoveredResource(DiscoveredResource):
+    """
+    DiscoveredResource linked to the discovery resource that discovered it.
+
+    :param discovery_resource_id: Resource id of the (managed) discovery resource that reported this
+           discovered resource.
+    """
+
+    # This class is used as API input. Its behaviour can be directly incorporated into the DiscoveredResource parent class
+    # when providing the id of the discovery resource is mandatory for all discovered resource. Ticket link:
+    # https://github.com/inmanta/inmanta-core/issues/8004
+
+    discovery_resource_id: ResourceId
+
+    def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
         return data.DiscoveredResource(
             discovered_resource_id=self.discovered_resource_id,
             values=self.values,
             discovered_at=datetime.datetime.now(),
             environment=env,
+            discovery_resource_id=self.discovery_resource_id,
         )
 
 

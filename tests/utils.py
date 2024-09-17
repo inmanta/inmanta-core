@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import base64
 import configparser
 import datetime
 import functools
@@ -24,12 +25,14 @@ import json
 import logging
 import math
 import os
+import random
 import shutil
 import uuid
 from collections import abc
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timezone
+from logging import LogRecord
 from typing import Any, Optional, TypeVar, Union
 
 import pytest
@@ -46,7 +49,7 @@ from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
-from inmanta.util import get_compiler_version
+from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
 from packaging import version
 
@@ -223,6 +226,12 @@ class LogSequence:
                         continue
                     return i + after
         return -1
+
+    def get(self, loggerpart, level, msg, min_level: int = math.inf) -> LogRecord:
+        idx = self._find(loggerpart, level, msg, self.index, min_level)
+        if idx < 0:
+            raise KeyError()
+        return self.caplog.records[idx]
 
     def contains(self, loggerpart, level, msg, min_level: int = math.inf) -> "LogSequence":
         """
@@ -415,6 +424,9 @@ class ClientHelper:
         assert res.code == 200, res.result
         if wait_for_released:
             await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
+
+    async def wait_for_released(self, version: int):
+        await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
 
     async def is_released(self, version: int) -> bool:
         versions = await self.client.list_versions(tid=self.environment)
@@ -779,3 +791,22 @@ def get_as_naive_datetime(timestamp: datetime) -> datetime:
     if timestamp.tzinfo is None:
         return timestamp
     return timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def make_random_file(size: int = 0) -> tuple[str, bytes, str]:
+    """
+    Generate a random file.
+
+    :param size: If size is > 0 content is generated that is equal or more than size.
+    """
+    randomvalue = str(random.randint(0, 10000))
+    if size > 0:
+        while len(randomvalue) < size:
+            randomvalue += randomvalue
+
+    content = ("Hello world %s\n" % (randomvalue)).encode()
+    hash = hash_file(content)
+
+    body = base64.b64encode(content).decode("ascii")
+
+    return hash, content, body

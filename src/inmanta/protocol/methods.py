@@ -876,7 +876,7 @@ def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
     :param tid: The id of the environment to which the code belongs.
     :param id: The version number of the configuration model.
     :param resources: A dictionary where each key is a string representing a resource type.
-                  For each resource type, the value is a dictionary. This nested dictionary's keys are file names,
+                  For each resource type, the value is a dictionary. This nested dictionary's keys are file hashes,
                   and each key maps to a tuple. This tuple contains three elements: the file name, the module name,
                   and a list of requirements.
 
@@ -1031,6 +1031,23 @@ def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
     :param tid: The environment this agent is defined in
     :param id: The name of the agent
     :param incremental_deploy: Indicates whether the agent should perform an incremental deploy or a full deploy
+    """
+
+
+@typedmethod(
+    path="/scheduler/",
+    operation="POST",
+    server_agent=True,
+    enforce_auth=False,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+)
+def trigger_read_version(tid: uuid.UUID) -> int:
+    """
+    Notify the scheduler that a new version has been released
+
+    :param tid: The environment this agent is defined in
     """
 
 

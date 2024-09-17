@@ -36,6 +36,7 @@ from colorlog.formatter import LogColors
 from inmanta import config, const
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
+from logfire.integrations.logging import LogfireLoggingHandler
 
 LOGGER = logging.getLogger(__name__)
 
@@ -74,6 +75,8 @@ log_levels = {
     "DEBUG": logging.DEBUG,
     "TRACE": 2,
 }
+
+logging.addLevelName(3, "TRACE")
 
 
 @stable_api
@@ -240,7 +243,6 @@ class LoggerMode(enum.Enum):
 
 
 class LoggingConfigBuilder:
-
     def get_bootstrap_logging_config(
         self,
         stream: TextIO = sys.stdout,
@@ -543,6 +545,7 @@ class InmantaLoggerConfig:
         self._handlers: abc.Sequence[logging.Handler] = self._apply_logging_config(log_config)
         self._options_applied: bool = False
         self._logging_configs_extensions: list[LoggingConfigExtension] = []
+        logging.root.addHandler(LogfireLoggingHandler())
 
     @classmethod
     def get_current_instance(cls) -> "InmantaLoggerConfig":
@@ -563,8 +566,8 @@ class InmantaLoggerConfig:
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout)
         """
         if cls._instance:
-            if len(cls._instance._handlers) != 1:
-                raise Exception("More than one root handler configured.")
+            if not cls._instance._handlers:
+                raise Exception("No handlers found.")
             if not isinstance(cls._instance._handlers[0], logging.StreamHandler):
                 raise Exception("Instance already exists with a different handler")
             elif isinstance(cls._instance._handlers[0], logging.StreamHandler) and cls._instance._handlers[0].stream != stream:
@@ -575,11 +578,15 @@ class InmantaLoggerConfig:
 
     @classmethod
     @stable_api
-    def clean_instance(cls) -> None:
+    def clean_instance(cls, root_handlers_to_remove: Optional[abc.Sequence[logging.Handler]] = None) -> None:
         """
-        This method should be used to clean up an instance of this class
+        This method should be used to clean up an instance of this class.
+
+        By default, this method removes and closes all root handlers from the logging framework. If the
+        root_handlers_to_remove argument is not None, only the provided root handlers will be removed and closed.
         """
-        for handler in logging.root.handlers:
+        to_remove = root_handlers_to_remove if root_handlers_to_remove is not None else logging.root.handlers
+        for handler in to_remove:
             # File-based handlers automatically re-open after close() if log records are written to them.
             # As such, we explicitly remove the handler from the root logger here.
             logging.root.removeHandler(handler)
@@ -626,6 +633,7 @@ class InmantaLoggerConfig:
         """
         Apply the given logging config file.
         """
+        handlers_before = list(logging.root.handlers)
         if not os.path.isfile(config_file):
             raise Exception(f"No logging config file exists at {config_file}.")
         with open(config_file, "r") as fh:
@@ -637,7 +645,7 @@ class InmantaLoggerConfig:
             logging.config.dictConfig(dict_config)
         except Exception:
             raise Exception(f"Failed to apply the logging config defined in {dict_config}.")
-        self._handlers = logging.root.handlers
+        self._handlers = [handler for handler in logging.root.handlers if handler not in handlers_before]
 
     def _apply_logging_config_from_options(self, options: Options) -> None:
         """
@@ -656,8 +664,9 @@ class InmantaLoggerConfig:
 
         This method assume that the given config defines a single root handler.
         """
+        handlers_before = list(logging.root.handlers)
         logging_config.apply_config()
-        return logging.root.handlers
+        return [handler for handler in logging.root.handlers if handler not in handlers_before]
 
     @stable_api
     def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:
@@ -706,7 +715,8 @@ class InmantaLoggerConfig:
 
         :return: The logging handler
         """
-        assert len(self._handlers) == 1, "This could happen if this method is used in combination with the caplog fixture."
+        if not self._handlers:
+            raise Exception("No handlers found.")
         return self._handlers[0]
 
     @stable_api

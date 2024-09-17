@@ -2531,7 +2531,7 @@ class Environment(BaseDocument):
             typ="str",
             default="600",
             doc="The deployment interval of the autostarted agents. Can be specified as a number of seconds"
-            " or as a cron-like expression."
+            " or as a cron-like expression. Set this to 0 to disable the automatic scheduling of deploy runs."
             " See also: :inmanta.config:option:`config.agent-deploy-interval`",
             validator=validate_cron_or_int,
             agent_restart=True,
@@ -2551,7 +2551,7 @@ class Environment(BaseDocument):
             default="86400",
             doc=(
                 "The repair interval of the autostarted agents. Can be specified as a number of seconds"
-                " or as a cron-like expression."
+                " or as a cron-like expression. Set this to 0 to disable the automatic scheduling of repair runs."
                 " See also: :inmanta.config:option:`config.agent-repair-interval`"
             ),
             validator=validate_cron_or_int,
@@ -2641,9 +2641,9 @@ class Environment(BaseDocument):
         ENVIRONMENT_METRICS_RETENTION: Setting(
             name=ENVIRONMENT_METRICS_RETENTION,
             typ="int",
-            default=8760,
+            default=336,
             doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
-            "Default=8760 hours (1 year). Set to 0 to disable automatic cleanups.",
+            "Default=336 hours (2 weeks). Set to 0 to disable automatic cleanups.",
             validator=convert_int,
         ),
     }
@@ -3583,7 +3583,7 @@ class Compile(BaseDocument):
     :param requested: Time the compile was requested
     :param started: Time the compile started
     :param completed: Time to compile was completed
-    :param do_export: should this compiler perform an export
+    :param do_export: should this compile perform an export
     :param force_update: should this compile definitely update
     :param metadata: exporter metadata to be passed to the compiler
     :param requested_environment_variables: environment variables requested to be passed to the compiler
@@ -3745,10 +3745,13 @@ class Compile(BaseDocument):
         return await cls._fetch_int(query)
 
     @classmethod
-    async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "Sequence[Compile]":
+    async def get_by_remote_id(
+        cls, environment_id: uuid.UUID, remote_id: uuid.UUID, *, connection: Optional[asyncpg.Connection] = None
+    ) -> "Sequence[Compile]":
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND remote_id=$2",
             [cls._get_value(environment_id), cls._get_value(remote_id)],
+            connection=connection,
         )
         return results
 
@@ -4475,13 +4478,16 @@ class Resource(BaseDocument):
     A specific version of a resource. This entity contains the desired state of a resource.
 
     :param environment: The environment this resource version is defined in
-    :param rid: The id of the resource and its version
-    :param resource: The resource for which this defines the state
-    :param model: The configuration model (versioned) this resource state is associated with
-    :param attributes: The state of this version of the resource
+    :param model: The version of the configuration model this resource state is associated with
+    :param resource_id: The id of the resource (without the version)
+    :param resource_type: The type of the resource
+    :param resource_id_value: The attribute value from the resource id
+    :param agent: The name of the agent responsible for deploying this resource
+    :param attributes: The desired state for this version of the resource as a dict of attributes
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
-    :param resource_id_value: The attribute value from the resource id
+    :param status: The state of this resource, used e.g. in scheduling
+    :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
     """
 
     __primary_key__ = ("environment", "model", "resource_id")
@@ -6385,18 +6391,24 @@ class DiscoveredResource(BaseDocument):
     """
     :param environment: the environment of the resource
     :param discovered_resource_id: The id of the resource
+    :param discovery_resource_id: The id of the discovery resource responsible for discovering this resource
     :param values: The values associated with the discovered_resource
     """
 
     environment: uuid.UUID
     discovered_at: datetime.datetime
     discovered_resource_id: m.ResourceIdStr
+    discovery_resource_id: Optional[m.ResourceIdStr]
     values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")
 
     def to_dto(self) -> m.DiscoveredResource:
-        return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values)
+        return m.DiscoveredResource(
+            discovered_resource_id=self.discovered_resource_id,
+            values=self.values,
+            discovery_resource_id=self.discovery_resource_id,
+        )
 
 
 class File(BaseDocument):

@@ -39,7 +39,7 @@ import inmanta.ast.export as ast_export
 import inmanta.data.model as model
 import utils
 from inmanta import config, data
-from inmanta.const import ParameterSource
+from inmanta.const import INMANTA_REMOVED_SET_ID, ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
 from inmanta.env import PythonEnvironment
@@ -690,13 +690,26 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
         report = [x for x in reports if x["name"] == "Recompiling configuration model"][0]
         return expected in report["command"]
 
+    def set_removal_was_requested(report: dict, removed_sets: Optional[set[str]] = None) -> bool:
+        """
+        Returns True if a resource set removal was requested for a given compile report.
+        In addition, if the removed_sets param is set, the removal of these specific sets is checked.
+
+        :param report: Compile report for which to check if a resource set removal was requested
+        """
+        if not removed_sets:
+            return INMANTA_REMOVED_SET_ID in report["requested_environment_variables"]
+
+        assert INMANTA_REMOVED_SET_ID in report["requested_environment_variables"]
+        return set(report["requested_environment_variables"][INMANTA_REMOVED_SET_ID].split()) == removed_sets
+
     # Do a compile
     compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
 
     await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
     assert not verify_command_report(report, "--partial")
-    assert not verify_command_report(report, "--removed_resource_sets")
+    assert not set_removal_was_requested(report.result["report"])
 
     # Do a partial compile
     compile_id, _ = await compilerslice.request_recompile(
@@ -706,16 +719,22 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
     await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
     assert verify_command_report(report, "--partial")
-    assert not verify_command_report(report, "--removed_resource_sets")
+    assert not set_removal_was_requested(report.result["report"])
 
     # Do a partial compile with removed resource_sets
     compile_id, _ = await compilerslice.request_recompile(
-        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True, removed_resource_sets=["a", "b", "c"]
+        env,
+        force_update=False,
+        do_export=False,
+        remote_id=remote_id1,
+        partial=True,
+        env_vars={INMANTA_REMOVED_SET_ID: "a b c"},
     )
 
     await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
-    assert verify_command_report(report, "--partial --delete-resource-set a --delete-resource-set b --delete-resource-set c")
+    assert verify_command_report(report, "--partial")
+    assert set_removal_was_requested(report.result["report"], {"a", "b", "c"})
 
 
 @pytest.mark.slowtest
@@ -965,14 +984,14 @@ async def run_compile_and_wait_until_compile_is_done(
     """
     Unblock the first compile in the compiler queue and wait until the compile finishes.
     """
-    current_task = compiler_service._env_to_compile_task[env_id]
-
     # prevent race conditions where compile request is not yet in queue
     await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
     run = compiler_queue.get(block=True)
     if fail is not None:
         run._make_compile_fail = fail
     run._make_pull_fail = fail_on_pull
+
+    current_task = compiler_service._env_to_compile_task[env_id]
     run.block = False
 
     def _is_compile_finished() -> bool:
@@ -994,6 +1013,9 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     env = await data.Environment.get_by_id(environment)
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
+    # Queue = [
+    #
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 0
     assert result.code == 200
@@ -1005,6 +1027,9 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     )
 
     # api should return one
+    # Queue = [
+    #   remote_id1 (Running)
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 1
     assert result.result["queue"][0]["remote_id"] == str(remote_id1)
@@ -1017,6 +1042,10 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     compile_id2, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=remote_id2)
 
     # api should return two
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting),
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 2
     assert result.result["queue"][1]["remote_id"] == str(remote_id2)
@@ -1028,6 +1057,11 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id3 = uuid.uuid4()
     compile_id3, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id3)
 
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting),
+    #   remote_id3 (Waiting),
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 3
     assert result.result["queue"][2]["remote_id"] == str(remote_id3)
@@ -1039,6 +1073,12 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id4 = uuid.uuid4()
     compile_id4, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=remote_id4)
 
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting), <--+
+    #   remote_id3 (Waiting),    |-- same _compile_merge_key
+    #   remote_id4 (Waiting), <--+
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 4
     assert result.result["queue"][3]["remote_id"] == str(remote_id4)
@@ -1052,11 +1092,30 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id6 = uuid.uuid4()
     compile_id6, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id6)
 
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting), <----------+
+    #   remote_id3 (Waiting), <----+     |-- same _compile_merge_key
+    #   remote_id4 (Waiting), <--- | ----+
+    #   remote_id5 (Waiting), <----+
+    #   remote_id6 (Waiting), <----+-- same _compile_merge_key
+    # ]
+
     # request with partial, will not be merged
     remote_id7 = uuid.uuid4()
     compile_id7, _ = await compilerslice.request_recompile(
         env=env, force_update=False, do_export=True, remote_id=remote_id7, partial=True
     )
+
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting), <----------+
+    #   remote_id3 (Waiting), <----+     |-- same _compile_merge_key
+    #   remote_id4 (Waiting), <--- | ----+
+    #   remote_id5 (Waiting), <----+
+    #   remote_id6 (Waiting), <----+-- same _compile_merge_key
+    #   remote_id7 (Waiting),
+    # ]
 
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 7
@@ -1074,20 +1133,35 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
     # api should return 6 when ready
+    # Queue = [
+    #   remote_id2 (Running), <----------+
+    #   remote_id3 (Waiting), <----+     |-- same _compile_merge_key
+    #   remote_id4 (Waiting), <--- | ----+
+    #   remote_id5 (Waiting), <----+
+    #   remote_id6 (Waiting), <----+-- same _compile_merge_key
+    #   remote_id7 (Waiting),
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 6
     assert result.result["queue"][0]["remote_id"] == str(remote_id2)
     assert result.code == 200
-    # 4 in the queue, 1 running
+    # 5 in the queue, 1 running
     await retry_limited(lambda: compilerslice._queue_count_cache == 5, 10)
 
     # finish second compile
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
+    # Queue = [
+    #   remote_id3 (Running), <----+
+    #   remote_id5 (Waiting), <----+-- same _compile_merge_key
+    #   remote_id6 (Waiting), <----+
+    #   remote_id7 (Waiting),
+    # ]
+
     # The "halted" field of a compile report is set asynchronously by a background task.
     # Use try_limited to prevent a race condition.
     await retry_limited(lambda: has_matching_compile_report(compile_id2, compile_id4), timeout=10)
-    # 2 in the queue, 1 running
+    # 3 in the queue, 1 running
     await retry_limited(lambda: compilerslice._queue_count_cache == 3, 10)
 
     # finish third compile
@@ -1096,6 +1170,9 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id6), timeout=10)
 
     # One left
+    # Queue = [
+    #   remote_id7 (Running),
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 1
 

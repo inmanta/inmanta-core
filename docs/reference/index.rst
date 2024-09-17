@@ -19,3 +19,4 @@ Inmanta, please check out the :doc:`../quickstart` guide.
     modules
     openapi
     compatibility
+    apilinks

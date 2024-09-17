@@ -42,6 +42,8 @@ This mapping is done by adding a static method to the resource class with ``get_
 name. This static method has two arguments: a reference to the exporter and the instance of the
 entity it is serializing.
 
+..
+    This uses std::File, which is to be removed, but it re-constructs it, so that is OK
 
 .. code-block:: python
     :linenos:
@@ -224,9 +226,7 @@ Caching
 The agent maintains a cache, that is kept over handler invocations. It can, for example, be used to
 cache a connection, so that multiple resources on the same device can share a connection.
 
-The cache can be invalidated either based on a timeout or on version. A timeout based cache is kept
-for a specific time. A version based cache is used for all resource in a specific version.
-The cache will be dropped when the deployment for this version is ready.
+
 
 The cache can be used through the :py:func:`@cache<inmanta.agent.handler.cache>` decorator. Any
 method annotated with this annotation will be cached, similar to the way
@@ -235,28 +235,38 @@ the method will form the cache key, the return value will be cached. When the me
 second time with the same arguments, it will not be executed again, but the cached result is
 returned instead. To exclude specific arguments from the cache key, use the `ignore` parameter.
 
+Cache entries will be dropped from the cache when they become stale.
+The for_version and timeout parameters control this behaviour:
+
+When ``for_version=True`` (default behaviour), the ``timeout`` parameter is ignored and entries
+will linger in the cache for 60s after their last use.
+Entries will be reused across model versions.
+
+To disable this behaviour and set a hard timeout, set ``for_version=False`` and
+the desired timeout via the ``timeout`` parameter.
 
 For example, to cache the connection to a specific device for 120 seconds:
 
 .. code-block:: python
 
-    @cache(timeout=120, ignore=["ctx"])
+    @cache(timeout=120, ignore=["ctx"], for_version=False)
     def get_client_connection(self, ctx, device_id):
        # ...
        return connection
 
-To do the same, but additionally also expire the cache when the next version is deployed, the method must have a parameter called `version`.
-`for_version` is True by default, so when a version parameter is present, the cache is version bound by default.
+Setting ``for_version=True`` (or omitting the parameter) will reset the lifetime
+of the cached connection to 60s everytime it is read from the cache.
 
 .. code-block:: python
 
-    @cache(timeout=120, ignore=["ctx"], for_version=True)
+    @cache(ignore=["ctx"])
     def get_client_connection(self, ctx, device_id, version):
        # ...
        return connection
 
-To also ensure the connection is properly closed, an `on_delete` function can be attached. This
-function is called when the cache is expired. It gets the cached item as argument.
+To also ensure the connection is properly closed, an ``on_delete`` function can be passed
+via the ``call_on_delete`` parameter. This function is called when the cache entry is removed
+from the cache. It gets the cached item as argument.
 
 
 .. code-block:: python

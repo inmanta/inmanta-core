@@ -18,34 +18,39 @@
 
 import abc
 import asyncio
-import contextlib
+import concurrent.futures
 import dataclasses
-import functools
+import datetime
 import hashlib
 import json
 import logging
 import os
-import types
+import pathlib
+import shutil
 import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence, cast
 
 import pkg_resources
 
 import inmanta.types
+import inmanta.util
+from inmanta import const
 from inmanta.agent import config as cfg
-from inmanta.data.model import PipConfig, ResourceIdStr, ResourceVersionIdStr
+from inmanta.agent import resourcepool
+from inmanta.const import ResourceState
+from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
 from inmanta.types import JsonType
-from inmanta.util import NamedLock
 
 LOGGER = logging.getLogger(__name__)
 
-FailedResourcesSet: typing.TypeAlias = set[str]
+
+FailedResources: typing.TypeAlias = dict[ResourceType, Exception]
 
 
 class AgentInstance(abc.ABC):
@@ -67,20 +72,22 @@ class ResourceDetails:
     id: Id
     rid: ResourceIdStr
     rvid: ResourceVersionIdStr
-    env_id: uuid.UUID
     model_version: int
     requires: Sequence[Id]
     attributes: dict[str, object]
 
-    def __init__(self, resource_dict: JsonType) -> None:
-        self.attributes = resource_dict["attributes"]
-        self.attributes["id"] = resource_dict["id"]
-        self.id = Id.parse_id(resource_dict["id"])
+    def __init__(self, id: ResourceIdStr, version: int, attributes: dict[str, object]) -> None:
+        self.attributes = attributes
+        self.id = Id.parse_id(id).copy(version=version)
         self.rid = self.id.resource_str()
         self.rvid = self.id.resource_version_str()
-        self.env_id = resource_dict["environment"]
-        self.requires = [Id.parse_id(resource_id) for resource_id in resource_dict["attributes"]["requires"]]
-        self.model_version = resource_dict["model"]
+        self.attributes["id"] = self.rvid
+        self.model_version = version
+        self.requires = [Id.parse_id(resource_id) for resource_id in cast(list[ResourceIdStr], attributes["requires"])]
+
+    @classmethod
+    def from_json(cls, resource_dict: JsonType) -> "ResourceDetails":
+        return ResourceDetails(resource_dict["id"], resource_dict["model"], resource_dict["attributes"])
 
 
 @dataclasses.dataclass
@@ -90,6 +97,11 @@ class EnvBlueprint:
     pip_config: PipConfig
     requirements: Sequence[str]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
+    python_version: tuple[int, int]
+
+    def __post_init__(self) -> None:
+        # remove duplicates and make uniform
+        self.requirements = sorted(set(self.requirements))
 
     def blueprint_hash(self) -> str:
         """
@@ -101,7 +113,8 @@ class EnvBlueprint:
         if self._hash_cache is None:
             blueprint_dict: Dict[str, Any] = {
                 "pip_config": self.pip_config.dict(),
-                "requirements": sorted(self.requirements),
+                "requirements": self.requirements,
+                "python_version": self.python_version,
             }
 
             # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -115,14 +128,18 @@ class EnvBlueprint:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EnvBlueprint):
             return False
-        return (self.pip_config, set(self.requirements)) == (other.pip_config, set(other.requirements))
+        return (self.pip_config, set(self.requirements), self.python_version) == (
+            other.pip_config,
+            set(other.requirements),
+            other.python_version,
+        )
 
     def __hash__(self) -> int:
         return int(self.blueprint_hash(), 16)
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
-        return f"EnvBlueprint(requirements=[{str(req)}], pip={self.pip_config}]"
+        return f"EnvBlueprint(requirements=[{str(req)}], pip={self.pip_config}, python_version={self.python_version}]"
 
 
 @dataclasses.dataclass
@@ -132,20 +149,40 @@ class ExecutorBlueprint(EnvBlueprint):
     sources: Sequence[ModuleSource]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
 
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        # remove duplicates and make uniform
+        self.sources = sorted(set(self.sources))
+
     @classmethod
     def from_specs(cls, code: typing.Collection["ResourceInstallSpec"]) -> "ExecutorBlueprint":
+        """
+        Create a single ExecutorBlueprint by combining the blueprint(s) of several
+        ResourceInstallSpec by merging respectively their module sources and their
+        requirements and making sure they all share the same pip config.
+        """
+
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
         pip_configs = [cd.blueprint.pip_config for cd in code]
+        python_versions = [cd.blueprint.python_version for cd in code]
         if not pip_configs:
             raise Exception("No Pip config available, aborting")
+        if not python_versions:
+            raise Exception("No Python versions found, aborting")
         base_pip = pip_configs[0]
         for pip_config in pip_configs:
             assert pip_config == base_pip, f"One agent is using multiple pip configs: {base_pip} {pip_config}"
+        base_python_version = python_versions[0]
+        for python_version in python_versions:
+            assert (
+                python_version == base_python_version
+            ), f"One agent is using multiple python versions: {base_python_version} {python_version}"
         return ExecutorBlueprint(
             pip_config=base_pip,
             sources=sources,
             requirements=requirements,
+            python_version=base_python_version,
         )
 
     def blueprint_hash(self) -> str:
@@ -158,9 +195,10 @@ class ExecutorBlueprint(EnvBlueprint):
         if self._hash_cache is None:
             blueprint_dict = {
                 "pip_config": self.pip_config.dict(),
-                "requirements": sorted(self.requirements),
-                # Use the hash values of the sources, sorted to ensure consistent ordering
-                "sources": sorted(source.hash_value for source in self.sources),
+                "requirements": self.requirements,
+                # Use the hash values and name to create a stable identity
+                "sources": [[source.hash_value, source.name, source.is_byte_code] for source in self.sources],
+                "python_version": self.python_version,
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -175,16 +213,20 @@ class ExecutorBlueprint(EnvBlueprint):
         """
         Converts this ExecutorBlueprint instance into an EnvBlueprint instance.
         """
-        return EnvBlueprint(pip_config=self.pip_config, requirements=self.requirements)
+        return EnvBlueprint(pip_config=self.pip_config, requirements=self.requirements, python_version=self.python_version)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return (self.pip_config, set(self.requirements), sorted(self.sources)) == (
+        return (self.pip_config, self.requirements, self.sources, self.python_version) == (
             other.pip_config,
-            set(other.requirements),
-            sorted(other.sources),
+            other.requirements,
+            other.sources,
+            other.python_version,
         )
+
+    def __hash__(self) -> int:
+        return hash(self.blueprint_hash())
 
 
 @dataclasses.dataclass
@@ -224,23 +266,25 @@ class ResourceInstallSpec:
 
     """
 
-    resource_type: str
+    resource_type: ResourceType
     model_version: int
     blueprint: ExecutorBlueprint
 
 
-class ExecutorVirtualEnvironment(PythonEnvironment):
+class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]):
     """
     Manages a single virtual environment for an executor,
     including the creation and installation of packages based on a blueprint.
 
     :param env_path: The file system path where the virtual environment should be created or exists.
-    :param threadpool: A ThreadPoolExecutor instance
     """
 
-    def __init__(self, env_path: str, threadpool: ThreadPoolExecutor):
-        super().__init__(env_path=env_path)
-        self.thread_pool = threadpool
+    def __init__(self, env_path: str, io_threadpool: ThreadPoolExecutor):
+        PythonEnvironment.__init__(self, env_path=env_path)
+        resourcepool.PoolMember.__init__(self, my_id=os.path.basename(env_path))
+        self.inmanta_venv_status_file: pathlib.Path = pathlib.Path(self.env_path) / const.INMANTA_VENV_STATUS_FILENAME
+        self.folder_name: str = pathlib.Path(self.env_path).name
+        self.io_threadpool = io_threadpool
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
@@ -249,16 +293,65 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
         :param blueprint: An instance of EnvBlueprint containing the configuration for
             the pip installation and the requirements to install.
         """
-        loop = asyncio.get_running_loop()
         req: list[str] = list(blueprint.requirements)
-        self.init_env()
+        await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
-            install_for_config = functools.partial(
-                self.install_for_config,
+            await self.async_install_for_config(
                 requirements=list(pkg_resources.parse_requirements(req)),
                 config=blueprint.pip_config,
             )
-            await loop.run_in_executor(self.thread_pool, install_for_config)
+
+        self.touch()
+
+    def is_correctly_initialized(self) -> bool:
+        """
+        Was the venv correctly initialized: the inmanta status file exists
+        """
+        return self.inmanta_venv_status_file.exists()
+
+    def touch(self) -> None:
+        """
+        Touch the inmanta status file
+        """
+        self.inmanta_venv_status_file.touch()
+
+    @property
+    def last_used(self) -> datetime.datetime:
+        """
+        Retrieve the last modified timestamp of the inmanta status file
+        """
+        if not self.is_correctly_initialized():
+            return const.DATETIME_MIN_UTC
+        return datetime.datetime.fromtimestamp(self.inmanta_venv_status_file.stat().st_mtime).astimezone()
+
+    async def request_shutdown(self) -> None:
+        """
+        Remove the venv of the executor through the thread pool.
+        This method is supposed to be used by the VirtualEnvironmentManager with the lock associated to this executor!
+        """
+        await super().request_shutdown()
+        await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.remove_venv)
+        await self.set_shutdown()
+
+    def remove_venv(self) -> None:
+        """
+        Remove the venv of the executor
+        """
+        try:
+            LOGGER.debug("Removing venv %s", self.env_path)
+            shutil.rmtree(self.env_path)
+        except Exception:
+            LOGGER.exception(
+                "An error occurred while removing the venv located %s",
+                self.env_path,
+            )
+
+    def reset(self) -> None:
+        """
+        Remove the venv of the executor and recreate the directory of the venv
+        """
+        self.remove_venv()
+        os.makedirs(self.env_path)
 
 
 def initialize_envs_directory() -> str:
@@ -274,109 +367,106 @@ def initialize_envs_directory() -> str:
     return env_dir
 
 
-class VirtualEnvironmentManager:
+class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, str, ExecutorVirtualEnvironment]):
     """
     Manages virtual environments to ensure efficient reuse.
     This manager handles the creation of new environments based on specific blueprints and maintains a directory
     for storing these environments.
     """
 
-    def __init__(self, envs_dir: str) -> None:
-        self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
-        self.envs_dir: str = envs_dir
-        self._locks: NamedLock = NamedLock()
+    def __init__(self, envs_dir: str, thread_pool: concurrent.futures.thread.ThreadPoolExecutor) -> None:
+        # We rely on a Named lock (`self._locks`, inherited from PoolManager) to be able to lock specific entries of the
+        # `_environment_map` dict. This allows us to prevent creating and deleting the same venv at a given time. The keys of
+        # this named lock are the hash of venv
+        super().__init__(
+            retention_time=cfg.executor_venv_retention_time.get(),
+        )
+        self.envs_dir: pathlib.Path = pathlib.Path(envs_dir).absolute()
+        self.thread_pool = thread_pool
 
-    def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
-        """
-        Retrieves the directory path for a virtual environment based on the given blueprint.
-        If the directory does not exist, it creates a new one. This method ensures that each
-        virtual environment has a unique storage location.
+    async def start(self) -> None:
+        await self.init_environment_map()
+        await super().start()
 
-        :param blueprint: The blueprint of the environment for which the storage is being determined.
-        :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
+    def my_name(self) -> str:
+        return "EnvironmentManager"
+
+    def member_name(self, member: ExecutorVirtualEnvironment) -> str:
+        return f"venv with hash: {member.get_id()}"
+
+    def render_id(self, member: EnvBlueprint) -> str:
+        return f"venv with hash: {member.blueprint_hash()}"
+
+    def _id_to_internal(self, ext_id: EnvBlueprint) -> str:
+        return ext_id.blueprint_hash()
+
+    def get_lock_name_for(self, member_id: str) -> str:
+        return member_id
+
+    async def init_environment_map(self) -> None:
         """
-        env_dir_name: str = blueprint.blueprint_hash()
+        Initialize the environment map of the VirtualEnvironmentManager: It will read everything on disk to reconstruct a
+        complete view of existing Venvs
+        """
+        folders = [file for file in self.envs_dir.iterdir() if file.is_dir()]
+        for folder in folders:
+            # No lock here, singe shot prior to start
+            current_folder = self.envs_dir / folder
+            self.pool[folder.name] = ExecutorVirtualEnvironment(env_path=str(current_folder), io_threadpool=self.thread_pool)
+
+    async def get_environment(self, blueprint: EnvBlueprint) -> ExecutorVirtualEnvironment:
+        """
+        Retrieves an existing virtual environment that matches the given blueprint or creates a new one if no match is found.
+        Utilizes NamedLock to ensure thread-safe operations for each unique blueprint.
+        """
+        return await self.get(blueprint)
+
+    async def create_member(self, member_id: EnvBlueprint) -> ExecutorVirtualEnvironment:
+        """
+        Creates a new virtual environment based on the provided blueprint or reuses an existing one if suitable.
+        This involves setting up the virtual environment and installing any required packages as specified in the blueprint.
+        This method must execute under the self._locks.get(<blueprint-hash>) lock to ensure thread-safe operations for each
+        unique blueprint.
+
+        :param blueprint: The blueprint specifying the configuration for the new virtual environment.
+        :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
+        """
+        interal_id = member_id.blueprint_hash()
+        env_dir_name: str = interal_id
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
         # Check if the directory already exists and create it if not
         if not os.path.exists(env_dir):
             os.makedirs(env_dir)
-            return env_dir, True  # Returning the path and True for newly created directory
+            is_new = True
         else:
             LOGGER.debug(
                 "Found existing venv for content %s at %s, content hash: %s",
-                str(blueprint),
+                str(member_id),
                 env_dir,
-                blueprint.blueprint_hash(),
+                interal_id,
             )
-            return env_dir, False  # Returning the path and False for existing directory
+            is_new = False  # Returning the path and False for existing directory
 
-    async def create_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
-        """
-        Creates a new virtual environment based on the provided blueprint or reuses an existing one if suitable.
-        This involves setting up the virtual environment and installing any required packages as specified in the blueprint.
+        process_environment = ExecutorVirtualEnvironment(env_dir, self.thread_pool)
 
-        :param blueprint: The blueprint specifying the configuration for the new virtual environment.
-        :param threadpool: A ThreadPoolExecutor
-        :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
+        loop = asyncio.get_running_loop()
 
-        TODO: Improve handling of bad venv scenarios, such as when the folder exists but is empty or corrupted.
-        """
-        env_storage, is_new = self.get_or_create_env_directory(blueprint)
-        process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
+        if not is_new and not process_environment.is_correctly_initialized():
+            LOGGER.info(
+                "Venv is already present but it was not correctly initialized. Re-creating it for content %s, "
+                "content hash: %s located in %s",
+                str(member_id),
+                interal_id,
+                env_dir,
+            )
+            await loop.run_in_executor(self.thread_pool, process_environment.reset)
+            is_new = True
+
         if is_new:
-            LOGGER.info("Creating venv for content %s, content hash: %s", str(blueprint), blueprint.blueprint_hash())
-            await process_environment.create_and_install_environment(blueprint)
-        self._environment_map[blueprint] = process_environment
-
+            LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), interal_id)
+            await process_environment.create_and_install_environment(member_id)
         return process_environment
-
-    async def get_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
-        """
-        Retrieves an existing virtual environment that matches the given blueprint or creates a new one if no match is found.
-        Utilizes NamedLock to ensure thread-safe operations for each unique blueprint.
-        """
-        assert isinstance(blueprint, EnvBlueprint), "Only EnvBlueprint instances are accepted, subclasses are not allowed."
-
-        if blueprint in self._environment_map:
-            LOGGER.debug(
-                "Found existing virtual environment for content %s, content hash: %s",
-                str(blueprint),
-                blueprint.blueprint_hash(),
-            )
-            return self._environment_map[blueprint]
-        # Acquire a lock based on the blueprint's hash
-        async with self._locks.get(blueprint.blueprint_hash()):
-            if blueprint in self._environment_map:
-                LOGGER.debug(
-                    "Found existing virtual environment for content %s, content hash: %s",
-                    str(blueprint),
-                    blueprint.blueprint_hash(),
-                )
-                return self._environment_map[blueprint]
-            return await self.create_environment(blueprint, threadpool)
-
-
-class CacheVersionContext(contextlib.AbstractAsyncContextManager[None]):
-    """
-    A context manager to ensure the cache version is properly closed
-    """
-
-    def __init__(self, executor: "Executor", version: int) -> None:
-        self.version = version
-        self.executor = executor
-
-    async def __aenter__(self) -> None:
-        await self.executor.open_version(self.version)
-
-    async def __aexit__(
-        self,
-        __exc_type: typing.Type[BaseException] | None,
-        __exc_value: BaseException | None,
-        __traceback: types.TracebackType | None,
-    ) -> None:
-        await self.executor.close_version(self.version)
-        return None
 
 
 class Executor(abc.ABC):
@@ -389,14 +479,7 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    failed_resource_types: FailedResourcesSet
-
-    def cache(self, model_version: int) -> CacheVersionContext:
-        """
-        Context manager responsible for opening and closing the handler cache
-        for the given model_version during deployment.
-        """
-        return CacheVersionContext(self, model_version)
+    failed_resources: FailedResources
 
     @abc.abstractmethod
     async def execute(
@@ -404,7 +487,7 @@ class Executor(abc.ABC):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-    ) -> None:
+    ) -> ResourceState:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
 
@@ -437,17 +520,8 @@ class Executor(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def open_version(self, version: int) -> None:
-        """
-        Open a version on the cache
-        """
-        pass
-
-    @abc.abstractmethod
-    async def close_version(self, version: int) -> None:
-        """
-        Close a version on the cache
-        """
+    async def join(self) -> None:
+        """Wait for shutdown to be completed"""
         pass
 
 
@@ -465,11 +539,14 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
     @abc.abstractmethod
     async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]) -> E:
         """
-        Retrieves an Executor based on the agent name and blueprint.
+        Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
         If an Executor does not exist for the given configuration, a new one is created.
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
-        :param blueprint: The ExecutorBlueprint defining the configuration for the Executor.
+        :param agent_uri: The name of the host on which the agent is running.
+        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
+            which resource types it can act on and all necessary information to install the relevant
+            handler code in its venv.
         :return: An Executor instance
         """
         pass
@@ -486,6 +563,13 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         pass
 
     @abc.abstractmethod
+    async def start(self) -> None:
+        """
+        Start the manager.
+        """
+        pass
+
+    @abc.abstractmethod
     async def stop(self) -> None:
         """
         Stop all executors.
@@ -495,7 +579,7 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         pass
 
     @abc.abstractmethod
-    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
+    async def join(self, thread_pool_finalizer: list[concurrent.futures.ThreadPoolExecutor], timeout: float) -> None:
         """
         Wait for all executors to terminate.
 

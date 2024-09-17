@@ -28,12 +28,13 @@ from enum import Enum
 from typing import Any, Callable, Optional
 from urllib import parse
 
+import pydantic
+
 from inmanta import config as inmanta_config
-from inmanta import util
-from inmanta.protocol.common import UrlMethod
+from inmanta import const, tracing, types, util
+from inmanta.protocol import common, exceptions
 from inmanta.util import TaskHandler
 
-from . import common
 from .rest import client
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -58,11 +59,11 @@ class CallTarget:
 
         return methods
 
-    def get_op_mapping(self) -> dict[str, dict[str, UrlMethod]]:
+    def get_op_mapping(self) -> dict[str, dict[str, common.UrlMethod]]:
         """
         Build a mapping between urls, ops and methods
         """
-        url_map: dict[str, dict[str, UrlMethod]] = defaultdict(dict)
+        url_map: dict[str, dict[str, common.UrlMethod]] = defaultdict(dict)
 
         # Loop over all methods in this class that have a handler annotation. The handler annotation refers to a method
         # definition. This method definition defines how the handler is invoked.
@@ -83,7 +84,9 @@ class CallTarget:
                         if url in url_map and properties.operation in url_map[url]:
                             raise Exception(f"A handler is already registered for {properties.operation} {url}. ")
 
-                        url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
+                        url_map[url][properties.operation] = common.UrlMethod(
+                            properties, self, method_handlers[1], method_handlers[0]
+                        )
         return url_map
 
 
@@ -140,10 +143,6 @@ class Endpoint(TaskHandler[None]):
 
     node_name = property(get_node_name)
 
-    async def stop(self) -> None:
-        """Stop this endpoint"""
-        await super().stop()
-
 
 class SessionEndpoint(Endpoint, CallTarget):
     """
@@ -164,6 +163,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         self.running: bool = True
         self.server_timeout = timeout
         self.reconnect_delay = reconnect_delay
+        self.dispatch_delay = 0.01  # keep at least 10 ms between dispatches
         self.add_call_target(self)
 
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
@@ -248,6 +248,10 @@ class SessionEndpoint(Endpoint, CallTarget):
 
                             for method_call in method_calls:
                                 self.add_background_task(self.dispatch_method(transport, method_call))
+                    # Always wait a bit between calls
+                    # reduces chance of missed agent map updates: https://github.com/inmanta/inmanta-core/issues/7831
+                    # encourage call batching
+                    await asyncio.sleep(self.dispatch_delay)
                 else:
                     LOGGER.warning(
                         "Heartbeat failed with status %d and message: %s, going to sleep for %d s",
@@ -291,7 +295,10 @@ class SessionEndpoint(Endpoint, CallTarget):
 
         body.update(kwargs)
 
-        response: common.Response = await transport._execute_call(config, body, method_call.headers)
+        with tracing.attach_context(
+            {const.TRACEPARENT: method_call.headers[const.TRACEPARENT]} if const.TRACEPARENT in method_call.headers else {}
+        ):
+            response: common.Response = await transport._execute_call(config, body, method_call.headers)
 
         if response.status_code == 500:
             msg = ""
@@ -474,3 +481,68 @@ class SessionClient(Client):
 
         result = await self._transport_instance.call(method_properties, args, kwargs)
         return result
+
+
+class TypedClient(Client):
+    """A client that returns typed data instead of JSON"""
+
+    def _raise_exception(self, exception_class: type[exceptions.BaseHttpException], result: Optional[types.JsonType]) -> None:
+        """Raise an exception based on the provided status"""
+        if result is None:
+            raise exception_class()
+
+        message = result.get("message", None)
+        details = result.get("error_details", None)
+
+        raise exception_class(message, details)
+
+    def _process_response(self, method_properties: common.MethodProperties, response: common.Result) -> types.ReturnTypes:
+        """Convert the response into a proper type and restore exception if any"""
+        match response.code:
+            case 200:
+                # typed methods always require an envelope key
+                if response.result is None or method_properties.envelope_key not in response.result:
+                    raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
+
+                if method_properties.return_type is None:
+                    return None
+
+                try:
+                    ta = pydantic.TypeAdapter(method_properties.return_type)
+                except common.InvalidMethodDefinition:
+                    raise exceptions.BadRequest("Typed client can only be used with typed methods.")
+
+                return ta.validate_python(response.result[method_properties.envelope_key])
+
+            case 400:
+                self._raise_exception(exceptions.BadRequest, response.result)
+
+            case 401:
+                self._raise_exception(exceptions.UnauthorizedException, response.result)
+
+            case 403:
+                self._raise_exception(exceptions.Forbidden, response.result)
+
+            case 404:
+                self._raise_exception(exceptions.NotFound, response.result)
+
+            case 409:
+                self._raise_exception(exceptions.Conflict, response.result)
+
+            case 500:
+                self._raise_exception(exceptions.ServerError, response.result)
+
+            case 503:
+                self._raise_exception(exceptions.ShutdownInProgress, response.result)
+
+            case _:
+                self._raise_exception(exceptions.ServerError, response.result)
+
+        # make mypy happy, it cannot deduce that all the cases will always raise an exception
+        return None
+
+    async def _call(
+        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
+    ) -> types.ReturnTypes:
+        """Execute a call and return the result"""
+        return self._process_response(method_properties, await super()._call(method_properties, args, kwargs))

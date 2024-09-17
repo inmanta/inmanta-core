@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-setuptools from 71.1.0.20240813 to 71.1.0.20240818
+destination-branches:
+- master
+sections: {}

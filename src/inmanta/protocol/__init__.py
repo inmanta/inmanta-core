@@ -57,7 +57,7 @@ from . import methods, methods_v2
 from .auth import decode_token, encode_token
 from .common import Response, Result, gzipped_json, json_encode
 from .decorators import handle, method, typedmethod
-from .endpoints import Client, SessionClient, SessionEndpoint, SyncClient, VersionMatch
+from .endpoints import Client, SessionClient, SessionEndpoint, SyncClient, TypedClient, VersionMatch
 
 __all__ = [
     "Response",
@@ -74,4 +74,5 @@ __all__ = [
     "typedmethod",
     "decode_token",
     "encode_token",
+    "TypedClient",
 ]

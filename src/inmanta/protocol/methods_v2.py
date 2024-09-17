@@ -24,7 +24,7 @@ from typing import Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
+from inmanta.data.model import LinkedDiscoveredResource, PipConfig, ResourceIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
@@ -1324,6 +1324,9 @@ def list_notifications(
     """
     List the notifications in an environment.
 
+    The returned notification objects may carry links to other objects, e.g. a compile report. The full list of supported links
+    can be found :ref:`here <api_self_referencing_links>`.
+
     :param tid: The id of the environment
     :param limit: Limit the number of notifications that are returned
     :param first_id: The notification id to use as a continuation token for paging, in combination with the 'start' value,
@@ -1476,7 +1479,9 @@ def get_environment_metrics(
 
 @typedmethod(path="/login", operation="POST", client_types=[ClientType.api], enforce_auth=False, api_version=2)
 def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
-    """Login a user. When the login succeeds an authentication header is returned with the Bearer token set.
+    """Login a user.
+
+     When the login succeeds an authentication header is returned with the Bearer token set.
 
     :param username: The user to login
     :param password: The password of this user
@@ -1541,13 +1546,17 @@ def set_password(username: str, password: str) -> None:
     varkw=True,
 )
 def discovered_resource_create(
-    tid: uuid.UUID, discovered_resource_id: str, **kwargs: object  # bypass the type checking for the values
+    tid: uuid.UUID,
+    discovered_resource_id: str,
+    discovery_resource_id: str,
+    **kwargs: object,  # bypass the type checking for the values
 ) -> None:
     """
     create a discovered resource.
 
     :param tid: The id of the environment this resource belongs to
     :param discovered_resource_id: The id of the discovered_resource
+    :param discovery_resource_id: The id of the discovery resource responsible for discovering this resource
     :param **kwargs: The following arguments are supported:
            values: The values associated with the discovered_resource
     """
@@ -1561,7 +1570,7 @@ def discovered_resource_create(
     client_types=[ClientType.agent],
     api_version=2,
 )
-def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: list[DiscoveredResource]) -> None:
+def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: list[LinkedDiscoveredResource]) -> None:
     """
     create multiple discovered resource in the DB
     :param tid: The id of the environment this resource belongs to
@@ -1601,8 +1610,12 @@ def discovered_resources_get_batch(
     filter: Optional[dict[str, list[str]]] = None,
 ) -> list[model.DiscoveredResource]:
     """
-    Get a list of discovered resources. For resources that the orchestrator is already managing, a link to the corresponding
-    resource is provided.
+    Get a list of discovered resources.
+
+    The discovery resource responsible for discovering each resource is included.
+    For resources that the orchestrator is already managing, a link to the corresponding resource is provided. The full list of
+    supported links can be found :ref:`here <api_self_referencing_links>`.
+
 
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
@@ -1616,10 +1629,12 @@ def discovered_resources_get_batch(
     :param filter: Filter the list of returned resources.
         Default behavior: return all discovered resources.
         Filtering by 'managed' is supported:
+
             - filter.managed=true: only return discovered resources that the orchestrator is already aware of i.e.
-            resources that are present in any released configuration model of environment tid.
+              resources that are present in any released configuration model of environment tid.
             - filter.managed=false: only return discovered resources that the orchestrator is unaware of i.e. resources
-            that are not part of any released configuration model of environment tid.
+              that are not part of any released configuration model of environment tid.
+
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid

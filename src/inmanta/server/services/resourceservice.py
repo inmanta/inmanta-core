@@ -44,6 +44,7 @@ from inmanta.data.model import (
     AttributeStateChange,
     DiscoveredResource,
     LatestReleasedResource,
+    LinkedDiscoveredResource,
     LogLine,
     ReleasedResourceDetails,
     Resource,
@@ -62,10 +63,9 @@ from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, Forbidden, NotFound, ServerError
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
 from inmanta.server import config as opt
 from inmanta.server import extensions, protocol
-from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 from inmanta.util import parse_timestamp
@@ -114,7 +114,7 @@ class ResourceActionLogLine(logging.LogRecord):
 class ResourceService(protocol.ServerSlice):
     """Resource Manager service"""
 
-    agentmanager_service: "AgentManager"
+    agentmanager_service: "agentmanager.AgentManager"
 
     def __init__(self) -> None:
         super().__init__(SLICE_RESOURCE)
@@ -147,7 +147,7 @@ class ResourceService(protocol.ServerSlice):
 
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
-        self.agentmanager_service = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
+        self.agentmanager_service = cast("agentmanager.AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
 
     async def start(self) -> None:
         self.schedule(
@@ -236,8 +236,31 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods.get_resources_for_agent, env="tid")
     async def get_resources_for_agent(
-        self, env: data.Environment, agent: str, version: int, sid: uuid.UUID, incremental_deploy: bool
+        self, env: data.Environment, agent: str, version: Optional[int], sid: uuid.UUID, incremental_deploy: bool
     ) -> Apireturn:
+        """
+        This method fetches the desired state of resources from the
+        database for a given (environment, agent, model version).
+
+        :param env: Only fetch resources from this environment.
+        :param agent: Only fetch resources this agent is responsible for.
+        :param version: Only fetch resources belonging to this version of
+            the model. Use the latest version by default.
+        :param sid: Session id for the agent.
+        :param incremental_deploy: Only fetch resources for which desired state has
+            changed since the last version.
+
+        :return: A tuple[int, Optional[JsonType]] with the http response code and a dict.
+
+        In case of success, this dict is expected to contain the following keys and associated types:
+        {
+            "environment": uuid.UUID,
+            "agent": str,
+            "version": int,
+            "resources": list[dict[str, object]]  # The requested resources
+            "resource_types": list(ResourceType),  # ALL the types for this model version
+        }
+        """
         if not self.agentmanager_service.is_primary(env, sid, agent):
             return 409, {"message": f"This agent is not currently the primary for the endpoint {agent} (sid: {sid})"}
         if incremental_deploy:
@@ -248,7 +271,7 @@ class ResourceService(protocol.ServerSlice):
             result = await self.get_all_resources_for_agent(env, agent, version)
         return result
 
-    async def get_all_resources_for_agent(self, env: data.Environment, agent: str, version: int) -> Apireturn:
+    async def get_all_resources_for_agent(self, env: data.Environment, agent: str, version: Optional[int]) -> Apireturn:
         started = datetime.datetime.now().astimezone()
         if version is None:
             version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
@@ -263,9 +286,12 @@ class ResourceService(protocol.ServerSlice):
         deploy_model = []
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
+        resource_types: set[ResourceType] = set()
 
         resource_ids = []
         for rv in resources:
+            resource_types.add(rv.resource_type)
+
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
@@ -289,7 +315,13 @@ class ResourceService(protocol.ServerSlice):
             )
             await ra.insert()
 
-        return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
+        return 200, {
+            "environment": env.id,
+            "agent": agent,
+            "version": version,
+            "resources": deploy_model,
+            "resource_types": list(resource_types),  # cast to list since sets are not json serializable
+        }
 
     async def get_resource_increment_for_agent(self, env: data.Environment, agent: str) -> Apireturn:
         started = datetime.datetime.now().astimezone()
@@ -325,7 +357,10 @@ class ResourceService(protocol.ServerSlice):
         deploy_model: list[dict[str, Any]] = []
         resource_ids: list[str] = []
 
+        resource_types: set[ResourceType] = set()
+
         for rv in resources:
+            resource_types.add(rv.resource_type)
             if rv.resource_id not in increment_ids:
                 continue
 
@@ -355,7 +390,13 @@ class ResourceService(protocol.ServerSlice):
             )
             await ra.insert()
 
-        return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
+        return 200, {
+            "environment": env.id,
+            "agent": agent,
+            "version": version,
+            "resources": deploy_model,
+            "resource_types": list(resource_types),  # cast to list since sets are not json serializable
+        }
 
     async def mark_deployed(
         self,
@@ -1277,9 +1318,17 @@ class ResourceService(protocol.ServerSlice):
         return resource
 
     @handle(methods_v2.discovered_resource_create, env="tid")
-    async def discovered_resource_create(self, env: data.Environment, discovered_resource_id: str, values: JsonType) -> None:
+    async def discovered_resource_create(
+        self,
+        env: data.Environment,
+        discovered_resource_id: ResourceIdStr,
+        values: JsonType,
+        discovery_resource_id: ResourceIdStr,
+    ) -> None:
         try:
-            discovered_resource = DiscoveredResource(discovered_resource_id=discovered_resource_id, values=values)
+            discovered_resource = LinkedDiscoveredResource(
+                discovered_resource_id=discovered_resource_id, values=values, discovery_resource_id=discovery_resource_id
+            )
         except ValidationError as e:
             # this part was copy/pasted from protocol.common.MethodProperties.validate_arguments.
             error_msg = f"Failed to validate argument\n{str(e)}"
@@ -1291,7 +1340,7 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods_v2.discovered_resource_create_batch, env="tid")
     async def discovered_resources_create_batch(
-        self, env: data.Environment, discovered_resources: list[DiscoveredResource]
+        self, env: data.Environment, discovered_resources: list[LinkedDiscoveredResource]
     ) -> None:
         dao_list = [res.to_dao(env.id) for res in discovered_resources]
         await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
@@ -1325,6 +1374,7 @@ class ResourceService(protocol.ServerSlice):
         try:
             handler = DiscoveredResourceView(environment=env, limit=limit, sort=sort, start=start, end=end, filter=filter)
             out = await handler.execute()
+
             return out
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e

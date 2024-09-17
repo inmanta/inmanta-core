@@ -40,7 +40,8 @@ import pydantic
 from asyncpg import Connection
 
 import inmanta.data.model as model
-from inmanta import config, const, data, protocol, server
+import inmanta.server.services.environmentlistener
+from inmanta import config, const, data, protocol, server, tracing
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
 from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvCreationFailedError, VirtualEnv
@@ -146,11 +147,12 @@ class CompileRun:
             await self.stage.update_streams(err=part)
 
     async def drain(self, sub_process: asyncio.subprocess.Process) -> int:
-        # pipe, so stream is actual, not optional
-        out = cast(asyncio.StreamReader, sub_process.stdout)
-        err = cast(asyncio.StreamReader, sub_process.stderr)
-        ret, _, _ = await asyncio.gather(sub_process.wait(), self.drain_out(out), self.drain_err(err))
-        return ret
+        with tracing.span("drain"):
+            # pipe, so stream is actual, not optional
+            out = cast(asyncio.StreamReader, sub_process.stdout)
+            err = cast(asyncio.StreamReader, sub_process.stderr)
+            ret, _, _ = await asyncio.gather(sub_process.wait(), self.drain_out(out), self.drain_err(err))
+            return ret
 
     async def get_branch(self) -> Optional[str]:
         try:
@@ -315,6 +317,7 @@ class CompileRun:
                 python_path = PythonEnvironment.get_python_path_for_env_path(venv_dir)
                 assert os.path.exists(python_path)
                 full_cmd = [python_path, "-m", "inmanta.app"] + inmanta_args
+                env.update(tracing.get_context())
                 return await self._run_compile_stage(stage_name, full_cmd, cwd, env)
 
             async def setup() -> AsyncIterator[Awaitable[Optional[data.Report]]]:
@@ -487,7 +490,7 @@ class CompileRun:
             return success, None
 
 
-class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
+class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.EnvironmentListener):
     """
     Compiler services offers:
 
@@ -516,6 +519,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     """
 
     _env_folder: str
+    environment_service: "environmentservice.EnvironmentService"
 
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)
@@ -623,7 +627,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         metadata: Optional[JsonType] = None,
         env_vars: Optional[Mapping[str, str]] = None,
         partial: bool = False,
-        removed_resource_sets: Optional[list[str]] = None,
         exporter_plugin: Optional[str] = None,
         notify_failed_compile: Optional[bool] = None,
         failed_compile_message: Optional[str] = None,
@@ -645,10 +648,10 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         :param in_db_transaction: If set to True, the connection must be provided and the connection must be part of an ongoing
                                   database transaction. If this parameter is set to True, is required to call
                                   `CompileService.notify_compile_request_committed()` right after the transaction commits.
-        :param soft_delete: Silently ignore deletion of resource sets in removed_resource_sets if they contain
-            resources that are being exported.
+        :param soft_delete: Silently ignore deletion of resource sets passed in the env_vars or mergeable_env_vars if
+            they contain resources that are being exported.
         :param mergeable_env_vars: a set of env vars that can be compacted over multiple compiles.
-            If multiple values are compacted, they will be joined using spaces
+            If multiple values are compacted, they will be joined using spaces.
         :return: the compile id of the requested compile and any warnings produced during the request
         """
         if in_db_transaction and not connection:
@@ -659,8 +662,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                 f" but the given connection is{' not' if in_db_transaction else ''} executing in a transaction."
             )
 
-        if removed_resource_sets is None:
-            removed_resource_sets = []
         if metadata is None:
             metadata = {}
         if env_vars is None:
@@ -693,7 +694,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             used_environment_variables=None,
             mergeable_environment_variables=mergeable_env_vars,
             partial=partial,
-            removed_resource_sets=removed_resource_sets,
             exporter_plugin=exporter_plugin,
             notify_failed_compile=notify_failed_compile,
             failed_compile_message=failed_compile_message,
@@ -741,7 +741,6 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                 "do_export",
                 "requested_environment_variables",
                 "partial",
-                "removed_resource_sets",
             },
         )
 
