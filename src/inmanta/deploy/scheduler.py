@@ -20,6 +20,7 @@ import asyncio
 import logging
 import uuid
 from collections.abc import Mapping, Set
+from typing import Optional
 
 from inmanta import data
 from inmanta.agent import executor
@@ -27,7 +28,7 @@ from inmanta.agent.code_manager import CodeManager
 from inmanta.data import Resource
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
-from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
+from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask
 from inmanta.protocol import Client
@@ -143,17 +144,17 @@ class ResourceScheduler:
             )
         )
 
-    async def get_resource_details(self, resource: ResourceIdStr) -> Optional[tuple[int, ResourceDetails]]:
+    async def get_resource_intent(self, resource: ResourceIdStr) -> Optional[tuple[int, ResourceDetails]]:
         """
         Returns the current version and the details for the given resource, or None if it is not (anymore) managed by the
         scheduler.
 
         Acquires scheduler lock.
         """
-        async with scheduler._scheduler_lock:
+        async with self._scheduler_lock:
             # fetch resource details under lock
             try:
-                return self._state.version, scheduler._state.resources[self.resource]
+                return self._state.version, self._state.resources[resource]
             except KeyError:
                 # Stale resource
                 # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
@@ -180,13 +181,13 @@ class ResourceScheduler:
         :param status: The new resource status.
         :param deployment_result: The result of the deploy, iff one just finished, else None.
         """
-        async with scheduler._scheduler_lock:
+        async with self._scheduler_lock:
             # refresh resource details for latest model state
-            details: Optional[ResourceDetails] = scheduler._state.resources.get(self.resource, None)
+            details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
             if details is None or details.attribute_hash != attribute_hash:
                 # The reported resource state is for a stale resource and therefore no longer relevant.
                 return
-            state: ResourceState = scheduler._state.resource_state[self.resource]
+            state: ResourceState = self._state.resource_state[resource]
             state.status = status
             if deployment_result is not None:
                 state.deployment_result = deployment_result
@@ -208,13 +209,7 @@ class ResourceScheduler:
 
         resource_mapping = {
             resource.resource_id: ResourceDetails(
-                # TODO: version does not belong here, id a bit out of place but OK
-                #   -> either way, different ResourceDetails than inmanta.agent.executor.ResourceDetails!
-                #   -> actually, it inherits now, but I'm not sure it should. It complicates atomicity and the import feels off
-                #   => should be injected only when communicating with the executor
                 attribute_hash=resource.attribute_hash,
-                id=resource.resource_id,
-                version=resource.model,
                 attributes=resource.attributes,
             )
             for resource in resources_from_db
@@ -224,7 +219,10 @@ class ResourceScheduler:
     def construct_requires_mapping(
         self, resources: Mapping[ResourceIdStr, ResourceDetails]
     ) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
-        require_mapping = {resource.rid: {req.resource_str() for req in resource.requires} for resource in resources.values()}
+        require_mapping = {
+            resource: {req.resource_str() for req in details.attributes.get("requires", [])}
+            for resource, details in resources.items()
+        }
         return require_mapping
 
     async def read_version(

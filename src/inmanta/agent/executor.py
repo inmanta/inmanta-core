@@ -74,9 +74,9 @@ class ResourceDetails:
     rvid: ResourceVersionIdStr
     model_version: int
     requires: Sequence[Id]
-    attributes: dict[str, object]
+    attributes: Mapping[str, object]
 
-    def __init__(self, id: ResourceIdStr, version: int, attributes: dict[str, object]) -> None:
+    def __init__(self, id: ResourceIdStr, version: int, attributes: Mapping[str, object]) -> None:
         self.attributes = attributes
         self.id = Id.parse_id(id).copy(version=version)
         self.rid = self.id.resource_str()
