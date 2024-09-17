@@ -20,7 +20,6 @@ import asyncio
 import logging
 import uuid
 from collections.abc import Mapping, Set
-from typing import Any
 
 from inmanta import data
 from inmanta.agent import executor
