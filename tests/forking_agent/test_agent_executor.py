@@ -425,8 +425,8 @@ def test():
     assert len(venvs) == 1, "Only one Virtual Environment should exist!"  # Only nr 3
 
     # Let's stop the other agent and pretend that the venv is outdated
-    await executor_manager.stop_for_agent("agent3")
-    executors = await asyncio.gather(*(e.join() for e in executors))
+    executors = await executor_manager.stop_for_agent("agent3")
+    await asyncio.gather(*(e.join() for e in executors))
     await retry_limited(wait_for_agent_stop_running, executor=executor_3, timeout=10)
     # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
     # modification override of the inmanta file and the retrieval of the last modification of the file
