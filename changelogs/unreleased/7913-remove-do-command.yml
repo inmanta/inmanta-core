@@ -1,0 +1,7 @@
+description: "Removed the 'inmanta module do' command"
+issue-nr: 7913
+change-type: major
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"
+

@@ -115,11 +115,10 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     await clienthelper.wait_for_released(version1)
 
     logger.info("first version released")
-    # timeout on single thread!
-    await check_scheduler_state(resources, scheduler)
 
     await clienthelper.wait_for_deployed()
 
+    await check_scheduler_state(resources, scheduler)
     await resource_action_consistency_check()
     await check_server_state_vs_scheduler_state(client, environment, scheduler)
 
