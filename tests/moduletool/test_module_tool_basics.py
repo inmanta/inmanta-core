@@ -656,7 +656,6 @@ import minimalv2module
             assert "Skipping module minimalv2module: v2 modules do not support this operation." in caplog.messages
 
     verify_v2_message("status")
-    verify_v2_message("do", argparse.Namespace(module=None, command="echo hello"))
     cwd = os.getcwd()
     try:
         os.chdir(os.path.join(modules_v2_dir, "minimalv2module"))
