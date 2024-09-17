@@ -114,7 +114,7 @@ Multi-version Inter-Service Relations
 =====================================
 
 Previously, an entity in the model corresponded to a service, with the introduction of multi-version lsm, that is no
-longer the case, a service can have multiple version and each version can have the same, or different entities.
+longer the case, a service can have multiple versions and each version can have the same, or different entities.
 So what does this mean for :ref:`inter-service relations<inter_service_relations>`?
 
 An inter-service relation still is a relation between 2 services, meaning that one service is related to another,
