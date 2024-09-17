@@ -20,17 +20,18 @@ import asyncio
 import logging
 import uuid
 from collections.abc import Mapping, Set
-from typing import Any
 
-from inmanta import data, resources
+from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import Resource
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import work
 from inmanta.deploy.state import ModelState, ResourceDetails, ResourceStatus
-from inmanta.deploy.tasks import Task
+from inmanta.deploy.tasks import DryRun, RefreshFact, Task
+from inmanta.deploy.work import PrioritizedTask
 from inmanta.protocol import Client
+from inmanta.resources import Id
 
 LOGGER = logging.getLogger(__name__)
 
@@ -119,22 +120,42 @@ class ResourceScheduler:
         pass
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
-        # FIXME
-        pass
+        resources = await self.build_resource_mappings_from_db(version)
+        for rid, resource in resources.items():
+            self._work.agent_queues.queue_put_nowait(
+                PrioritizedTask(
+                    task=DryRun(
+                        resource=rid,
+                        version=version,
+                        resource_details=resource,
+                        dry_run_id=dry_run_id,
+                    ),
+                    priority=10,
+                )
+            )
 
-    async def get_facts(self, resource: dict[str, Any]) -> None:
-        # FIXME, also clean up typing of arguments
-        pass
+    async def get_facts(self, resource: dict[str, object]) -> None:
+        rid = Id.parse_id(resource["id"]).resource_str()
+        self._work.agent_queues.queue_put_nowait(
+            PrioritizedTask(
+                task=RefreshFact(resource=rid),
+                priority=10,
+            )
+        )
 
-    async def build_resource_mappings_from_db(
-        self,
-    ) -> tuple[Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
+    async def build_resource_mappings_from_db(self, version: int | None = None) -> Mapping[ResourceIdStr, ResourceDetails]:
         """
         Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
 
-        :return: resource_mapping {id -> resource details} and require_mapping {id -> requires}
+        :return: resource_mapping {id -> resource details}
         """
-        resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(environment=self._environment)
+        if version is None:
+            resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(
+                environment=self._environment
+            )
+        else:
+            resources_from_db = await data.Resource.get_resources_for_version(self._environment, version)
+
         resource_mapping = {
             resource.resource_id: ResourceDetails(
                 attribute_hash=resource.attribute_hash,
@@ -144,13 +165,13 @@ class ResourceScheduler:
             )
             for resource in resources_from_db
         }
-        require_mapping = {
-            resource.resource_id: {
-                resources.Id.parse_id(req).resource_str() for req in list(resource.attributes.get("requires", []))
-            }
-            for resource in resources_from_db
-        }
-        return resource_mapping, require_mapping
+        return resource_mapping
+
+    def construct_requires_mapping(
+        self, resources: Mapping[ResourceIdStr, ResourceDetails]
+    ) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
+        require_mapping = {resource.rid: {req.resource_str() for req in resource.requires} for resource in resources.values()}
+        return require_mapping
 
     async def read_version(
         self,
@@ -165,7 +186,8 @@ class ResourceScheduler:
         if environment is None:
             raise ValueError(f"No environment found with this id: `{self._environment}`")
         version = environment.last_version
-        resources_from_db, requires_from_db = await self.build_resource_mappings_from_db()
+        resources_from_db = await self.build_resource_mappings_from_db()
+        requires_from_db = self.construct_requires_mapping(resources_from_db)
         await self.new_version(version, resources_from_db, requires_from_db)
 
     async def new_version(

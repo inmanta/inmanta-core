@@ -1,0 +1,5 @@
+description: Added dryrun and getfacts
+issue-nr: 8011
+change-type: minor
+destination-branches: [master]
+

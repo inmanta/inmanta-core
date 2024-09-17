@@ -876,13 +876,15 @@ class AgentManager(ServerSlice, SessionListener):
             ):
                 if opt.server_use_resource_scheduler.get():
                     await self._autostarted_agent_manager._ensure_scheduler(env)
+                    agent = const.AGENT_SCHEDULER_ID
                 else:
                     agents = await data.ConfigurationModel.get_agents(env.id, version)
                     await self._autostarted_agent_manager._ensure_agents(env, agents)
+                    agent = res.agent
 
-                client = self.get_agent_client(env_id, res.agent)
+                client = self.get_agent_client(env_id, agent)
                 if client is not None:
-                    await client.get_parameter(str(env_id), res.agent, res.to_dict())
+                    await client.get_parameter(str(env_id), agent, res.to_dict())
 
                 self._fact_resource_block_set[resource_id] = now
 
@@ -1255,6 +1257,8 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         Start an autostarted agent process for the given environment. Should only be called if none is running yet.
         """
+        assert not no_auto_start_scheduler
+
         use_resource_scheduler: bool = opt.server_use_resource_scheduler.get()
 
         config: str = await self._make_agent_config(env, connection=connection, scheduler=use_resource_scheduler)
