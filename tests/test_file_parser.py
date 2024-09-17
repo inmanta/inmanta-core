@@ -30,6 +30,7 @@ from inmanta.util import parse_requirements
 def test_requirements_txt_parser(tmpdir) -> None:
     content = """
         test==1.2.3
+
         # A comment
         other-dep~=2.0.0
         third-dep<5.0.0 # another comment
@@ -53,12 +54,22 @@ dep
     assert parsed_canonical_requirements_from_file == requirements
 
     parsed_canonical_requirements = util.parse_requirements(
-        ["test==1.2.3", "# A comment", "other-dep~=2.0.0", "third-dep<5.0.0 # another comment", "splitteddep", "Capital"]
+        [
+            "test==1.2.3",
+            "# A comment",
+            "  ",
+            "",
+            "other-dep~=2.0.0",
+            "third-dep<5.0.0 # another comment",
+            "splitteddep",
+            "Capital",
+        ]
     )
     assert parsed_canonical_requirements == requirements
 
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="test")
     expected_content = """
+
         # A comment
         other-dep~=2.0.0
         third-dep<5.0.0 # another comment
@@ -71,6 +82,7 @@ dep
         new_content
         == """
         test==1.2.3
+
         # A comment
         other-dep~=2.0.0
         splitteddep
@@ -82,6 +94,7 @@ dep
         new_content
         == """
         test==1.2.3
+
         # A comment
         other-dep~=2.0.0
         third-dep<5.0.0 # another comment
@@ -93,6 +106,7 @@ dep
         new_content
         == """
         test==1.2.3
+
         # A comment
         other-dep~=2.0.0
         third-dep<5.0.0 # another comment
