@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 import uuid
 from typing import Optional, cast
@@ -112,7 +111,8 @@ class ProjectService(protocol.ServerSlice):
         environments = await data.Environment.get_list(project=project.id)
         if len(environments) > 0:
             raise ServerError(
-                f"Cannot remove the project `{project_id}` because it still contains some environments: {','.join([str((env.name, str(env.id))) for env in environments])}"
+                f"Cannot remove the project `{project_id}` because it still contains some environments: "
+                f"{','.join([str((env.name, str(env.id))) for env in environments])}"
             )
 
         await project.delete()

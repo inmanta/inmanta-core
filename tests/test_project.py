@@ -101,10 +101,9 @@ async def test_delete_environment_project(client):
     response = await client.delete_project(project_id_a)
     assert response.code == 500
     assert (
-        response.result["message"]
-        == "An unexpected error occurred in the server while processing the request: "
-           f"Cannot remove the project `{project_id_a}` because it still contains some environments: "
-           f"('env', '{env1_id}')"
+        response.result["message"] == "An unexpected error occurred in the server while processing the request: "
+        f"Cannot remove the project `{project_id_a}` because it still contains some environments: "
+        f"('env', '{env1_id}')"
     )
 
     result = await client.delete_environment(id=env1_id)
@@ -116,7 +115,6 @@ async def test_delete_environment_project(client):
     response = await client.list_projects()
     assert response.code == 200
     assert response.result["projects"] == []
-
 
 
 async def test_project_api_v2_project_list_ordering(client_v2):
@@ -316,10 +314,9 @@ async def test_delete_environment_project_v2(client_v2):
     response = await client_v2.project_delete(project_id_a)
     assert response.code == 500
     assert (
-        response.result["message"]
-        == "An unexpected error occurred in the server while processing the request: "
-           f"Cannot remove the project `{project_id_a}` because it still contains some environments: "
-           f"('env', '{env1_id}'),('env2', '{env2_id}')"
+        response.result["message"] == "An unexpected error occurred in the server while processing the request: "
+        f"Cannot remove the project `{project_id_a}` because it still contains some environments: "
+        f"('env', '{env1_id}'),('env2', '{env2_id}')"
     )
 
     result = await client_v2.environment_delete(id=env1_id)
