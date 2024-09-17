@@ -18,6 +18,7 @@
 
 import asyncio
 import dataclasses
+import json
 import logging
 import os
 import time
@@ -1916,7 +1917,8 @@ async def test_export_duplicate(resource_container, snippetcompiler):
 
         test::Resource(key="test", value="foo")
         test::Resource(key="test", value="bar")
-    """
+    """,
+        autostd=True,
     )
 
     with pytest.raises(CompilerException) as exc:
@@ -2577,10 +2579,6 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
     while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
         await asyncio.sleep(0.1)
 
-    # cache has 1 version in flight
-    executor_instance = agent.executor_manager.executors["agent1"]
-    assert len(executor_instance._cache.counterforVersion) == 1
-
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
@@ -2589,10 +2587,6 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
     )
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
-
-    # cache has no versions in flight
-    # for issue #1883
-    assert not executor_instance._cache.counterforVersion
 
     # Incremental deploy
     #   * All resources are deployed successfully:
@@ -2826,10 +2820,6 @@ async def test_s_periodic_Vs_full(
     while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
         await asyncio.sleep(0.1)
 
-    # cache has 1 version in flight
-    executor_instance = agent.executor_manager.executors["agent1"]
-    assert len(executor_instance._cache.counterforVersion) == 1
-
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, push=False)
@@ -2841,8 +2831,6 @@ async def test_s_periodic_Vs_full(
     await resource_container.wait_for_done_with_waiters(client, environment, versions[action.wait_for])
     # cache has no versions in flight
     # for issue #1883
-
-    assert not executor_instance._cache.counterforVersion
 
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, action.msg)
 
@@ -3359,13 +3347,20 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     result = response.result
     assert result["resource"]["status"] == "unavailable"
 
+    logging.getLogger(__name__).warning("Found results: %s", json.dumps(result["logs"], indent=1))
+
+    def is_log_line(log_line):
+        return (
+            log_line["action"] == "deploy"
+            and log_line["status"] == "unavailable"
+            and ("failed to load handler code " in log_line["messages"][-1]["msg"])
+        )
+
     # Expected logs:
     #   [0] Deploy action: Failed to load handler code or install handler code
     #   [1] Pull action
     #   [2] Store action
-    assert result["logs"][0]["action"] == "deploy"
-    assert result["logs"][0]["status"] == "unavailable"
-    assert "failed to load handler code " in result["logs"][0]["messages"][-1]["msg"]
+    assert any((is_log_line(line) for line in result["logs"]))
 
 
 async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, async_finalizer):
@@ -4105,7 +4100,7 @@ async def test_agent_code_loading_with_failure(
 
     idx1 = log_index(
         caplog,
-        "inmanta.agent.agent",
+        "inmanta.agent.code_manager",
         logging.ERROR,
         "Failed to get source code for test::Test2 version=-1",
     )

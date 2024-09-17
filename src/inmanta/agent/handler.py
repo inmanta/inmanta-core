@@ -120,15 +120,16 @@ def cache(
 
     The name of the method + the arguments of the method form the cache key
 
-    If an argument named version is present and for_version is True,
-    the cache entry is flushed after this version has been deployed
     If an argument named resource is present,
     it is assumed to be a resource and its ID is used, without the version information
 
-    :param timeout: the number of second this cache entry should live
-    :param for_version: if true, this value is evicted from the cache when this deploy is ready
+    :param timeout: Hard timeout for non-lingering cache item i.e. when `for_version=False`.
+        Ignored otherwise.
+    :param for_version: When True, this cache item will linger in the cache for 60s after its last use.
+        When False, this cache item will be evicted from the cache <timeout> seconds after
+        entering the cache.
     :param ignore: a list of argument names that should not be part of the cache key
-    :param cache_none: cache returned none values
+    :param cache_none: allow the caching of None values
     :param call_on_delete: A callback function that is called when the value is removed from the cache,
             with the value as argument.
     """
@@ -136,7 +137,7 @@ def cache(
     def actual(f: Callable[..., object]) -> T_FUNC:
         myignore = set(ignore)
         sig = inspect.signature(f)
-        myargs = list(sig.parameters.keys())[1:]
+        myargs = list(sig.parameters.keys())[1:]  # Starts at 1 because 0 is self.
 
         def wrapper(self: HandlerAPI[TResource], *args: object, **kwds: object) -> object:
             kwds.update(dict(zip(myargs, args)))

@@ -24,8 +24,9 @@ from inmanta import const, data
 
 
 async def test_consistent_resource_state_reporting(
-    server, agent_factory, environment, resource_container, clienthelper, client, no_agent_backoff
+    server, agent, environment, resource_container, clienthelper, client, no_agent_backoff
 ) -> None:
+    """Doesn't work for new scheduler, as every release is a deploy"""
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, False)
@@ -33,8 +34,6 @@ async def test_consistent_resource_state_reporting(
     await env.set(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
     await env.set(data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
     await env.set(data.AUTOSTART_ON_START, True)
-
-    agent = await agent_factory(environment=environment, hostname="agent1")
 
     rid = "test::Resource[agent1,key=key1]"
     rid2 = "test::Resource[agent1,key=key2]"

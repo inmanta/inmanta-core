@@ -40,6 +40,9 @@ src/inmanta/server/config.py:0: error: Returning Any from function declared to r
 src/inmanta/docstring_parser.py:0: error: Value expression in dictionary comprehension has incompatible type "str | None"; expected type "str"  [misc]
 src/inmanta/docstring_parser.py:0: error: Incompatible types in assignment (expression has type "Docstring", variable has type "str")  [assignment]
 src/inmanta/docstring_parser.py:0: error: Argument 1 to "DocString" has incompatible type "str"; expected "Docstring"  [arg-type]
+src/inmanta/util/async_lru.py:0: error: Function is missing a type annotation  [no-untyped-def]
+src/inmanta/util/async_lru.py:0: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
+src/inmanta/util/async_lru.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/protocol/ipc_light.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/protocol/ipc_light.py:0: note: This violates the Liskov substitution principle
 src/inmanta/protocol/ipc_light.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
@@ -373,6 +376,7 @@ src/inmanta/protocol/methods.py:0: error: Function is missing a return type anno
 src/inmanta/protocol/methods.py:0: note: Use "-> None" if function does not return a value
 src/inmanta/protocol/methods.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/protocol/methods.py:0: error: Function is missing a return type annotation  [no-untyped-def]
+src/inmanta/protocol/methods.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/protocol/methods.py:0: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
 src/inmanta/protocol/methods.py:0: error: Function is missing a return type annotation  [no-untyped-def]
@@ -683,9 +687,6 @@ src/inmanta/ast/blocks.py:0: error: Name "List" is not defined  [name-defined]
 src/inmanta/ast/blocks.py:0: note: Did you forget to import it from "typing"? (Suggestion: "from typing import List")
 src/inmanta/ast/blocks.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "ExecutionContext")  [assignment]
 src/inmanta/ast/blocks.py:0: error: Returning Any from function declared to return "list[DynamicStatement]"  [no-any-return]
-src/inmanta/agent/cache.py:0: error: Missing type parameters for generic type "AbstractContextManager"  [type-arg]
-src/inmanta/agent/cache.py:0: error: Function is missing a type annotation  [no-untyped-def]
-src/inmanta/agent/cache.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/agent/cache.py:0: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
 src/inmanta/protocol/rest/server.py:0: error: Module "pyformance" has no attribute "timer"  [attr-defined]
 src/inmanta/protocol/rest/server.py:0: error: Argument 1 to "get_global_url_map" of "RESTServer" has incompatible type "Sequence[CallTarget]"; expected "list[CallTarget]"  [arg-type]
@@ -913,10 +914,6 @@ src/inmanta/module.py:0: error: Returning Any from function declared to return "
 src/inmanta/module.py:0: error: Argument 1 to "Metadata" has incompatible type "**Mapping[str, object]"; expected "str"  [arg-type]
 src/inmanta/module.py:0: error: Argument 1 to "Metadata" has incompatible type "**Mapping[str, object]"; expected "str | None"  [arg-type]
 src/inmanta/module.py:0: error: Argument 1 to "Metadata" has incompatible type "**Mapping[str, object]"; expected "bool"  [arg-type]
-src/inmanta/module.py:0: error: Returning Any from function declared to return "str"  [no-any-return]
-src/inmanta/module.py:0: error: Too few arguments for "__call__" of "_V2ValidatorClsMethod"  [call-arg]
-src/inmanta/module.py:0: error: Too few arguments  [call-arg]
-src/inmanta/module.py:0: error: Too few arguments for "__call__" of "_OnlyValueValidatorClsMethod"  [call-arg]
 src/inmanta/module.py:0: error: Missing type parameters for generic type "ModuleLike"  [type-arg]
 src/inmanta/module.py:0: error: Missing type parameters for generic type "ModuleLike"  [type-arg]
 src/inmanta/module.py:0: error: Missing type parameters for generic type "ModuleLike"  [type-arg]
@@ -949,8 +946,6 @@ src/inmanta/moduletool.py:0: error: Argument 1 to "get_project_for_module" of "M
 src/inmanta/moduletool.py:0: error: Missing type parameters for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: Missing type parameters for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: "Module[Any]" has no attribute "is_editable"  [attr-defined]
-src/inmanta/moduletool.py:0: error: Argument "distribution" to "get_requires_for_build" of "ProjectBuilder" has incompatible type "str"; expected "Literal['sdist', 'wheel']"  [arg-type]
-src/inmanta/moduletool.py:0: error: Argument "distribution" to "build" of "ProjectBuilder" has incompatible type "str"; expected "Literal['sdist', 'wheel']"  [arg-type]
 src/inmanta/export.py:0: error: Cannot infer type argument 1 of "Option"  [misc]
 src/inmanta/export.py:0: error: Missing type parameters for generic type "tuple"  [type-arg]
 src/inmanta/export.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
@@ -970,6 +965,7 @@ src/inmanta/export.py:0: error: Argument 2 to "add" of "Exporter" has incompatib
 src/inmanta/app.py:0: error: Missing type parameters for generic type "Future"  [type-arg]
 src/inmanta/app.py:0: error: Argument 2 to "safe_shutdown" has incompatible type "Callable[[int | None], Coroutine[Any, Any, None]]"; expected "Callable[[], None]"  [arg-type]
 src/inmanta/app.py:0: error: Argument 2 to "safe_shutdown" has incompatible type "Callable[[int | None], Coroutine[Any, Any, None]]"; expected "Callable[[], None]"  [arg-type]
+src/inmanta/app.py:0: error: Incompatible types in assignment (expression has type "str | None", variable has type "int | None")  [assignment]
 src/inmanta/app.py:0: error: Incompatible types in assignment (expression has type "str | None", variable has type "int | None")  [assignment]
 src/inmanta/app.py:0: error: Argument 1 to "run" of "Exporter" has incompatible type "dict[str, Type]"; expected "dict[str, Entity] | None"  [arg-type]
 src/inmanta/app.py:0: error: No overload variant of "print" matches argument types "str", "TextIO | Any", "dict[str, object]"  [call-overload]
@@ -991,6 +987,11 @@ src/inmanta/compiler/help/explainer.py:0: error: Item "None" of "RelationAttribu
 src/inmanta/agent/resourcepool.py:0: error: Missing type parameters for generic type "PoolMember"  [type-arg]
 src/inmanta/agent/resourcepool.py:0: error: Argument 1 to "append" of "list" has incompatible type "Callable[[TPoolMember], Coroutine[Any, Any, bool]]"; expected "Callable[[PoolMember[TPoolID]], Coroutine[Any, Any, Any]]"  [arg-type]
 src/inmanta/agent/resourcepool.py:0: error: Missing type parameters for generic type "PoolMember"  [type-arg]
+src/inmanta/deploy/scheduler.py:0: error: Argument "attribute_hash" to "ResourceDetails" has incompatible type "str | None"; expected "str"  [arg-type]
+src/inmanta/deploy/scheduler.py:0: error: No overload variant of "list" matches argument type "object"  [call-overload]
+src/inmanta/deploy/scheduler.py:0: note: Possible overload variants:
+src/inmanta/deploy/scheduler.py:0: note: def [_T] __init__(self) -> list[_T]
+src/inmanta/deploy/scheduler.py:0: note: def [_T] __init__(self, Iterable[_T], /) -> list[_T]
 src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/agent/forking_executor.py:0: note: This violates the Liskov substitution principle
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
@@ -1162,6 +1163,8 @@ src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types in assignment (expression has type "set[str | None]", variable has type "set[str]")  [assignment]
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument "agents" to "_trigger_auto_deploy" of "OrchestrationService" has incompatible type "Collection[str]"; expected "Sequence[str] | None"  [arg-type]
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible return value type (got "ReturnValueWithMeta[Sequence[DesiredStateVersion]]", expected "ReturnValue[list[DesiredStateVersion]]")  [return-value]
+src/inmanta/server/agentmanager.py:0: error: Argument 1 to "_ensure_scheduler" of "AutostartedAgentManager" has incompatible type "Environment | None"; expected "Environment"  [arg-type]
+src/inmanta/server/agentmanager.py:0: error: Argument 1 to "ensure_agent_registered" of "AgentManager" has incompatible type "Environment | None"; expected "Environment"  [arg-type]
 src/inmanta/server/services/compilerservice.py:0: error: Incompatible types in assignment (expression has type "bool | int | float | str | dict[str, str | int | bool]", variable has type "int")  [assignment]
 src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for + ("None" and "timedelta")  [operator]
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"

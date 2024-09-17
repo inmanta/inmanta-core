@@ -124,6 +124,7 @@ def test_import_compiler(import_entry_point: Callable[[str], Optional[int]]) -> 
     assert import_entry_point("inmanta.compiler") == 0
 
 
+@pytest.mark.slow
 def test_import_server(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.server.extensions") == 0
     assert import_entry_point("inmanta.server.bootloader") == 0
@@ -131,3 +132,14 @@ def test_import_server(import_entry_point: Callable[[str], Optional[int]]) -> No
 
 def test_import_validation_type(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.validation_type") == 0
+
+
+@pytest.mark.slow
+def test_import_server_services(import_entry_point: Callable[[str], Optional[int]]) -> None:
+    assert import_entry_point("inmanta.server.compilerservice") == 0
+    assert import_entry_point("inmanta.server.services.databaseservice") == 0
+    assert import_entry_point("inmanta.server.services.environmentservice") == 0
+    assert import_entry_point("inmanta.server.services.environment_metrics_service") == 0
+    assert import_entry_point("inmanta.server.services.orchestrationservice") == 0
+    assert import_entry_point("inmanta.server.services.projectservice") == 0
+    assert import_entry_point("inmanta.server.services.resourceservice") == 0

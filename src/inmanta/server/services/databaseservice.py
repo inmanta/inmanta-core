@@ -70,25 +70,7 @@ class DatabaseService(protocol.ServerSlice):
 
     async def connect_database(self) -> None:
         """Connect to the database"""
-        database_host = opt.db_host.get()
-        database_port = opt.db_port.get()
-
-        database_username = opt.db_username.get()
-        database_password = opt.db_password.get()
-        connection_pool_min_size = opt.db_connection_pool_min_size.get()
-        connection_pool_max_size = opt.db_connection_pool_max_size.get()
-        connection_timeout = opt.db_connection_timeout.get()
-        self._pool = await data.connect(
-            database_host,
-            database_port,
-            opt.db_name.get(),
-            database_username,
-            database_password,
-            connection_pool_min_size=connection_pool_min_size,
-            connection_pool_max_size=connection_pool_max_size,
-            connection_timeout=connection_timeout,
-        )
-        LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
+        self._pool = await server_db_connect()
 
         # Check if JIT is enabled
         async with self._pool.acquire() as connection:
@@ -149,3 +131,25 @@ class DatabaseService(protocol.ServerSlice):
     async def _check_database_pool_exhaustion(self) -> None:
         assert self._db_pool_watcher is not None  # Make mypy happy
         self._db_pool_watcher.check_for_pool_exhaustion()
+
+
+async def server_db_connect() -> asyncpg.pool.Pool:
+    database_host = opt.db_host.get()
+    database_port = opt.db_port.get()
+    database_username = opt.db_username.get()
+    database_password = opt.db_password.get()
+    connection_pool_min_size = opt.db_connection_pool_min_size.get()
+    connection_pool_max_size = opt.db_connection_pool_max_size.get()
+    connection_timeout = opt.db_connection_timeout.get()
+    out = await data.connect(
+        database_host,
+        database_port,
+        opt.db_name.get(),
+        database_username,
+        database_password,
+        connection_pool_min_size=connection_pool_min_size,
+        connection_pool_max_size=connection_pool_max_size,
+        connection_timeout=connection_timeout,
+    )
+    LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
+    return out

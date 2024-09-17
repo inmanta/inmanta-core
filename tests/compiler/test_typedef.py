@@ -28,9 +28,12 @@ entity Test:
     abc value
 end
 
-implement Test using std::none
+implement Test using none
 
 Test(value="a")
+
+implementation none for std::Entity:
+end
 """,
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` (reported in Construct(Test) ({dir}/main.cf:11))
 caused by:
@@ -47,9 +50,12 @@ entity Test:
     abc value
 end
 
-implement Test using std::none
+implement Test using none
 
 Test(value="ab")
+
+implementation none for std::Entity:
+end
 """,
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` (reported in Construct(Test) ({dir}/main.cf:10))
 caused by:
@@ -73,7 +79,9 @@ entity Test:
         mytype v = "value"
 end
 
-implement Test using std::none
+implement Test using none
+implementation none for std::Entity:
+end
         """,
         "Invalid value 'value', does not match constraint `(self in ['accepted', 'values'])`"
         " (reported in mytype v = 'value' ({dir}/main.cf:5:16))",
@@ -89,7 +97,10 @@ entity Test:
         mytype v = "value"
 end
 
-implement Test using std::none
+implement Test using none
+
+implementation none for std::Entity:
+end
         """,
         "Invalid value 'value', does not match constraint `/accepted_value/`"
         " (reported in mytype v = 'value' ({dir}/main.cf:5:16))",
@@ -107,6 +118,7 @@ end
         """,
         "Invalid value [42, 42], does not match constraint `std::unique(self)`"
         " (reported in mytype v = List() ({dir}/main.cf:5:16))",
+        autostd=True,
     )
 
 
@@ -119,7 +131,10 @@ typedef mytype as string matching self in x
 entity A:
     mytype myvalue = "allowed"
 end
-implement A using std::none
+implement A using none
+
+implementation none for std::Entity:
+end
         """,
         "Unable to resolve `x`: a type constraint can not reference variables. (reported in x ({dir}/main.cf:3:43))",
     )

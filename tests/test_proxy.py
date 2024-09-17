@@ -25,7 +25,10 @@ from inmanta.execute.util import NoneValue
 
 
 def proxy_object(snippetcompiler, snippet, var):
-    snippetcompiler.setup_for_snippet(snippet)
+    own_none = """
+    implementation none for std::Entity: end
+    """
+    snippetcompiler.setup_for_snippet(snippet + own_none)
     (_, root) = compiler.do_compile()
 
     scope = root.get_child("__config__").scope
@@ -41,7 +44,7 @@ def test_basic_object(snippetcompiler):
 entity Test1:
 string x
 end
-implement Test1 using std::none
+implement Test1 using none
 
 a = Test1(x="a")
 """,
@@ -60,7 +63,7 @@ def test_dict_attr(snippetcompiler):
 entity Test1:
 dict x = {}
 end
-implement Test1 using std::none
+implement Test1 using none
 
 a = Test1(x={"a":"A"})
 """,
@@ -98,7 +101,7 @@ def test_dynamic_proxy_attribute_error(snippetcompiler):
         """
 entity A:
 end
-implement A using std::none
+implement A using none
 
 x = A()
         """,
@@ -122,7 +125,7 @@ def test_dynamic_proxy_optional_value_error(snippetcompiler):
 entity A:
 end
 A.other [0:1] -- A
-implement A using std::none
+implement A using none
 
 x = A(other=null)
         """,
