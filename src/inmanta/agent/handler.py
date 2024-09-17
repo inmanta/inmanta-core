@@ -110,6 +110,8 @@ def cache(
     # deprecated parameter kept for backwards compatibility: if set, overrides cache_none
     cacheNone: Optional[bool] = None,  # noqa: N803
     call_on_delete: Optional[Callable[[Any], None]] = None,
+    evict_after_creation: Optional[bool]=None,
+    evict_after_last_access: Optional[bool]=None,
 ) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
     """
     decorator for methods in resource handlers to provide caching
@@ -123,11 +125,13 @@ def cache(
     If an argument named resource is present,
     it is assumed to be a resource and its ID is used, without the version information
 
-    :param timeout: Hard timeout for non-lingering cache item i.e. when `for_version=False`.
+    :param timeout: Hard timeout for non-lingering cache item i.e. when `evict_after_creation=True`.
         Ignored otherwise.
-    :param for_version: When True, this cache item will linger in the cache for 60s after its last use.
-        When False, this cache item will be evicted from the cache <timeout> seconds after
+
+
+    :param evict_after_creation: When True, this cache item will be evicted from the cache <timeout> seconds after
         entering the cache.
+    :param evict_after_last_access: When True, this cache item will linger in the cache for 60s after its last use.
     :param ignore: a list of argument names that should not be part of the cache key
     :param cache_none: allow the caching of None values
     :param call_on_delete: A callback function that is called when the value is removed from the cache,
@@ -148,7 +152,8 @@ def cache(
             return self.cache.get_or_else(
                 f.__name__,
                 bound,
-                for_version,
+                evict_after_creation,
+                evict_after_last_access,
                 timeout,
                 myignore,
                 cacheNone if cacheNone is not None else cache_none,

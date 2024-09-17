@@ -40,7 +40,8 @@ class CacheItem:
         timeout: float,
         value: Any,
         call_on_delete: Optional[Callable[[Any], None]],
-        lingering: bool = True,
+        evict_after_last_access: bool = True,
+        evict_after_creation: bool = False,
     ) -> None:
         """
         :param key: The full key identifying this item in the cache.
@@ -48,17 +49,19 @@ class CacheItem:
         :param value: The value being cached associated to the key.
         :param call_on_delete: Optional finalizer to call when the cache item is deleted. This is
             a callable expecting the cached value as an argument.
-        :param lingering: When True, this cache item will linger in the cache for 60s after its last use.
-            When False, this cache item will be evicted from the cache <timeout> seconds after
+        :param evict_after_last_access: When True, this cache item will linger in the cache for 60s after its last use.
+        :param evict_after_creation: When True, this cache item will be evicted from the cache <timeout> seconds after
             entering the cache.
         """
         self.key = key
         self.value = value
         self.call_on_delete = call_on_delete
-        self.lingering = lingering
+        self.lingering = evict_after_last_access
 
         now = time.time()
-        self.expiry_time = (now + 60) if lingering else (now + timeout)
+        self.expiry_time = (now + 60) if evict_after_last_access
+
+        else (now + timeout)
 
         # Make sure finalizers are only called once
         self.finalizer_lock = Lock()
@@ -221,7 +224,8 @@ class AgentCache:
         resource: Optional[Resource] = None,
         timeout: int = 5000,
         call_on_delete: Optional[Callable[[Any], None]] = None,
-        for_version: bool = True,
+        evict_after_last_access: bool=True,
+        evict_after_creation: bool=False,
     ) -> None:
         """
         add a value to the cache with the given key
@@ -237,7 +241,8 @@ class AgentCache:
                 timeout,
                 value,
                 call_on_delete,
-                lingering=for_version,
+                evict_after_last_access=evict_after_last_access,
+                evict_after_creation=evict_after_creation
             )
         )
 
@@ -257,7 +262,8 @@ class AgentCache:
         self,
         key: str,
         function: Callable[..., Any],
-        for_version: bool = True,
+        evict_after_last_access: bool=True,
+        evict_after_creation: bool=False,
         timeout: int = 5000,
         ignore: set[str] = set(),
         cache_none: bool = True,
@@ -272,13 +278,12 @@ class AgentCache:
 
         all kwargs are prepended to the key
 
-        :param timeout: Use in combination with for_version=False to set a "hard" expiry timeout (in seconds).
+        :param timeout: Use in combination with evict_after_creation=True to set a "hard" expiry timeout (in seconds).
           The cached entry will be evicted from the cache after this period of time.
-          Ignored when for_version=True.
-        :param for_version: This parameter controls when the cached value is considered expired.
-            - for_version=False: the cached value is not tied to any model version. It is
+
+        :param evict_after_creation: the cached value is not tied to any model version. It is
               considered stale after <timeout> seconds have elapsed since it entered the cache.
-            - for_version=True: the cached value is expected to be reused across multiple versions.
+        :param evict_after_last_access: the cached value is expected to be reused across multiple versions.
               It is considered stale if no agent used this entry in the last 60s.
 
         """
@@ -303,7 +308,7 @@ class AgentCache:
                     value = function(**kwargs)
                     if cache_none or value is not None:
                         self.cache_value(
-                            key, value, timeout=timeout, call_on_delete=call_on_delete, for_version=for_version, **args
+                            key, value, timeout=timeout, call_on_delete=call_on_delete, evict_after_last_access=evict_after_last_access, evict_after_creation=evict_after_creation**args
                         )
             with self.addLock:
                 del self.addLocks[key]
