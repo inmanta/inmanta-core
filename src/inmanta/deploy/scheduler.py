@@ -135,7 +135,7 @@ class ResourceScheduler:
                 )
             )
 
-    async def get_facts(self, resource: dict[str, Any]) -> None:
+    async def get_facts(self, resource: dict[str, object]) -> None:
         rid = Id.parse_id(resource["id"]).resource_str()
         self._work.agent_queues.queue_put_nowait(
             PrioritizedTask(
