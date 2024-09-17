@@ -59,21 +59,16 @@ class PoisonPill(Task):
         pass
 
 
+# TODO: drop this intermediate class now that the logic has become so simple?
 class WithHashMatchTask(Task):
 
     async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
-        resource_details: "state.ResourceDetails"
-        async with scheduler._scheduler_lock:
-            # fetch resource details atomically under lock
-            try:
-                resource_details = scheduler._state.resources[self.resource]
-            except KeyError:
-                # Stale resource, can simply be dropped.
-                # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
-                # because of this check, and an intrinsic part of the locking design because it's preferred over wider
-                # locking for performance reasons.
-                return
-        await self.execute_on_resource(scheduler, agent, resource_details)
+        intent: Optional[tuple[int, "state.ResourceDetails"]]
+        intent = await scheduler.get_resource_intent(self.resource)
+        if intent is None:
+            # Stale resource, can simply be dropped.
+            return
+        await self.execute_on_resource(scheduler, agent, intent[1])
 
     @abc.abstractmethod
     async def execute_on_resource(
@@ -83,32 +78,31 @@ class WithHashMatchTask(Task):
 
 
 class Deploy(WithHashMatchTask):
-    async def execute_on_resource(
-        self, scheduler: "scheduler.ResourceScheduler", agent: str, resource_details: "state.ResourceDetails"
-    ) -> None:
-        status = await self.do_deploy(scheduler, agent, resource_details)
+    async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
+        version: int
+        resource_details: "state.ResourceDetails"
+        intent = await scheduler.get_resource_intent(self.resource)
+        if intent is None:
+            # Stale resource, can simply be dropped.
+            return
+        version, resource_details = intent
 
-        is_success = status == const.ResourceState.deployed
+        status = await self.do_deploy(scheduler, agent, version, resource_details)
 
-        async with scheduler._scheduler_lock:
-            # refresh resource details for latest model state
-            new_details: Optional[state.ResourceDetails] = scheduler._state.resources.get(self.resource, None)
-            my_state: state.ResourceState | None = scheduler._state.resource_state.get(self.resource, None)
-            if new_details is not None and new_details.attribute_hash == resource_details.attribute_hash:
-                assert my_state is not None
-                if is_success:
-                    my_state.status = state.ResourceStatus.UP_TO_DATE
-                    my_state.deployment_result = state.DeploymentResult.DEPLOYED
-                else:
-                    # FIXME[#8008]: WDB to Sander: do we set status here as well?
-                    my_state.deployment_result = state.DeploymentResult.FAILED
-                scheduler._work.notify_provides(self)
-            # The deploy that finished has become stale (state has changed since the deploy started).
-            # Nothing to report on a stale deploy.
-            # A new deploy for the current model state will have been queued already.
+        is_success: bool = status == const.ResourceState.deployed
+        scheduler.report_resource_state(
+            resource=resource,
+            attribute_hash=resource_details.attribute_hash,
+            status=state.ResourceStatus.UP_TO_DATE if is_success else state.ResourceStatus.HAS_UPDATE,
+            deployment_result=state.DeploymentResult.DEPLOYED if is_success else state.DeploymentResult.FAILED,
+        )
 
     async def do_deploy(
-        self, scheduler: "scheduler.ResourceScheduler", agent: str, resource_details: "state.ResourceDetails"
+        self,
+        scheduler: "scheduler.ResourceScheduler",
+        agent: str,
+        version: int,
+        resource_details: "state.ResourceDetails",
     ) -> "const.ResourceState":
         # FIXME: WDB to Sander: is the version of the state the correct version?
         #   It may happen that the set of types no longer matches the version?
@@ -164,6 +158,11 @@ class Deploy(WithHashMatchTask):
         # DEPLOY!!!
         gid = uuid.uuid4()
         # FIXME: reason argument is not used
+        executor_resource_details: executor.ResourceDetails = executor.ResourceDetails(
+            id=self.resource,
+            version=version,
+            attributes=resource_details.attributes,
+        )
         return await my_executor.execute(gid, resource_details, "New Scheduler initiated action")
 
 

@@ -192,7 +192,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
 
     def send_shutdown(self) -> None:
         """
-        Wake up all wrokers after shutdown is signalled
+        Wake up all workers after shutdown is signalled
         """
         poison_pill = TaskQueueItem(
             task=PrioritizedTask(task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")), priority=-1),
@@ -262,7 +262,7 @@ class ScheduledWork:
     Expects to be informed by the scheduler of deploy requests and/or state changes through update_state() and
     delete_resource().
 
-    Expects to be informed by task runners of finished tasks through notify_provides().
+    Expects to be informed by scheduler of finished tasks through finished_deploy().
 
     :param requires: Live, read-only view on requires-provides mapping for the latest model state.
     :param new_agent_trigger: Method to notify client of newly created agent queues. When notified about a queue, client is
@@ -429,10 +429,12 @@ class ScheduledWork:
             if task.delete_with_resource():
                 self.agent_queues.discard(task)
 
-    def notify_provides(self, finished_deploy: "tasks.Deploy") -> None:
+    def finished_deploy(self, resource: ResourceIdStr) -> None:
         # FIXME[#8010]: consider failure scenarios -> check how current agent does it, e.g. skip-for-undefined
         # FIXME[#8008]: docstring + mention under lock + mention only iff not stale
-        resource: ResourceIdStr = finished_deploy.resource
+        if resource in self.waiting or Deploy(resource=resource) in self._agent_queues:
+            # a new deploy task was scheduled in the meantime, no need to do anything
+            return
         for dependant in self.provides.get(resource, []):
             blocked_deploy: Optional[BlockedDeploy] = self.waiting.get(dependant, None)
             if blocked_deploy is None:

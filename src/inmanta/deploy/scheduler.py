@@ -126,6 +126,55 @@ class ResourceScheduler:
         # FIXME, also clean up typing of arguments
         pass
 
+    async def get_resource_details(self, resource: ResourceIdStr) -> Optional[tuple[int, ResourceDetails]]:
+        """
+        Returns the current version and the details for the given resource, or None if it is not (anymore) managed by the
+        scheduler.
+
+        Acquires scheduler lock.
+        """
+        async with scheduler._scheduler_lock:
+            # fetch resource details under lock
+            try:
+                return self._state.version, scheduler._state.resources[self.resource]
+            except KeyError:
+                # Stale resource
+                # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
+                # because of this check, and an intrinsic part of the locking design because it's preferred over wider
+                # locking for performance reasons.
+                return None
+
+    async def report_resource_state(
+        self,
+        resource: ResourceIdStr,
+        attribute_hash: str,
+        status: ResourceStatus,
+        deployment_result: Optional[DeploymentResult] = None,
+    ) -> None:
+        """
+        Report new state for a resource. Since knowledge of deployment result implies a finished deploy, it must only be set
+        when a deploy has just finished.
+
+        Acquires scheduler lock.
+
+        :param resource: The resource to report state for.
+        :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
+            hash indicates the state information is stale.
+        :param status: The new resource status.
+        :param deployment_result: The result of the deploy, iff one just finished, else None.
+        """
+        async with scheduler._scheduler_lock:
+            # refresh resource details for latest model state
+            details: Optional[ResourceDetails] = scheduler._state.resources.get(self.resource, None)
+            if details is None or details.attribute_hash != attribute_hash:
+                # The reported resource state is for a stale resource and therefore no longer relevant.
+                return
+            state: ResourceState = scheduler._state.resource_state[self.resource]
+            state.status = status
+            if deployment_result is not None:
+                state.deployment_result = deployment_result
+                self._work.finished_deploy(resource)
+
     async def build_resource_mappings_from_db(
         self,
     ) -> tuple[Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
