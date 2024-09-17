@@ -879,6 +879,7 @@ def remove_comment_part(to_clean: str) -> str:
 
     :param to_clean: The string to clean
     :return: A cleaned string
+    :raise: When the provided string to clean doesn't contain a requirement name
     """
     # Refer to PEP 508. A requirement could contain a hashtag
     to_clean = to_clean.strip()
@@ -899,9 +900,11 @@ def parse_requirement(requirement: str) -> CanonicalRequirement:
     """
     To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
     could arise when checking if packages are installed in a particular Venv.
+    This function supposes to receive an actual requirement. Commented strings will not be handled and result in a ValueError
 
     :param requirement: The requirement's name
     :return: A new requirement instance
+    :raise: ValueError when commented or empty strings are provided
     """
     # Packaging Requirement is not able to parse requirements with comment. Therefore, we need to remove the `comment` part
     drop_comment = remove_comment_part(to_clean=requirement)
@@ -922,7 +925,16 @@ def parse_requirements(requirements: Sequence[str]) -> list[CanonicalRequirement
     :param requirements: The names of the different requirements
     :return: Sequence[Requirement]
     """
-    return [parse_requirement(requirement=e) for e in requirements]
+    canonical_requirements = []
+    for e in requirements:
+        try:
+            canonical_requirements.append(parse_requirement(requirement=e))
+        except ValueError:
+            LOGGER.debug("This line was skipped because the requirement could not be parsed: %s", e)
+            # This line was empty or only containing a comment
+            continue
+
+    return canonical_requirements
 
 
 def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequirement]:
@@ -942,7 +954,7 @@ def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequi
             try:
                 requirements.append(parse_requirement(line))
             except ValueError:
-                LOGGER.warning("This line was skipped because the requirement could not be parsed: %s", line)
+                LOGGER.debug("This line was skipped because the requirement could not be parsed: %s", line)
                 # This line was empty or only containing a comment
                 continue
     return requirements
@@ -951,19 +963,10 @@ def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequi
 # Retaken from the `click-plugins` repo which is now unmaintained
 def with_plugins(plugins: Iterator[importlib_metadata.EntryPoint]) -> Callable[[Group], Group]:
     """
-    A decorator to register external CLI commands to an instance of
-    `click.Group()`.
+    A decorator to register external CLI commands to an instance of `click.Group()`.
 
-    Parameters
-    ----------
-    plugins : iter
-        An iterable producing one `pkg_resources.EntryPoint()` per iteration.
-    attrs : **kwargs, optional
-        Additional keyword arguments for instantiating `click.Group()`.
-
-    Returns
-    -------
-    click.Group()
+    :param plugins: An iterable producing one `pkg_resources.EntryPoint()` per iteration
+    :return: The provided click group with the new commands
     """
 
     def decorator(group: click.Group) -> click.Group:

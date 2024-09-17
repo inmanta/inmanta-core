@@ -132,7 +132,7 @@ class InmantaModuleRequirement:
         return self._requirement == other._requirement
 
     def __contains__(self, version: packaging.version.Version | str) -> bool:
-        return version in self._requirement.specifier if len(self._requirement.specifier) > 0 else True
+        return self._requirement.specifier.contains(version, prereleases=True)
 
     def __str__(self) -> str:
         return str(self._requirement).replace("-", "_")

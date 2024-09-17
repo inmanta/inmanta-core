@@ -19,6 +19,8 @@
 import os
 import pathlib
 
+import pytest
+
 import packaging.requirements
 from inmanta import util
 from inmanta.file_parser import RequirementsTxtParser
@@ -47,8 +49,13 @@ dep
     requirements_as_str = RequirementsTxtParser.parse_requirements_as_strs(requirements_txt_file)
     assert requirements_as_str == expected_requirements
 
-    parsed_canonical_requirements = util.parse_requirements_from_file(pathlib.Path(requirements_txt_file))
-    assert len(parsed_canonical_requirements) == len(expected_requirements)
+    parsed_canonical_requirements_from_file = util.parse_requirements_from_file(pathlib.Path(requirements_txt_file))
+    assert parsed_canonical_requirements_from_file == requirements
+
+    parsed_canonical_requirements = util.parse_requirements(
+        ["test==1.2.3", "# A comment", "other-dep~=2.0.0", "third-dep<5.0.0 # another comment", "splitteddep", "Capital"]
+    )
+    assert parsed_canonical_requirements == requirements
 
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="test")
     expected_content = """
@@ -92,3 +99,53 @@ dep
         splitteddep
     """
     )
+
+
+@pytest.mark.parametrize(
+    "iteration",
+    [
+        ("", True),
+        ("#", True),
+        ("   # ", True),
+        ("#this is a comment", True),
+        ("test==1.2.3", False),
+        ("other-dep~=2.0.0", False),
+    ],
+)
+def test_canonical_requirement(iteration) -> None:
+    """
+    Ensure that empty name requirements are not allowed in `Requirement`
+    """
+    name, should_fail = iteration
+    if should_fail:
+        with pytest.raises(ValueError):
+            util.parse_requirement(requirement=name)
+    else:
+        util.parse_requirement(requirement=name)
+
+
+@pytest.mark.parametrize(
+    "iteration",
+    [
+        ("", "", True),
+        ("#", "#", True),
+        ("   # ", "   # ", True),
+        ("#this is a comment", "#this is a comment", True),
+        ("test==1.2.3", "test==1.2.3", False),
+        ("other-dep~=2.0.0", "other-dep~=2.0.0", False),
+        ("test==1.2.3  # a command", "test==1.2.3", False),
+        ("other-dep #~=2.0.0", "other-dep", False),
+        ("other-dep#~=2.0.0", "other-dep#~=2.0.0", False),
+    ],
+)
+def test_drop_comment_part(iteration) -> None:
+    """
+    Ensure that empty name requirements are not allowed in `Requirement`
+    """
+    value, expected_value, should_fail = iteration
+    if should_fail:
+        with pytest.raises(ValueError):
+            util.remove_comment_part(value)
+    else:
+        current_value = util.remove_comment_part(value)
+        assert current_value == expected_value

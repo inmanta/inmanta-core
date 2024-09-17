@@ -1190,10 +1190,7 @@ class ActiveEnv(PythonEnvironment):
         for c in all_constraints:
             requirement = c.requirement
             if requirement.name not in installed_versions or (
-                (
-                    len(requirement.specifier) > 0
-                    and not requirement.specifier.contains(installed_versions[requirement.name], prereleases=True)
-                )
+                not requirement.specifier.contains(installed_versions[requirement.name], prereleases=True)
                 and (not requirement.marker or (requirement.marker and requirement.marker.evaluate()))
             ):
                 version_conflict = VersionConflict(
@@ -1266,7 +1263,8 @@ class ActiveEnv(PythonEnvironment):
         constraint_violations: set[VersionConflict] = {
             VersionConflict(constraint, installed_versions.get(constraint.name, None))
             for constraint in all_constraints
-            if constraint.name not in installed_versions or installed_versions[constraint.name] not in constraint.specifier
+            if constraint.name not in installed_versions
+            or not constraint.specifier.contains(installed_versions[constraint.name], prereleases=True)
         }
 
         all_violations = constraint_violations_non_strict | constraint_violations_strict | constraint_violations
