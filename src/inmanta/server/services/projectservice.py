@@ -25,7 +25,7 @@ import asyncpg
 from inmanta import data
 from inmanta.data import model
 from inmanta.protocol import handle, methods, methods_v2
-from inmanta.protocol.exceptions import NotFound, ServerError
+from inmanta.protocol.exceptions import Conflict, NotFound, ServerError
 from inmanta.server import (
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
@@ -110,7 +110,7 @@ class ProjectService(protocol.ServerSlice):
 
         environments = await data.Environment.get_list(project=project.id)
         if len(environments) > 0:
-            raise ServerError(
+            raise Conflict(
                 f"Cannot remove the project `{project_id}` because it still contains some environments: "
                 f"{','.join([str((env.name, str(env.id))) for env in environments])}"
             )
