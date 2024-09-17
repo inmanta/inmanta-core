@@ -908,12 +908,10 @@ def parse_requirement(requirement: str) -> CanonicalRequirement:
     # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
     # already installed
     # This instance is considered as doomed because the requirement name that this instance is using is not "canonicalized"
-    doomed_requirement_instance = packaging.requirements.Requirement(requirement_string=drop_comment)
-    canonical_name = str(doomed_requirement_instance).replace(
-        doomed_requirement_instance.name, packaging.utils.canonicalize_name(doomed_requirement_instance.name)
-    )
-    requirement_instance = CanonicalRequirement(packaging.requirements.Requirement(requirement_string=canonical_name))
-    return requirement_instance
+    requirement_instance = packaging.requirements.Requirement(requirement_string=drop_comment)
+    requirement_instance.name = packaging.utils.canonicalize_name(requirement_instance.name)
+    canonical_requirement_instance = CanonicalRequirement(requirement_instance)
+    return canonical_requirement_instance
 
 
 def parse_requirements(requirements: Sequence[str]) -> list[CanonicalRequirement]:

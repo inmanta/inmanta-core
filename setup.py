@@ -18,8 +18,7 @@ requires = [
     "logfire~=0.46",
     "more-itertools>=8,<11",
     "opentelemetry-instrumentation-asyncpg~=0.46b0",
-    # leave upper bound floating for fast-moving and extremely stable packaging
-    "packaging>=21.3",
+    "packaging>=21.3,23",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
@@ -95,7 +94,6 @@ setup(
             "inmanta-cli = inmanta.main:main",
             "inmanta = inmanta.app:app",
             "inmanta-initial-user-setup = inmanta.user_setup:main",
-            "inmanta-cli_plugins = inmanta.main:cmd",
         ],
     },
 )
