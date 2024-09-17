@@ -14,7 +14,7 @@ more-itertools==10.5.0
 packaging==24.1
 pip==24.2
 ply==3.11
-pydantic==2.9.1
+pydantic==2.9.2
 pyformance==0.4
 PyJWT==2.9.0
 pynacl==1.5.0
