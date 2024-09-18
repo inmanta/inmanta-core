@@ -33,8 +33,7 @@ from unittest.mock import patch
 import py
 import pytest
 
-import packaging.requirements
-from inmanta import env, loader, module
+from inmanta import env, loader, module, util
 from inmanta.data.model import PipConfig
 from inmanta.env import Pip
 from inmanta.util import parse_requirement
@@ -453,7 +452,7 @@ def test_active_env_get_module_file_editable_namespace_package(
 
 
 def create_install_package(
-    name: str, version: version.Version, requirements: list[packaging.requirements.Requirement], local_module_package_index: str
+    name: str, version: version.Version, requirements: list[util.CanonicalRequirement], local_module_package_index: str
 ) -> None:
     """
     Creates and installs a simple package with specified requirements. Creates package in a temporary directory and
@@ -564,7 +563,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local
     """
     caplog.set_level(logging.WARNING)
     in_scope: Pattern[str] = re.compile("test-package-.*")
-    constraints: list[packaging.requirements.Requirement] = [parse_requirement(requirement="test-package-one~=1.0")]
+    constraints: list[util.CanonicalRequirement] = [parse_requirement(requirement="test-package-one~=1.0")]
 
     env.process_env.check(in_scope)
 

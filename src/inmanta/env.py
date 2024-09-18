@@ -78,7 +78,7 @@ class VersionConflict:
     :param owner: The package from which the constraint originates
     """
 
-    requirement: packaging.requirements.Requirement
+    requirement: util.CanonicalRequirement
     installed_version: Optional[packaging.version.Version] = None
     owner: Optional[str] = None
 
@@ -163,12 +163,12 @@ class ConflictingRequirements(CompilerException):
             )
 
 
-req_list = TypeVar("req_list", Sequence[str], Sequence[packaging.requirements.Requirement])
+req_list = TypeVar("req_list", Sequence[str], Sequence[util.CanonicalRequirement])
 
 
 class PythonWorkingSet:
     @classmethod
-    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[packaging.requirements.Requirement]:
+    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[util.CanonicalRequirement]:
         """
         Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
         """
@@ -187,8 +187,8 @@ class PythonWorkingSet:
         installed_packages: dict[str, packaging.version.Version] = cls.get_packages_in_working_set()
 
         def _are_installed_recursive(
-            reqs: Sequence[packaging.requirements.Requirement],
-            seen_requirements: Sequence[packaging.requirements.Requirement],
+            reqs: Sequence[util.CanonicalRequirement],
+            seen_requirements: Sequence[util.CanonicalRequirement],
             contained_in_extra: Optional[str] = None,
         ) -> bool:
             """
@@ -234,7 +234,7 @@ class PythonWorkingSet:
                             return False
             return True
 
-        reqs_as_requirements: Sequence[packaging.requirements.Requirement] = cls._get_as_requirements_type(requirements)
+        reqs_as_requirements: Sequence[util.CanonicalRequirement] = cls._get_as_requirements_type(requirements)
         return _are_installed_recursive(reqs_as_requirements, seen_requirements=[])
 
     @classmethod
@@ -380,7 +380,7 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[packaging.requirements.Requirement]] = None,
+        requirements: Optional[Sequence[util.CanonicalRequirement]] = None,
         requirements_files: Optional[list[str]] = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
@@ -421,7 +421,7 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[packaging.requirements.Requirement]] = None,
+        requirements: Optional[Sequence[util.CanonicalRequirement]] = None,
         requirements_files: Optional[list[str]] = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
@@ -461,7 +461,7 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[packaging.requirements.Requirement]] = None,
+        requirements: Optional[Sequence[util.CanonicalRequirement]] = None,
         requirements_files: Optional[list[str]] = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
@@ -984,7 +984,7 @@ import sys
         ]
 
     @classmethod
-    def _get_requirements_on_inmanta_package(cls) -> Sequence[packaging.requirements.Requirement]:
+    def _get_requirements_on_inmanta_package(cls) -> Sequence[util.CanonicalRequirement]:
         """
         Returns the content of the requirement file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
@@ -1148,7 +1148,7 @@ class ActiveEnv(PythonEnvironment):
         """
 
         class OwnedRequirement(NamedTuple):
-            requirement: packaging.requirements.Requirement
+            requirement: util.CanonicalRequirement
             owner: Optional[str] = None
 
             def is_owned_by(self, owners: abc.Set[str]) -> bool:
@@ -1252,7 +1252,7 @@ class ActiveEnv(PythonEnvironment):
 
         working_set: abc.Iterable[importlib.metadata.Distribution] = importlib.metadata.distributions()
         # add all requirements of all in scope packages installed in this environment
-        all_constraints: set[packaging.requirements.Requirement] = set(constraints if constraints is not None else []).union(
+        all_constraints: set[util.CanonicalRequirement] = set(constraints if constraints is not None else []).union(
             util.parse_requirement(requirement=requirement)
             for dist_info in working_set
             if in_scope.fullmatch(dist_info.name)

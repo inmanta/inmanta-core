@@ -21,7 +21,6 @@ import pathlib
 
 import pytest
 
-import packaging.requirements
 from inmanta import util
 from inmanta.file_parser import RequirementsTxtParser
 from inmanta.util import parse_requirements
@@ -45,7 +44,7 @@ dep
         fd.write(content)
 
     expected_requirements = ["test==1.2.3", "other-dep~=2.0.0", "third-dep<5.0.0", "splitteddep", "Capital"]
-    requirements: list[packaging.requirements.Requirement] = RequirementsTxtParser().parse(requirements_txt_file)
+    requirements: list[util.CanonicalRequirement] = RequirementsTxtParser().parse(requirements_txt_file)
     assert requirements == parse_requirements(expected_requirements)
     requirements_as_str = RequirementsTxtParser.parse_requirements_as_strs(requirements_txt_file)
     assert requirements_as_str == expected_requirements

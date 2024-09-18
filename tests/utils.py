@@ -491,11 +491,11 @@ def create_python_package(
     pkg_version: packaging.version.Version,
     path: str,
     *,
-    requirements: Optional[Sequence[packaging.requirements.Requirement]] = None,
+    requirements: Optional[Sequence[util.CanonicalRequirement]] = None,
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
-    optional_dependencies: Optional[dict[str, Sequence[packaging.requirements.Requirement]]] = None,
+    optional_dependencies: Optional[dict[str, Sequence[util.CanonicalRequirement]]] = None,
 ) -> None:
     """
     Creates an empty Python package.
@@ -580,9 +580,9 @@ def module_from_template(
     *,
     new_version: Optional[packaging.version.Version] = None,
     new_name: Optional[str] = None,
-    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, packaging.requirements.Requirement]]] = None,
+    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, util.CanonicalRequirement]]] = None,
     new_extras: Optional[
-        abc.Mapping[str, abc.Sequence[Union[module.InmantaModuleRequirement, packaging.requirements.Requirement]]]
+        abc.Mapping[str, abc.Sequence[Union[module.InmantaModuleRequirement, util.CanonicalRequirement]]]
     ] = None,
     install: bool = False,
     editable: bool = False,
@@ -612,10 +612,10 @@ def module_from_template(
     """
 
     def to_python_requires(
-        requires: abc.Sequence[Union[module.InmantaModuleRequirement, packaging.requirements.Requirement]]
+        requires: abc.Sequence[Union[module.InmantaModuleRequirement, util.CanonicalRequirement]]
     ) -> list[str]:
         return [
-            str(req if isinstance(req, packaging.requirements.Requirement) else str(req.get_python_package_requirement()))
+            str(req if isinstance(req, util.CanonicalRequirement) else str(req.get_python_package_requirement()))
             for req in requires
         ]
 
@@ -698,7 +698,7 @@ def v1_module_from_template(
     *,
     new_version: Optional[packaging.version.Version] = None,
     new_name: Optional[str] = None,
-    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, packaging.requirements.Requirement]]] = None,
+    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, util.CanonicalRequirement]]] = None,
     new_content_init_cf: Optional[str] = None,
     new_content_init_py: Optional[str] = None,
 ) -> module.ModuleV2Metadata:
@@ -738,7 +738,7 @@ def v1_module_from_template(
         with open(os.path.join(dest_dir, "requirements.txt"), "w") as fd:
             fd.write(
                 "\n".join(
-                    str(req if isinstance(req, packaging.requirements.Requirement) else req.get_python_package_requirement())
+                    str(req if isinstance(req, util.CanonicalRequirement) else req.get_python_package_requirement())
                     for req in new_requirements
                 )
             )

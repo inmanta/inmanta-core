@@ -1177,7 +1177,7 @@ class RequirementsTxtFile:
         """
         return any(r.name == pkg_name.lower() for r in self._requirements)
 
-    def set_requirement_and_write(self, requirement: packaging.requirements.Requirement) -> None:
+    def set_requirement_and_write(self, requirement: util.CanonicalRequirement) -> None:
         """
         Add the given requirement to the requirements.txt file and update the file on disk, replacing any existing constraints
         on this package.
@@ -3423,7 +3423,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
         # Parse config file
         config_parser = ConfigParser()
         config_parser.read(self.get_metadata_file_path())
-        python_pkg_requirement: packaging.requirements.Requirement = requirement.get_python_package_requirement()
+        python_pkg_requirement: util.CanonicalRequirement = requirement.get_python_package_requirement()
         if config_parser.has_option("options", "install_requires"):
             new_install_requires = [
                 r
