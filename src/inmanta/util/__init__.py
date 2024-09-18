@@ -918,22 +918,12 @@ def parse_requirement(requirement: str) -> CanonicalRequirement:
 
 def parse_requirements(requirements: Sequence[str]) -> list[CanonicalRequirement]:
     """
-    To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
-    could arise when checking if packages are installed in a particular Venv.
+    This function supposes to receive actual requirements. Commented strings will not be handled and result in a ValueError
 
     :param requirements: The names of the different requirements
-    :return: Sequence[Requirement]
+    :return: list[CanonicalRequirement]
     """
-    canonical_requirements = []
-    for e in requirements:
-        try:
-            canonical_requirements.append(parse_requirement(requirement=e))
-        except ValueError:
-            LOGGER.debug("This line was skipped because the requirement could not be parsed: %s", e)
-            # This line was empty or only containing a comment
-            continue
-
-    return canonical_requirements
+    return [parse_requirement(requirement=e) for e in requirements]
 
 
 def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequirement]:

@@ -52,19 +52,22 @@ dep
     parsed_canonical_requirements_from_file = util.parse_requirements_from_file(pathlib.Path(requirements_txt_file))
     assert parsed_canonical_requirements_from_file == requirements
 
-    parsed_canonical_requirements = util.parse_requirements(
-        [
-            "test==1.2.3",
-            "# A comment",
-            "  ",
-            "",
-            "other-dep~=2.0.0",
-            "third-dep<5.0.0 # another comment",
-            "splitteddep",
-            "Capital",
-        ]
-    )
+    problematic_requirements = [
+        "test==1.2.3",
+        "# A comment",
+        "  ",
+        "",
+        "other-dep~=2.0.0",
+        "third-dep<5.0.0 # another comment",
+        "splitteddep",
+        "Capital",
+    ]
+
+    parsed_canonical_requirements = util.parse_requirements(expected_requirements)
     assert parsed_canonical_requirements == requirements
+
+    with pytest.raises(ValueError):
+        util.parse_requirements(problematic_requirements)
 
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="test")
     expected_content = """
