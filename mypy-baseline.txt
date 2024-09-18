@@ -893,7 +893,7 @@ src/inmanta/execute/scheduler.py:0: error: Missing type parameters for generic t
 src/inmanta/execute/scheduler.py:0: error: "<subclass of "DelayedResultVariable" and "RelationAttributeVariable">" has no attribute "attribute"  [attr-defined]
 src/inmanta/execute/scheduler.py:0: error: "<subclass of "DelayedResultVariable" and "RelationAttributeVariable">" has no attribute "attribute"  [attr-defined]
 src/inmanta/execute/scheduler.py:0: error: "<subclass of "DelayedResultVariable" and "RelationAttributeVariable">" has no attribute "attribute"  [attr-defined]
-src/inmanta/env.py:0: error: Argument 1 to "parse_requirements" has incompatible type "Sequence[Requirement]"; expected "Sequence[str]"  [arg-type]
+src/inmanta/env.py:0: error: Argument 1 to "parse_requirements" has incompatible type "Sequence[CanonicalRequirement]"; expected "Sequence[str]"  [arg-type]
 src/inmanta/env.py:0: error: "type[WorkingSet]" has no attribute "_build_master"  [attr-defined]
 src/inmanta/env.py:0: error: Incompatible return value type (got "tuple[str | None, Loader | None] | None", expected "tuple[str | None, Loader] | None")  [return-value]
 src/inmanta/env.py:0: error: Item "None" of "ModuleSpec | None" has no attribute "submodule_search_locations"  [union-attr]
