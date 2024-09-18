@@ -148,8 +148,8 @@ Tracking embedded entities across updates
 Depending on what the embedded entities are modeling, you might want to keep track of which embedded entities
 were added or removed during an update. This section describes how to track embedded entities during the update flow of
 a service. When using the simple lifecycle, this is supported out of the box by wrapping the call to ``lsm::all()`` with the :py:meth:`inmanta_plugins.lsm.insert_removed_embedded_entities<inmanta_plugins.lsm.insert_removed_embedded_entities>` plugin.
-The following sections describe 3 flavours of update flows through examples.
 
+The following sections describe 3 flavours of update flows through examples.
 
 
 Update flow with implicit deletion
@@ -200,9 +200,9 @@ Update flow with mutually explicit desired state
 The last possible update scenario is one with mutually exclusive desired state throughout the update, e.g. a database
 migration from cluster A to cluster B:
 
-Initial desired state: data lives in cluster A
-Intermediate desired state:  data is replicated in cluster A and cluster B
-Final desired state: data lives in cluster B
+1. Initial desired state: data lives in cluster A
+2. Intermediate desired state:  data is replicated in cluster A and cluster B
+3. Final desired state: data lives in cluster B
 
 
 For these more involved update scenarios we recommend updating the lifecycle specifically for this update.
