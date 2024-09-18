@@ -615,7 +615,7 @@ def module_from_template(
         requires: abc.Sequence[Union[module.InmantaModuleRequirement, util.CanonicalRequirement]]
     ) -> list[str]:
         return [
-            str(req if isinstance(req, util.CanonicalRequirement) else str(req.get_python_package_requirement()))
+            str(req) if isinstance(req, packaging.requirements.Requirement) else str(req.get_python_package_requirement())
             for req in requires
         ]
 
@@ -738,7 +738,11 @@ def v1_module_from_template(
         with open(os.path.join(dest_dir, "requirements.txt"), "w") as fd:
             fd.write(
                 "\n".join(
-                    str(req if isinstance(req, util.CanonicalRequirement) else req.get_python_package_requirement())
+                    (
+                        str(req)
+                        if isinstance(req, packaging.requirements.Requirement)
+                        else str(req.get_python_package_requirement())
+                    )
                     for req in new_requirements
                 )
             )
