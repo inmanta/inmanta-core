@@ -139,6 +139,73 @@ values of its attributes are. This means that there will be no difference in beh
 set to ``rw`` or ``rw+``. If an index is defined on the embedded entity, the attribute modifiers will be enforced in
 the same way as for relationships with an upper arity larger than one.
 
+.. _tracking_embedded_entities_across_updates:
+
+Tracking embedded entities across updates
+#########################################
+
+
+Depending on what the embedded entities are modeling, you might want to keep track of which embedded entities
+were added or removed during an update. This section describes how to track embedded entities during the update flow of
+a service. When using the simple lifecycle, this is supported out of the box by wrapping the call to ``lsm::all()`` with the :py:meth:`inmanta_plugins.lsm.insert_removed_embedded_entities<inmanta_plugins.lsm.insert_removed_embedded_entities>` plugin.
+The following sections describe 3 flavours of update flows through examples.
+
+
+
+Update flow with implicit deletion
+**********************************
+
+In this update flow, the embedded entities are side-effect free
+and fully under control of the parent entity. The following model
+demonstrate this case:
+
+- The parent entity is a file on a file system
+- The embedded entities represent individual lines in this file
+
+In this example, the deployed resources (i.e. the deployed files) will mirror exactly the embedded entities
+present in the model since the content of the file is derived from the set of embedded entities.
+If an embedded entity is removed during an update, the file content will reflect this accordingly.
+
+
+.. literalinclude:: embedded_entities_sources/example_lines_in_file.cf
+    :linenos:
+    :language: inmanta
+    :caption: main.cf
+
+Update flow with explicit deletion
+**********************************
+
+
+In this update flow, the embedded entities are not side-effect free
+or not fully under control of the parent entity. The following model
+demonstrate this case:
+
+- The parent entity is a directory on a file system
+- The embedded entities represent individual files in this directory
+
+In this example, we have to take extra steps to make sure the deployed resources (i.e. the deployed directories and files
+below them) match the embedded entities present in the model.
+The content of the directories is derived from the set of embedded entities. If an embedded entity is removed during an
+update, we have to make sure to remove it from disk explicitly.
+
+.. literalinclude:: embedded_entities_sources/example_files_in_folder.cf
+    :linenos:
+    :language: inmanta
+    :caption: main.cf
+
+
+Update flow with mutually explicit desired state
+************************************************
+
+The last possible update scenario is one with mutually exclusive desired state throughout the update, e.g. a database
+migration from cluster A to cluster B:
+
+Initial desired state: data lives in cluster A
+Intermediate desired state:  data is replicated in cluster A and cluster B
+Final desired state: data lives in cluster B
+
+
+For these more involved update scenarios we recommend updating the lifecycle specifically for this update.
 
 .. _legacy_no_strict_modifier_enforcement:
 
