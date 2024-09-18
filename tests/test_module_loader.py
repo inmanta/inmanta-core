@@ -397,7 +397,7 @@ def test_load_import_based_v2_project(local_module_package_index: str, snippetco
     """
     module_name: str = "minimalv2module"
 
-    def load(requires: Optional[list[inmanta.util.CanonicalRequirement]] = None) -> None:
+    def load(requires: Optional[list[inmanta.inmanta.util.CanonicalRequirement]] = None) -> None:
         project: Project = snippetcompiler_clean.setup_for_snippet(
             f"import {module_name}",
             autostd=False,
@@ -853,7 +853,7 @@ def test_module_install_extra_on_project_level_v2_dep(
         },
         publish_index=index,
     )
-    package_with_extra: inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
+    package_with_extra: inmanta.inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
         "mymod[myfeature]"
     ).get_python_package_requirement()
     package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}mymod"
@@ -1011,10 +1011,10 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
         },
         publish_index=index,
     )
-    package_without_extra: inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
+    package_without_extra: inmanta.inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
         "mymod"
     ).get_python_package_requirement()
-    package_with_extra: inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
+    package_with_extra: inmanta.inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
         "mymod[myfeature]"
     ).get_python_package_requirement()
     package_name: str = str(package_without_extra)
@@ -1084,10 +1084,10 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
         },
         publish_index=index,
     )
-    package_without_extra: inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
+    package_without_extra: inmanta.inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
         "depmod"
     ).get_python_package_requirement()
-    package_with_extra: inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
+    package_with_extra: inmanta.inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
         "depmod[myfeature]"
     ).get_python_package_requirement()
     package_name: str = str(package_without_extra)
@@ -1169,10 +1169,10 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
 
     # Publish dependency of V1 module (depmod) to python package repo
-    package_without_extra: inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
+    package_without_extra: inmanta.inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
         "depmod"
     ).get_python_package_requirement()
-    package_with_extra: inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
+    package_with_extra: inmanta.inmanta.util.CanonicalRequirement = InmantaModuleRequirement.parse(
         "depmod[myfeature]"
     ).get_python_package_requirement()
     package_name: str = str(package_without_extra)

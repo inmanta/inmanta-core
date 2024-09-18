@@ -20,7 +20,6 @@ import os
 
 import inmanta.util
 import packaging.utils
-from inmanta import util
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 
@@ -57,7 +56,7 @@ class RequirementsTxtParser:
     """
 
     @classmethod
-    def parse(cls, filename: str) -> list[util.CanonicalRequirement]:
+    def parse(cls, filename: str) -> list[inmanta.util.CanonicalRequirement]:
         """
         Get all the requirements in `filename` as a list of `Requirement` instances.
         """

@@ -43,7 +43,7 @@ dep
         fd.write(content)
 
     expected_requirements = ["test==1.2.3", "other-dep~=2.0.0", "third-dep<5.0.0", "splitteddep", "Capital"]
-    requirements: list[inmanta.util.CanonicalRequirement] = RequirementsTxtParser().parse(requirements_txt_file)
+    requirements: list[inmanta.inmanta.util.CanonicalRequirement] = RequirementsTxtParser().parse(requirements_txt_file)
     assert requirements == inmanta.util.parse_requirements(expected_requirements)
     requirements_as_str = RequirementsTxtParser.parse_requirements_as_strs(requirements_txt_file)
     assert requirements_as_str == expected_requirements

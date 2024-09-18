@@ -40,6 +40,7 @@ import yaml
 
 import build
 import build.env
+import inmanta.util
 import packaging.requirements
 import packaging.version
 from _pytest.mark import MarkDecorator
@@ -491,11 +492,11 @@ def create_python_package(
     pkg_version: packaging.version.Version,
     path: str,
     *,
-    requirements: Optional[Sequence[util.CanonicalRequirement]] = None,
+    requirements: Optional[Sequence[inmanta.util.CanonicalRequirement]] = None,
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
-    optional_dependencies: Optional[dict[str, Sequence[util.CanonicalRequirement]]] = None,
+    optional_dependencies: Optional[dict[str, Sequence[inmanta.util.CanonicalRequirement]]] = None,
 ) -> None:
     """
     Creates an empty Python package.
@@ -580,9 +581,9 @@ def module_from_template(
     *,
     new_version: Optional[packaging.version.Version] = None,
     new_name: Optional[str] = None,
-    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, util.CanonicalRequirement]]] = None,
+    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]]] = None,
     new_extras: Optional[
-        abc.Mapping[str, abc.Sequence[Union[module.InmantaModuleRequirement, util.CanonicalRequirement]]]
+        abc.Mapping[str, abc.Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]]]
     ] = None,
     install: bool = False,
     editable: bool = False,
@@ -612,7 +613,7 @@ def module_from_template(
     """
 
     def to_python_requires(
-        requires: abc.Sequence[Union[module.InmantaModuleRequirement, util.CanonicalRequirement]]
+        requires: abc.Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]]
     ) -> list[str]:
         return [
             str(req) if isinstance(req, packaging.requirements.Requirement) else str(req.get_python_package_requirement())
@@ -698,7 +699,7 @@ def v1_module_from_template(
     *,
     new_version: Optional[packaging.version.Version] = None,
     new_name: Optional[str] = None,
-    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, util.CanonicalRequirement]]] = None,
+    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]]] = None,
     new_content_init_cf: Optional[str] = None,
     new_content_init_py: Optional[str] = None,
 ) -> module.ModuleV2Metadata:

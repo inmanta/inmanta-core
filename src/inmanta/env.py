@@ -47,7 +47,7 @@ import inmanta.util
 import packaging.requirements
 import packaging.utils
 import packaging.version
-from inmanta import const, util
+from inmanta import const
 from inmanta.ast import CompilerException
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
@@ -79,7 +79,7 @@ class VersionConflict:
     :param owner: The package from which the constraint originates
     """
 
-    requirement: util.CanonicalRequirement
+    requirement: inmanta.util.CanonicalRequirement
     installed_version: Optional[packaging.version.Version] = None
     owner: Optional[str] = None
 
@@ -164,12 +164,12 @@ class ConflictingRequirements(CompilerException):
             )
 
 
-req_list = TypeVar("req_list", Sequence[str], Sequence[util.CanonicalRequirement])
+req_list = TypeVar("req_list", Sequence[str], Sequence[inmanta.util.CanonicalRequirement])
 
 
 class PythonWorkingSet:
     @classmethod
-    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[util.CanonicalRequirement]:
+    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[inmanta.util.CanonicalRequirement]:
         """
         Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
         """
@@ -188,8 +188,8 @@ class PythonWorkingSet:
         installed_packages: dict[str, packaging.version.Version] = cls.get_packages_in_working_set()
 
         def _are_installed_recursive(
-            reqs: Sequence[util.CanonicalRequirement],
-            seen_requirements: Sequence[util.CanonicalRequirement],
+            reqs: Sequence[inmanta.util.CanonicalRequirement],
+            seen_requirements: Sequence[inmanta.util.CanonicalRequirement],
             contained_in_extra: Optional[str] = None,
         ) -> bool:
             """
@@ -224,7 +224,7 @@ class PythonWorkingSet:
                         if distribution is None:
                             return False
 
-                        pkgs_required_by_extra: set[util.CanonicalRequirement] = set(
+                        pkgs_required_by_extra: set[inmanta.util.CanonicalRequirement] = set(
                             [inmanta.util.parse_requirement(str(e)) for e in distribution.requires(extras=(extra,))]
                         ) - set([inmanta.util.parse_requirement(str(e)) for e in distribution.requires(extras=())])
                         if not _are_installed_recursive(
@@ -235,7 +235,7 @@ class PythonWorkingSet:
                             return False
             return True
 
-        reqs_as_requirements: Sequence[util.CanonicalRequirement] = cls._get_as_requirements_type(requirements)
+        reqs_as_requirements: Sequence[inmanta.util.CanonicalRequirement] = cls._get_as_requirements_type(requirements)
         return _are_installed_recursive(reqs_as_requirements, seen_requirements=[])
 
     @classmethod
@@ -382,7 +382,7 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[util.CanonicalRequirement]] = None,
+        requirements: Optional[Sequence[inmanta.util.CanonicalRequirement]] = None,
         requirements_files: Optional[list[str]] = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
@@ -423,7 +423,7 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[util.CanonicalRequirement]] = None,
+        requirements: Optional[Sequence[inmanta.util.CanonicalRequirement]] = None,
         requirements_files: Optional[list[str]] = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
@@ -463,7 +463,7 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[util.CanonicalRequirement]] = None,
+        requirements: Optional[Sequence[inmanta.util.CanonicalRequirement]] = None,
         requirements_files: Optional[list[str]] = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
@@ -817,7 +817,7 @@ import sys
 
     def install_for_config(
         self,
-        requirements: list[util.CanonicalRequirement],
+        requirements: list[inmanta.util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -858,7 +858,7 @@ import sys
 
     async def async_install_for_config(
         self,
-        requirements: list[util.CanonicalRequirement],
+        requirements: list[inmanta.util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -895,7 +895,7 @@ import sys
 
     def install_from_index(
         self,
-        requirements: list[util.CanonicalRequirement],
+        requirements: list[inmanta.util.CanonicalRequirement],
         index_urls: Optional[list[str]] = None,
         upgrade: bool = False,
         allow_pre_releases: bool = False,
@@ -986,7 +986,7 @@ import sys
         ]
 
     @classmethod
-    def _get_requirements_on_inmanta_package(cls) -> Sequence[util.CanonicalRequirement]:
+    def _get_requirements_on_inmanta_package(cls) -> Sequence[inmanta.util.CanonicalRequirement]:
         """
         Returns the content of the requirement file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
@@ -1122,7 +1122,7 @@ class ActiveEnv(PythonEnvironment):
 
     def install_for_config(
         self,
-        requirements: list[util.CanonicalRequirement],
+        requirements: list[inmanta.util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -1142,7 +1142,7 @@ class ActiveEnv(PythonEnvironment):
     def get_constraint_violations_for_check(
         self,
         strict_scope: Optional[Pattern[str]] = None,
-        constraints: Optional[list[util.CanonicalRequirement]] = None,
+        constraints: Optional[list[inmanta.util.CanonicalRequirement]] = None,
     ) -> tuple[set[VersionConflict], set[VersionConflict]]:
         """
         Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
@@ -1150,7 +1150,7 @@ class ActiveEnv(PythonEnvironment):
         """
 
         class OwnedRequirement(NamedTuple):
-            requirement: util.CanonicalRequirement
+            requirement: inmanta.util.CanonicalRequirement
             owner: Optional[str] = None
 
             def is_owned_by(self, owners: abc.Set[str]) -> bool:
@@ -1210,7 +1210,7 @@ class ActiveEnv(PythonEnvironment):
     def check(
         self,
         strict_scope: Optional[Pattern[str]] = None,
-        constraints: Optional[list[util.CanonicalRequirement]] = None,
+        constraints: Optional[list[inmanta.util.CanonicalRequirement]] = None,
     ) -> None:
         """
         Check this Python environment for incompatible dependencies in installed packages.
@@ -1235,7 +1235,9 @@ class ActiveEnv(PythonEnvironment):
         for violation in constraint_violations:
             LOGGER.warning("%s", violation)
 
-    def check_legacy(self, in_scope: Pattern[str], constraints: Optional[list[util.CanonicalRequirement]] = None) -> bool:
+    def check_legacy(
+        self, in_scope: Pattern[str], constraints: Optional[list[inmanta.util.CanonicalRequirement]] = None
+    ) -> bool:
         """
         Check this Python environment for incompatible dependencies in installed packages. This method is a legacy method
         in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
@@ -1254,7 +1256,7 @@ class ActiveEnv(PythonEnvironment):
 
         working_set: abc.Iterable[importlib.metadata.Distribution] = importlib.metadata.distributions()
         # add all requirements of all in scope packages installed in this environment
-        all_constraints: set[util.CanonicalRequirement] = set(constraints if constraints is not None else []).union(
+        all_constraints: set[inmanta.util.CanonicalRequirement] = set(constraints if constraints is not None else []).union(
             inmanta.util.parse_requirement(requirement=requirement)
             for dist_info in working_set
             if in_scope.fullmatch(dist_info.name)
@@ -1443,7 +1445,7 @@ class VirtualEnv(ActiveEnv):
 
     def install_for_config(
         self,
-        requirements: list[util.CanonicalRequirement],
+        requirements: list[inmanta.util.CanonicalRequirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
