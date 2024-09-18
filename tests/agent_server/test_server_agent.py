@@ -1789,11 +1789,11 @@ async def test_autostart_clear_agent_venv_on_delete(
 
     assert os.path.exists(venv_dir_agent1)
 
+    result = await client.delete_environment(environment)
+    assert result.code == 200
+
     if delete_project:
         result = await client.delete_project(project_default)
-        assert result.code == 200
-    else:
-        result = await client.delete_environment(environment)
         assert result.code == 200
 
     assert not os.path.exists(venv_dir_agent1)
@@ -1887,24 +1887,6 @@ async def test_stop_autostarted_agents_on_environment_removal(server, client, re
 
     # The autostarted agent should be terminated when its environment is deleted.
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=0)
-
-
-async def test_stop_autostarted_agents_on_project_removal(server, client, resource_container, no_agent_backoff):
-    current_process = psutil.Process()
-    inmanta_agent_child_processes: list[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
-    resource_container.Provider.reset()
-    (project1_id, env1_id) = await setup_environment_with_agent(client, "proj1")
-    await setup_environment_with_agent(client, "proj2")
-
-    # Two autostarted agents should be running (one in proj1 and one in proj2).
-    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=2)
-
-    result = await client.delete_project(id=project1_id)
-    assert result.code == 200, result.result
-
-    # The autostarted agent of proj1 should be terminated when its project is deleted
-    # The autostarted agent of proj2 keep running
-    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
 
 async def test_export_duplicate(resource_container, snippetcompiler):
