@@ -38,6 +38,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 # FIXME[#8008] review code structure + functionality + add docstrings
+# FIXME[#8008] review comments on original PR
 # FIXME[#8008] add import entry point test case
 
 

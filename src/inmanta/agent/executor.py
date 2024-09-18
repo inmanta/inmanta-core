@@ -29,6 +29,7 @@ import pathlib
 import shutil
 import typing
 import uuid
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, cast

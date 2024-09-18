@@ -26,10 +26,10 @@ from typing import Collection, TypeAlias
 
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.resources import Id
-from inmanta.util.collections import BidirectionalManyToManyMapping
+from inmanta.util.collections import BidirectionalManyMapping
 
 
-class RequiresProvidesMapping(BidirectionalManyToManyMapping[ResourceIdStr, ResourceIdStr]):
+class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceIdStr]):
     def requires_view(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
         return self
 
@@ -143,6 +143,7 @@ class ModelState:
         del self.resources[resource]
         del self.resource_state[resource]
         del self.requires[resource]
+        del self.requires.reverse_mapping()[resource]
 
         parsed_id = Id.parse_id(resource)
         self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] -= 1
