@@ -261,9 +261,9 @@ async def test_modify_environment_project(client_v2):
 
 
 async def test_delete_environment_project_v2(client_v2):
-    """Test deleting a project containing an environment."""
+    """Test deleting a project containing two environments."""
 
-    # Create a projects and two environments
+    # Create a project and two environments
     result = await client_v2.project_create("dev-project")
     assert result.code == 200
     project_id_a = result.result["data"]["id"]
@@ -276,7 +276,7 @@ async def test_delete_environment_project_v2(client_v2):
     assert result.code == 200
     env2_id = result.result["data"]["id"]
 
-    # Delete project a
+    # Delete project
     result = await client_v2.project_delete(project_id_a)
     assert result.code == 409
     assert (
