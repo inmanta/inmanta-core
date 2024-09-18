@@ -406,6 +406,20 @@ async def test_create_env_same_name(client):
     assert f"Project with id={project_id} already has an environment with name dev1" in result.result["message"]
 
 
+async def test_project_list_environments_after_failed_removal(client):
+    result = await client.create_project("env-test")
+    project_id = result.result["project"]["id"]
+
+    result = await client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="prod")
+
+    result = await client.delete_project(project_id)
+    assert result.code == 409
+
+    result = await client.list_environments()
+    assert len(result.result["environments"]) == 2
+
+
 async def test_create_with_id(client):
     project_id = uuid.uuid4()
     result = await client.create_project(name="test_project", project_id=project_id)
