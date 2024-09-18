@@ -19,6 +19,7 @@
 import os
 import pathlib
 
+import packaging.requirements
 import pytest
 
 import inmanta.util
@@ -43,7 +44,7 @@ dep
         fd.write(content)
 
     expected_requirements = ["test==1.2.3", "other-dep~=2.0.0", "third-dep<5.0.0", "splitteddep", "Capital"]
-    requirements: list[inmanta.inmanta.util.CanonicalRequirement] = RequirementsTxtParser().parse(requirements_txt_file)
+    requirements: list[inmanta.util.CanonicalRequirement] = RequirementsTxtParser().parse(requirements_txt_file)
     assert requirements == inmanta.util.parse_requirements(expected_requirements)
     requirements_as_str = RequirementsTxtParser.parse_requirements_as_strs(requirements_txt_file)
     assert requirements_as_str == expected_requirements
@@ -53,9 +54,6 @@ dep
 
     problematic_requirements = [
         "test==1.2.3",
-        "# A comment",
-        "  ",
-        "",
         "other-dep~=2.0.0",
         "third-dep<5.0.0 # another comment",
         "splitteddep",
@@ -65,8 +63,9 @@ dep
     parsed_canonical_requirements = inmanta.util.parse_requirements(expected_requirements)
     assert parsed_canonical_requirements == requirements
 
-    with pytest.raises(ValueError):
+    with pytest.raises(Exception) as e:
         inmanta.util.parse_requirements(problematic_requirements)
+    assert 'Expected end or semicolon (after version specifier)\n    third-dep<5.0.0 # another comment\n' in str(e.value)
 
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="test")
     expected_content = """
@@ -133,7 +132,7 @@ def test_canonical_requirement(iteration) -> None:
     """
     name, should_fail = iteration
     if should_fail:
-        with pytest.raises(ValueError):
+        with pytest.raises(packaging.requirements.InvalidRequirement):
             inmanta.util.parse_requirement(requirement=name)
     else:
         inmanta.util.parse_requirement(requirement=name)

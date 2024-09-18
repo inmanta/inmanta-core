@@ -53,7 +53,6 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
-from packaging.version import Version
 
 T = TypeVar("T")
 
@@ -460,7 +459,7 @@ def get_product_meta_data() -> ProductMetadata:
 
 
 def product_version_lower_or_equal_than(version: str) -> bool:
-    return Version(version=get_product_meta_data().version) <= Version(version=version)
+    return packaging.version.Version(version=get_product_meta_data().version) <= packaging.version.Version(version=version)
 
 
 def mark_only_for_version_higher_than(version: str) -> "MarkDecorator":

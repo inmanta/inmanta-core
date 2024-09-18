@@ -872,12 +872,12 @@ class ExhaustedPoolWatcher:
         self._exhausted_pool_events_count = 0
 
 
-def remove_comment_part(to_clean: str) -> str:
+def remove_comment_part_from_specifier(to_clean: str) -> str:
     """
-    Remove the comment part of a given string
+    Remove the comment part of a requirement specifier
 
-    :param to_clean: The string to clean
-    :return: A cleaned string
+    :param to_clean: The requirement specifier to clean
+    :return: A cleaned requirement specifier
     """
     # Refer to PEP 508. A requirement could contain a hashtag
     to_clean = to_clean.strip()
@@ -898,23 +898,15 @@ def parse_requirement(requirement: str) -> CanonicalRequirement:
     """
     Parse the given requirement string into a requirement object with a canonicalized name, meaning that we are sure that
     every CanonicalRequirement will follow the same convention regarding the name. This will allow us compare requirements.
-    This function supposes to receive an actual requirement. Commented strings will not be handled and result in a ValueError
+    This function supposes to receive an actual requirement.
 
     :param requirement: The requirement's name
     :return: A new requirement instance
-    :raise: ValueError when commented or empty strings are provided
     """
-    # packaging.Requirement is not able to parse requirements with comment (if there is one).
-    # Therefore, we need to make sure that the provided requirement doesn't contain any `comment` part
-    drop_comment = remove_comment_part(to_clean=requirement)
-
-    if drop_comment.startswith("#") or len(drop_comment) == 0:
-        raise ValueError(f"The requirement is invalid: Cannot be a comment or empty -> `{drop_comment}`!")
-
     # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
     # already installed
     # /!\ The following line could cause issue because we are not supposed to modify fields of an existing instance
-    requirement_instance = packaging.requirements.Requirement(requirement_string=drop_comment)
+    requirement_instance = packaging.requirements.Requirement(requirement_string=requirement)
     requirement_instance.name = packaging.utils.canonicalize_name(requirement_instance.name)
     canonical_requirement_instance = CanonicalRequirement(requirement_instance)
     return canonical_requirement_instance
@@ -945,15 +937,14 @@ def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequi
     if not file_path.exists():
         raise RuntimeError(f"The provided path does not exist: `{file_path}`!")
 
-    requirements = []
     with open(file_path) as f:
-        for line in f.readlines():
-            try:
-                requirements.append(parse_requirement(line))
-            except ValueError:
-                LOGGER.debug("This line was skipped because the requirement could not be parsed: %s", line)
-                # This line was empty or only containing a comment
-                continue
+        file_contents: list[str] = f.readlines()
+        requirements = [
+            parse_requirement(remove_comment_part_from_specifier(line))
+            for line in file_contents
+            if (stripped := line.lstrip()) and not stripped.startswith("#")  # preprocessing
+        ]
+
     return requirements
 
 
