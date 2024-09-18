@@ -30,13 +30,13 @@ from asyncio import Semaphore
 from collections import abc
 from typing import TYPE_CHECKING, Optional
 
-import inmanta.util
 import py.path
 import pytest
 from pytest import approx
 
 import inmanta.ast.export as ast_export
 import inmanta.data.model as model
+import inmanta.util
 import utils
 from inmanta import config, data
 from inmanta.const import INMANTA_REMOVED_SET_ID, ParameterSource

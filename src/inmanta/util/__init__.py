@@ -875,19 +875,19 @@ class ExhaustedPoolWatcher:
         self._exhausted_pool_events_count = 0
 
 
-def remove_comment_part_from_specifier(to_clean: str) -> str:
+def remove_comment_part(to_clean: str) -> str:
     """
-    Remove the comment part of a requirement specifier
+    Remove the comment part of a given string
 
-    :param to_clean: The requirement specifier to clean
-    :return: A cleaned requirement specifier
+    :param to_clean: The string to clean
+    :return: A cleaned string
     """
     # Refer to PEP 508. A requirement could contain a hashtag
-    groups = REQUIREMENT_SPECIFIER.search(to_clean)
-    if not groups:
-        return ""
-
-    return groups.group(1)
+    to_clean = to_clean.strip()
+    drop_comment, _, _ = to_clean.partition(" #")
+    # We make sure whitespaces are not counted in the length of this string, e.g. "        #"
+    drop_comment = drop_comment.strip()
+    return drop_comment
 
 
 """
@@ -909,7 +909,7 @@ def parse_requirement(requirement: str) -> CanonicalRequirement:
     """
     # packaging.Requirement is not able to parse requirements with comment (if there is one).
     # Therefore, we need to make sure that the provided requirement doesn't contain any `comment` part
-    drop_comment = remove_comment_part_from_specifier(to_clean=requirement)
+    drop_comment = remove_comment_part(to_clean=requirement)
 
     if drop_comment.startswith("#") or len(drop_comment) == 0:
         raise ValueError(f"The requirement is invalid: Cannot be a comment or empty -> `{drop_comment}`!")
