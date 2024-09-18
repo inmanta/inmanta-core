@@ -125,7 +125,7 @@ def cache(
     If an argument named resource is present,
     it is assumed to be a resource and its ID is used, without the version information
 
-    :param timeout: Hard timeout for non-lingering cache item i.e. when `evict_after_creation=True`.
+    :param timeout: Hard timeout for cache items when `evict_after_creation=True`.
         Ignored otherwise.
 
 

@@ -381,7 +381,7 @@ async def test_cache_decorator_basics(time_machine):
         assert "x2" == test.test_method_2(dummy_arg="BBB")  # +1 miss
         test.check_n_cache_misses(3)
 
-    # Wait out lingering time of 60s after last read
+    # Wait out expiry time of 60s after last read
     time_machine.shift(datetime.timedelta(seconds=61))
 
     # The cache cleanup method is called upon entering the AgentCache context manager
@@ -405,7 +405,7 @@ async def test_cache_decorator_basics(time_machine):
         assert "x2" == test.test_method_2(dummy_arg="AAA")
         test.check_n_cache_misses(4)
 
-    # Wait out lingering time of 60s after last read
+    # Wait out expiry time of 60s after last read
     time_machine.shift(datetime.timedelta(seconds=61))
 
     with agent_cache:
@@ -415,9 +415,9 @@ async def test_cache_decorator_basics(time_machine):
         test.check_n_cache_misses(5)
 
 
-async def test_cache_decorator_lingering_entries(time_machine):
+async def test_cache_decorator_expire_after_last_access(time_machine):
     """
-    Test the behaviour of lingering cache entries.
+    Test the behaviour of cache entries expiring after last access.
 
     Cache entries are considered lingering as long as for_version=True (default).
     The timeout argument is ignored for lingering entries.
@@ -488,7 +488,7 @@ async def test_cache_decorator_lingering_entries(time_machine):
     time_machine.shift(datetime.timedelta(seconds=50))
 
     # The cache cleanup method is called upon entering the AgentCache context manager
-    # All entries are lingering, check that we have 0 miss
+    # All entries expiry times were refreshed after last access, check that we have 0 miss
     with agent_cache:
         assert "x1" == test.linger_test_method_1()  # cache hit
         assert "x2" == test.linger_test_method_2()  # cache hit
@@ -514,7 +514,8 @@ async def test_cache_decorator_lingering_entries(time_machine):
 
     test.reset_miss_counter()
 
-    # Wait out lingering time of 60s after last read, all entries should miss
+    # Expiry time was reset to 60s after last read.
+    # Wait it out and check that all entries miss.
     time_machine.shift(datetime.timedelta(seconds=61))
 
     with agent_cache:
@@ -529,7 +530,8 @@ async def test_cache_decorator_lingering_entries(time_machine):
 
 async def test_cache_decorator_hard_expiry_entries(time_machine):
     """
-    Test the behaviour of non-lingering cache entries.
+    TODO refactor test + docstring
+    Test the behaviour of cache entries with a hard expiry.
 
     Cache entries are considered non-lingering when for_version=False.
     The timeout argument controls the lifetime of the entry since it entered the cache.
@@ -612,7 +614,7 @@ async def test_cache_decorator_hard_expiry_entries(time_machine):
     time_machine.shift(datetime.timedelta(seconds=20))
 
     with agent_cache:
-        # Check that non-lingering entries with an 80s timeout got cleaned up:
+        # Check that entries with a 'hard' 80s timeout got cleaned up:
         assert "x2" == test.non_linger_test_method_2()  # +1 miss
         assert "recurring_read" == test.non_linger_test_method_3(dummy_arg="recurring_read")  # +1 miss
         assert "initial_read" == test.non_linger_test_method_3(dummy_arg="initial_read")  # +1 miss
