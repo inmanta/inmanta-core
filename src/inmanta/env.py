@@ -43,6 +43,7 @@ from typing import Callable, NamedTuple, Optional, Tuple, TypeVar
 
 import pkg_resources
 
+import inmanta.util
 import packaging.requirements
 import packaging.utils
 import packaging.version
@@ -173,7 +174,7 @@ class PythonWorkingSet:
         Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
         """
         if isinstance(requirements[0], str):
-            return util.parse_requirements(requirements)
+            return inmanta.util.parse_requirements(requirements)
         else:
             return requirements
 
@@ -224,8 +225,8 @@ class PythonWorkingSet:
                             return False
 
                         pkgs_required_by_extra: set[util.CanonicalRequirement] = set(
-                            [util.parse_requirement(str(e)) for e in distribution.requires(extras=(extra,))]
-                        ) - set([util.parse_requirement(str(e)) for e in distribution.requires(extras=())])
+                            [inmanta.util.parse_requirement(str(e)) for e in distribution.requires(extras=(extra,))]
+                        ) - set([inmanta.util.parse_requirement(str(e)) for e in distribution.requires(extras=())])
                         if not _are_installed_recursive(
                             reqs=list(pkgs_required_by_extra),
                             seen_requirements=list(seen_requirements) + list(reqs),
@@ -240,7 +241,8 @@ class PythonWorkingSet:
     @classmethod
     def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> dict[str, packaging.version.Version]:
         """
-        Return all packages present in `pkg_resources.working_set` together with the version of the package.
+        Return all packages (under the canonicalized form) present in `pkg_resources.working_set` together with the version
+        of the package.
 
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
@@ -964,7 +966,7 @@ import sys
         use_pip_config was ignored on ISO6 and it still is
         """
         self.install_from_index(
-            requirements=util.parse_requirements(requirements_list),
+            requirements=inmanta.util.parse_requirements(requirements_list),
             upgrade=upgrade,
             upgrade_strategy=upgrade_strategy,
             use_pip_config=True,
@@ -992,7 +994,7 @@ import sys
         protected_inmanta_packages: list[str] = cls.get_protected_inmanta_packages()
         workingset: dict[str, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
         return [
-            util.parse_requirement(requirement=f"{pkg}=={workingset[pkg]}")
+            inmanta.util.parse_requirement(requirement=f"{pkg}=={workingset[pkg]}")
             for pkg in workingset
             if pkg in protected_inmanta_packages
         ]
@@ -1156,7 +1158,7 @@ class ActiveEnv(PythonEnvironment):
 
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(util.parse_requirement(requirement=str(requirement)), dist_info.key)
+            OwnedRequirement(inmanta.util.parse_requirement(requirement=str(requirement)), dist_info.key)
             for dist_info in pkg_resources.working_set
             for requirement in dist_info.requires()
         )
@@ -1253,7 +1255,7 @@ class ActiveEnv(PythonEnvironment):
         working_set: abc.Iterable[importlib.metadata.Distribution] = importlib.metadata.distributions()
         # add all requirements of all in scope packages installed in this environment
         all_constraints: set[util.CanonicalRequirement] = set(constraints if constraints is not None else []).union(
-            util.parse_requirement(requirement=requirement)
+            inmanta.util.parse_requirement(requirement=requirement)
             for dist_info in working_set
             if in_scope.fullmatch(dist_info.name)
             for requirement in dist_info.requires or []

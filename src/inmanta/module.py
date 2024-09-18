@@ -54,6 +54,7 @@ from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationE
 
 import inmanta.data.model
 import packaging.requirements
+import packaging.utils
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins, util
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
@@ -65,7 +66,7 @@ from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.stable_api import stable_api
-from inmanta.util import get_compiler_version, parse_requirement, parse_requirements
+from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
@@ -110,7 +111,7 @@ class InmantaModuleRequirement:
         # Requirement converts all "_" to "-". Inmanta modules use "_"
         warnings.warn(InmantaWarning("The `project_name` property has been deprecated in favor of `name`"))
 
-        return self._requirement.name.replace("-", "_")
+        return self.name
 
     @property
     def name(self) -> str:
@@ -148,7 +149,7 @@ class InmantaModuleRequirement:
             )
         if "-" in spec:
             raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
-        return cls(parse_requirement(requirement=spec))
+        return cls(inmanta.util.parse_requirement(requirement=spec))
 
     def get_python_package_requirement(self) -> util.CanonicalRequirement:
         """
@@ -157,7 +158,7 @@ class InmantaModuleRequirement:
         module_name = self.name
         pkg_name = ModuleV2Source.get_package_name_for(module_name)
         pkg_req_str = str(self).replace(module_name, pkg_name, 1)  # Replace max 1 occurrence
-        return parse_requirement(requirement=pkg_req_str)
+        return inmanta.util.parse_requirement(requirement=pkg_req_str)
 
 
 class CompilerExceptionWithExtendedTrace(CompilerException):
@@ -727,7 +728,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         # These could be constraints (-c) as well, but that requires additional sanitation
         # Because for pip not every valid -r is a valid -c
         current_requires = project.get_strict_python_requirements_as_list()
-        requirements += parse_requirements(current_requires)
+        requirements += inmanta.util.parse_requirements(current_requires)
 
         if preinstalled is not None:
             # log warning if preinstalled version does not match constraints
@@ -1175,7 +1176,8 @@ class RequirementsTxtFile:
         Returns True iff this requirements.txt file contains the given package name. The given `pkg_name` is matched
         case insensitive against the requirements in this RequirementsTxtFile.
         """
-        return any(r.name == pkg_name.lower() for r in self._requirements)
+        canonicalized: str = packaging.utils.canonicalize_name(pkg_name)
+        return any(r.name == canonicalized for r in self._requirements)
 
     def set_requirement_and_write(self, requirement: util.CanonicalRequirement) -> None:
         """
@@ -2126,7 +2128,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.verify_module_version_compatibility()
 
         # do python install
-        pyreq: list[util.CanonicalRequirement] = parse_requirements(self.collect_python_requirements())
+        pyreq: list[util.CanonicalRequirement] = inmanta.util.parse_requirements(self.collect_python_requirements())
 
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
@@ -2544,7 +2546,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
         if self.strict_deps_check:
-            constraints: list[util.CanonicalRequirement] = parse_requirements(self.collect_python_requirements())
+            constraints: list[util.CanonicalRequirement] = inmanta.util.parse_requirements(self.collect_python_requirements())
             env.process_env.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
             if not env.process_env.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
@@ -2675,7 +2677,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # filter on import stmt
         reqs = []
         for spec in self._metadata.requires:
-            req = [parse_requirement(requirement=spec)]
+            req = [inmanta.util.parse_requirement(requirement=spec)]
             if len(req) > 1:
                 print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
@@ -2812,7 +2814,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         reqs = []
         for spec in self.get_module_requirements():
-            req = [parse_requirement(requirement=spec)]
+            req = [inmanta.util.parse_requirement(requirement=spec)]
             if len(req) > 1:
                 print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
@@ -3428,7 +3430,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
             new_install_requires = [
                 r
                 for r in config_parser.get("options", "install_requires").split("\n")
-                if r and parse_requirement(requirement=r).name != python_pkg_requirement.name
+                if r and inmanta.util.parse_requirement(requirement=r).name != python_pkg_requirement.name
             ]
             new_install_requires.append(str(python_pkg_requirement))
         else:

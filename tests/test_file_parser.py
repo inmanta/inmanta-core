@@ -21,9 +21,8 @@ import pathlib
 
 import pytest
 
-from inmanta import util
+import inmanta.util
 from inmanta.file_parser import RequirementsTxtParser
-from inmanta.util import parse_requirements
 
 
 def test_requirements_txt_parser(tmpdir) -> None:
@@ -44,12 +43,12 @@ dep
         fd.write(content)
 
     expected_requirements = ["test==1.2.3", "other-dep~=2.0.0", "third-dep<5.0.0", "splitteddep", "Capital"]
-    requirements: list[util.CanonicalRequirement] = RequirementsTxtParser().parse(requirements_txt_file)
-    assert requirements == parse_requirements(expected_requirements)
+    requirements: list[inmanta.util.CanonicalRequirement] = RequirementsTxtParser().parse(requirements_txt_file)
+    assert requirements == inmanta.util.parse_requirements(expected_requirements)
     requirements_as_str = RequirementsTxtParser.parse_requirements_as_strs(requirements_txt_file)
     assert requirements_as_str == expected_requirements
 
-    parsed_canonical_requirements_from_file = util.parse_requirements_from_file(pathlib.Path(requirements_txt_file))
+    parsed_canonical_requirements_from_file = inmanta.util.parse_requirements_from_file(pathlib.Path(requirements_txt_file))
     assert parsed_canonical_requirements_from_file == requirements
 
     problematic_requirements = [
@@ -63,11 +62,11 @@ dep
         "Capital",
     ]
 
-    parsed_canonical_requirements = util.parse_requirements(expected_requirements)
+    parsed_canonical_requirements = inmanta.util.parse_requirements(expected_requirements)
     assert parsed_canonical_requirements == requirements
 
     with pytest.raises(ValueError):
-        util.parse_requirements(problematic_requirements)
+        inmanta.util.parse_requirements(problematic_requirements)
 
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="test")
     expected_content = """
@@ -135,9 +134,9 @@ def test_canonical_requirement(iteration) -> None:
     name, should_fail = iteration
     if should_fail:
         with pytest.raises(ValueError):
-            util.parse_requirement(requirement=name)
+            inmanta.util.parse_requirement(requirement=name)
     else:
-        util.parse_requirement(requirement=name)
+        inmanta.util.parse_requirement(requirement=name)
 
 
 @pytest.mark.parametrize(
@@ -159,5 +158,5 @@ def test_drop_comment_part(iteration) -> None:
     Ensure that empty name requirements are not allowed in `Requirement`
     """
     value, expected_value = iteration
-    current_value = util.remove_comment_part(value)
+    current_value = inmanta.util.remove_comment_part_from_specifier(value)
     assert current_value == expected_value

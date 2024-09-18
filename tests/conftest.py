@@ -133,7 +133,6 @@ from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
-from inmanta.util import parse_requirement
 from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
@@ -1922,10 +1921,10 @@ def index_with_pkgs_containing_optional_deps() -> str:
             path=os.path.join(tmpdirname, "pkg"),
             publish_index=pip_index,
             optional_dependencies={
-                "optional-a": [parse_requirement(requirement="dep-a")],
+                "optional-a": [inmanta.util.parse_requirement(requirement="dep-a")],
                 "optional-b": [
-                    parse_requirement(requirement="dep-b"),
-                    parse_requirement(requirement="dep-c"),
+                    inmanta.util.parse_requirement(requirement="dep-b"),
+                    inmanta.util.parse_requirement(requirement="dep-c"),
                 ],
             },
         )

@@ -28,6 +28,7 @@ import itertools
 import logging
 import os
 import pathlib
+import re
 import socket
 import threading
 import time
@@ -37,7 +38,7 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
-from collections.abc import Coroutine, Iterator
+from collections.abc import Coroutine, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
@@ -47,7 +48,6 @@ from typing import BinaryIO, Callable, Generic, Optional, Sequence, TypeVar, Uni
 import asyncpg
 import click
 import importlib_metadata
-from click import Group
 from tornado import gen
 
 import packaging
@@ -65,6 +65,8 @@ HASH_ROUNDS = 100000
 
 T = TypeVar("T")
 S = TypeVar("S")
+
+REQUIREMENT_SPECIFIER = re.compile(r"^\s*#*(\S+).*")
 
 
 def get_compiler_version() -> str:
@@ -873,43 +875,48 @@ class ExhaustedPoolWatcher:
         self._exhausted_pool_events_count = 0
 
 
-def remove_comment_part(to_clean: str) -> str:
+def remove_comment_part_from_specifier(to_clean: str) -> str:
     """
-    Remove the comment part of a given string
+    Remove the comment part of a requirement specifier
 
-    :param to_clean: The string to clean
-    :return: A cleaned string
+    :param to_clean: The requirement specifier to clean
+    :return: A cleaned requirement specifier
     """
     # Refer to PEP 508. A requirement could contain a hashtag
-    to_clean = to_clean.strip()
-    drop_comment, _, _ = to_clean.partition(" #")
-    # We make sure whitespaces are not counted in the length of this string, e.g. "        #"
-    drop_comment = drop_comment.strip()
-    return drop_comment
+    groups = REQUIREMENT_SPECIFIER.search(to_clean)
+    if not groups:
+        return ""
+
+    return groups.group(1)
 
 
+"""
+A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized, which
+allows us to compare requirements without dealing afterwards with the format of these requirements.
+"""
 CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
 
 
 def parse_requirement(requirement: str) -> CanonicalRequirement:
     """
-    To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
-    could arise when checking if packages are installed in a particular Venv.
+    Parse the given requirement string into a requirement object with a canonicalized name, meaning that we are sure that
+    every CanonicalRequirement will follow the same convention regarding the name. This will allow us compare requirements.
     This function supposes to receive an actual requirement. Commented strings will not be handled and result in a ValueError
 
     :param requirement: The requirement's name
     :return: A new requirement instance
     :raise: ValueError when commented or empty strings are provided
     """
-    # Packaging Requirement is not able to parse requirements with comment. Therefore, we need to remove the `comment` part
-    drop_comment = remove_comment_part(to_clean=requirement)
+    # packaging.Requirement is not able to parse requirements with comment (if there is one).
+    # Therefore, we need to make sure that the provided requirement doesn't contain any `comment` part
+    drop_comment = remove_comment_part_from_specifier(to_clean=requirement)
 
     if drop_comment.startswith("#") or len(drop_comment) == 0:
         raise ValueError(f"The requirement is invalid: Cannot be a comment or empty -> `{drop_comment}`!")
 
     # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
     # already installed
-    # This instance is considered as doomed because the requirement name that this instance is using is not "canonicalized"
+    # /!\ The following line could cause issue because we are not supposed to modify fields of an existing instance
     requirement_instance = packaging.requirements.Requirement(requirement_string=drop_comment)
     requirement_instance.name = packaging.utils.canonicalize_name(requirement_instance.name)
     canonical_requirement_instance = CanonicalRequirement(requirement_instance)
@@ -918,7 +925,10 @@ def parse_requirement(requirement: str) -> CanonicalRequirement:
 
 def parse_requirements(requirements: Sequence[str]) -> list[CanonicalRequirement]:
     """
-    This function supposes to receive actual requirements. Commented strings will not be handled and result in a ValueError
+    Parse the given requirements (sequence of strings) into requirement objects with a canonicalized name, meaning that we
+    are sure that every CanonicalRequirement will follow the same convention regarding the name. This will allow us compare
+    requirements. This function supposes to receive actual requirements. Commented strings will not be handled and result in
+    a ValueError
 
     :param requirements: The names of the different requirements
     :return: list[CanonicalRequirement]
@@ -928,11 +938,12 @@ def parse_requirements(requirements: Sequence[str]) -> list[CanonicalRequirement
 
 def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequirement]:
     """
-    To be able to compare requirements, we need to make sure that every requirement's name is canonicalized otherwise issues
-    could arise when checking if packages are installed in a particular Venv.
+    Parse the given requirements (line by line) from a file into requirement objects with a canonicalized name, meaning that we
+    are sure that every CanonicalRequirement will follow the same convention regarding the name. This will allow us compare
+    requirements.
 
     :param file_path: The path to the read the requirements from
-    :return: Sequence[Requirement]
+    :return: list[CanonicalRequirement]
     """
     if not file_path.exists():
         raise RuntimeError(f"The provided path does not exist: `{file_path}`!")
@@ -950,7 +961,7 @@ def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequi
 
 
 # Retaken from the `click-plugins` repo which is now unmaintained
-def with_plugins(plugins: Iterator[importlib_metadata.EntryPoint]) -> Callable[[Group], Group]:
+def click_group_with_plugins(plugins: Iterable[importlib_metadata.EntryPoint]) -> Callable[[click.Group], click.Group]:
     """
     A decorator to register external CLI commands to an instance of `click.Group()`.
 
@@ -959,10 +970,7 @@ def with_plugins(plugins: Iterator[importlib_metadata.EntryPoint]) -> Callable[[
     """
 
     def decorator(group: click.Group) -> click.Group:
-        if not isinstance(group, click.Group):
-            raise TypeError("Plugins can only be attached to an instance of click.Group()")
-
-        for entry_point in plugins or ():
+        for entry_point in plugins:
             try:
                 group.add_command(entry_point.load())
             except Exception as e:

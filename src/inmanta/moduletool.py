@@ -76,7 +76,6 @@ from inmanta.module import (
     gitprovider,
 )
 from inmanta.stable_api import stable_api
-from inmanta.util import parse_requirements
 from packaging.version import Version
 
 LOGGER = logging.getLogger(__name__)
@@ -485,7 +484,7 @@ compatible with the dependencies specified by the updated modules.
                 # Because for pip not every valid -r is a valid -c
                 current_requires = my_project.get_strict_python_requirements_as_list()
                 env.process_env.install_for_config(
-                    v2_python_specs + parse_requirements(current_requires),
+                    v2_python_specs + inmanta.util.parse_requirements(current_requires),
                     my_project.metadata.pip,
                     upgrade=True,
                 )
