@@ -28,7 +28,6 @@ import itertools
 import logging
 import os
 import pathlib
-import re
 import socket
 import threading
 import time
@@ -65,8 +64,6 @@ HASH_ROUNDS = 100000
 
 T = TypeVar("T")
 S = TypeVar("S")
-
-REQUIREMENT_SPECIFIER = re.compile(r"^\s*#*(\S+).*")
 
 
 def get_compiler_version() -> str:
