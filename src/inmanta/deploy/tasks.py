@@ -26,8 +26,14 @@ from typing import Optional
 
 from inmanta import const, data
 from inmanta.agent import executor
-from inmanta.data.model import ResourceIdStr
+from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import scheduler, state
+
+LOGGER = logging.getLogger(__name__)
+
+
+def logger_for_agent(agent: str) -> logging.Logger:
+    return logging.getLogger("agent").getChild(agent)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -46,6 +52,32 @@ class Task(abc.ABC):
     def delete_with_resource(self) -> bool:
         return True
 
+    async def get_executor(
+        self, scheduler: "scheduler.ResourceScheduler", agent: str, entity_type: ResourceType, version: int
+    ) -> executor.Executor:
+        """Helper method to produce the executor"""
+        code, invalid_resources = await scheduler._code_manager.get_code(
+            environment=scheduler._environment,
+            version=version,
+            resource_types=scheduler._state.get_types_for_agent(agent),
+        )
+
+        # Bail out if this failed
+        if entity_type in invalid_resources:
+            raise invalid_resources[entity_type]
+
+        # Get executor
+        my_executor: executor.Executor = await scheduler._executor_manager.get_executor(
+            agent_name=agent, agent_uri="NO_URI", code=code
+        )
+        failed_resources = my_executor.failed_resources
+
+        # Bail out if this failed
+        if entity_type in failed_resources:
+            raise failed_resources[entity_type]
+
+        return my_executor
+
 
 class PoisonPill(Task):
     """
@@ -59,7 +91,7 @@ class PoisonPill(Task):
         pass
 
 
-class WithHashMatchTask(Task):
+class OnLatestState(Task):
 
     async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
         resource_details: "state.ResourceDetails"
@@ -82,7 +114,7 @@ class WithHashMatchTask(Task):
         pass
 
 
-class Deploy(WithHashMatchTask):
+class Deploy(OnLatestState):
     async def execute_on_resource(
         self, scheduler: "scheduler.ResourceScheduler", agent: str, resource_details: "state.ResourceDetails"
     ) -> None:
@@ -139,26 +171,12 @@ class Deploy(WithHashMatchTask):
             )
 
         # Find code
-        code, invalid_resources = await scheduler._code_manager.get_code(
-            environment=scheduler._environment,
-            version=scheduler._state.version,
-            resource_types=scheduler._state.get_types_for_agent(agent),
-        )
+        version = scheduler._state.version
 
-        # Bail out if this failed
-        if resource_details.id.entity_type in invalid_resources:
-            await report_deploy_failure(invalid_resources[resource_details.id.entity_type])
-            return const.ResourceState.unavailable
-
-        # Get executor
-        my_executor: executor.Executor = await scheduler._executor_manager.get_executor(
-            agent_name=agent, agent_uri="NO_URI", code=code
-        )
-        failed_resources = my_executor.failed_resources
-
-        # Bail out if this failed
-        if resource_details.id.entity_type in failed_resources:
-            await report_deploy_failure(failed_resources[resource_details.id.entity_type])
+        try:
+            my_executor: executor.Executor = await self.get_executor(scheduler, agent, resource_details.id.entity_type, version)
+        except Exception as e:
+            await report_deploy_failure(e)
             return const.ResourceState.unavailable
 
         # DEPLOY!!!
@@ -170,10 +188,44 @@ class Deploy(WithHashMatchTask):
 @dataclass(frozen=True, kw_only=True)
 class DryRun(Task):
     version: int
+    resource_details: state.ResourceDetails
+    dry_run_id: uuid.UUID
 
     def delete_with_resource(self) -> bool:
         return False
 
+    async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
+        try:
+            my_executor: executor.Executor = await self.get_executor(
+                scheduler, agent, self.resource_details.id.entity_type, self.version
+            )
+            await my_executor.dry_run([self.resource_details], self.dry_run_id)
+        except Exception:
+            logger_for_agent(agent).error(
+                "Skipping dryrun for resource %s because it is in undeployable state %s",
+                self.resource_details.rvid,
+                exc_info=True,
+            )
+            await scheduler._client.dryrun_update(
+                tid=scheduler._environment,
+                id=self.dry_run_id,
+                resource=self.resource_details.rvid,
+                changes={"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}},
+            )
 
-class RefreshFact(WithHashMatchTask):
-    pass
+
+class RefreshFact(OnLatestState):
+
+    async def execute_on_resource(
+        self, scheduler: "scheduler.ResourceScheduler", agent: str, resource_details: "state.ResourceDetails"
+    ) -> None:
+        try:
+            executor = await self.get_executor(scheduler, agent, resource_details.id.entity_type, scheduler._state.version)
+        except Exception:
+            logger_for_agent(agent).warning(
+                "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded",
+                resource_details.rvid,
+            )
+            return
+
+        await executor.get_facts(resource_details)

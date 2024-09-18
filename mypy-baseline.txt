@@ -976,11 +976,8 @@ src/inmanta/compiler/help/explainer.py:0: error: Item "None" of "RelationAttribu
 src/inmanta/agent/resourcepool.py:0: error: Missing type parameters for generic type "PoolMember"  [type-arg]
 src/inmanta/agent/resourcepool.py:0: error: Argument 1 to "append" of "list" has incompatible type "Callable[[TPoolMember], Coroutine[Any, Any, bool]]"; expected "Callable[[PoolMember[TPoolID]], Coroutine[Any, Any, Any]]"  [arg-type]
 src/inmanta/agent/resourcepool.py:0: error: Missing type parameters for generic type "PoolMember"  [type-arg]
+src/inmanta/deploy/scheduler.py:0: error: Argument 1 to "parse_id" of "Id" has incompatible type "object"; expected "ResourceVersionIdStr | ResourceIdStr"  [arg-type]
 src/inmanta/deploy/scheduler.py:0: error: Argument "attribute_hash" to "ResourceDetails" has incompatible type "str | None"; expected "str"  [arg-type]
-src/inmanta/deploy/scheduler.py:0: error: No overload variant of "list" matches argument type "object"  [call-overload]
-src/inmanta/deploy/scheduler.py:0: note: Possible overload variants:
-src/inmanta/deploy/scheduler.py:0: note: def [_T] __init__(self) -> list[_T]
-src/inmanta/deploy/scheduler.py:0: note: def [_T] __init__(self, Iterable[_T], /) -> list[_T]
 src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/agent/forking_executor.py:0: note: This violates the Liskov substitution principle
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
