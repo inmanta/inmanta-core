@@ -19,10 +19,10 @@
 import os
 import pathlib
 
-import packaging.requirements
 import pytest
 
 import inmanta.util
+import packaging.requirements
 from inmanta.file_parser import RequirementsTxtParser
 
 
@@ -65,7 +65,7 @@ dep
 
     with pytest.raises(Exception) as e:
         inmanta.util.parse_requirements(problematic_requirements)
-    assert 'Expected end or semicolon (after version specifier)\n    third-dep<5.0.0 # another comment\n' in str(e.value)
+    assert "Expected end or semicolon (after version specifier)\n    third-dep<5.0.0 # another comment\n" in str(e.value)
 
     new_content = RequirementsTxtParser.get_content_with_dep_removed(requirements_txt_file, remove_dep_on_pkg="test")
     expected_content = """

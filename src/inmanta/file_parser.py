@@ -94,14 +94,22 @@ class RequirementsTxtParser:
                 if line_continuation_buffer:
                     line_continuation_buffer += line
                     if not line.endswith("\\"):
-                        if inmanta.util.parse_requirement(requirement=inmanta.util.remove_comment_part_from_specifier(line_continuation_buffer)).name != removed_dependency:
+                        if (
+                            inmanta.util.parse_requirement(
+                                requirement=inmanta.util.remove_comment_part_from_specifier(line_continuation_buffer)
+                            ).name
+                            != removed_dependency
+                        ):
                             result += line_continuation_buffer
                         line_continuation_buffer = ""
                 elif not line.strip() or line.strip().startswith("#"):
                     result += line
                 elif line.endswith("\\"):
                     line_continuation_buffer = line
-                elif inmanta.util.parse_requirement(requirement=inmanta.util.remove_comment_part_from_specifier(line)).name != removed_dependency:
+                elif (
+                    inmanta.util.parse_requirement(requirement=inmanta.util.remove_comment_part_from_specifier(line)).name
+                    != removed_dependency
+                ):
                     result += line
                 else:
                     # Dependency matches `remove_dep_on_pkg` => Remove line from result
