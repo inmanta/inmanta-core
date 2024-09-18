@@ -875,21 +875,16 @@ class ExhaustedPoolWatcher:
 
 def remove_comment_part(to_clean: str) -> str:
     """
-    Remove the comment part of a given string and ensure that the length of the string is greater than 0
+    Remove the comment part of a given string
 
     :param to_clean: The string to clean
     :return: A cleaned string
-    :raise: When the provided string to clean doesn't contain a requirement name
     """
     # Refer to PEP 508. A requirement could contain a hashtag
     to_clean = to_clean.strip()
-    if to_clean.startswith("#"):
-        raise ValueError("The name of the requirement cannot be a comment!")
     drop_comment, _, _ = to_clean.partition(" #")
     # We make sure whitespaces are not counted in the length of this string, e.g. "        #"
     drop_comment = drop_comment.strip()
-    if len(drop_comment) == 0:
-        raise ValueError("The name of the requirement cannot be an empty string!")
     return drop_comment
 
 
@@ -908,6 +903,10 @@ def parse_requirement(requirement: str) -> CanonicalRequirement:
     """
     # Packaging Requirement is not able to parse requirements with comment. Therefore, we need to remove the `comment` part
     drop_comment = remove_comment_part(to_clean=requirement)
+
+    if drop_comment.startswith("#") or len(drop_comment) == 0:
+        raise ValueError(f"The requirement is invalid: Cannot be a comment or empty -> `{drop_comment}`!")
+
     # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
     # already installed
     # This instance is considered as doomed because the requirement name that this instance is using is not "canonicalized"

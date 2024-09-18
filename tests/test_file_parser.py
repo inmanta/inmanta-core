@@ -141,25 +141,21 @@ def test_canonical_requirement(iteration) -> None:
 @pytest.mark.parametrize(
     "iteration",
     [
-        ("", "", True),
-        ("#", "#", True),
-        ("   # ", "   # ", True),
-        ("#this is a comment", "#this is a comment", True),
-        ("test==1.2.3", "test==1.2.3", False),
-        ("other-dep~=2.0.0", "other-dep~=2.0.0", False),
-        ("test==1.2.3  # a command", "test==1.2.3", False),
-        ("other-dep #~=2.0.0", "other-dep", False),
-        ("other-dep#~=2.0.0", "other-dep#~=2.0.0", False),
+        ("", ""),
+        ("#", "#"),
+        ("   # ", "#"),
+        ("#this is a comment", "#this is a comment"),
+        ("test==1.2.3", "test==1.2.3"),
+        ("other-dep~=2.0.0", "other-dep~=2.0.0"),
+        ("test==1.2.3  # a command", "test==1.2.3"),
+        ("other-dep #~=2.0.0", "other-dep"),
+        ("other-dep#~=2.0.0", "other-dep#~=2.0.0"),
     ],
 )
 def test_drop_comment_part(iteration) -> None:
     """
     Ensure that empty name requirements are not allowed in `Requirement`
     """
-    value, expected_value, should_fail = iteration
-    if should_fail:
-        with pytest.raises(ValueError):
-            util.remove_comment_part(value)
-    else:
-        current_value = util.remove_comment_part(value)
-        assert current_value == expected_value
+    value, expected_value = iteration
+    current_value = util.remove_comment_part(value)
+    assert current_value == expected_value
