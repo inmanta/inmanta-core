@@ -83,6 +83,40 @@ async def test_project_api_v1(client):
     assert response.code == 404
 
 
+async def test_delete_environment_project(client):
+    """Test modifying the project of an environment"""
+
+    # Create two projects and two environments
+    result = await client.create_project("project-test")
+    assert result.code == 200
+    assert "project" in result.result
+    assert "id" in result.result["project"]
+    project_id_a = result.result["project"]["id"]
+
+    result = await client.create_environment(project_id=project_id_a, name="env")
+    assert result.code == 200
+    env1_id = result.result["environment"]["id"]
+
+    # Delete project a
+    result = await client.delete_project(project_id_a)
+    assert result.code == 409
+    assert (
+        result.result["message"] == "Request conflicts with the current state of the resource: "
+        f"Cannot remove the project `{project_id_a}` because it still contains some environments: "
+        f"('env', '{env1_id}')"
+    )
+
+    result = await client.delete_environment(id=env1_id)
+    assert result.code == 200
+
+    result = await client.delete_project(project_id_a)
+    assert result.code == 200
+
+    result = await client.list_projects()
+    assert result.code == 200
+    assert result.result["projects"] == []
+
+
 async def test_project_api_v2_project_list_ordering(client_v2):
     """
     Creates a few projects with several environments each.
