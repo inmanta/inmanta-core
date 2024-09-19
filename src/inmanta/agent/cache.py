@@ -232,8 +232,8 @@ class AgentCache:
         resource: Optional[Resource] = None,
         timeout: int = 5000,
         call_on_delete: Optional[Callable[[Any], None]] = None,
-        evict_after_last_access: bool=True,
-        evict_after_creation: bool=False,
+        evict_after_last_access: bool = True,
+        evict_after_creation: bool = False,
     ) -> None:
         """
         add a value to the cache with the given key
@@ -257,7 +257,7 @@ class AgentCache:
                 value,
                 call_on_delete,
                 evict_after_last_access=evict_after_last_access,
-                evict_after_creation=evict_after_creation
+                evict_after_creation=evict_after_creation,
             )
         )
 
@@ -277,8 +277,8 @@ class AgentCache:
         self,
         key: str,
         function: Callable[..., Any],
-        evict_after_last_access: bool=True,
-        evict_after_creation: bool=False,
+        evict_after_last_access: bool = True,
+        evict_after_creation: bool = False,
         timeout: int = 5000,
         ignore: set[str] = set(),
         cache_none: bool = True,
@@ -323,7 +323,13 @@ class AgentCache:
                     value = function(**kwargs)
                     if cache_none or value is not None:
                         self.cache_value(
-                            key, value, timeout=timeout, call_on_delete=call_on_delete, evict_after_last_access=evict_after_last_access, evict_after_creation=evict_after_creation,**args
+                            key,
+                            value,
+                            timeout=timeout,
+                            call_on_delete=call_on_delete,
+                            evict_after_last_access=evict_after_last_access,
+                            evict_after_creation=evict_after_creation,
+                            **args,
                         )
             with self.addLock:
                 del self.addLocks[key]

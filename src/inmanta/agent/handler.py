@@ -111,8 +111,8 @@ def cache(
     # deprecated parameter kept for backwards compatibility: if set, overrides cache_none
     cacheNone: Optional[bool] = None,  # noqa: N803
     call_on_delete: Optional[Callable[[Any], None]] = None,
-    evict_after_creation: Optional[bool]=None,
-    evict_after_last_access: Optional[bool]=None,
+    evict_after_creation: Optional[bool] = None,
+    evict_after_last_access: Optional[bool] = None,
 ) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
     """
     decorator for methods in resource handlers to provide caching
@@ -133,6 +133,17 @@ def cache(
     :param evict_after_creation: When True, this cache item will be evicted from the cache <timeout> seconds after
         entering the cache.
     :param evict_after_last_access: When True, this cache item will linger in the cache for 60s after its last use.
+
+                                                    evict_after_creation
+                                            True            False           None
+
+                                True         TT              TF              TF
+
+    evict_after_last_access     False        FT              W               W
+
+                                None         FT              TF              TF
+
+
     :param ignore: a list of argument names that should not be part of the cache key
     :param cache_none: allow the caching of None values
     :param call_on_delete: A callback function that is called when the value is removed from the cache,
@@ -150,17 +161,49 @@ def cache(
             def bound(**kwds: object) -> object:
                 return f(self, **kwds)
 
-            # if for_version is not None:
-            #     if for_version:
-            #         evict_after_last_access=True
-            #     else:
-            #         evict_after_creation=True
+            _evict_after_last_access: bool
+            _evict_after_creation: bool
+
+            # Legacy parameter is passed, it overrides evict_after_last_access and evict_after_creation
+            if for_version is not None:
+                _evict_after_last_access = for_version
+                _evict_after_creation = not for_version
+            else:
+                # "New" parameters are used: validate that both are not set to False
+                # and set sensible default values
+
+                #                                                evict_after_creation
+                #                                        None         True            False
+                #                             None        TF           FT              TF
+                #
+                # evict_after_last_access     True        TF           TT              TF
+                #
+                #                             False       W            FT              W
+                #
+
+                if evict_after_last_access is None:
+                    if evict_after_creation is None:
+                        _evict_after_last_access = True
+                        _evict_after_creation = False
+                    else:
+                        _evict_after_last_access = not evict_after_creation
+                        _evict_after_creation = evict_after_creation
+                else:
+                    if not evict_after_last_access:
+                        if not evict_after_creation:
+                            raise ValueError(
+                                f"Invalid parameters for cache decorator for function {f.__name__}. "
+                                "At least one of evict_after_last_access and evict_after_creation "
+                                "should be True."
+                            )
+                    _evict_after_last_access = bool(evict_after_last_access)
+                    _evict_after_creation = bool(evict_after_creation)
 
             return self.cache.get_or_else(
                 key=f.__name__,
                 function=bound,
-                evict_after_last_access=evict_after_last_access,
-                evict_after_creation=evict_after_creation,
+                evict_after_last_access=_evict_after_last_access,
+                evict_after_creation=_evict_after_creation,
                 timeout=timeout,
                 ignore=myignore,
                 cache_none=cacheNone if cacheNone is not None else cache_none,
