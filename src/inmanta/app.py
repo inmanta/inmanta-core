@@ -64,6 +64,7 @@ from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env
 from inmanta.logging import InmantaLoggerConfig, LoggerMode, LoggerModeManager, _is_on_tty
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.services.databaseservice import server_db_connect
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
@@ -158,11 +159,16 @@ def start_scheduler(options: argparse.Namespace) -> None:
         AsyncHTTPClient.configure(None, max_clients=max_clients)
 
     tracing.configure_logfire("agent_rs")
+
     util.ensure_event_loop()
     a = agent_new.Agent()
 
+    async def start() -> None:
+        await server_db_connect()
+        await a.start()
+
     setup_signal_handlers(a.stop)
-    IOLoop.current().add_callback(a.start)
+    IOLoop.current().add_callback(start)
     IOLoop.current().start()
     LOGGER.info("Agent with Resource scheduler Shutdown complete")
 

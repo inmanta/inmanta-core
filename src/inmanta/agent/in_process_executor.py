@@ -32,7 +32,7 @@ from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
 from inmanta.agent.executor import FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
-from inmanta.const import ParameterSource
+from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader
 from inmanta.resources import Id, Resource
@@ -257,11 +257,11 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-    ) -> None:
+    ) -> ResourceState:
         try:
             resource: Resource | None = await self.deserialize(resource_details, const.ResourceAction.deploy)
         except Exception:
-            return
+            return const.ResourceState.unavailable
         assert resource is not None
         ctx = handler.HandlerContext(resource, logger=self.logger)
         ctx.debug(
@@ -279,7 +279,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         except Exception:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception("Failed to report the start of the deployment to the server")
-            return
+            return const.ResourceState.failed
 
         async with self.activity_lock:
             with self._cache:
@@ -298,6 +298,11 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
         await self._report_resource_deploy_done(resource_details, ctx)
+        # context should not be none at this point
+        if ctx.status is None:
+            ctx.error("Status not set, should not happen")
+            return const.ResourceState.failed
+        return ctx.status
 
     async def dry_run(
         self,

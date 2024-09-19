@@ -592,13 +592,6 @@ class ModuleTool(ModuleLikeTool):
             parents=parent_parsers,
         )
 
-        do = subparser.add_parser(
-            "do",
-            help="Execute a command on all loaded modules",
-            parents=parent_parsers,
-        )
-        do.add_argument("command", metavar="command", help="the command to execute")
-
         install: ArgumentParser = subparser.add_parser(
             "install",
             parents=parent_parsers,
@@ -953,16 +946,6 @@ version: 0.0.1dev0"""
         subprocess.check_output(["git", "add", ".gitignore", "module.yml", "model/_init.cf"], cwd=mod_path)
 
         LOGGER.info("Module successfully created.")
-
-    def do(self, command: str, module: str) -> None:
-        for mod in self.get_modules(module):
-            if not isinstance(mod, ModuleV1):
-                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.", mod.name)
-                continue
-            try:
-                mod.execute_command(command)
-            except Exception as e:
-                print(e)
 
     def list(self) -> None:
         """
