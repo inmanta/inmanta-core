@@ -1,0 +1,3 @@
+description: Fix bug on the migration script of the multi-version lsm documentation.
+change-type: patch
+destination-branches: [master, iso7]

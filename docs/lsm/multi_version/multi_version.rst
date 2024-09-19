@@ -108,7 +108,7 @@ where this set will be validated and eventually promoted.
 .. literalinclude:: multi_version_sources/service_entity_version_migration.py
     :linenos:
     :language: python
-    :lines: 1-94
+    :lines: 1-95
 
 Multi-version Inter-Service Relations
 =====================================
@@ -151,4 +151,4 @@ would fail, causing the compilation to fail.
 .. literalinclude:: multi_version_sources/isr_service_entity_version_migration.py
     :linenos:
     :language: python
-    :lines: 1-91
+    :lines: 1-92
