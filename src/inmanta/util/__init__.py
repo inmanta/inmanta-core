@@ -887,11 +887,11 @@ def remove_comment_part_from_specifier(to_clean: str) -> str:
     return drop_comment
 
 
+CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
 """
 A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized, which
-allows us to compare requirements without dealing afterwards with the format of these requirements.
+allows us to compare names without dealing afterwards with the format of these requirements.
 """
-CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
 
 
 def parse_requirement(requirement: str) -> CanonicalRequirement:
@@ -905,7 +905,8 @@ def parse_requirement(requirement: str) -> CanonicalRequirement:
     """
     # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
     # already installed
-    # /!\ The following line could cause issue because we are not supposed to modify fields of an existing instance
+    # The following line could cause issue because we are not supposed to modify fields of an existing instance
+    # The version of packaging is constrained to ensure this can not cause problems in production.
     requirement_instance = packaging.requirements.Requirement(requirement_string=requirement)
     requirement_instance.name = packaging.utils.canonicalize_name(requirement_instance.name)
     canonical_requirement_instance = CanonicalRequirement(requirement_instance)
