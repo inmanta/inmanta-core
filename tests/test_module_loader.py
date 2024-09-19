@@ -397,7 +397,7 @@ def test_load_import_based_v2_project(local_module_package_index: str, snippetco
     """
     module_name: str = "minimalv2module"
 
-    def load(requires: Optional[list[inmanta.inmanta.util.CanonicalRequirement]] = None) -> None:
+    def load(requires: Optional[list[inmanta.util.CanonicalRequirement]] = None) -> None:
         project: Project = snippetcompiler_clean.setup_for_snippet(
             f"import {module_name}",
             autostd=False,
