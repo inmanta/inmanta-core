@@ -45,6 +45,7 @@ def main(args):
                 f"Instance with id {instance['id']} is being skipped because it is on state {instance['state']}"
                 f"and not on state 'up' or 'failed'."
             )
+            continue
 
         description = "migrated instance"
 
