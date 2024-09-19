@@ -132,17 +132,7 @@ def cache(
 
     :param evict_after_creation: When True, this cache item will be evicted from the cache <timeout> seconds after
         entering the cache.
-    :param evict_after_last_access: When True, this cache item will linger in the cache for 60s after its last use.
-
-                                                    evict_after_creation
-                                            True            False           None
-
-                                True         TT              TF              TF
-
-    evict_after_last_access     False        FT              W               W
-
-                                None         FT              TF              TF
-
+    :param evict_after_last_access: When True, this cache item will stay in the cache for 60s after its last use.
 
     :param ignore: a list of argument names that should not be part of the cache key
     :param cache_none: allow the caching of None values
@@ -170,7 +160,9 @@ def cache(
                 _evict_after_creation = not for_version
             else:
                 # "New" parameters are used: validate that both are not set to False
-                # and set sensible default values
+                # and set sensible default values if need be. The following table
+                # shows the expected value for the pair (evict_after_last_access, evict_after_creation)
+                # depending on their respective input value. `W` means an exception should be raised
 
                 #                                                evict_after_creation
                 #                                        None         True            False

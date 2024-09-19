@@ -49,7 +49,7 @@ class CacheItem:
         :param value: The value being cached associated to the key.
         :param call_on_delete: Optional finalizer to call when the cache item is deleted. This is
             a callable expecting the cached value as an argument.
-        :param evict_after_last_access: When True, this cache item will linger in the cache for 60s after its last use.
+        :param evict_after_last_access: When True, this cache item will stay in the cache for 60s after its last use.
         :param evict_after_creation: When True, this cache item will be evicted from the cache <timeout> seconds after
             entering the cache.
         """
@@ -120,10 +120,6 @@ class AgentCache:
         """
         # The cache itself
         self.cache: dict[str, CacheItem] = {}
-
-        # Lingering items will remain in the cache for this
-        # many seconds after they were last used.
-        self.item_lingering_time: float = 60
 
         # Time-based eviction mechanism
         # Keep track of when is the next earliest cache item expiry time.
@@ -295,7 +291,6 @@ class AgentCache:
 
         :param timeout: Use in combination with evict_after_creation=True to set a "hard" expiry timeout (in seconds).
           The cached entry will be evicted from the cache after this period of time.
-
         :param evict_after_creation: the cached value is not tied to any model version. It is
               considered stale after <timeout> seconds have elapsed since it entered the cache.
         :param evict_after_last_access: the cached value is expected to be reused across multiple versions.
@@ -323,8 +318,8 @@ class AgentCache:
                     value = function(**kwargs)
                     if cache_none or value is not None:
                         self.cache_value(
-                            key,
-                            value,
+                            key=key,
+                            value=value,
                             timeout=timeout,
                             call_on_delete=call_on_delete,
                             evict_after_last_access=evict_after_last_access,

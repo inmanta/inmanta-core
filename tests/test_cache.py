@@ -529,7 +529,7 @@ async def test_cache_decorator_last_access_expiry(time_machine):
         test.check_n_cache_misses(0)
 
     # Check that the "initial_read" entry was properly cleaned up but all other
-    # entries lingered on.
+    # entries remained in the cache.
     time_machine.shift(datetime.timedelta(seconds=50))
 
     with agent_cache:
