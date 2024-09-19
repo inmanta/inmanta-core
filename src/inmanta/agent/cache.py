@@ -59,7 +59,7 @@ class CacheItem:
         self.evict_after_last_access = evict_after_last_access
 
         now = time.time()
-        self.expiry_time = sys.maxsize
+        self.expiry_time: float = sys.maxsize
 
         if evict_after_last_access:
             self.expiry_time = now + 60
