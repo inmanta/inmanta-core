@@ -382,7 +382,7 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[inmanta.util.CanonicalRequirement]] = None,
+        requirements: Optional[Sequence[packaging.requirements.Requirement]] = None,
         requirements_files: Optional[list[str]] = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
@@ -423,7 +423,7 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[inmanta.util.CanonicalRequirement]] = None,
+        requirements: Optional[Sequence[packaging.requirements.Requirement]] = None,
         requirements_files: Optional[list[str]] = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
@@ -463,7 +463,7 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[inmanta.util.CanonicalRequirement]] = None,
+        requirements: Optional[Sequence[packaging.requirements.Requirement]] = None,
         requirements_files: Optional[list[str]] = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
@@ -858,7 +858,7 @@ import sys
 
     async def async_install_for_config(
         self,
-        requirements: list[inmanta.util.CanonicalRequirement],
+        requirements: list[packaging.requirements.Requirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[list[str]] = None,
@@ -979,10 +979,13 @@ import sys
         """
         return [
             # Protect product packages
-            "inmanta",
-            "inmanta-service-orchestrator",
+            packaging.utils.canonicalize_name("inmanta"),
+            packaging.utils.canonicalize_name("inmanta-service-orchestrator"),
             # Protect all server extensions
-            *(f"inmanta-{ext_name}" for ext_name in InmantaBootloader.get_available_extensions().keys()),
+            *(
+                packaging.utils.canonicalize_name(f"inmanta-{ext_name}")
+                for ext_name in InmantaBootloader.get_available_extensions().keys()
+            ),
         ]
 
     @classmethod
