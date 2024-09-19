@@ -976,6 +976,7 @@ import sys
     def get_protected_inmanta_packages(cls) -> list[str]:
         """
         Returns the list of packages that should not be installed/updated by any operation on a Python environment.
+        This list of packages will be under the canonical form.
         """
         return [
             # Protect product packages
