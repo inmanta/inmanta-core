@@ -93,7 +93,7 @@ async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent_
     """
     cache = agent_cache
     value = "test too"
-    cache.cache_value("test", value, timeout=0.1, for_version=False)
+    cache.cache_value("test", value, timeout=0.1, evict_after_creation=True)
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
@@ -108,7 +108,7 @@ async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent_
 def test_timeout_manual_cleanup():
     cache = AgentCache()
     value = "test too"
-    cache.cache_value("test", value, timeout=0.1, for_version=False)
+    cache.cache_value("test", value, timeout=0.1, evict_after_creation=True)
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
@@ -216,13 +216,21 @@ async def test_multi_threaded(agent_cache: AgentCache):
 
     def target_1():
         cache.get_or_else(
-            "test", lambda: alpha.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete(), for_version=False
+            "test",
+            lambda: alpha.create(),
+            timeout=cache_entry_expiry,
+            call_on_delete=lambda x: x.delete(),
+            evict_after_creation=True,
         )
 
     t1 = Thread(target=target_1)
     t2 = Thread(
         target=lambda: cache.get_or_else(
-            "test", lambda: beta.create(), timeout=cache_entry_expiry, call_on_delete=lambda x: x.delete(), for_version=False
+            "test",
+            lambda: beta.create(),
+            timeout=cache_entry_expiry,
+            call_on_delete=lambda x: x.delete(),
+            evict_after_creation=True,
         )
     )
 
