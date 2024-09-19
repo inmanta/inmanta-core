@@ -59,7 +59,12 @@ class CacheItem:
         self.evict_after_last_access = evict_after_last_access
 
         now = time.time()
-        self.expiry_time = (now + 60) if evict_after_last_access else (now + timeout)
+        self.expiry_time = sys.maxsize
+
+        if evict_after_last_access:
+            self.expiry_time = now + 60
+        if evict_after_creation:
+            self.expiry_time = min(self.expiry_time, now + timeout)
 
         # Make sure finalizers are only called once
         self.finalizer_lock = Lock()
@@ -318,7 +323,7 @@ class AgentCache:
                     value = function(**kwargs)
                     if cache_none or value is not None:
                         self.cache_value(
-                            key, value, timeout=timeout, call_on_delete=call_on_delete, evict_after_last_access=evict_after_last_access, evict_after_creation=evict_after_creation**args
+                            key, value, timeout=timeout, call_on_delete=call_on_delete, evict_after_last_access=evict_after_last_access, evict_after_creation=evict_after_creation,**args
                         )
             with self.addLock:
                 del self.addLocks[key]

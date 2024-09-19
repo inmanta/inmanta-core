@@ -105,7 +105,8 @@ def cache(
     func: Optional[T_FUNC] = None,
     ignore: list[str] = [],
     timeout: int = 5000,
-    for_version: bool = True,
+    # deprecated parameter kept for backwards compatibility: if set, overrides evict_after_creation/evict_after_last_access
+    for_version: Optional[bool] = None,
     cache_none: bool = True,
     # deprecated parameter kept for backwards compatibility: if set, overrides cache_none
     cacheNone: Optional[bool] = None,  # noqa: N803
@@ -149,16 +150,22 @@ def cache(
             def bound(**kwds: object) -> object:
                 return f(self, **kwds)
 
+            # if for_version is not None:
+            #     if for_version:
+            #         evict_after_last_access=True
+            #     else:
+            #         evict_after_creation=True
+
             return self.cache.get_or_else(
-                f.__name__,
-                bound,
-                evict_after_creation,
-                evict_after_last_access,
-                timeout,
-                myignore,
-                cacheNone if cacheNone is not None else cache_none,
-                **kwds,
+                key=f.__name__,
+                function=bound,
+                evict_after_last_access=evict_after_last_access,
+                evict_after_creation=evict_after_creation,
+                timeout=timeout,
+                ignore=myignore,
+                cache_none=cacheNone if cacheNone is not None else cache_none,
                 call_on_delete=call_on_delete,
+                **kwds,
             )
 
         # Too much magic to type statically

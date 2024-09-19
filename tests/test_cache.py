@@ -415,72 +415,101 @@ async def test_cache_decorator_basics(time_machine):
         test.check_n_cache_misses(5)
 
 
-async def test_cache_decorator_expire_after_last_access(time_machine):
+async def test_cache_decorator_last_access_expiry(time_machine):
     """
     Test the behaviour of cache entries expiring after last access.
 
-    Cache entries are considered lingering as long as for_version=True (default).
-    The timeout argument is ignored for lingering entries.
-    Lingering entries are considered stale 60s after their last use.
+    Cache entries will expire 60s after their last access if:
+      - for_version=True (legacy parameter)
+      - evict_after_last_access=True
+
+    The timeout argument is ignored for these entries.
     Stale entries are cleaned up on the next call to `clean_stale_entries`.
 
+    Legacy behaviour tests:
     This test checks that this behaviour is consistent for the 4 combinations
-    of (timeout, for_version) via `linger_test_method_1` to `linger_test_method_4`.
+    of (timeout, for_version) via `test_method_1` to `test_method_4`.
 
-    `linger_test_method_5` is used to test that
-        - a lingering entry is properly cleaned up if it is not being used ("initial_read" entry).
-        - the expiry time of a lingering entry is properly reset to 60s when
-          it is read ("recurring_read" entry).
+    `test_method_5` is used to test that
+        - an entry is properly cleaned up if it is not being used ("initial_read" entry).
+        - the entry's expiry time is properly reset to 60s when
+          it is read.
+
+    New behaviour tests:
+        `test_method_1` and `test_method_3` already test the behaviour for the default
+        value for `evict_after_last_access`.
+
+        `test_method_22`, `test_method_44` and  `test_method_55` test the new behaviour
+        by explicitly providing the `evict_after_last_access` parameter.
 
     """
 
-    class LingeringTest(CacheMissCounter):
+    class ExpireAfterLastAccessTest(CacheMissCounter):
         @cache
-        def linger_test_method_1(self):
+        def test_method_1(self):
             self.increment_miss_counter()
             return "x1"
 
         @cache(for_version=True)
-        def linger_test_method_2(self):
+        def test_method_2(self):
             self.increment_miss_counter()
             return "x2"
 
         @cache(timeout=1)
-        def linger_test_method_3(self):
+        def test_method_3(self):
             self.increment_miss_counter()
             return "x3"
 
         @cache(timeout=1, for_version=True)
-        def linger_test_method_4(self):
+        def test_method_4(self):
             self.increment_miss_counter()
             return "x4"
 
         @cache
-        def linger_test_method_5(self, dummy_arg: str):
+        def test_method_5(self, dummy_arg: str):
+            self.increment_miss_counter()
+            return dummy_arg
+
+        @cache(evict_after_last_access=True)
+        def test_method_22(self):
+            self.increment_miss_counter()
+            return "x2"
+
+        @cache(timeout=1, evict_after_last_access=True)
+        def test_method_44(self):
+            self.increment_miss_counter()
+            return "x4"
+
+        @cache(evict_after_last_access=True)
+        def test_method_55(self, dummy_arg: str):
             self.increment_miss_counter()
             return dummy_arg
 
     agent_cache = AgentCache()
-    test = LingeringTest(agent_cache)
+    test = ExpireAfterLastAccessTest(agent_cache)
 
     time_machine.move_to(datetime.datetime.now().astimezone(), tick=False)
 
     with agent_cache:
-        assert "initial_read" == test.linger_test_method_5(dummy_arg="initial_read")  # +1 miss
-        test.check_n_cache_misses(1)
+        assert "initial_read" == test.test_method_5(dummy_arg="initial_read")  # +1 miss
+        assert "initial_read" == test.test_method_55(dummy_arg="initial_read")  # +1 miss
+        test.check_n_cache_misses(2)
 
     test.reset_miss_counter()
 
     with agent_cache:
         # Populate the cache
-        assert "x1" == test.linger_test_method_1()  # +1 miss
-        assert "x2" == test.linger_test_method_2()  # +1 miss
-        assert "x3" == test.linger_test_method_3()  # +1 miss
-        assert "x4" == test.linger_test_method_4()  # +1 miss
-        test.check_n_cache_misses(4)
+        assert "x1" == test.test_method_1()  # +1 miss
+        assert "x2" == test.test_method_2()  # +1 miss
+        assert "x2" == test.test_method_22()  # +1 miss
+        assert "x3" == test.test_method_3()  # +1 miss
+        assert "x4" == test.test_method_4()  # +1 miss
+        assert "x4" == test.test_method_44()  # +1 miss
+        test.check_n_cache_misses(6)
 
-        assert "recurring_read" == test.linger_test_method_5(dummy_arg="recurring_read")  # +1 miss
-        test.check_n_cache_misses(5)
+        assert "recurring_read" == test.test_method_5(dummy_arg="recurring_read")  # +1 miss
+        assert "recurring_read" == test.test_method_55(dummy_arg="recurring_read")  # +1 miss
+        test.check_n_cache_misses(8)
 
     test.reset_miss_counter()
 
@@ -490,11 +519,14 @@ async def test_cache_decorator_expire_after_last_access(time_machine):
     # The cache cleanup method is called upon entering the AgentCache context manager
     # All entries expiry times were refreshed after last access, check that we have 0 miss
     with agent_cache:
-        assert "x1" == test.linger_test_method_1()  # cache hit
-        assert "x2" == test.linger_test_method_2()  # cache hit
-        assert "x3" == test.linger_test_method_3()  # cache hit
-        assert "x4" == test.linger_test_method_4()  # cache hit
-        assert "recurring_read" == test.linger_test_method_5(dummy_arg="recurring_read")  # cache hit
+        assert "x1" == test.test_method_1()  # cache hit
+        assert "x2" == test.test_method_2()  # cache hit
+        assert "x2" == test.test_method_22()  # cache hit
+        assert "x3" == test.test_method_3()  # cache hit
+        assert "x4" == test.test_method_4()  # cache hit
+        assert "x4" == test.test_method_44()  # cache hit
+        assert "recurring_read" == test.test_method_5(dummy_arg="recurring_read")  # cache hit
+        assert "recurring_read" == test.test_method_55(dummy_arg="recurring_read")  # cache hit
         test.check_n_cache_misses(0)
 
     # Check that the "initial_read" entry was properly cleaned up but all other
@@ -502,15 +534,19 @@ async def test_cache_decorator_expire_after_last_access(time_machine):
     time_machine.shift(datetime.timedelta(seconds=50))
 
     with agent_cache:
-        assert "x1" == test.linger_test_method_1()  # cache hit
-        assert "x2" == test.linger_test_method_2()  # cache hit
-        assert "x3" == test.linger_test_method_3()  # cache hit
-        assert "x4" == test.linger_test_method_4()  # cache hit
-        assert "recurring_read" == test.linger_test_method_5(dummy_arg="recurring_read")  # cache hit
+        assert "x1" == test.test_method_1()  # cache hit
+        assert "x2" == test.test_method_2()  # cache hit
+        assert "x2" == test.test_method_22()  # cache hit
+        assert "x3" == test.test_method_3()  # cache hit
+        assert "x4" == test.test_method_4()  # cache hit
+        assert "x4" == test.test_method_44()  # cache hit
+        assert "recurring_read" == test.test_method_5(dummy_arg="recurring_read")  # cache hit
+        assert "recurring_read" == test.test_method_55(dummy_arg="recurring_read")  # cache hit
         test.check_n_cache_misses(0)
 
-        assert "initial_read" == test.linger_test_method_5(dummy_arg="initial_read")  # +1 miss
-        test.check_n_cache_misses(1)
+        assert "initial_read" == test.test_method_5(dummy_arg="initial_read")  # +1 miss
+        assert "initial_read" == test.test_method_55(dummy_arg="initial_read")  # +1 miss
+        test.check_n_cache_misses(2)
 
     test.reset_miss_counter()
 
@@ -519,16 +555,20 @@ async def test_cache_decorator_expire_after_last_access(time_machine):
     time_machine.shift(datetime.timedelta(seconds=61))
 
     with agent_cache:
-        assert "x1" == test.linger_test_method_1()  # +1 miss
-        assert "x2" == test.linger_test_method_2()  # +1 miss
-        assert "x3" == test.linger_test_method_3()  # +1 miss
-        assert "x4" == test.linger_test_method_4()  # +1 miss
-        assert "recurring_read" == test.linger_test_method_5(dummy_arg="recurring_read")  # +1 miss
-        assert "initial_read" == test.linger_test_method_5(dummy_arg="initial_read")  # +1 miss
-        test.check_n_cache_misses(6)
+        assert "x1" == test.test_method_1()  # +1 miss
+        assert "x2" == test.test_method_2()  # +1 miss
+        assert "x2" == test.test_method_22()  # +1 miss
+        assert "x3" == test.test_method_3()  # +1 miss
+        assert "x4" == test.test_method_4()  # +1 miss
+        assert "x4" == test.test_method_44()  # +1 miss
+        assert "recurring_read" == test.test_method_5(dummy_arg="recurring_read")  # +1 miss
+        assert "recurring_read" == test.test_method_55(dummy_arg="recurring_read")  # +1 miss
+        assert "initial_read" == test.test_method_5(dummy_arg="initial_read")  # +1 miss
+        assert "initial_read" == test.test_method_55(dummy_arg="initial_read")  # +1 miss
+        test.check_n_cache_misses(10)
 
 
-async def test_cache_decorator_hard_expiry_entries(time_machine):
+async def test_cache_decorator_legacy_for_version_false(time_machine):
     """
     TODO refactor test + docstring
     Test the behaviour of cache entries with a hard expiry.
