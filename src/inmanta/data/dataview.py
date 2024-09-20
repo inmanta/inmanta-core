@@ -366,14 +366,20 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             )
 
         def construct_filter(filter_name: str, filter_condition: str, drop_if_paging_order: PagingOrder) -> str:
+            """
+            Construct filter to count the number of items that are before / after the current page.
+            If the filter condition is empty, nothing will be returned except if the current order is the same as the one
+            contained in `drop_if_paging_order`. The motivation behind this, is if that no result is returned
+
+            :param filter_name: The name of the variable to store the result of the select
+            :param filter_condition: The condition to use in the filtering
+            :param drop_if_paging_order: If the filtering needs to be ignored
+            """
             if found_result:
-                if filter_condition:
-                    return f", COUNT(*) filter ({filter_condition}) as {filter_name}"
-                else:
-                    return filter_condition
+                return f", COUNT(*) filter ({filter_condition}) as {filter_name}" if filter_condition else ""
             else:
-                if found_result or drop_if_paging_order != order:
-                    return f", COUNT(*) filter ({filter_condition}) as {filter_name}"
+                if drop_if_paging_order != order:
+                    return f", COUNT(*) filter ({filter_condition}) as {filter_name}" if filter_condition else ""
                 else:
                     return f", COUNT(*) as {filter_name}"
 
@@ -435,6 +441,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
                 params.update({k: value_to_string(v) for k, v in args.items() if v is not None})
                 return f"{base_url}?{urllib.parse.urlencode(params, doseq=True)}"
 
+            # TODO h something here
             link_with_end = make_link(
                 end=paging_boundaries.end,
                 last_id=paging_boundaries.last_id,

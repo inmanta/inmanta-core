@@ -216,9 +216,9 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
 
     assert result.result["metadata"] == {"total": 7, "before": 0, "after": 0, "page_size": 100}
 
-    fake_url = f"{base_url}/api/v2/agents?limit=1&sort=last_failover.asc&filter.status=paused&first_id=zzzz"
+    fake_id_url = f"{base_url}/api/v2/agents?limit=1&sort=last_failover.asc&filter.status=paused&first_id=zzzz"
     request = HTTPRequest(
-        url=fake_url,
+        url=fake_id_url,
         headers={"X-Inmanta-tid": str(environment)},
     )
     response = await http_client.fetch(request, raise_error=False)
