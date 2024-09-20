@@ -93,7 +93,7 @@ async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent_
     """
     cache = agent_cache
     value = "test too"
-    cache.cache_value("test", value, timeout=0.1, evict_after_creation=True)
+    cache.cache_value("test", value, evict_after_creation=0.1)
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
@@ -108,7 +108,7 @@ async def test_timeout_automatic_cleanup(set_custom_cache_cleanup_policy, agent_
 def test_timeout_manual_cleanup():
     cache = AgentCache()
     value = "test too"
-    cache.cache_value("test", value, timeout=0.1, evict_after_creation=True)
+    cache.cache_value("test", value, evict_after_creation=0.1)
     cache.cache_value("test2", value)
 
     assert value == cache.find("test")
@@ -162,7 +162,7 @@ def test_default_timeout(my_resource, time_machine):
     cache = AgentCache()
     value = "test too"
 
-    cache.cache_value("test", value)
+    cache.cache_value("test", value, evict_after_creation=5000)
     assert value == cache.find("test")
 
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
@@ -218,9 +218,8 @@ async def test_multi_threaded(agent_cache: AgentCache):
         cache.get_or_else(
             "test",
             lambda: alpha.create(),
-            timeout=cache_entry_expiry,
             call_on_delete=lambda x: x.delete(),
-            evict_after_creation=True,
+            evict_after_creation=cache_entry_expiry,
         )
 
     t1 = Thread(target=target_1)
@@ -228,9 +227,8 @@ async def test_multi_threaded(agent_cache: AgentCache):
         target=lambda: cache.get_or_else(
             "test",
             lambda: beta.create(),
-            timeout=cache_entry_expiry,
             call_on_delete=lambda x: x.delete(),
-            evict_after_creation=True,
+            evict_after_creation=cache_entry_expiry,
         )
     )
 
@@ -579,68 +577,58 @@ async def test_cache_decorator_since_creation_expiry(time_machine):
     """
     Test the behaviour of cache entries expiring after creation.
 
-    Cache entries will expire after a timeout since their creation if:
-      - for_version=False (legacy parameter)
-      - evict_after_creation=True
+    Test legacy parameters:
+        - for_version=False
+        - timeout (default 5000s)
 
-    This timeout is controlled via the timeout parameter.
-    Stale entries are cleaned up on the next call to `clean_stale_entries`.
-
-    Legacy behaviour tests:
-    This test checks the legacy behaviour via `test_method_1` to `test_method_3` and `short_lived_test_method_1`
-
-    `evict_after_last_access` is used as a baseline comparison of what happens to an entry
-    evicted after last access.
-
-    New behaviour tests:
-        `test_method_11` to `test_method_33` and `short_lived_test_method_11` test the same behaviour
-        as their single-digit counterparts but they use the new `evict_after_creation` parameter.
+    Test new parameter:
+        - evict_after_creation>0
 
     """
 
     class ExpireAfterCreationTest(CacheMissCounter):
         @cache(for_version=False)
-        def test_method_1(self):
+        def test_default_5000s_timeout_legacy(self):
             self.increment_miss_counter()
             return "x1"
 
         @cache(timeout=80, for_version=False)
-        def test_method_2(self):
+        def test_80s_timeout_legacy(self):
             self.increment_miss_counter()
             return "x2"
 
         @cache(timeout=80, for_version=False)
-        def test_method_3(self, dummy_arg: str):
+        def test_80s_timeout_with_arg_legacy(self, dummy_arg: str):
             self.increment_miss_counter()
             return dummy_arg
 
-        @cache
-        def evict_after_last_access(self):
-            self.increment_miss_counter()
-            return "x3"
-
         @cache(timeout=20, for_version=False)
-        def short_lived_test_method_1(self):
+        def test_20s_timeout_legacy(self):
             self.increment_miss_counter()
             return "x4"
 
-        @cache(evict_after_creation=True)
-        def test_method_11(self):
+        @cache
+        def baseline_evict_after_last_access(self):
+            self.increment_miss_counter()
+            return "x3"
+
+        @cache(evict_after_creation=5000)
+        def test_5000s_timeout(self):
             self.increment_miss_counter()
             return "x1"
 
-        @cache(timeout=80, evict_after_creation=True)
-        def test_method_22(self):
+        @cache(evict_after_creation=80)
+        def test_80s_timeout(self):
             self.increment_miss_counter()
             return "x2"
 
-        @cache(timeout=80, evict_after_creation=True)
-        def test_method_33(self, dummy_arg: str):
+        @cache(evict_after_creation=80)
+        def test_80s_timeout_with_arg(self, dummy_arg: str):
             self.increment_miss_counter()
             return dummy_arg
 
-        @cache(timeout=20, evict_after_creation=True)
-        def short_lived_test_method_11(self):
+        @cache(evict_after_creation=20)
+        def test_20s_timeout(self):
             self.increment_miss_counter()
             return "x4"
 
@@ -650,25 +638,25 @@ async def test_cache_decorator_since_creation_expiry(time_machine):
     time_machine.move_to(datetime.datetime.now().astimezone(), tick=False)
 
     with agent_cache:
-        assert "initial_read" == test.test_method_3(dummy_arg="initial_read")  # +1 miss
-        assert "initial_read" == test.test_method_33(dummy_arg="initial_read")  # +1 miss
+        assert "initial_read" == test.test_80s_timeout_with_arg_legacy(dummy_arg="initial_read")  # +1 miss
+        assert "initial_read" == test.test_80s_timeout_with_arg(dummy_arg="initial_read")  # +1 miss
         test.check_n_cache_misses(2)
 
     test.reset_miss_counter()
 
     with agent_cache:
         # Populate the cache
-        assert "x1" == test.test_method_1()  # +1 miss
-        assert "x1" == test.test_method_11()  # +1 miss
-        assert "x2" == test.test_method_2()  # +1 miss
-        assert "x2" == test.test_method_22()  # +1 miss
-        assert "x3" == test.evict_after_last_access()  # +1 miss
-        assert "x4" == test.short_lived_test_method_1()  # +1 miss
-        assert "x4" == test.short_lived_test_method_11()  # +1 miss
+        assert "x1" == test.test_default_5000s_timeout_legacy()  # +1 miss
+        assert "x1" == test.test_5000s_timeout()  # +1 miss
+        assert "x2" == test.test_80s_timeout_legacy()  # +1 miss
+        assert "x2" == test.test_80s_timeout()  # +1 miss
+        assert "x3" == test.baseline_evict_after_last_access()  # +1 miss
+        assert "x4" == test.test_20s_timeout_legacy()  # +1 miss
+        assert "x4" == test.test_20s_timeout()  # +1 miss
         test.check_n_cache_misses(7)
 
-        assert "recurring_read" == test.test_method_3(dummy_arg="recurring_read")  # +1 miss
-        assert "recurring_read" == test.test_method_33(dummy_arg="recurring_read")  # +1 miss
+        assert "recurring_read" == test.test_80s_timeout_with_arg_legacy(dummy_arg="recurring_read")  # +1 miss
+        assert "recurring_read" == test.test_80s_timeout_with_arg(dummy_arg="recurring_read")  # +1 miss
         test.check_n_cache_misses(9)
 
     test.reset_miss_counter()
@@ -678,15 +666,15 @@ async def test_cache_decorator_since_creation_expiry(time_machine):
 
     # The cache cleanup method is called upon entering the AgentCache context manager
     with agent_cache:
-        assert "x1" == test.test_method_1()  # cache hit
-        assert "x1" == test.test_method_11()  # cache hit
-        assert "x2" == test.test_method_2()  # cache hit
-        assert "x2" == test.test_method_22()  # cache hit
-        assert "recurring_read" == test.test_method_3(dummy_arg="recurring_read")  # cache hit
-        assert "recurring_read" == test.test_method_33(dummy_arg="recurring_read")  # cache hit
-        assert "x3" == test.evict_after_last_access()  # +1 miss
-        assert "x4" == test.short_lived_test_method_1()  # +1 miss
-        assert "x4" == test.short_lived_test_method_11()  # +1 miss
+        assert "x1" == test.test_default_5000s_timeout_legacy()  # cache hit
+        assert "x1" == test.test_5000s_timeout()  # cache hit
+        assert "x2" == test.test_80s_timeout_legacy()  # cache hit
+        assert "x2" == test.test_80s_timeout()  # cache hit
+        assert "recurring_read" == test.test_80s_timeout_with_arg_legacy(dummy_arg="recurring_read")  # cache hit
+        assert "recurring_read" == test.test_80s_timeout_with_arg(dummy_arg="recurring_read")  # cache hit
+        assert "x3" == test.baseline_evict_after_last_access()  # +1 miss
+        assert "x4" == test.test_20s_timeout_legacy()  # +1 miss
+        assert "x4" == test.test_20s_timeout()  # +1 miss
         test.check_n_cache_misses(3)
 
     test.reset_miss_counter()
@@ -695,26 +683,26 @@ async def test_cache_decorator_since_creation_expiry(time_machine):
 
     with agent_cache:
         # Check that entries with a 'hard' 80s timeout got cleaned up:
-        assert "x2" == test.test_method_2()  # +1 miss
-        assert "x2" == test.test_method_22()  # +1 miss
-        assert "recurring_read" == test.test_method_3(dummy_arg="recurring_read")  # +1 miss
-        assert "recurring_read" == test.test_method_33(dummy_arg="recurring_read")  # +1 miss
-        assert "initial_read" == test.test_method_3(dummy_arg="initial_read")  # +1 miss
-        assert "initial_read" == test.test_method_33(dummy_arg="initial_read")  # +1 miss
+        assert "x2" == test.test_80s_timeout_legacy()  # +1 miss
+        assert "x2" == test.test_80s_timeout()  # +1 miss
+        assert "recurring_read" == test.test_80s_timeout_with_arg_legacy(dummy_arg="recurring_read")  # +1 miss
+        assert "recurring_read" == test.test_80s_timeout_with_arg(dummy_arg="recurring_read")  # +1 miss
+        assert "initial_read" == test.test_80s_timeout_with_arg_legacy(dummy_arg="initial_read")  # +1 miss
+        assert "initial_read" == test.test_80s_timeout_with_arg(dummy_arg="initial_read")  # +1 miss
         test.check_n_cache_misses(6)
         # Check that entry with default timeout of 5000s wasn't cleaned up:
-        assert "x1" == test.test_method_1()  # cache hit
-        assert "x1" == test.test_method_11()  # cache hit
+        assert "x1" == test.test_default_5000s_timeout_legacy()  # cache hit
+        assert "x1" == test.test_5000s_timeout()  # cache hit
         test.check_n_cache_misses(6)
 
     test.reset_miss_counter()
 
     # Wait out longer than the default timeout and check that the cache entry was cleaned up:
-    time_machine.shift(datetime.timedelta(seconds=5000))
+    time_machine.shift(datetime.timedelta(seconds=5001))
 
     with agent_cache:
-        assert "x1" == test.test_method_1()  # +1 miss
-        assert "x1" == test.test_method_11()  # +1 miss
+        assert "x1" == test.test_default_5000s_timeout_legacy()  # +1 miss
+        assert "x1" == test.test_5000s_timeout()  # +1 miss
         test.check_n_cache_misses(2)
 
 
@@ -834,66 +822,39 @@ async def test_cache_decorator_parameters(time_machine):
     """
     Test specific cache parameter combinations:
         - test that the legacy `for_version` parameter correctly overrides the 'new' parameters.
-        - test that exceptions are raised when invalid parameter combinations are used
 
     """
 
     class CacheParametersTest(CacheMissCounter):
-        @cache(for_version=False, evict_after_last_access=True)
-        def test_legacy_override_1(self):
+        @cache(for_version=False, evict_after_last_access=60)
+        def test_legacy_override_ela(self):
             """
-            evict_after_last_access should be overridden to False
+            for_version=False overrides evict_after_last_access behaviour:
+            Use default for evict_after_creation = 5000s
             """
             self.increment_miss_counter()
             return "x1"
 
-        @cache(for_version=True, evict_after_creation=True)
-        def test_legacy_override_2(self):
+        @cache(for_version=True, evict_after_creation=5000)
+        def test_legacy_override_eac(self):
             """
-            evict_after_creation should be overridden to True
+            for_version=True overrides evict_after_creation behaviour:
+            Use default for evict_after_last_access = 60
             """
             self.increment_miss_counter()
             return "x2"
-
-        @cache(evict_after_creation=False, evict_after_last_access=False)
-        def test_both_false(self):
-            self.increment_miss_counter()
-            return "x3"
-
-        @cache(evict_after_last_access=False)
-        def test_none_and_false(self):
-            self.increment_miss_counter()
-            return "x4"
 
     agent_cache = AgentCache()
     test = CacheParametersTest(agent_cache)
 
     time_machine.move_to(datetime.datetime.now().astimezone(), tick=False)
 
-    with pytest.raises(ValueError) as exc_info:
-        test.test_both_false()
-
-    assert (
-        "Invalid parameters for cache decorator for function test_both_false. "
-        "At least one of evict_after_last_access and evict_after_creation "
-        "should be True."
-    ) in str(exc_info.value)
-
-    with pytest.raises(ValueError) as exc_info:
-        test.test_none_and_false()
-
-    assert (
-        "Invalid parameters for cache decorator for function test_none_and_false. "
-        "At least one of evict_after_last_access and evict_after_creation "
-        "should be True."
-    ) in str(exc_info.value)
-
     test.reset_miss_counter()
 
     with agent_cache:
         # Populate the cache
-        assert "x1" == test.test_legacy_override_1()  # +1 miss
-        assert "x2" == test.test_legacy_override_2()  # +1 miss
+        assert "x1" == test.test_legacy_override_ela()  # +1 miss
+        assert "x2" == test.test_legacy_override_eac()  # +1 miss
         test.check_n_cache_misses(2)
 
     test.reset_miss_counter()
@@ -902,7 +863,7 @@ async def test_cache_decorator_parameters(time_machine):
 
     # The cache cleanup method is called upon entering the AgentCache context manager
     with agent_cache:
-        assert "x1" == test.test_legacy_override_1()  # cache hit
+        assert "x1" == test.test_legacy_override_ela()  # cache hit
         test.check_n_cache_misses(0)
-        assert "x2" == test.test_legacy_override_2()  # cache miss
+        assert "x2" == test.test_legacy_override_eac()  # cache miss
         test.check_n_cache_misses(1)

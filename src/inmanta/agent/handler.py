@@ -104,6 +104,8 @@ class InvalidOperation(Exception):
 def cache(
     func: Optional[T_FUNC] = None,
     ignore: list[str] = [],
+    # deprecated parameter kept for backwards compatibility: if set along with for_version,
+    # overrides evict_after_creation/evict_after_last_access
     timeout: int = 5000,
     # deprecated parameter kept for backwards compatibility: if set, overrides evict_after_creation/evict_after_last_access
     for_version: Optional[bool] = None,
@@ -111,8 +113,8 @@ def cache(
     # deprecated parameter kept for backwards compatibility: if set, overrides cache_none
     cacheNone: Optional[bool] = None,  # noqa: N803
     call_on_delete: Optional[Callable[[Any], None]] = None,
-    evict_after_creation: Optional[bool] = None,
-    evict_after_last_access: Optional[bool] = None,
+    evict_after_creation: float = 0,
+    evict_after_last_access: float = 0,
 ) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
     """
     decorator for methods in resource handlers to provide caching
@@ -130,9 +132,10 @@ def cache(
         Ignored otherwise.
 
 
-    :param evict_after_creation: When True, this cache item will be evicted from the cache <timeout> seconds after
+    :param evict_after_creation: This cache item will be considered stale this number of seconds after
         entering the cache.
-    :param evict_after_last_access: When True, this cache item will stay in the cache for 60s after its last use.
+    :param evict_after_last_access: This cache item will be considered stale this number of seconds after
+        it was last accessed.
 
     :param ignore: a list of argument names that should not be part of the cache key
     :param cache_none: allow the caching of None values
@@ -151,52 +154,30 @@ def cache(
             def bound(**kwds: object) -> object:
                 return f(self, **kwds)
 
-            _evict_after_last_access: bool
-            _evict_after_creation: bool
+            _evict_after_last_access: float = evict_after_last_access
+            _evict_after_creation: float = evict_after_creation
 
             # Legacy parameter is passed, it overrides evict_after_last_access and evict_after_creation
             if for_version is not None:
-                _evict_after_last_access = for_version
-                _evict_after_creation = not for_version
-            else:
-                # "New" parameters are used: validate that both are not set to False
-                # and set sensible default values if need be. The following table
-                # shows the expected value for the pair (evict_after_last_access, evict_after_creation)
-                # depending on their respective input value. `W` means an exception should be raised
-
-                #                                                evict_after_creation
-                #                                        None         True            False
-                #                             None        TF           FT              TF
-                #
-                # evict_after_last_access     True        TF           TT              TF
-                #
-                #                             False       W            FT              W
-                #
-
-                if evict_after_last_access is None:
-                    if evict_after_creation is None:
-                        _evict_after_last_access = True
-                        _evict_after_creation = False
+                if for_version:
+                    if evict_after_last_access > 0:
+                        _evict_after_last_access = evict_after_last_access
                     else:
-                        _evict_after_last_access = not evict_after_creation
-                        _evict_after_creation = evict_after_creation
+                        _evict_after_last_access = 60
                 else:
-                    if not evict_after_last_access:
-                        if not evict_after_creation:
-                            raise ValueError(
-                                f"Invalid parameters for cache decorator for function {f.__name__}. "
-                                "At least one of evict_after_last_access and evict_after_creation "
-                                "should be True."
-                            )
-                    _evict_after_last_access = bool(evict_after_last_access)
-                    _evict_after_creation = bool(evict_after_creation)
+                    _evict_after_creation = timeout
+                    _evict_after_last_access = 0
+            else:
+                # If both params are unset/negative, keep entries alive
+                # in the cache for 60s after their last usage.
+                if evict_after_creation <= 0 and evict_after_last_access <= 0:
+                    _evict_after_last_access = 60
 
             return self.cache.get_or_else(
                 key=f.__name__,
                 function=bound,
                 evict_after_last_access=_evict_after_last_access,
                 evict_after_creation=_evict_after_creation,
-                timeout=timeout,
                 ignore=myignore,
                 cache_none=cacheNone if cacheNone is not None else cache_none,
                 call_on_delete=call_on_delete,
