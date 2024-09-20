@@ -291,7 +291,7 @@ class ScheduledWork:
         self.agent_queues.reset()
         self._waiting.clear()
 
-    def deploy(
+    def deploy_with_context(
         self,
         resources: Set[ResourceIdStr],
         *,
@@ -359,10 +359,16 @@ class ScheduledWork:
             not_scheduled.add(resource)
             return False
 
-        def extend_requires(resource: ResourceIdStr, added_requires: set[ResourceIdStr]) -> None:
-            # FIXME[#8008]: docstring: added_requires should only contain scheduled subset of requires relation
-            #   + takes ownership of set
-            if not added_requires:
+        def extend_blocked_on(resource: ResourceIdStr, new_blockers: set[ResourceIdStr]) -> None:
+            """
+            Add to the blocked on set for this resource, deferring the associated deploy task if it is already queued.
+            This method takes ownership of the new_blockers set, the caller should not use it again.
+
+            :param resource: The resource for which to add blockers.
+            :param new_blockers: The resources to add as blockers. This must be a subset of the resources's scheduled requires,
+                i.e. requires that are currently queued or waiting. The method takes ownership of this object.
+            """
+            if not new_blockers:
                 # empty set, nothing to do
                 return
             if not is_scheduled(resource):
@@ -381,10 +387,10 @@ class ScheduledWork:
                     # FIXME[#8015]: default priority
                     task=PrioritizedTask(task=task, priority=priority if priority is not None else 0),
                     # task was previously ready to execute => assume no other blockers than this one
-                    blocked_on=added_requires,
+                    blocked_on=new_blockers,
                 )
             else:
-                self._waiting[resource].blocked_on.update(added_requires)
+                self._waiting[resource].blocked_on.update(new_blockers)
                 maybe_runnable.discard(resource)
 
         # ensure desired resource deploys are scheduled
@@ -409,11 +415,11 @@ class ScheduledWork:
 
             # inform along provides relation that this task has been scheduled, deferring already scheduled provides
             for dependant in self.provides.get(resource, ()):
-                extend_requires(dependant, {resource})
+                extend_blocked_on(dependant, {resource})
 
         # update state for added requires
         for resource, new in added_requires.items():
-            extend_requires(resource, {r for r in new if is_scheduled(r)})
+            extend_blocked_on(resource, {r for r in new if is_scheduled(r)})
 
         # finally check if any tasks have become ready to run
         for resource in maybe_runnable:
@@ -422,7 +428,9 @@ class ScheduledWork:
             # no more need to update cache entries
 
     def _queue_if_ready(self, blocked_deploy: BlockedDeploy) -> None:
-        # FIXME[#8008]: docstring
+        """
+        Check if the given deploy has become unblocked and move to the agent queues if it has.
+        """
         if blocked_deploy.blocked_on:
             # still waiting for something, nothing to do
             return
@@ -445,11 +453,14 @@ class ScheduledWork:
                 self.agent_queues.discard(task)
 
     def finished_deploy(self, resource: ResourceIdStr) -> None:
-        # FIXME[#8010]: consider failure scenarios -> check how current agent does it, e.g. skip-for-undefined
-        # FIXME[#8008]: docstring + mention under lock + mention only iff not stale
+        """
+        Report that a resource has finished deploying for its current desired state, regardless of the deploy result (success /
+        failure). Stale deploys must never be reported.
+        """
         if resource in self._waiting or tasks.Deploy(resource=resource) in self.agent_queues:
             # a new deploy task was scheduled in the meantime, no need to do anything else
             return
+        # FIXME[#8012]: event propagation + test
         for dependant in self.provides.get(resource, []):
             blocked_deploy: Optional[BlockedDeploy] = self._waiting.get(dependant, None)
             if blocked_deploy is None:

@@ -47,8 +47,7 @@ class Task(abc.ABC):
     resource: ResourceIdStr
 
     @abc.abstractmethod
-    async def execute(self, scheduler: "scheduler.TaskManager", agent: str) -> None:
-        """the scheduler is considered to be a friend class: access to internal members is expected"""
+    async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
         pass
 
     def delete_with_resource(self) -> bool:
@@ -64,15 +63,13 @@ class Task(abc.ABC):
         )
 
     async def get_executor(
-        self, scheduler: "scheduler.TaskManager", agent: str, resource_type: ResourceType, version: int
+        self, task_manager: "scheduler.TaskManager", agent: str, resource_type: ResourceType, version: int
     ) -> executor.Executor:
         """Helper method to produce the executor"""
-        # TODO: pass code_manager, executor manager, client and environment as argument or make them public
-        code, invalid_resources = await scheduler._code_manager.get_code(
-            environment=scheduler._environment,
+        code, invalid_resources = await task_manager.code_manager.get_code(
+            environment=task_manager.environment,
             version=version,
-            # TODO: this is a private access!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
-            resource_types=scheduler._state.get_types_for_agent(agent),
+            resource_types=task_manager.get_types_for_agent(agent),
         )
 
         # Bail out if this failed
@@ -80,7 +77,7 @@ class Task(abc.ABC):
             raise invalid_resources[resource_type]
 
         # Get executor
-        my_executor: executor.Executor = await scheduler._executor_manager.get_executor(
+        my_executor: executor.Executor = await task_manager.executor_manager.get_executor(
             agent_name=agent, agent_uri="NO_URI", code=code
         )
         failed_resources = my_executor.failed_resources
@@ -100,24 +97,24 @@ class PoisonPill(Task):
     It functions mostly as a no-op
     """
 
-    async def execute(self, scheduler: "scheduler.TaskManager", agent: str) -> None:
+    async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
         pass
 
 
 class Deploy(Task):
-    async def execute(self, scheduler: "scheduler.TaskManager", agent: str) -> None:
+    async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
         version: int
         resource_details: "state.ResourceDetails"
-        intent = await scheduler.get_resource_intent(self.resource, for_deploy=True)
+        intent = await task_manager.get_resource_intent(self.resource, for_deploy=True)
         if intent is None:
             # Stale resource, can simply be dropped.
             return
         version, resource_details = intent
 
-        status = await self.do_deploy(scheduler, agent, version, resource_details)
+        status = await self.do_deploy(task_manager, agent, version, resource_details)
 
         is_success: bool = status == const.ResourceState.deployed
-        await scheduler.report_resource_state(
+        await task_manager.report_resource_state(
             resource=self.resource,
             attribute_hash=resource_details.attribute_hash,
             status=state.ResourceStatus.UP_TO_DATE if is_success else state.ResourceStatus.HAS_UPDATE,
@@ -126,7 +123,7 @@ class Deploy(Task):
 
     async def do_deploy(
         self,
-        scheduler: "scheduler.TaskManager",
+        task_manager: "scheduler.TaskManager",
         agent: str,
         version: int,
         resource_details: "state.ResourceDetails",
@@ -148,8 +145,8 @@ class Deploy(Task):
                 error=str(excn),
                 traceback="".join(traceback.format_tb(excn.__traceback__)),
             )
-            await scheduler._client.resource_action_update(
-                tid=scheduler._environment,
+            await task_manager.client.resource_action_update(
+                tid=task_manager.environment,
                 resource_ids=[executor_resource_details.rvid],
                 action_id=uuid.uuid4(),
                 action=const.ResourceAction.deploy,
@@ -160,7 +157,7 @@ class Deploy(Task):
             )
 
         try:
-            my_executor: executor.Executor = await self.get_executor(scheduler, agent, executor_resource_details.id.entity_type, version)
+            my_executor: executor.Executor = await self.get_executor(task_manager, agent, executor_resource_details.id.entity_type, version)
         except Exception as e:
             await report_deploy_failure(e)
             return const.ResourceState.unavailable
@@ -180,11 +177,11 @@ class DryRun(Task):
     def delete_with_resource(self) -> bool:
         return False
 
-    async def execute(self, scheduler: "scheduler.TaskManager", agent: str) -> None:
+    async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(self.version, self.resource_details)
         try:
             my_executor: executor.Executor = await self.get_executor(
-                scheduler, agent, executor_resource_details.id.entity_type, self.version
+                task_manager, agent, executor_resource_details.id.entity_type, self.version
             )
             await my_executor.dry_run([executor_resource_details], self.dry_run_id)
         except Exception:
@@ -193,8 +190,8 @@ class DryRun(Task):
                 executor_resource_details.rvid,
                 exc_info=True,
             )
-            await scheduler._client.dryrun_update(
-                tid=scheduler._environment,
+            await task_manager.client.dryrun_update(
+                tid=task_manager.environment,
                 id=self.dry_run_id,
                 resource=executor_resource_details.rvid,
                 changes={"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}},
@@ -203,9 +200,9 @@ class DryRun(Task):
 
 class RefreshFact(Task):
 
-    async def execute(self, scheduler: "scheduler.TaskManager", agent: str) -> None:
+    async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
         version: int
-        intent = await scheduler.get_resource_intent(self.resource)
+        intent = await task_manager.get_resource_intent(self.resource)
         if intent is None:
             # Stale resource, can simply be dropped.
             return
@@ -214,7 +211,7 @@ class RefreshFact(Task):
 
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
         try:
-            executor = await self.get_executor(scheduler, agent, resources.Id.parse_id(self.resource).entity_type, version)
+            executor = await self.get_executor(task_manager, agent, resources.Id.parse_id(self.resource).entity_type, version)
         except Exception:
             logger_for_agent(agent).warning(
                 "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded",

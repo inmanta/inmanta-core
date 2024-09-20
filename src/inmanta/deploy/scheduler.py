@@ -21,14 +21,14 @@ import asyncio
 import logging
 import uuid
 from abc import abstractmethod
-from collections.abc import Mapping, Set
+from collections.abc import Collection, Mapping, Set
 from typing import Optional
 
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import Resource
-from inmanta.data.model import ResourceIdStr
+from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import work
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import DryRun, RefreshFact, Task
@@ -39,15 +39,21 @@ from inmanta.resources import Id
 LOGGER = logging.getLogger(__name__)
 
 
-# FIXME[#8008] review code structure + functionality + add docstrings
-# FIXME[#8008] review comments on original PR
-# TODO: what to do with UPDATE_PENDING?
-
-
 class TaskManager(abc.ABC):
     """
     Interface for communication with tasks (deploy.task.Task). Offers methods to inspect intent and to report task results.
     """
+
+    environment: uuid.UUID
+    client: Client
+    code_manager: CodeManager
+    executor_manager: executor.ExecutorManager[executor.Executor]
+
+    @abstractmethod
+    def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
+        """
+        Returns a collection of all resource types that are known to live on a given agent.
+        """
 
     @abstractmethod
     async def get_resource_intent(
@@ -119,9 +125,8 @@ class ResourceScheduler(TaskManager):
         #   (e.g. trigger deploy). A single lock suffices since all state accesses (both read and write) by the task runners are
         #   short, synchronous operations (and therefore we wouldn't gain anything by allowing multiple readers).
         self._scheduler_lock: asyncio.Lock = asyncio.Lock()
-        # - lock to serialize scheduler state updates (i.e. process new version)
-        # TODO: rename desired_state_lock / intent_lock?
-        self._update_lock: asyncio.Lock = asyncio.Lock()
+        # - lock to serialize updates to the scheduler's intent (version, attributes, ...), e.g. process a new version.
+        self._intent_lock: asyncio.Lock = asyncio.Lock()
 
         self._running = False
         # Agent name to worker task
@@ -138,10 +143,10 @@ class ResourceScheduler(TaskManager):
         # that intent has gone stale since
         self._deploying_stale: set[ResourceIdStr]
 
-        self._environment = environment
-        self._client = client
-        self._code_manager = CodeManager(client)
-        self._executor_manager = executor_manager
+        self.environment = environment
+        self.client = client
+        self.code_manager = CodeManager(client)
+        self.executor_manager = executor_manager
 
     def reset(self) -> None:
         """
@@ -168,16 +173,15 @@ class ResourceScheduler(TaskManager):
         Trigger a deploy
         """
         async with self._scheduler_lock:
-            self._work.deploy(self._state.dirty, stale_deploys=self._deploying_stale)
+            self._work.deploy_with_context(self._state.dirty, stale_deploys=self._deploying_stale)
 
     async def repair(self) -> None:
         """
         Trigger a repair, i.e. mark all resources as dirty, then trigger a deploy.
         """
-        # TODO: check implementation against design
         async with self._scheduler_lock:
             self._state.dirty.update(self._state.resources.keys())
-            self._work.deploy(self._state.dirty, stale_deploys=self._deploying_stale)
+            self._work.deploy_with_context(self._state.dirty, stale_deploys=self._deploying_stale)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         resources = await self._build_resource_mappings_from_db(version)
@@ -210,12 +214,12 @@ class ResourceScheduler(TaskManager):
         :return: resource_mapping {id -> resource details}
         """
         if version is None:
-            # TODO: BUG: not necessarily released
+            # TODO: create ticket: BUG: not necessarily released
             resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(
-                environment=self._environment
+                environment=self.environment
             )
         else:
-            resources_from_db = await data.Resource.get_resources_for_version(self._environment, version)
+            resources_from_db = await data.Resource.get_resources_for_version(self.environment, version)
 
         resource_mapping = {
             resource.resource_id: ResourceDetails(
@@ -244,10 +248,10 @@ class ResourceScheduler(TaskManager):
         It will then compute the work that needs to be done (resources to create / delete / update) to be up to date with
         this new version.
         """
-        environment = await data.Environment.get_by_id(self._environment)
+        environment = await data.Environment.get_by_id(self.environment)
         if environment is None:
-            raise ValueError(f"No environment found with this id: `{self._environment}`")
-        # TODO BUG: version does not necessarily correspond to resources' version + last_version is reserved, not necessarily released
+            raise ValueError(f"No environment found with this id: `{self.environment}`")
+        # TODO create ticket: BUG: version does not necessarily correspond to resources' version + last_version is reserved, not necessarily released
         #       -> call ConfigurationModel.get_version_nr_latest_version() instead?
         version = environment.last_version
         resources_from_db = await self._build_resource_mappings_from_db()
@@ -260,10 +264,9 @@ class ResourceScheduler(TaskManager):
         resources: Mapping[ResourceIdStr, ResourceDetails],
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
     ) -> None:
-        async with self._update_lock:
-            # Inspect new state and mark resources as "update pending" where appropriate. Since this method is the only writer
-            # for "update pending", and a stale read is acceptable, we can do this part before acquiring the exclusive scheduler
-            # lock.
+        async with self._intent_lock:
+            # Inspect new state and compare it with the old one before acquiring scheduler the lock.
+            # This is safe because we only read intent-related state here, for which we've already acquired the lock
             deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
             for resource in deleted_resources:
                 self._work.delete_resource(resource)
@@ -276,17 +279,14 @@ class ResourceScheduler(TaskManager):
                     resource not in self._state.resources
                     or details.attribute_hash != self._state.resources[resource].attribute_hash
                 ):
-                    self._state.update_pending.add(resource)
                     new_desired_state.add(resource)
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
                 added: Set[ResourceIdStr] = new_requires - old_requires
                 dropped: Set[ResourceIdStr] = old_requires - new_requires
                 if added:
-                    self._state.update_pending.add(resource)
                     added_requires[resource] = added
                 if dropped:
-                    self._state.update_pending.add(resource)
                     dropped_requires[resource] = dropped
                 # this loop is race-free, potentially slow, and completely synchronous
                 # => regularly pass control to the event loop to not block scheduler operation during update prep
@@ -308,7 +308,7 @@ class ResourceScheduler(TaskManager):
                 self._deploying.difference_update(new_stale)
                 self._deploying_stale.update(new_stale)
                 # ensure deploy for ALL dirty resources, not just the new ones
-                self._work.deploy(
+                self._work.deploy_with_context(
                     self._state.dirty,
                     stale_deploys=self._deploying_stale,
                     added_requires=added_requires,
@@ -316,9 +316,10 @@ class ResourceScheduler(TaskManager):
                 )
                 for resource in deleted_resources:
                     self._state.drop(resource)
-                # FIXME[#8008]: design step 7: drop update_pending
-            # FIXME[#8008]: design step 10: Once more, drop all resources that do not exist in this version from the scheduled
-            #               work, in case they got added again by a deploy trigger
+            # Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added
+            # again by a deploy trigger (because we dropped them outside the lock).
+            for resource in deleted_resources:
+                self._work.delete_resource(resource)
 
     def _start_for_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
@@ -329,7 +330,6 @@ class ResourceScheduler(TaskManager):
         while self._running:
             task: Task = await self._work.agent_queues.queue_get(agent)
             try:
-                # FIXME[#8008]: skip and reschedule deploy / refresh-fact task if resource marked as update pending?
                 await task.execute(self, agent)
             except Exception:
                 LOGGER.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
@@ -375,10 +375,12 @@ class ResourceScheduler(TaskManager):
                 return
             state: ResourceState = self._state.resource_state[resource]
             state.status = status
-            # TODO: update dirty
             if deployment_result is not None:
                 self._deploying.remove(resource)
                 state.deployment_result = deployment_result
                 self._work.finished_deploy(resource)
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
+
+    def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
+        return list(self._state.types_per_agent[agent])
