@@ -236,12 +236,13 @@ second time with the same arguments, it will not be executed again, but the cach
 returned instead. To exclude specific arguments from the cache key, use the ``ignore`` parameter.
 
 Cache entries will be dropped from the cache when they become stale. Use the following parameters to control when an entry is considered stale:
-  * Setting ``evict_after_creation=True`` will mark entries as stale after a timeout controlled by the ``timeout`` parameter (5000s by default).
-  * Setting ``refresh_after_access=True`` will reset the expiry time of entries to 60s anytime they're used.
+  * ``evict_after_creation``: mark entries as stale after this amount of time (in seconds) has elapsed since they entered the cache (5000s by default).
+  * ``evict_after_last_access``: mark entries as stale after this amount of time (in seconds) has elapsed since they were last accessed (60 by default).
+
 
 .. note::
 
-    If both ``evict_after_creation=True`` and ``refresh_after_access=True`` are set,
+    If both ``evict_after_creation=True`` and ``evict_after_last_access=True`` are set,
     the entry will become stale when the shortest of the two timers is up.
 
 
@@ -249,12 +250,12 @@ For example, to cache the connection to a specific device for 120 seconds:
 
 .. code-block:: python
 
-    @cache(timeout=120, ignore=["ctx"], evict_after_creation=True)
+    @cache(ignore=["ctx"], evict_after_creation=120)
     def get_client_connection(self, ctx, device_id):
        # ...
        return connection
 
-Setting ``refresh_after_access=True`` (or omitting the parameter) will reset the lifetime
+Setting ``evict_after_last_access=60`` (or omitting the parameter) will reset the lifetime
 of the cached connection to 60s everytime it is read from the cache.
 
 .. code-block:: python
@@ -271,7 +272,7 @@ from the cache. It gets the cached item as argument.
 
 .. code-block:: python
 
-    @cache(timeout=120, ignore=["ctx"], refresh_after_access=True,
+    @cache(ignore=["ctx"], evict_after_last_access=60,
        call_on_delete=lambda connection:connection.close())
     def get_client_connection(self, ctx, device_id, version):
        # ...

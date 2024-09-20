@@ -429,7 +429,7 @@ async def test_cache_decorator_last_access_expiry(time_machine):
 
     Cache entries will expire 60s after their last access if:
       - for_version=True (legacy parameter)
-      - refresh_after_access=True
+      - evict_after_last_access=True
 
     The timeout argument is ignored for these entries.
     Stale entries are cleaned up on the next call to `clean_stale_entries`.
@@ -444,10 +444,10 @@ async def test_cache_decorator_last_access_expiry(time_machine):
 
     New behaviour tests:
         `test_method_1` and `test_method_3` already test the behaviour for the default
-        value for `refresh_after_access`.
+        value for `evict_after_last_access`.
 
         `test_method_22`, `test_method_44` and  `test_method_55` test the new behaviour
-        by explicitly providing the `refresh_after_access` parameter.
+        by explicitly providing the `evict_after_last_access` parameter.
 
     """
 
@@ -477,17 +477,17 @@ async def test_cache_decorator_last_access_expiry(time_machine):
             self.increment_miss_counter()
             return dummy_arg
 
-        @cache(refresh_after_access=True)
+        @cache(evict_after_last_access=True)
         def test_method_22(self):
             self.increment_miss_counter()
             return "x2"
 
-        @cache(timeout=1, refresh_after_access=True)
+        @cache(timeout=1, evict_after_last_access=True)
         def test_method_44(self):
             self.increment_miss_counter()
             return "x4"
 
-        @cache(refresh_after_access=True)
+        @cache(evict_after_last_access=True)
         def test_method_55(self, dummy_arg: str):
             self.increment_miss_counter()
             return dummy_arg
@@ -589,7 +589,7 @@ async def test_cache_decorator_since_creation_expiry(time_machine):
     Legacy behaviour tests:
     This test checks the legacy behaviour via `test_method_1` to `test_method_3` and `short_lived_test_method_1`
 
-    `refresh_after_access` is used as a baseline comparison of what happens to an entry
+    `evict_after_last_access` is used as a baseline comparison of what happens to an entry
     evicted after last access.
 
     New behaviour tests:
@@ -615,7 +615,7 @@ async def test_cache_decorator_since_creation_expiry(time_machine):
             return dummy_arg
 
         @cache
-        def refresh_after_access(self):
+        def evict_after_last_access(self):
             self.increment_miss_counter()
             return "x3"
 
@@ -662,7 +662,7 @@ async def test_cache_decorator_since_creation_expiry(time_machine):
         assert "x1" == test.test_method_11()  # +1 miss
         assert "x2" == test.test_method_2()  # +1 miss
         assert "x2" == test.test_method_22()  # +1 miss
-        assert "x3" == test.refresh_after_access()  # +1 miss
+        assert "x3" == test.evict_after_last_access()  # +1 miss
         assert "x4" == test.short_lived_test_method_1()  # +1 miss
         assert "x4" == test.short_lived_test_method_11()  # +1 miss
         test.check_n_cache_misses(7)
@@ -684,7 +684,7 @@ async def test_cache_decorator_since_creation_expiry(time_machine):
         assert "x2" == test.test_method_22()  # cache hit
         assert "recurring_read" == test.test_method_3(dummy_arg="recurring_read")  # cache hit
         assert "recurring_read" == test.test_method_33(dummy_arg="recurring_read")  # cache hit
-        assert "x3" == test.refresh_after_access()  # +1 miss
+        assert "x3" == test.evict_after_last_access()  # +1 miss
         assert "x4" == test.short_lived_test_method_1()  # +1 miss
         assert "x4" == test.short_lived_test_method_11()  # +1 miss
         test.check_n_cache_misses(3)
@@ -839,10 +839,10 @@ async def test_cache_decorator_parameters(time_machine):
     """
 
     class CacheParametersTest(CacheMissCounter):
-        @cache(for_version=False, refresh_after_access=True)
+        @cache(for_version=False, evict_after_last_access=True)
         def test_legacy_override_1(self):
             """
-            refresh_after_access should be overridden to False
+            evict_after_last_access should be overridden to False
             """
             self.increment_miss_counter()
             return "x1"
@@ -855,12 +855,12 @@ async def test_cache_decorator_parameters(time_machine):
             self.increment_miss_counter()
             return "x2"
 
-        @cache(evict_after_creation=False, refresh_after_access=False)
+        @cache(evict_after_creation=False, evict_after_last_access=False)
         def test_both_false(self):
             self.increment_miss_counter()
             return "x3"
 
-        @cache(refresh_after_access=False)
+        @cache(evict_after_last_access=False)
         def test_none_and_false(self):
             self.increment_miss_counter()
             return "x4"
@@ -875,7 +875,7 @@ async def test_cache_decorator_parameters(time_machine):
 
     assert (
         "Invalid parameters for cache decorator for function test_both_false. "
-        "At least one of refresh_after_access and evict_after_creation "
+        "At least one of evict_after_last_access and evict_after_creation "
         "should be True."
     ) in str(exc_info.value)
 
@@ -884,7 +884,7 @@ async def test_cache_decorator_parameters(time_machine):
 
     assert (
         "Invalid parameters for cache decorator for function test_none_and_false. "
-        "At least one of refresh_after_access and evict_after_creation "
+        "At least one of evict_after_last_access and evict_after_creation "
         "should be True."
     ) in str(exc_info.value)
 

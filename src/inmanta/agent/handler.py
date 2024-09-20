@@ -105,14 +105,14 @@ def cache(
     func: Optional[T_FUNC] = None,
     ignore: list[str] = [],
     timeout: int = 5000,
-    # deprecated parameter kept for backwards compatibility: if set, overrides evict_after_creation/refresh_after_access
+    # deprecated parameter kept for backwards compatibility: if set, overrides evict_after_creation/evict_after_last_access
     for_version: Optional[bool] = None,
     cache_none: bool = True,
     # deprecated parameter kept for backwards compatibility: if set, overrides cache_none
     cacheNone: Optional[bool] = None,  # noqa: N803
     call_on_delete: Optional[Callable[[Any], None]] = None,
     evict_after_creation: Optional[bool] = None,
-    refresh_after_access: Optional[bool] = None,
+    evict_after_last_access: Optional[bool] = None,
 ) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
     """
     decorator for methods in resource handlers to provide caching
@@ -132,7 +132,7 @@ def cache(
 
     :param evict_after_creation: When True, this cache item will be evicted from the cache <timeout> seconds after
         entering the cache.
-    :param refresh_after_access: When True, this cache item will stay in the cache for 60s after its last use.
+    :param evict_after_last_access: When True, this cache item will stay in the cache for 60s after its last use.
 
     :param ignore: a list of argument names that should not be part of the cache key
     :param cache_none: allow the caching of None values
@@ -151,50 +151,50 @@ def cache(
             def bound(**kwds: object) -> object:
                 return f(self, **kwds)
 
-            _refresh_after_access: bool
+            _evict_after_last_access: bool
             _evict_after_creation: bool
 
-            # Legacy parameter is passed, it overrides refresh_after_access and evict_after_creation
+            # Legacy parameter is passed, it overrides evict_after_last_access and evict_after_creation
             if for_version is not None:
-                _refresh_after_access = for_version
+                _evict_after_last_access = for_version
                 _evict_after_creation = not for_version
             else:
                 # "New" parameters are used: validate that both are not set to False
                 # and set sensible default values if need be. The following table
-                # shows the expected value for the pair (refresh_after_access, evict_after_creation)
+                # shows the expected value for the pair (evict_after_last_access, evict_after_creation)
                 # depending on their respective input value. `W` means an exception should be raised
 
                 #                                                evict_after_creation
                 #                                        None         True            False
                 #                             None        TF           FT              TF
                 #
-                # refresh_after_access        True        TF           TT              TF
+                # evict_after_last_access     True        TF           TT              TF
                 #
                 #                             False       W            FT              W
                 #
 
-                if refresh_after_access is None:
+                if evict_after_last_access is None:
                     if evict_after_creation is None:
-                        _refresh_after_access = True
+                        _evict_after_last_access = True
                         _evict_after_creation = False
                     else:
-                        _refresh_after_access = not evict_after_creation
+                        _evict_after_last_access = not evict_after_creation
                         _evict_after_creation = evict_after_creation
                 else:
-                    if not refresh_after_access:
+                    if not evict_after_last_access:
                         if not evict_after_creation:
                             raise ValueError(
                                 f"Invalid parameters for cache decorator for function {f.__name__}. "
-                                "At least one of refresh_after_access and evict_after_creation "
+                                "At least one of evict_after_last_access and evict_after_creation "
                                 "should be True."
                             )
-                    _refresh_after_access = bool(refresh_after_access)
+                    _evict_after_last_access = bool(evict_after_last_access)
                     _evict_after_creation = bool(evict_after_creation)
 
             return self.cache.get_or_else(
                 key=f.__name__,
                 function=bound,
-                refresh_after_access=_refresh_after_access,
+                evict_after_last_access=_evict_after_last_access,
                 evict_after_creation=_evict_after_creation,
                 timeout=timeout,
                 ignore=myignore,
