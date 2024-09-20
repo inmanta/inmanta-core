@@ -37,6 +37,7 @@ from typing import Any, Dict, Optional, Union, cast
 
 import pkg_resources
 
+import inmanta.util
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
@@ -1460,7 +1461,7 @@ class Agent(SessionEndpoint):
             await loop.run_in_executor(
                 self.thread_pool,
                 self._env.install_for_config,
-                list(pkg_resources.parse_requirements(requirements)),
+                inmanta.util.parse_requirements(requirements),
                 pip_config,
             )
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, sources)

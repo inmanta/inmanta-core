@@ -18,8 +18,8 @@ requires = [
     "importlib_metadata>=4,<9",
     "jinja2~=3.0",
     "more-itertools>=8,<11",
-    # leave upper bound floating for fast-moving and extremely stable packaging
-    "packaging>=21.3",
+    # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
+    "packaging>=21.3,<24.2",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",

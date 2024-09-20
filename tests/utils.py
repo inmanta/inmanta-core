@@ -35,10 +35,12 @@ from typing import Any, Optional, TypeVar, Union
 
 import pytest
 import yaml
-from pkg_resources import Requirement, parse_version
 
 import build
 import build.env
+import inmanta.util
+import packaging.requirements
+import packaging.version
 from _pytest.mark import MarkDecorator
 from inmanta import config, const, data, env, module, protocol, util
 from inmanta.data import ResourceIdStr
@@ -49,7 +51,6 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
-from packaging import version
 
 T = TypeVar("T")
 
@@ -425,7 +426,7 @@ def get_product_meta_data() -> ProductMetadata:
 
 
 def product_version_lower_or_equal_than(version: str) -> bool:
-    return parse_version(get_product_meta_data().version) <= parse_version(version)
+    return packaging.version.Version(version=get_product_meta_data().version) <= packaging.version.Version(version=version)
 
 
 def mark_only_for_version_higher_than(version: str) -> "MarkDecorator":
@@ -454,14 +455,14 @@ class PipIndex:
 
 def create_python_package(
     name: str,
-    pkg_version: version.Version,
+    pkg_version: packaging.version.Version,
     path: str,
     *,
-    requirements: Optional[Sequence[Requirement]] = None,
+    requirements: Optional[Sequence[inmanta.util.CanonicalRequirement]] = None,
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
-    optional_dependencies: Optional[dict[str, Sequence[Requirement]]] = None,
+    optional_dependencies: Optional[dict[str, Sequence[inmanta.util.CanonicalRequirement]]] = None,
 ) -> None:
     """
     Creates an empty Python package.
@@ -544,10 +545,12 @@ def module_from_template(
     source_dir: str,
     dest_dir: Optional[str] = None,
     *,
-    new_version: Optional[version.Version] = None,
+    new_version: Optional[packaging.version.Version] = None,
     new_name: Optional[str] = None,
-    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
-    new_extras: Optional[abc.Mapping[str, abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]]] = None,
+    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]]] = None,
+    new_extras: Optional[
+        abc.Mapping[str, abc.Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]]]
+    ] = None,
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
@@ -576,9 +579,12 @@ def module_from_template(
     """
 
     def to_python_requires(
-        requires: abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]
-    ) -> abc.Iterator[Requirement]:
-        return (str(req if isinstance(req, Requirement) else req.get_python_package_requirement()) for req in requires)
+        requires: abc.Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]]
+    ) -> list[str]:
+        return [
+            str(req) if isinstance(req, packaging.requirements.Requirement) else str(req.get_python_package_requirement())
+            for req in requires
+        ]
 
     if (dest_dir is None) != in_place:
         raise ValueError("Either dest_dir or in_place must be set, never both.")
@@ -657,9 +663,9 @@ def v1_module_from_template(
     source_dir: str,
     dest_dir: str,
     *,
-    new_version: Optional[version.Version] = None,
+    new_version: Optional[packaging.version.Version] = None,
     new_name: Optional[str] = None,
-    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
+    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]]] = None,
     new_content_init_cf: Optional[str] = None,
     new_content_init_py: Optional[str] = None,
 ) -> module.ModuleV2Metadata:
@@ -699,7 +705,11 @@ def v1_module_from_template(
         with open(os.path.join(dest_dir, "requirements.txt"), "w") as fd:
             fd.write(
                 "\n".join(
-                    str(req if isinstance(req, Requirement) else req.get_python_package_requirement())
+                    (
+                        str(req)
+                        if isinstance(req, packaging.requirements.Requirement)
+                        else str(req.get_python_package_requirement())
+                    )
                     for req in new_requirements
                 )
             )
