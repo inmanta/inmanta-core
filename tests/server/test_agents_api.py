@@ -215,10 +215,12 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert len(result.result["data"]) == 7
     assert agent_names(result.result["data"]) == all_agent_names_in_expected_order
 
-    if order == "ASC":
-        assert result.result["metadata"] == {"total": 7, "before": 7, "after": 0, "page_size": 100}
-    else:
-        assert result.result["metadata"] == {"total": 7, "before": 0, "after": 7, "page_size": 100}
+    assert result.result["metadata"] == {"total": 7, "before": 0, "after": 0, "page_size": 100}
+
+    # if order == "ASC":
+    #     assert result.result["metadata"] == {"total": 7, "before": 7, "after": 0, "page_size": 100}
+    # else:
+    #     assert result.result["metadata"] == {"total": 7, "before": 0, "after": 7, "page_size": 100}
 
 
 async def test_sorting_validation(client, environment: str, env_with_agents: None) -> None:

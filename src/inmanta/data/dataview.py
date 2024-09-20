@@ -364,12 +364,26 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
                 page_size=self.limit,
             )
 
+        def construct_filter(filter_name: str, filter_condition: str, drop_if_paging_order: PagingOrder) -> str:
+            if filter_condition:
+                # We will only remove the filter if
+                #   - Some results have been found
+                #   - the current paging order (order) is equals to the paging order of the current filter
+                #       - count_before ->  PagingOrder.ASC
+                #       - count_after ->  PagingOrder.DESC
+                if found_result or not drop_if_paging_order == order:
+                    return f", COUNT(*) filter ({filter_condition}) as {filter_name}"
+                else:
+                    return f", COUNT(*) as {filter_name}"
+            else:
+                return filter_condition
+
+
         select_clause = (
             "SELECT COUNT(*) as count_total"
-            + (f", COUNT(*) filter ({before_filter}) as count_before" if before_filter else "")
-            + (f", COUNT(*) filter ({after_filter}) as count_after " if after_filter else "")
+            + (construct_filter("count_before", before_filter, PagingOrder.ASC))
+            + (construct_filter("count_after", after_filter, PagingOrder.DESC))
         )
-        # If we have not found any result, then we cannot base ourself on the filter to construct
 
         query_builder = query_builder.select(select_clause)
 
@@ -379,18 +393,10 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         if not result:
             raise InvalidQueryParameter("Could not determine page bounds")
 
-        count_total = cast(int, result[0]["count_total"])
-        count_before = cast(int, result[0].get("count_before", 0))
-        count_after = cast(int,result[0].get("count_after", 0))
-        if  count_before == 0 and count_after == 0 and count_total > 0:
-            if order == PagingOrder.ASC:
-                count_before = count_total
-            else:
-                count_after = count_total
         return PagingMetadata(
-            total=count_total,
-            before=count_before,
-            after=count_after,
+            total=cast(int, result[0]["count_total"]),
+            before=cast(int, result[0].get("count_before", 0)),
+            after=cast(int,result[0].get("count_after", 0)),
             page_size=self.limit,
         )
 
