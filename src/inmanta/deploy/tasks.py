@@ -22,7 +22,6 @@ import logging
 import traceback
 import uuid
 from dataclasses import dataclass
-from typing import Optional
 
 from inmanta import const, data, resources
 from inmanta.agent import executor
@@ -157,7 +156,9 @@ class Deploy(Task):
             )
 
         try:
-            my_executor: executor.Executor = await self.get_executor(task_manager, agent, executor_resource_details.id.entity_type, version)
+            my_executor: executor.Executor = await self.get_executor(
+                task_manager, agent, executor_resource_details.id.entity_type, version
+            )
         except Exception as e:
             await report_deploy_failure(e)
             return const.ResourceState.unavailable
@@ -178,7 +179,9 @@ class DryRun(Task):
         return False
 
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
-        executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(self.version, self.resource_details)
+        executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(
+            self.version, self.resource_details
+        )
         try:
             my_executor: executor.Executor = await self.get_executor(
                 task_manager, agent, executor_resource_details.id.entity_type, self.version
@@ -211,7 +214,9 @@ class RefreshFact(Task):
 
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
         try:
-            executor = await self.get_executor(task_manager, agent, resources.Id.parse_id(self.resource).entity_type, version)
+            my_executor = await self.get_executor(
+                task_manager, agent, resources.Id.parse_id(self.resource).entity_type, version
+            )
         except Exception:
             logger_for_agent(agent).warning(
                 "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded",
@@ -219,4 +224,4 @@ class RefreshFact(Task):
             )
             return
 
-        await executor.get_facts(executor_resource_details)
+        await my_executor.get_facts(executor_resource_details)

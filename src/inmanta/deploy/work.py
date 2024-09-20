@@ -199,7 +199,9 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         Wake up all workers after shutdown is signalled
         """
         poison_pill = TaskQueueItem(
-            task=PrioritizedTask(task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")), priority=-1),
+            task=PrioritizedTask(
+                task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")), priority=-1
+            ),
             insert_order=0,
         )
         for queue in self._agent_queues.values():
@@ -320,10 +322,7 @@ class ScheduledWork:
 
         # lookup caches for visited nodes
         queued: set[ResourceIdStr] = {  # queued or running, pre-populate with in-progress deploys
-            t.resource
-            for t in self.agent_queues.in_progress
-            if isinstance(t, tasks.Deploy)
-            if t.resource not in stale_deploys
+            t.resource for t in self.agent_queues.in_progress if isinstance(t, tasks.Deploy) if t.resource not in stale_deploys
         }
         not_scheduled: set[ResourceIdStr] = set()
 

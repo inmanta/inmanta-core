@@ -25,6 +25,7 @@ T = TypeVar("T", bound=Hashable)
 K = TypeVar("K", bound=Hashable)
 V = TypeVar("V", bound=Hashable)
 
+
 class BidirectionalManyMapping(MutableMapping[S, Set[T]], Generic[S, T]):
     """
     A mutable bidirectional mapping many-to-many mapping between two value domains. All operations uphold the bidirectional
@@ -35,6 +36,7 @@ class BidirectionalManyMapping(MutableMapping[S, Set[T]], Generic[S, T]):
 
     While this is a mutable mapping, mutations on the underlying sets are not supported.
     """
+
     def __init__(self, mapping: Optional[Mapping[S, Set[T]]] = None) -> None:
         self._primary: dict[S, set[T]] = {}
         self._reverse: dict[T, set[S]] = {}

@@ -30,8 +30,6 @@ from inmanta.util.collections import BidirectionalManyMapping
 
 
 class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceIdStr]):
-    """
-    """
     def requires_view(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
         return self
 
@@ -81,6 +79,7 @@ class ResourceState:
     """
     State of a resource. Consists of multiple independent (mostly) state vectors that make up the final state.
     """
+
     # FIXME: review / finalize resource state. Based on draft design in
     #   https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
     status: ResourceStatus

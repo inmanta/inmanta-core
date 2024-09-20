@@ -338,7 +338,9 @@ class ResourceScheduler(TaskManager):
 
     # TaskManager interface
 
-    async def get_resource_intent(self, resource: ResourceIdStr, *, for_deploy: bool = False) -> Optional[tuple[int, ResourceDetails]]:
+    async def get_resource_intent(
+        self, resource: ResourceIdStr, *, for_deploy: bool = False
+    ) -> Optional[tuple[int, ResourceDetails]]:
         async with self._scheduler_lock:
             # fetch resource details under lock
             try:

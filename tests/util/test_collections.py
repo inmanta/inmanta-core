@@ -17,7 +17,7 @@
 """
 
 import pytest
-from collections.abc import Mapping, Set
+
 from inmanta.util.collections import BidirectionalManyMapping
 
 
@@ -118,9 +118,8 @@ def test_bidirectional_many_mapping() -> None:
     copy: BidirectionalManyMapping[str, int] = BidirectionalManyMapping(number_categories)
 
     def copy_equals() -> bool:
-        return (
-            dict(copy.items()) == dict(number_categories.items())
-            and dict(copy.reverse_mapping().items()) == dict(category_numbers.items())
+        return dict(copy.items()) == dict(number_categories.items()) and dict(copy.reverse_mapping().items()) == dict(
+            category_numbers.items()
         )
 
     assert copy_equals()
