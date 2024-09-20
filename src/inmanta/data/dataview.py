@@ -140,7 +140,7 @@ class RequestedPagingBoundaries:
         return (self.end is not None) or (self.last_id is not None)
 
 
-class PagingMetadata:  # TODO h here
+class PagingMetadata:
     def __init__(self, total: int, before: int, after: int, page_size: int) -> None:
         self.total = total
         self.before = before
