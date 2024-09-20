@@ -449,6 +449,19 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     assert response["metadata"] == {"total": 5, "before": 2, "after": 1, "page_size": 2}
     # TODO h here
 
+    fake_id_url = f"{base_url}/api/v2/agents?limit=1&sort=agent.asc&filter.status=paused&start=ausf&first_id=athonet_core%3A%3Alicense%3A%3ALicense%5BDARI-LDARI-CP002%2Ccomponent_id%3Dausf%5D"
+    request = HTTPRequest(
+        url=fake_id_url,
+        headers={"X-Inmanta-tid": str(environment)},
+    )
+    response = await http_client.fetch(request, raise_error=False)
+    assert response.code == 200
+    response = json.loads(response.body.decode("utf-8"))
+    # We don't have a way to reconstruct the previous link
+    assert response.get("links", None) is None
+    assert response["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
+    assert response["data"] == []
+
 @pytest.mark.parametrize(
     "sort, expected_status",
     [
