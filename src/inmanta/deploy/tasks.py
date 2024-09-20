@@ -127,8 +127,6 @@ class Deploy(Task):
         version: int,
         resource_details: "state.ResourceDetails",
     ) -> "const.ResourceState":
-        # FIXME: WDB to Sander: is the version of the state the correct version?
-        #   It may happen that the set of types no longer matches the version?
         # FIXME: code loading interface is not nice like this,
         #   - we may want to track modules per agent, instead of types
         #   - we may also want to track the module version vs the model version

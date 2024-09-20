@@ -138,10 +138,10 @@ class ResourceScheduler(TaskManager):
         # tasks that have been picked up while this set contains only those tasks for which we've already committed. For each
         # deploy task, there is a (typically) short window of time where it's considered in progress by the agent queue, but
         # it has not yet started on the actual deploy, i.e. it will still see updates to the resource intent.
-        self._deploying: set[ResourceIdStr]
+        self._deploying: set[ResourceIdStr] = set()
         # Set of resources for which a concrete stale deploy is in progress, i.e. we've committed for a given intent and
         # that intent has gone stale since
-        self._deploying_stale: set[ResourceIdStr]
+        self._deploying_stale: set[ResourceIdStr] = set()
 
         self.environment = environment
         self.client = client
@@ -234,7 +234,7 @@ class ResourceScheduler(TaskManager):
         self, resources: Mapping[ResourceIdStr, ResourceDetails]
     ) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
         require_mapping = {
-            resource: {req.resource_str() for req in details.attributes.get("requires", [])}
+            resource: {Id.parse_id(req).resource_str() for req in details.attributes.get("requires", [])}
             for resource, details in resources.items()
         }
         return require_mapping
@@ -243,10 +243,11 @@ class ResourceScheduler(TaskManager):
         self,
     ) -> None:
         """
-        Method that is used as a notification from the Server to retrieve the latest data concerning the release of the
-        latest version. This method will fetch the latest version and the different resources in their latest version.
-        It will then compute the work that needs to be done (resources to create / delete / update) to be up to date with
-        this new version.
+        Update model state and scheduled work based on the latest released version in the database, e.g. when the scheduler is
+        started or when a new version is released. Triggers a deploy after updating internal state:
+        - schedules new or updated resources to be deployed
+        - schedules any resources that are not in a known good state.
+        - rearranges deploy tasks by requires if required
         """
         environment = await data.Environment.get_by_id(self.environment)
         if environment is None:
@@ -352,8 +353,9 @@ class ResourceScheduler(TaskManager):
                 # locking for performance reasons.
                 return None
             else:
-                # still under lock => can safely add to non-stale in-progress set
-                self._deploying.add(resource)
+                if for_deploy:
+                    # still under lock => can safely add to non-stale in-progress set
+                    self._deploying.add(resource)
                 return result
 
     async def report_resource_state(

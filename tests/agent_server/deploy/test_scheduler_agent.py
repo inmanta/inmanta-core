@@ -163,7 +163,7 @@ def make_resource_minimal(environment):
         m.update(character.encode("utf-8"))
         attribute_hash = m.hexdigest()
 
-        return state.ResourceDetails(rid, version, attributes, attribute_hash)
+        return state.ResourceDetails(attributes, attribute_hash)
 
     return make_resource_minimal
 
@@ -180,9 +180,7 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
         ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
     }
 
-    # FIXME: SANDER: It seems we immediatly deploy if a new version arrives, we don't wait for an explicit deploy call?
-    # Is this by design?
-    await agent.scheduler.new_version(5, resources, make_requires(resources))
+    await agent.scheduler._new_version(5, resources, make_requires(resources))
 
     async def done():
         agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent1")
@@ -206,7 +204,7 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
         ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
     }
 
-    await agent.scheduler.new_version(5, resources, make_requires(resources))
+    await agent.scheduler._new_version(5, resources, make_requires(resources))
 
     assert len(agent.scheduler._state.get_types_for_agent("agent1")) == 2
 
@@ -214,7 +212,7 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
         ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, [], 6),
     }
 
-    await agent.scheduler.new_version(6, resources, make_requires(resources))
+    await agent.scheduler._new_version(6, resources, make_requires(resources))
 
     assert len(agent.scheduler._state.get_types_for_agent("agent1")) == 1
     assert len(agent.scheduler._state.resources) == 1
@@ -261,9 +259,7 @@ async def test_get_facts(agent: TestAgent, make_resource_minimal):
         ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
     }
 
-    # FIXME: SANDER: It seems we immediatly deploy if a new version arrives, we don't wait for an explicit deploy call?
-    # Is this by design?
-    await agent.scheduler.new_version(5, resources, make_requires(resources))
+    await agent.scheduler._new_version(5, resources, make_requires(resources))
 
     await agent.scheduler.get_facts({"id": rid1})
 
