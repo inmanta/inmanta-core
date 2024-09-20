@@ -98,6 +98,8 @@ class ModelState:
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict[ResourceIdStr, ResourceState] = dataclasses.field(default_factory=dict)
     update_pending: set[ResourceIdStr] = dataclasses.field(default_factory=set)
+    # resources with a known or assumed difference between intent and actual state
+    dirty: set[ResourceIdStr] = dataclasses.field(default_factory=set)
     # types per agent keeps track of which resource types live on which agent by doing a reference count
     # the dict is agent_name -> resource_type -> resource_count
     types_per_agent: dict[str, dict[ResourceType, int]] = dataclasses.field(
@@ -119,18 +121,22 @@ class ModelState:
 
     def update_desired_state(
         self,
-        resource: ResourceDetails,
+        resource: ResourceIdStr,
+        details: ResourceDetails,
     ) -> None:
-        # FIXME[#8008]: raise KeyError if already lives in state?
-        resource_id = resource.rid
-        self.resources[resource_id] = resource
-        if resource_id in self.resource_state:
-            self.resource_state[resource_id].status = ResourceStatus.HAS_UPDATE
+        """
+        Register a new desired state for a resource.
+        """
+        self.resources[resource] = details
+        if resource in self.resource_state:
+            self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
         else:
-            self.resource_state[resource_id] = ResourceState(
+            self.resource_state[resource] = ResourceState(
                 status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW
             )
-            self.types_per_agent[resource.id.agent_name][resource.id.entity_type] += 1
+            parsed_id = Id.parse_id(resource)
+            self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] += 1
+        self.dirty.add(resource)
 
     def update_requires(
         self,
@@ -149,6 +155,7 @@ class ModelState:
         self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] -= 1
         if self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] == 0:
             del self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type]
+        self.dirty.discard(resource)
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self.types_per_agent[agent])

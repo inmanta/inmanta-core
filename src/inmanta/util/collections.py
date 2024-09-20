@@ -19,25 +19,25 @@
 from collections.abc import Hashable, Iterator, Mapping, MutableMapping, Set
 from typing import Generic, Optional, TypeVar
 
-P = TypeVar("P", bound=Hashable)
 S = TypeVar("S", bound=Hashable)
+T = TypeVar("T", bound=Hashable)
 # type vars not bound to the class
 K = TypeVar("K", bound=Hashable)
 V = TypeVar("V", bound=Hashable)
 
-
-class BidirectionalManyMapping(MutableMapping[P, Set[S]], Generic[P, S]):
+class BidirectionalManyMapping(MutableMapping[S, Set[T]], Generic[S, T]):
     """
-    A mutable bidirectional mapping many-to-many mapping between two value domains.
+    A mutable bidirectional mapping many-to-many mapping between two value domains. All operations uphold the bidirectional
+    invariant.
 
-    e.g. if a value x maps to y1 and y2, then both y1 and y2 will include x in the reverse mapping. This property holds in both
+    e.g. if a value s maps to t1 and t2, then both t1 and t2 will include s in the reverse mapping. This property holds in both
     directions.
 
     While this is a mutable mapping, mutations on the underlying sets are not supported.
     """
-    def __init__(self, mapping: Optional[Mapping[P, Set[S]]] = None) -> None:
-        self._primary: dict[P, set[S]] = {}
-        self._reverse: dict[S, set[P]] = {}
+    def __init__(self, mapping: Optional[Mapping[S, Set[T]]] = None) -> None:
+        self._primary: dict[S, set[T]] = {}
+        self._reverse: dict[T, set[S]] = {}
         if mapping is not None:
             for key, values in mapping.items():
                 self[key] = values
@@ -69,13 +69,13 @@ class BidirectionalManyMapping(MutableMapping[P, Set[S]], Generic[P, S]):
 
     # MutableMapping interface
 
-    def __getitem__(self, key: P) -> Set[S]:
+    def __getitem__(self, key: S) -> Set[T]:
         return self._primary.__getitem__(key)
 
-    def __setitem__(self, key: P, value: Set[S]) -> None:
+    def __setitem__(self, key: S, value: Set[T]) -> None:
         self._set(self._primary, self._reverse, key, value)
 
-    def __delitem__(self, key: P) -> None:
+    def __delitem__(self, key: S) -> None:
         """
         Delete item from this end of the mapping.
         """
@@ -86,7 +86,7 @@ class BidirectionalManyMapping(MutableMapping[P, Set[S]], Generic[P, S]):
         # delete from primary mapping
         del self._primary[key]
 
-    def __iter__(self) -> Iterator[P]:
+    def __iter__(self) -> Iterator[S]:
         return iter(self._primary)
 
     def __len__(self) -> int:
@@ -101,15 +101,17 @@ class BidirectionalManyMapping(MutableMapping[P, Set[S]], Generic[P, S]):
 
     # Methods for reverse access
 
-    def reverse_mapping(self) -> "BidirectionalManyMapping[S, P]":
+    def reverse_mapping(self) -> "BidirectionalManyMapping[T, S]":
         """
         Return a BidirectionalManyMapping coupled to this one to represent the reverse mapping. The instance remains coupled
         with this one, meaning that changes to one are reflected to the other, i.e. they're mutable views on both sides of the
         same bidirectional mapping.
+
+        This method is symmetric, i.e. `self.reverse_mapping().reverse_mapping() is self`
         """
         return _BidirectionalManyToManyMappingReverse(self)
 
-    def get_reverse(self, key: S, default: Optional[Set[P]] = None) -> Optional[Set[P]]:
+    def get_reverse(self, key: T, default: Optional[Set[S]] = None) -> Optional[Set[S]]:
         """
         Return the values associated with the given key in the reverse mapping.
 
@@ -117,7 +119,7 @@ class BidirectionalManyMapping(MutableMapping[P, Set[S]], Generic[P, S]):
         """
         return self._reverse.get(key, default)
 
-    def set_reverse(self, key: S, values: Set[P]) -> None:
+    def set_reverse(self, key: T, values: Set[S]) -> None:
         """
         Set new values for the key in the reverse mapping. Old values are completely replaced and the primary mapping is
         updated accordingly.
@@ -127,11 +129,11 @@ class BidirectionalManyMapping(MutableMapping[P, Set[S]], Generic[P, S]):
         self._set(self._reverse, self._primary, key, values)
 
 
-class _BidirectionalManyToManyMappingReverse(BidirectionalManyMapping[S, P], Generic[P, S]):
-    def __init__(self, base: BidirectionalManyMapping[P, S]) -> None:
+class _BidirectionalManyToManyMappingReverse(BidirectionalManyMapping[T, S], Generic[S, T]):
+    def __init__(self, base: BidirectionalManyMapping[S, T]) -> None:
         self._base = base
         self._primary = self._base._reverse
         self._reverse = self._base._primary
 
-    def reverse_mapping(self) -> BidirectionalManyMapping[P, S]:
+    def reverse_mapping(self) -> BidirectionalManyMapping[S, T]:
         return self._base

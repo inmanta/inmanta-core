@@ -104,6 +104,11 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         # use simple counter rather than time.monotonic_ns() for performance reasons
         self._entry_count: int = 0
         self._new_agent_notify: Callable[[str], None] = new_agent_notify
+        self._in_progress: set[tasks.Task] = set()
+
+    @property
+    def in_progress(self) -> Set[tasks.Task]:
+        return self._in_progress
 
     def reset(self) -> None:
         self._agent_queues.clear()
@@ -158,7 +163,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         return self._tasks_by_resource.get(task.resource, {}).get(task, None)
 
     def sorted(self, agent: str) -> list[PrioritizedTask[tasks.Task]]:
-        # FIXME[#8008]: remove this method: it's only a PoC to hightlight how to achieve a sorted view
+        # FIXME: remove this method: it's only a PoC to hightlight how to achieve a sorted view
         queue: asyncio.PriorityQueue[TaskQueueItem] = self._agent_queues[agent]
         backing_heapq: list[TaskQueueItem] = queue._queue  # type: ignore [attr-defined]
         backing_heapq.sort()
@@ -186,7 +191,6 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         if task.resource not in self._tasks_by_resource:
             self._tasks_by_resource[task.resource] = {}
         self._tasks_by_resource[task.resource][task] = item
-        # FIXME[#8008]: parse agent, may need to be optimized
         agent_name = Id.parse_id(task.resource).agent_name
         self._get_queue(agent_name).put_nowait(item)
 
@@ -214,15 +218,17 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
                 continue
             # remove from the queue since it's been picked up
             self.discard(item.task.task)
+            self._in_progress.add(item.task.task)
             return item.task.task
 
-    def task_done(self, agent: str) -> None:
+    def task_done(self, agent: str, task: tasks.Task) -> None:
         """
         Indicate that a formerly enqueued task for a given agent is complete.
 
         Used by queue consumers. For each get() used to fetch a task, a subsequent call to task_done() tells the corresponding
         agent queue that the processing on the task is complete.
         """
+        self._in_progress.remove(task)
         self._agent_queues[agent].task_done()
 
     #########################
@@ -259,13 +265,14 @@ class ScheduledWork:
         scheduled work, they will be processed in requires order. Only direct requires are considered. It is the responsibility
         of the scheduler to include in-between resources as scheduled work if/when transitive requires ordering is desired.
 
-    Expects to be informed by the scheduler of deploy requests and/or state changes through update_state() and
+    Expects to be informed by the scheduler of deploy requests and/or state changes through add() and
     delete_resource().
 
     Expects to be informed by scheduler of finished tasks through finished_deploy().
 
-    :param requires: Live, read-only view on requires-provides mapping for the latest model state.
-    :param new_agent_trigger: Method to notify client of newly created agent queues. When notified about a queue, client is
+    :param requires: Live, read-only view on requires mapping for the latest model state.
+    :param provides: Live, read-only view on provides mapping for the latest model state.
+    :param new_agent_notify: Method to notify client of newly created agent queues. When notified about a queue, client is
         expected to start consuming its tasks.
     """
 
@@ -278,30 +285,33 @@ class ScheduledWork:
         self.requires: Mapping[ResourceIdStr, Set[ResourceIdStr]] = requires
         self.provides: Mapping[ResourceIdStr, Set[ResourceIdStr]] = provides
         self.agent_queues: AgentQueues = AgentQueues(new_agent_notify)
-        self.waiting: dict[ResourceIdStr, BlockedDeploy] = {}
+        self._waiting: dict[ResourceIdStr, BlockedDeploy] = {}
 
     def reset(self) -> None:
         self.agent_queues.reset()
-        self.waiting.clear()
+        self._waiting.clear()
 
-    # FIXME[#8008]: name
-    def update_state(
+    def deploy(
         self,
+        resources: Set[ResourceIdStr],
         *,
-        ensure_scheduled: Set[ResourceIdStr],
-        running_deploys: Set[ResourceIdStr],
+        stale_deploys: Optional[Set[ResourceIdStr]] = None,
         added_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
         dropped_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
     ) -> None:
         """
-        Update the scheduled work state to reflect the new model state and scheduler intent. May defer tasks that were
-        previously considered ready to execute if any of their dependencies are added to the scheduled work.
+        Add deploy tasks for the given resources. Additionally update the scheduled work state to reflect the new model state
+        and scheduler intent. May defer tasks that were previously considered ready to execute if any of their dependencies are
+        added to the scheduled work or if new dependencies are added.
 
-        :param ensure_scheduled: Set of resources that should be deployed. Adds a deploy task to the scheduled work for each
+        :param resources: Set of resources that should be deployed. Adds a deploy task to the scheduled work for each
             of these, unless it is already scheduled.
-        :param running_deploys: Set of resources for which a deploy is currently running, for the latest desired state, i.e.
-            stale deploys should be excluded.
+        :param stale_deploys: Set of resources for which a stale deploy is in progress, i.e. a deploy for an outdated resource
+            intent.
+        :param added_requires: Requires edges that were added since the previous state update, if any.
+        :param dropped_requires: Requires edges that were removed since the previous state update, if any.
         """
+        stale_deploys = stale_deploys if stale_deploys is not None else set()
         added_requires = added_requires if added_requires is not None else {}
         dropped_requires = dropped_requires if dropped_requires is not None else {}
 
@@ -309,7 +319,12 @@ class ScheduledWork:
         maybe_runnable: set[ResourceIdStr] = set()
 
         # lookup caches for visited nodes
-        queued: set[ResourceIdStr] = set(running_deploys)  # queued or running
+        queued: set[ResourceIdStr] = {  # queued or running, pre-populate with in-progress deploys
+            t.resource
+            for t in self.agent_queues.in_progress
+            if isinstance(t, tasks.Deploy)
+            if t.resource not in stale_deploys
+        }
         not_scheduled: set[ResourceIdStr] = set()
 
         # First drop all dropped requires so that we work on the smallest possible set for this operation.
@@ -317,10 +332,10 @@ class ScheduledWork:
             if not dropped:
                 # empty set, nothing to do
                 continue
-            if resource not in self.waiting:
+            if resource not in self._waiting:
                 # this resource is not currently waiting for anything => nothing to do
                 continue
-            self.waiting[resource].blocked_on.difference_update(dropped)
+            self._waiting[resource].blocked_on.difference_update(dropped)
             maybe_runnable.add(resource)
 
         def is_scheduled(resource: ResourceIdStr) -> bool:
@@ -328,7 +343,7 @@ class ScheduledWork:
             Returns whether the resource is currently scheduled, caching the results.
             """
             # start with cheap checks: check waiting and cached sets
-            if resource in self.waiting or resource in queued:
+            if resource in self._waiting or resource in queued:
                 # definitely scheduled
                 return True
             if resource in not_scheduled:
@@ -362,18 +377,18 @@ class ScheduledWork:
                 task: tasks.Deploy = tasks.Deploy(resource=resource)
                 priority: Optional[int] = self.agent_queues.discard(task)
                 queued.remove(resource)
-                self.waiting[resource] = BlockedDeploy(
+                self._waiting[resource] = BlockedDeploy(
                     # FIXME[#8015]: default priority
                     task=PrioritizedTask(task=task, priority=priority if priority is not None else 0),
                     # task was previously ready to execute => assume no other blockers than this one
                     blocked_on=added_requires,
                 )
             else:
-                self.waiting[resource].blocked_on.update(added_requires)
+                self._waiting[resource].blocked_on.update(added_requires)
                 maybe_runnable.discard(resource)
 
         # ensure desired resource deploys are scheduled
-        for resource in ensure_scheduled:
+        for resource in resources:
             if is_scheduled(resource):
                 # Deploy is already scheduled / running. No need to do anything here. If any of its dependencies are to be
                 # scheduled as well, they will follow the provides relation to ensure this deploy waits its turn.
@@ -382,7 +397,7 @@ class ScheduledWork:
             blocked_on: set[ResourceIdStr] = {
                 dependency for dependency in self.requires.get(resource, ()) if is_scheduled(dependency)
             }
-            self.waiting[resource] = BlockedDeploy(
+            self._waiting[resource] = BlockedDeploy(
                 # FIXME[#8015]: priority
                 task=PrioritizedTask(task=tasks.Deploy(resource=resource), priority=0),
                 blocked_on=blocked_on,
@@ -402,7 +417,7 @@ class ScheduledWork:
 
         # finally check if any tasks have become ready to run
         for resource in maybe_runnable:
-            blocked: BlockedDeploy = self.waiting[resource]
+            blocked: BlockedDeploy = self._waiting[resource]
             self._queue_if_ready(blocked)
             # no more need to update cache entries
 
@@ -413,7 +428,7 @@ class ScheduledWork:
             return
         # ready to execute, move to agent queue
         self.agent_queues.queue_put_nowait(blocked_deploy.task)
-        del self.waiting[blocked_deploy.task.task.resource]
+        del self._waiting[blocked_deploy.task.task.resource]
 
     def delete_resource(self, resource: ResourceIdStr) -> None:
         """
@@ -421,8 +436,8 @@ class ScheduledWork:
         do not act on the latest desired state.
         """
         # delete from waiting collection if deploy task is waiting to be queued
-        if resource in self.waiting:
-            del self.waiting[resource]
+        if resource in self._waiting:
+            del self._waiting[resource]
         # additionally delete from agent_queues if a task is already queued
         task: tasks.Task
         for task in self.agent_queues.get_tasks_for_resource(resource):
@@ -432,11 +447,11 @@ class ScheduledWork:
     def finished_deploy(self, resource: ResourceIdStr) -> None:
         # FIXME[#8010]: consider failure scenarios -> check how current agent does it, e.g. skip-for-undefined
         # FIXME[#8008]: docstring + mention under lock + mention only iff not stale
-        if resource in self.waiting or Deploy(resource=resource) in self._agent_queues:
-            # a new deploy task was scheduled in the meantime, no need to do anything
+        if resource in self._waiting or tasks.Deploy(resource=resource) in self.agent_queues:
+            # a new deploy task was scheduled in the meantime, no need to do anything else
             return
         for dependant in self.provides.get(resource, []):
-            blocked_deploy: Optional[BlockedDeploy] = self.waiting.get(dependant, None)
+            blocked_deploy: Optional[BlockedDeploy] = self._waiting.get(dependant, None)
             if blocked_deploy is None:
                 # dependant is not currently scheduled
                 continue

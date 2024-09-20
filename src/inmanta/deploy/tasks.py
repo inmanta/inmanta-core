@@ -40,12 +40,14 @@ def logger_for_agent(agent: str) -> logging.Logger:
 class Task(abc.ABC):
     """
     Resource action task. Represents the execution of a specific resource action for a given resource.
+
+    Closely coupled with deploy.scheduler.TaskManager interface. Concrete implementations must respect its contract.
     """
 
     resource: ResourceIdStr
 
     @abc.abstractmethod
-    async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
+    async def execute(self, scheduler: "scheduler.TaskManager", agent: str) -> None:
         """the scheduler is considered to be a friend class: access to internal members is expected"""
         pass
 
@@ -62,7 +64,7 @@ class Task(abc.ABC):
         )
 
     async def get_executor(
-        self, scheduler: "scheduler.ResourceScheduler", agent: str, resource_type: ResourceType, version: int
+        self, scheduler: "scheduler.TaskManager", agent: str, resource_type: ResourceType, version: int
     ) -> executor.Executor:
         """Helper method to produce the executor"""
         # TODO: pass code_manager, executor manager, client and environment as argument or make them public
@@ -98,15 +100,15 @@ class PoisonPill(Task):
     It functions mostly as a no-op
     """
 
-    async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
+    async def execute(self, scheduler: "scheduler.TaskManager", agent: str) -> None:
         pass
 
 
 class Deploy(Task):
-    async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
+    async def execute(self, scheduler: "scheduler.TaskManager", agent: str) -> None:
         version: int
         resource_details: "state.ResourceDetails"
-        intent = await scheduler.get_resource_intent(self.resource)
+        intent = await scheduler.get_resource_intent(self.resource, for_deploy=True)
         if intent is None:
             # Stale resource, can simply be dropped.
             return
@@ -124,7 +126,7 @@ class Deploy(Task):
 
     async def do_deploy(
         self,
-        scheduler: "scheduler.ResourceScheduler",
+        scheduler: "scheduler.TaskManager",
         agent: str,
         version: int,
         resource_details: "state.ResourceDetails",
@@ -178,7 +180,7 @@ class DryRun(Task):
     def delete_with_resource(self) -> bool:
         return False
 
-    async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
+    async def execute(self, scheduler: "scheduler.TaskManager", agent: str) -> None:
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(self.version, self.resource_details)
         try:
             my_executor: executor.Executor = await self.get_executor(
@@ -201,7 +203,7 @@ class DryRun(Task):
 
 class RefreshFact(Task):
 
-    async def execute(self, scheduler: "scheduler.ResourceScheduler", agent: str) -> None:
+    async def execute(self, scheduler: "scheduler.TaskManager", agent: str) -> None:
         version: int
         intent = await scheduler.get_resource_intent(self.resource)
         if intent is None:
