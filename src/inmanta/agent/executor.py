@@ -74,10 +74,10 @@ class ResourceDetails:
     rvid: ResourceVersionIdStr
     model_version: int
     requires: Sequence[Id]
-    attributes: Mapping[str, object]
+    attributes: dict[str, object]
 
     def __init__(self, id: ResourceIdStr, version: int, attributes: Mapping[str, object]) -> None:
-        self.attributes = attributes
+        self.attributes = dict(attributes)
         self.id = Id.parse_id(id).copy(version=version)
         self.rid = self.id.resource_str()
         self.rvid = self.id.resource_version_str()
