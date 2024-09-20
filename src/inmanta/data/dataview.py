@@ -29,7 +29,6 @@ from asyncpg import Record
 
 import inmanta.data
 from inmanta import data
-from inmanta.config import Config
 from inmanta.data import (
     APILIMIT,
     PRIMITIVE_SQL_TYPES,
@@ -310,7 +309,9 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
     # Paging helpers
 
-    async def _get_page_count(self, bounds: Union[PagingBoundaries, RequestedPagingBoundaries], found_result: bool) -> PagingMetadata:
+    async def _get_page_count(
+        self, bounds: Union[PagingBoundaries, RequestedPagingBoundaries], found_result: bool
+    ) -> PagingMetadata:
         """
         Construct the page counts,
 
@@ -365,19 +366,16 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             )
 
         def construct_filter(filter_name: str, filter_condition: str, drop_if_paging_order: PagingOrder) -> str:
-            if filter_condition:
-                # We will only remove the filter if
-                #   - Some results have been found
-                #   - the current paging order (order) is equals to the paging order of the current filter
-                #       - count_before ->  PagingOrder.ASC
-                #       - count_after ->  PagingOrder.DESC
-                if found_result or not drop_if_paging_order == order:
+            if found_result:
+                if filter_condition:
+                    return f", COUNT(*) filter ({filter_condition}) as {filter_name}"
+                else:
+                    return filter_condition
+            else:
+                if found_result or drop_if_paging_order != order:
                     return f", COUNT(*) filter ({filter_condition}) as {filter_name}"
                 else:
                     return f", COUNT(*) as {filter_name}"
-            else:
-                return filter_condition
-
 
         select_clause = (
             "SELECT COUNT(*) as count_total"
@@ -396,7 +394,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         return PagingMetadata(
             total=cast(int, result[0]["count_total"]),
             before=cast(int, result[0].get("count_before", 0)),
-            after=cast(int,result[0].get("count_after", 0)),
+            after=cast(int, result[0].get("count_after", 0)),
             page_size=self.limit,
         )
 

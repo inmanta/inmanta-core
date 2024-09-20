@@ -178,20 +178,6 @@ async def test_compile_reports_paging(server, client, env_with_compile_reports, 
 
     assert result.result["metadata"] == {"total": 6, "before": 0, "after": 0, "page_size": 6}
 
-    old_date = datetime.datetime(2023, 9, 15, 8, 43, 18, 433696, tzinfo=datetime.timezone.utc)
-    result = await client.get_compile_reports(
-        environment,
-        limit=6,
-        sort=f"{order_by_column}.{order}",
-        filter={"success": False, "requested": [f"lt:{old_date.astimezone(datetime.timezone.utc)}"]},
-    )
-    assert result.code == 200
-
-    # if order == "ASC":
-    #     assert result.result["metadata"] == {"total": 6, "before": 6, "after": 0, "page_size": 6}
-    # else:
-    #     assert result.result["metadata"] == {"total": 6, "before": 0, "after": 6, "page_size": 6}
-
 
 async def test_compile_reports_filters(server, client, env_with_compile_reports):
     environment, compile_requested_timestamps = env_with_compile_reports

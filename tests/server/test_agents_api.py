@@ -120,7 +120,6 @@ def agent_names(agents: list[dict[str, str]]) -> list[str]:
 @pytest.mark.parametrize("order_by_column", ["name", "status", "process_name", "last_failover", "paused"])
 @pytest.mark.parametrize("order", ["DESC", "ASC"])
 async def test_agents_paging(server, client, env_with_agents: None, environment: str, order_by_column: str, order: str) -> None:
-    # TODO h here
     result = await client.get_agents(
         environment,
         filter={"status": ["paused", "up"]},
@@ -217,10 +216,18 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
 
     assert result.result["metadata"] == {"total": 7, "before": 0, "after": 0, "page_size": 100}
 
-    # if order == "ASC":
-    #     assert result.result["metadata"] == {"total": 7, "before": 7, "after": 0, "page_size": 100}
-    # else:
-    #     assert result.result["metadata"] == {"total": 7, "before": 0, "after": 7, "page_size": 100}
+    fake_url = f"{base_url}/api/v2/agents?limit=1&sort=last_failover.asc&filter.status=paused&first_id=zzzz"
+    request = HTTPRequest(
+        url=fake_url,
+        headers={"X-Inmanta-tid": str(environment)},
+    )
+    response = await http_client.fetch(request, raise_error=False)
+    assert response.code == 200
+    response = json.loads(response.body.decode("utf-8"))
+    # We don't have a way to reconstruct the previous link
+    assert response.get("links", None) is None
+    assert response["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
+    assert response["data"] == []
 
 
 async def test_sorting_validation(client, environment: str, env_with_agents: None) -> None:
