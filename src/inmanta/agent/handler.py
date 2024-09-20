@@ -168,7 +168,7 @@ def cache(
                 #                                        None         True            False
                 #                             None        TF           FT              TF
                 #
-                # refresh_after_access     True        TF           TT              TF
+                # refresh_after_access        True        TF           TT              TF
                 #
                 #                             False       W            FT              W
                 #

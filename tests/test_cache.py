@@ -451,7 +451,7 @@ async def test_cache_decorator_last_access_expiry(time_machine):
 
     """
 
-    class ExpireAfterLastAccessTest(CacheMissCounter):
+    class RefreshAfterAccessTest(CacheMissCounter):
         @cache
         def test_method_1(self):
             self.increment_miss_counter()
@@ -493,7 +493,7 @@ async def test_cache_decorator_last_access_expiry(time_machine):
             return dummy_arg
 
     agent_cache = AgentCache()
-    test = ExpireAfterLastAccessTest(agent_cache)
+    test = RefreshAfterAccessTest(agent_cache)
 
     time_machine.move_to(datetime.datetime.now().astimezone(), tick=False)
 
@@ -679,11 +679,11 @@ async def test_cache_decorator_since_creation_expiry(time_machine):
     # The cache cleanup method is called upon entering the AgentCache context manager
     with agent_cache:
         assert "x1" == test.test_method_1()  # cache hit
-        assert "x1" == test.test_method_11()  # cache hitm
+        assert "x1" == test.test_method_11()  # cache hit
         assert "x2" == test.test_method_2()  # cache hit
-        assert "x2" == test.test_method_22()  # cache hitm
+        assert "x2" == test.test_method_22()  # cache hit
         assert "recurring_read" == test.test_method_3(dummy_arg="recurring_read")  # cache hit
-        assert "recurring_read" == test.test_method_33(dummy_arg="recurring_read")  # cache hitm
+        assert "recurring_read" == test.test_method_33(dummy_arg="recurring_read")  # cache hit
         assert "x3" == test.refresh_after_access()  # +1 miss
         assert "x4" == test.short_lived_test_method_1()  # +1 miss
         assert "x4" == test.short_lived_test_method_11()  # +1 miss
