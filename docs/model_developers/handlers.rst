@@ -233,19 +233,16 @@ method annotated with this annotation will be cached, similar to the way
 `lru_cache <https://docs.python.org/3/library/functools.html#functools.lru_cache>`_ works. The arguments to
 the method will form the cache key, the return value will be cached. When the method is called a
 second time with the same arguments, it will not be executed again, but the cached result is
-returned instead. To exclude specific arguments from the cache key, use the `ignore` parameter.
+returned instead. To exclude specific arguments from the cache key, use the ``ignore`` parameter.
 
-Cache entries will be dropped from the cache when they become stale. Use the following
-parameters to control when an entry is considered stale:
+Cache entries will be dropped from the cache when they become stale. Use the following parameters to control when an entry is considered stale:
+  * Setting ``evict_after_creation=True`` will mark entries as stale after a timeout controlled by the ``timeout`` parameter (5000s by default).
+  * Setting ``refresh_after_access=True`` will reset the expiry time of entries to 60s anytime they're used.
 
-  - Setting ``evict_after_creation=True``will mark entries as stale after a timeout
-    controlled by the ``timeout`` parameter (5000s by default).
+.. note::
 
-  - Setting``refresh_after_access=True`` will reset the expiry time of entries to
-    60s anytime they're used.
-
-
-  - If both are set, the entry will become stale when the shortest of the two timers is up.
+    If both ``evict_after_creation=True`` and ``refresh_after_access=True`` are set,
+    the entry will become stale when the shortest of the two timers is up.
 
 
 For example, to cache the connection to a specific device for 120 seconds:
