@@ -35,8 +35,6 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Dict, Optional, Union, cast
 
-import pkg_resources
-
 import inmanta.util
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
