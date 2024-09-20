@@ -187,7 +187,7 @@ class DryRun(Task):
             await my_executor.dry_run([executor_resource_details], self.dry_run_id)
         except Exception:
             logger_for_agent(agent).error(
-                "Skipping dryrun for resource %s because it is in undeployable state %s",
+                "Skipping dryrun for resource %s because it is in undeployable state",
                 executor_resource_details.rvid,
                 exc_info=True,
             )

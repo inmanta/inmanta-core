@@ -40,7 +40,7 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
 @dataclass(frozen=True)
 class ResourceDetails:
     attribute_hash: str
-    attributes: Mapping[str, object]
+    attributes: Mapping[str, object] = dataclasses.field(hash=False)
 
 
 class ResourceStatus(StrEnum):
