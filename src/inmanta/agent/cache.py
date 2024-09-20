@@ -40,7 +40,7 @@ class CacheItem:
         timeout: float,
         value: Any,
         call_on_delete: Optional[Callable[[Any], None]],
-        evict_after_last_access: bool = True,
+        refresh_after_access: bool = True,
         evict_after_creation: bool = False,
     ) -> None:
         """
@@ -49,19 +49,19 @@ class CacheItem:
         :param value: The value being cached associated to the key.
         :param call_on_delete: Optional finalizer to call when the cache item is deleted. This is
             a callable expecting the cached value as an argument.
-        :param evict_after_last_access: When True, this cache item will stay in the cache for 60s after its last use.
+        :param refresh_after_access: When True, this cache item will stay in the cache for 60s after its last use.
         :param evict_after_creation: When True, this cache item will be evicted from the cache <timeout> seconds after
             entering the cache.
         """
         self.key = key
         self.value = value
         self.call_on_delete = call_on_delete
-        self.evict_after_last_access = evict_after_last_access
+        self.refresh_after_access = refresh_after_access
 
         now = time.time()
         self.expiry_time: float = sys.maxsize
 
-        if evict_after_last_access:
+        if refresh_after_access:
             self.expiry_time = now + 60
         if evict_after_creation:
             self.expiry_time = min(self.expiry_time, now + timeout)
@@ -93,7 +93,7 @@ class AgentCache:
     item last access timestamp. If both are set, the shortest duration of the
     two will trigger the item to become stale.
 
-    1. evict_after_last_access
+    1. refresh_after_access
 
         These items are expected to be reused across multiple
         model versions. Their expiry time is reset to 60s any
@@ -133,7 +133,7 @@ class AgentCache:
         self._agent_instance = agent_instance
 
         # This set holds cache items used during a resource action whose
-        # expiry time should be refreshed i.e. evict_after_last_access=True
+        # expiry time should be refreshed i.e. refresh_after_access=True
         self.used_items_to_refresh: set[CacheItem] = set()
 
     def touch_used_cache_items(self) -> None:
@@ -196,7 +196,7 @@ class AgentCache:
         """
         item = self.cache[key]
 
-        if item.evict_after_last_access:
+        if item.refresh_after_access:
             self.used_items_to_refresh.add(item)
 
         return item
@@ -209,7 +209,7 @@ class AgentCache:
 
         heapq.heappush(self.timer_queue, item)
 
-        if item.evict_after_last_access:
+        if item.refresh_after_access:
             self.used_items_to_refresh.add(item)
 
         if item.expiry_time < self.next_action:
@@ -228,7 +228,7 @@ class AgentCache:
         resource: Optional[Resource] = None,
         timeout: int = 5000,
         call_on_delete: Optional[Callable[[Any], None]] = None,
-        evict_after_last_access: bool = True,
+        refresh_after_access: bool = True,
         evict_after_creation: bool = False,
     ) -> None:
         """
@@ -242,7 +242,7 @@ class AgentCache:
         :param timeout: Used in combination with evict_after_creation=True, ignored otherwise. The cached value will
             be considered stale <timeout> seconds after entering the cache.
         :param call_on_delete: A callback function that is called when the value is removed from the cache.
-        :param evict_after_last_access: Expire this cache item 60 seconds after its last usage. Each time this entry
+        :param refresh_after_access: Expire this cache item 60 seconds after its last usage. Each time this entry
             is read from the cache, this expiry timer will be reset to 60 seconds.
         :param evict_after_creation: Expire this cache item <timeout> seconds after its creation.
         """
@@ -252,7 +252,7 @@ class AgentCache:
                 timeout,
                 value,
                 call_on_delete,
-                evict_after_last_access=evict_after_last_access,
+                refresh_after_access=refresh_after_access,
                 evict_after_creation=evict_after_creation,
             )
         )
@@ -273,7 +273,7 @@ class AgentCache:
         self,
         key: str,
         function: Callable[..., Any],
-        evict_after_last_access: bool = True,
+        refresh_after_access: bool = True,
         evict_after_creation: bool = False,
         timeout: int = 5000,
         ignore: set[str] = set(),
@@ -293,7 +293,7 @@ class AgentCache:
           The cached entry will be evicted from the cache after this period of time.
         :param evict_after_creation: the cached value is not tied to any model version. It is
               considered stale after <timeout> seconds have elapsed since it entered the cache.
-        :param evict_after_last_access: the cached value is expected to be reused across multiple versions.
+        :param refresh_after_access: the cached value is expected to be reused across multiple versions.
               It is considered stale if no agent used this entry in the last 60s.
 
         """
@@ -322,7 +322,7 @@ class AgentCache:
                             value=value,
                             timeout=timeout,
                             call_on_delete=call_on_delete,
-                            evict_after_last_access=evict_after_last_access,
+                            refresh_after_access=refresh_after_access,
                             evict_after_creation=evict_after_creation,
                             **args,
                         )

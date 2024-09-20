@@ -235,26 +235,29 @@ the method will form the cache key, the return value will be cached. When the me
 second time with the same arguments, it will not be executed again, but the cached result is
 returned instead. To exclude specific arguments from the cache key, use the `ignore` parameter.
 
-Cache entries will be dropped from the cache when they become stale.
-The for_version and timeout parameters control this behaviour:
+Cache entries will be dropped from the cache when they become stale. Use the following
+parameters to control when an entry is considered stale:
 
-When ``for_version=True`` (default behaviour), the ``timeout`` parameter is ignored and entries
-will linger in the cache for 60s after their last use.
-Entries will be reused across model versions.
+  - Setting ``evict_after_creation=True``will mark entries as stale after a timeout
+    controlled by the ``timeout`` parameter (5000s by default).
 
-To disable this behaviour and set a hard timeout, set ``for_version=False`` and
-the desired timeout via the ``timeout`` parameter.
+  - Setting``refresh_after_access=True`` will reset the expiry time of entries to
+    60s anytime they're used.
+
+
+  - If both are set, the entry will become stale when the shortest of the two timers is up.
+
 
 For example, to cache the connection to a specific device for 120 seconds:
 
 .. code-block:: python
 
-    @cache(timeout=120, ignore=["ctx"], for_version=False)
+    @cache(timeout=120, ignore=["ctx"], evict_after_creation=True)
     def get_client_connection(self, ctx, device_id):
        # ...
        return connection
 
-Setting ``for_version=True`` (or omitting the parameter) will reset the lifetime
+Setting ``refresh_after_access=True`` (or omitting the parameter) will reset the lifetime
 of the cached connection to 60s everytime it is read from the cache.
 
 .. code-block:: python
@@ -271,7 +274,7 @@ from the cache. It gets the cached item as argument.
 
 .. code-block:: python
 
-    @cache(timeout=120, ignore=["ctx"], for_version=True,
+    @cache(timeout=120, ignore=["ctx"], refresh_after_access=True,
        call_on_delete=lambda connection:connection.close())
     def get_client_connection(self, ctx, device_id, version):
        # ...
