@@ -29,6 +29,7 @@ from asyncpg import Record
 
 import inmanta.data
 from inmanta import data
+from inmanta.config import Config
 from inmanta.data import (
     APILIMIT,
     PRIMITIVE_SQL_TYPES,
@@ -140,7 +141,7 @@ class RequestedPagingBoundaries:
         return (self.end is not None) or (self.last_id is not None)
 
 
-class PagingMetadata:
+class PagingMetadata:  # TODO h here
     def __init__(self, total: int, before: int, after: int, page_size: int) -> None:
         self.total = total
         self.before = before
@@ -292,13 +293,16 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         try:
             dtos, paging_boundaries_in = await self.get_data()
             paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
+            found_result: bool
             if paging_boundaries_in:
+                found_result = True
                 paging_boundaries = paging_boundaries_in
             else:
                 # nothing found now, use the current page boundaries to determine if something exists before us
+                found_result = False
                 paging_boundaries = self.requested_page_boundaries
 
-            metadata = await self._get_page_count(paging_boundaries)
+            metadata = await self._get_page_count(paging_boundaries, found_result)
             links = await self.prepare_paging_links(dtos, paging_boundaries, metadata)
             return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata.to_dict())
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
@@ -306,12 +310,15 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
     # Paging helpers
 
-    async def _get_page_count(self, bounds: Union[PagingBoundaries, RequestedPagingBoundaries]) -> PagingMetadata:
+    async def _get_page_count(self, bounds: Union[PagingBoundaries, RequestedPagingBoundaries], found_result: bool) -> PagingMetadata:
         """
         Construct the page counts,
 
         either from the PagingBoundaries if we have a valid page,
         or from the RequestedPagingBoundaries if we got an empty page
+
+        :param bounds:
+        :param found_result: Have we found any result
         """
         query_builder = self.get_base_query_for_page_count()
 
@@ -362,6 +369,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             + (f", COUNT(*) filter ({before_filter}) as count_before" if before_filter else "")
             + (f", COUNT(*) filter ({after_filter}) as count_after " if after_filter else "")
         )
+        # If we have not found any result, then we cannot base ourself on the filter to construct
 
         query_builder = query_builder.select(select_clause)
 
@@ -370,10 +378,19 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         result = cast(list[Record], result)
         if not result:
             raise InvalidQueryParameter("Could not determine page bounds")
+
+        count_total = cast(int, result[0]["count_total"])
+        count_before = cast(int, result[0].get("count_before", 0))
+        count_after = cast(int,result[0].get("count_after", 0))
+        if  count_before == 0 and count_after == 0 and count_total > 0:
+            if order == PagingOrder.ASC:
+                count_before = count_total
+            else:
+                count_after = count_total
         return PagingMetadata(
-            total=cast(int, result[0]["count_total"]),
-            before=cast(int, result[0].get("count_before", 0)),
-            after=cast(int, result[0].get("count_after", 0)),
+            total=count_total,
+            before=count_before,
+            after=count_after,
             page_size=self.limit,
         )
 

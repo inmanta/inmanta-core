@@ -176,7 +176,10 @@ async def test_compile_reports_paging(server, client, env_with_compile_reports, 
     ):
         assert c["environment_variables"] == expected
 
-    assert result.result["metadata"] == {"total": 6, "before": 0, "after": 0, "page_size": 6}
+    if order == "ASC":
+        assert result.result["metadata"] == {"total": 6, "before": 6, "after": 0, "page_size": 6}
+    else:
+        assert result.result["metadata"] == {"total": 6, "before": 0, "after": 6, "page_size": 6}
 
 
 async def test_compile_reports_filters(server, client, env_with_compile_reports):
