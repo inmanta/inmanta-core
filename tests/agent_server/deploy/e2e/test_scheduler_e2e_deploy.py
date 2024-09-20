@@ -176,9 +176,8 @@ async def check_scheduler_state(resources, scheduler):
         assert id_without_version in scheduler._state.resources
         expected_resource_attributes = dict(resource)
         current_attributes = dict(scheduler._state.resources[id_without_version].attributes)
-        # Id's have different versions
+        # scheduler's attributes does not have the injected id
         del expected_resource_attributes["id"]
-        del current_attributes["id"]
         new_requires = []
         for require in expected_resource_attributes["requires"]:
             require_without_version, _, _ = require.partition(",v=")

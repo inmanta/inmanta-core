@@ -162,6 +162,8 @@ class ExecutorBlueprint(EnvBlueprint):
         requirements and making sure they all share the same pip config.
         """
 
+        if not code:
+            raise ValueError("from_specs expects at least one resource install spec")
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
         pip_configs = [cd.blueprint.pip_config for cd in code]

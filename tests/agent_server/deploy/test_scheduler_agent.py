@@ -106,8 +106,8 @@ class TestAgent(Agent):
     ):
         super().__init__(environment)
         self.executor_manager = DummyManager()
-        self.scheduler._executor_manager = self.executor_manager
-        self.scheduler._code_manager = DummyCodeManager(self._client)
+        self.scheduler.executor_manager = self.executor_manager
+        self.scheduler.code_manager = DummyCodeManager(self._client)
         # Bypass DB
         self.scheduler.read_version = pass_method
         self.scheduler.mock_versions = {}
