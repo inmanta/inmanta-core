@@ -163,7 +163,7 @@ def make_resource_minimal(environment):
         m.update(character.encode("utf-8"))
         attribute_hash = m.hexdigest()
 
-        return state.ResourceDetails(attributes, attribute_hash)
+        return state.ResourceDetails(attributes=attributes, attribute_hash=attribute_hash)
 
     return make_resource_minimal
 
