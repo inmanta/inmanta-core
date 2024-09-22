@@ -160,18 +160,25 @@ def cache(
             if timeout and timeout > 0:
                 _evict_after_creation = timeout
 
-            # Legacy `for_version` parameter is passed, it overrides evict_after_last_access and evict_after_creation
+            # Legacy `for_version` parameter is used, compute
+            # evict_after_last_access and evict_after_creation
             if for_version is not None:
                 if for_version:
+                    _evict_after_creation = 0
+
                     if evict_after_last_access > 0:
                         _evict_after_last_access = evict_after_last_access
                     else:
                         _evict_after_last_access = 60
                 else:
+                    _evict_after_last_access = 0
+
+                    # Successive overrides with a 5000s default
                     _evict_after_creation = 5000
+                    if evict_after_creation > 0:
+                        _evict_after_creation = evict_after_creation
                     if timeout and timeout > 0:
                         _evict_after_creation = timeout
-                    _evict_after_last_access = 0
             else:
                 # If both params are unset/negative, keep entries alive
                 # in the cache for 60s after their last usage.

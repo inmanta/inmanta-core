@@ -235,8 +235,8 @@ the method will form the cache key, the return value will be cached. When the me
 second time with the same arguments, it will not be executed again, but the cached result is
 returned instead. To exclude specific arguments from the cache key, use the ``ignore`` parameter.
 
-Cache entries will be dropped from the cache when they become stale. Use the following parameters to control when an entry is considered stale:
-  * ``evict_after_creation``: mark entries as stale after this amount of time (in seconds) has elapsed since they entered the cache (5000s by default).
+Cache entries will be dropped from the cache when they become stale. Use the following parameters to set the retention policy:
+  * ``evict_after_creation``: mark entries as stale after this amount of time (in seconds) has elapsed since they entered the cache.
   * ``evict_after_last_access``: mark entries as stale after this amount of time (in seconds) has elapsed since they were last accessed (60 by default).
 
 
@@ -255,8 +255,8 @@ For example, to cache the connection to a specific device for 120 seconds:
        # ...
        return connection
 
-Setting ``evict_after_last_access=60`` (or omitting the parameter) will reset the lifetime
-of the cached connection to 60s everytime it is read from the cache.
+Setting ``evict_after_last_access=60`` (or omitting the parameter) will evict
+the connection from the cache 60s after it was last read from the cache.
 
 .. code-block:: python
 
