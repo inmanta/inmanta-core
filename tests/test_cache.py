@@ -877,3 +877,12 @@ async def test_cache_decorator_parameters(time_machine):
         test.check_n_cache_misses(0)
         assert "x2" == test.test_legacy_override_eac()  # cache miss
         test.check_n_cache_misses(1)
+
+    test.reset_miss_counter()
+    # Check that default timeout of 5000s is used
+    time_machine.shift(datetime.timedelta(seconds=5001))
+
+    # The cache cleanup method is called upon entering the AgentCache context manager
+    with agent_cache:
+        assert "x1" == test.test_legacy_override_ela()  # cache miss
+        test.check_n_cache_misses(1)
