@@ -1,7 +1,7 @@
 description: >
   The retention policy of items in the agent cache can be set via
-  the `evict_after_creation` and `evict_after_creation` parameters.
-change-type: patch
+  the `evict_after_creation` and `evict_after_last_access` parameters.
+change-type: minor
 destination-branches: [master]
 sections:
   minor-improvement: "{{description}}"

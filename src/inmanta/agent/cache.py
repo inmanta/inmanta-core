@@ -83,8 +83,8 @@ class CacheItem:
 
     def refresh(self, now: float) -> None:
         """
-        Refresh this cache item. Resets the expiry time for items
-        evicted a certain time after their last access.
+        Refresh this cache item. Resets the expiry time for items marked
+        for eviction a certain time after their last access.
 
         :parameter now: Baseline 'now' time.
         """
@@ -149,7 +149,8 @@ class AgentCache:
 
     def touch_used_cache_items(self) -> None:
         """
-        Extend the expiry time of items in the used_items_to_refresh by 60s
+        Extend the expiry time of items in the used_items_to_refresh by their
+        respective grace period.
         """
         now = time.time()
         for item in self.used_items_to_refresh:
