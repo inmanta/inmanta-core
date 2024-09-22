@@ -431,26 +431,9 @@ async def test_cache_decorator_last_access_expiry(time_machine):
       - for_version=True (legacy parameter), timeout controlled by the `timeout` legacy parameter.
       - a timeout is set via the `evict_after_last_access` parameter.
 
-    Stale entries are cleaned up on the next call to `clean_stale_entries`.
-
-    Legacy behaviour tests:
-    This test checks that this behaviour is consistent for the 4 combinations
-    of (timeout, for_version) via `test_method_1` to `test_method_4`.
-
-    `test_method_5` is used to test that
-        - an entry is properly cleaned up if it is not being used ("initial_read" entry).
-        - the entry's expiry time is properly reset to 60s when it is read.
-
-    New behaviour tests:
-        `test_method_1` and `test_method_3` already test the behaviour for the default
-        value for `evict_after_last_access`.
-
-        `test_method_22`, `test_method_44` and  `test_method_55` test the new behaviour
-        by explicitly providing the `evict_after_last_access` parameter.
-
     """
 
-    class EvitctAfterLastAccessTest(CacheMissCounter):
+    class EvictAfterLastAccessTest(CacheMissCounter):
 
         @cache(for_version=True)
         def legacy_for_version_true(self):
@@ -507,7 +490,7 @@ async def test_cache_decorator_last_access_expiry(time_machine):
             return dummy_arg
 
     agent_cache = AgentCache()
-    test = EvitctAfterLastAccessTest(agent_cache)
+    test = EvictAfterLastAccessTest(agent_cache)
 
     time_machine.move_to(datetime.datetime.now().astimezone(), tick=False)
 
