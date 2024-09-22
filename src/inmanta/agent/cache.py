@@ -61,7 +61,7 @@ class CacheItem:
         self.expiry_time: float = sys.maxsize
 
         if evict_after_last_access > 0:
-            self.expiry_time = now + evict_after_last_access
+            self.refresh(now)
         if evict_after_creation > 0:
             self.expiry_time = min(self.expiry_time, now + evict_after_creation)
 
@@ -80,6 +80,18 @@ class CacheItem:
 
     def __del__(self) -> None:
         self.delete()
+
+    def refresh(self, now: float) -> None:
+        """
+        Refresh this cache item. Resets the expiry time for items
+        evicted a certain time after their last access.
+
+        :parameter now: Baseline 'now' time.
+        """
+        if self.refresh_after_access < 0:
+            return
+
+        self.expiry_time = now + self.refresh_after_access
 
 
 @stable_api
@@ -132,7 +144,7 @@ class AgentCache:
         self._agent_instance = agent_instance
 
         # This set holds cache items used during a resource action whose
-        # expiry time should be refreshed i.e. evict_after_last_access=True
+        # expiry time should be refreshed i.e. evict_after_last_access>0
         self.used_items_to_refresh: set[CacheItem] = set()
 
     def touch_used_cache_items(self) -> None:
@@ -141,7 +153,7 @@ class AgentCache:
         """
         now = time.time()
         for item in self.used_items_to_refresh:
-            item.expiry_time = now + 60
+            item.refresh(now)
 
         self.used_items_to_refresh = set()
         if self.timer_queue:

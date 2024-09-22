@@ -1,3 +1,7 @@
-description: "Clarify user facing interface."
+description: >
+  The retention policy of items in the agent cache can be set via
+  the `evict_after_creation` and `evict_after_creation` parameters.
 change-type: patch
 destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"

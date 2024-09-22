@@ -104,9 +104,8 @@ class InvalidOperation(Exception):
 def cache(
     func: Optional[T_FUNC] = None,
     ignore: list[str] = [],
-    # deprecated parameter kept for backwards compatibility: if set along with for_version,
-    # overrides evict_after_creation/evict_after_last_access
-    timeout: int = 5000,
+    # deprecated parameter kept for backwards compatibility: alias for evict_after_creation
+    timeout: Optional[int] = None,
     # deprecated parameter kept for backwards compatibility: if set, overrides evict_after_creation/evict_after_last_access
     for_version: Optional[bool] = None,
     cache_none: bool = True,
@@ -157,7 +156,11 @@ def cache(
             _evict_after_last_access: float = evict_after_last_access
             _evict_after_creation: float = evict_after_creation
 
-            # Legacy parameter is passed, it overrides evict_after_last_access and evict_after_creation
+            # If legacy param `timeout` is set, it overrides `evict_after_creation`
+            if timeout and timeout > 0:
+                _evict_after_creation = timeout
+
+            # Legacy `for_version` parameter is passed, it overrides evict_after_last_access and evict_after_creation
             if for_version is not None:
                 if for_version:
                     if evict_after_last_access > 0:
@@ -165,7 +168,9 @@ def cache(
                     else:
                         _evict_after_last_access = 60
                 else:
-                    _evict_after_creation = timeout
+                    _evict_after_creation = 5000
+                    if timeout and timeout > 0:
+                        _evict_after_creation = timeout
                     _evict_after_last_access = 0
             else:
                 # If both params are unset/negative, keep entries alive
