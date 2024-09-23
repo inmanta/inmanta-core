@@ -191,8 +191,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         if task.resource not in self._tasks_by_resource:
             self._tasks_by_resource[task.resource] = {}
         self._tasks_by_resource[task.resource][task] = item
-        agent_name = Id.parse_id(task.resource).agent_name
-        self._get_queue(agent_name).put_nowait(item)
+        self._get_queue(task.id.agent_name).put_nowait(item)
 
     def send_shutdown(self) -> None:
         """

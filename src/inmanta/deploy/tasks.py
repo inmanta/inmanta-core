@@ -17,6 +17,7 @@
 """
 
 import abc
+import dataclasses
 import datetime
 import logging
 import traceback
@@ -44,6 +45,12 @@ class Task(abc.ABC):
     """
 
     resource: ResourceIdStr
+
+    id: resources.Id = dataclasses.field(init=False, compare=False, hash=False)
+
+    def __post_init__(self) -> None:
+        # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
+        object.__setattr__(self, "id", resources.Id.parse_id(self.resource))
 
     @abc.abstractmethod
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
@@ -213,7 +220,7 @@ class RefreshFact(Task):
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
         try:
             my_executor = await self.get_executor(
-                task_manager, agent, resources.Id.parse_id(self.resource).entity_type, version
+                task_manager, agent, self.id.entity_type, version
             )
         except Exception:
             logger_for_agent(agent).warning(

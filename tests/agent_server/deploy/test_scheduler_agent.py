@@ -115,7 +115,7 @@ class TestAgent(Agent):
         async def build_resource_mappings_from_db(version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:
             return self.scheduler.mock_versions[version]
 
-        self.scheduler.build_resource_mappings_from_db = build_resource_mappings_from_db
+        self.scheduler._build_resource_mappings_from_db = build_resource_mappings_from_db
 
 
 @pytest.fixture
