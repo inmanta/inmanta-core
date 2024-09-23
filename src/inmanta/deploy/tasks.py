@@ -144,7 +144,10 @@ class Deploy(Task):
             try:
                 gid = uuid.uuid4()
                 # FIXME: reason argument is not used
-                await my_executor.execute(gid, executor_resource_details, "New Scheduler initiated action")
+                deploy_result: const.ResourceState = await my_executor.execute(
+                    gid, executor_resource_details, "New Scheduler initiated action"
+                )
+                success = deploy_result == const.ResourceState.deployed
             except Exception as e:
                 log_line = data.LogLine.log(
                     logging.ERROR,
@@ -154,8 +157,6 @@ class Deploy(Task):
                     traceback="".join(traceback.format_tb(e.__traceback__)),
                 )
                 success = False
-            else:
-                success = True
         finally:
             await task_manager.report_resource_state(
                 resource=self.resource,
