@@ -108,10 +108,7 @@ class InmantaModuleRequirement:
 
     @property
     def project_name(self) -> str:
-        # Requirement converts all "_" to "-". Inmanta modules use "_"
-        warnings.warn(InmantaWarning("The `project_name` property has been deprecated in favor of `name`"))
-
-        return self.name
+        return self._requirement.project_name.replace("-", "_")
 
     @property
     def name(self) -> str:
@@ -669,7 +666,7 @@ class ModuleSource(Generic[TModule]):
         raise NotImplementedError("Abstract method")
 
     def _get_module_name(self, module_spec: list[InmantaModuleRequirement]) -> str:
-        module_names: set[str] = {req.name for req in module_spec}
+        module_names: set[str] = {req.project_name for req in module_spec}
         module_name: str = more_itertools.one(
             module_names,
             too_short=ValueError("module_spec should contain at least one requirement"),
