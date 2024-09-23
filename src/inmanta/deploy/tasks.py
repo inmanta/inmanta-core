@@ -110,37 +110,24 @@ class Deploy(Task):
             return
         version, resource_details = intent
 
-        status = await self.do_deploy(task_manager, agent, version, resource_details)
-
-        is_success: bool = status == const.ResourceState.deployed
-        await task_manager.report_resource_state(
-            resource=self.resource,
-            attribute_hash=resource_details.attribute_hash,
-            status=state.ResourceStatus.UP_TO_DATE if is_success else state.ResourceStatus.HAS_UPDATE,
-            deployment_result=state.DeploymentResult.DEPLOYED if is_success else state.DeploymentResult.FAILED,
-        )
-
-    async def do_deploy(
-        self,
-        task_manager: "scheduler.TaskManager",
-        agent: str,
-        version: int,
-        resource_details: "state.ResourceDetails",
-    ) -> "const.ResourceState":
-        # FIXME: code loading interface is not nice like this,
-        #   - we may want to track modules per agent, instead of types
-        #   - we may also want to track the module version vs the model version
-        #       as it avoid the problem of fast chanfing model versions
-        executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
-
-        async def report_deploy_failure(excn: Exception) -> None:
+        success: bool
+        try:
+            # FIXME: code loading interface is not nice like this,
+            #   - we may want to track modules per agent, instead of types
+            #   - we may also want to track the module version vs the model version
+            #       as it avoid the problem of fast chanfing model versions
+            executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
+            my_executor: executor.Executor = await self.get_executor(
+                task_manager, agent, executor_resource_details.id.entity_type, version
+            )
+        except Exception as e:
             log_line = data.LogLine.log(
                 logging.ERROR,
                 "All resources of type `%(res_type)s` failed to load handler code or install handler code "
                 "dependencies: `%(error)s`\n%(traceback)s",
                 res_type=executor_resource_details.id.entity_type,
-                error=str(excn),
-                traceback="".join(traceback.format_tb(excn.__traceback__)),
+                error=str(e),
+                traceback="".join(traceback.format_tb(e.__traceback__)),
             )
             await task_manager.client.resource_action_update(
                 tid=task_manager.environment,
@@ -152,19 +139,30 @@ class Deploy(Task):
                 messages=[log_line],
                 status=const.ResourceState.unavailable,
             )
-
-        try:
-            my_executor: executor.Executor = await self.get_executor(
-                task_manager, agent, executor_resource_details.id.entity_type, version
+            success = False
+        else:
+            try:
+                gid = uuid.uuid4()
+                # FIXME: reason argument is not used
+                await my_executor.execute(gid, executor_resource_details, "New Scheduler initiated action")
+            except Exception as e:
+                log_line = data.LogLine.log(
+                    logging.ERROR,
+                    "Failure during executor execution for resource %(res)s",
+                    res=self.resource,
+                    error=str(e),
+                    traceback="".join(traceback.format_tb(e.__traceback__)),
+                )
+                success = False
+            else:
+                success = True
+        finally:
+            await task_manager.report_resource_state(
+                resource=self.resource,
+                attribute_hash=resource_details.attribute_hash,
+                status=state.ResourceStatus.UP_TO_DATE if success else state.ResourceStatus.HAS_UPDATE,
+                deployment_result=state.DeploymentResult.DEPLOYED if success else state.DeploymentResult.FAILED,
             )
-        except Exception as e:
-            await report_deploy_failure(e)
-            return const.ResourceState.unavailable
-
-        # DEPLOY!!!
-        gid = uuid.uuid4()
-        # FIXME: reason argument is not used
-        return await my_executor.execute(gid, executor_resource_details, "New Scheduler initiated action")
 
 
 @dataclass(frozen=True, kw_only=True)
