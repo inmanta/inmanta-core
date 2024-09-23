@@ -101,6 +101,21 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             )
         return version, resources
 
+    async def make_marker_version() -> int:
+        version = await clienthelper.get_version()
+        resources = [
+            {
+                "key": "key",
+                "value": "value",
+                "id": "test::Resource[agentx,key=key],v=%d" % version,
+                "requires": [],
+                "purged": False,
+                "send_event": False,
+            },
+        ]
+        await clienthelper.put_version_simple(version=version, resources=resources)
+        return version
+
     logger.info("setup done")
 
     version1, resources = await make_version()
@@ -135,6 +150,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     version1, resources = await make_version(True)
     await clienthelper.put_version_simple(version=version1, resources=resources)
+    await make_marker_version()
 
     # deploy and wait until one is ready
     result = await client.release_version(env_id, version1, push=False)
@@ -145,6 +161,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     await check_scheduler_state(resources, scheduler)
 
     await resource_action_consistency_check()
+    assert resource_container.Provider.readcount("agentx", "key") == 0
 
     # deploy trigger
     await client.deploy(environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy)

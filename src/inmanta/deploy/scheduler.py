@@ -151,7 +151,7 @@ class ResourceScheduler:
         """
         if version is None:
             resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(
-                environment=self._environment
+                environment=self._environment, released_only=True
             )
         else:
             resources_from_db = await data.Resource.get_resources_for_version(self._environment, version)
