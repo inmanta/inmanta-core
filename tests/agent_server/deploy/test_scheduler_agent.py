@@ -206,7 +206,7 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
 
     await agent.scheduler._new_version(5, resources, make_requires(resources))
 
-    assert len(agent.scheduler._state.get_types_for_agent("agent1")) == 2
+    assert len(agent.scheduler.get_types_for_agent("agent1")) == 2
 
     resources = {
         ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, [], 6),
@@ -214,7 +214,7 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
 
     await agent.scheduler._new_version(6, resources, make_requires(resources))
 
-    assert len(agent.scheduler._state.get_types_for_agent("agent1")) == 1
+    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
     assert len(agent.scheduler._state.resources) == 1
 
 
