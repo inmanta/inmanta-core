@@ -33,9 +33,10 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, cast
 
+import pkg_resources
+
 import inmanta.types
 import inmanta.util
-import packaging.requirements
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
@@ -296,7 +297,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
-                requirements=[packaging.requirements.Requirement(requirement_string=e) for e in req],
+                requirements=list(pkg_resources.parse_requirements(req)),
                 config=blueprint.pip_config,
             )
 

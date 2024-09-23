@@ -30,13 +30,13 @@ from asyncio import Semaphore
 from collections import abc
 from typing import TYPE_CHECKING, Optional
 
+import pkg_resources
 import py.path
 import pytest
 from pytest import approx
 
 import inmanta.ast.export as ast_export
 import inmanta.data.model as model
-import inmanta.util
 import utils
 from inmanta import config, data
 from inmanta.const import INMANTA_REMOVED_SET_ID, ParameterSource
@@ -1807,7 +1807,7 @@ async def test_uninstall_python_packages(
     venv = PythonEnvironment(env_path=venv_path)
     assert name_protected_pkg not in venv.get_installed_packages()
     venv.install_for_config(
-        requirements=[inmanta.util.parse_requirement(requirement=name_protected_pkg)],
+        requirements=[pkg_resources.Requirement.parse(name_protected_pkg)],
         config=PipConfig(
             index_url=local_module_package_index,
         ),
