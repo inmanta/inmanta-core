@@ -426,53 +426,51 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         url_query_params.update(self.get_extra_url_parameters())
 
+        base_url = self.get_base_url()
+
+        def value_to_string(value: Union[str, int, UUID, datetime]) -> str:
+            if isinstance(value, datetime):
+                # Accross API boundaries, all naive datetime instances are assumed UTC.
+                # Returns ISO timestamp.
+                return datetime_iso_format(value, tz_aware=opt.server_tz_aware_timestamps.get())
+            return str(value)
+
+        def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:
+            params = url_query_params.copy()
+            params.update({k: value_to_string(v) for k, v in args.items() if v is not None})
+            return f"{base_url}?{urllib.parse.urlencode(params, doseq=True)}"
+
+        link_with_end = make_link(
+            end=paging_boundaries.end,
+            last_id=paging_boundaries.last_id,
+        )
+        link_with_start = make_link(
+            start=paging_boundaries.start,
+            first_id=paging_boundaries.first_id,
+        )
+
+        if meta.after > 0 or len(dtos) == 0:
+            if self.order.get_order() == "DESC":
+                links["next"] = link_with_end
+            else:
+                links["next"] = link_with_start
+
+        if meta.before > 0 or len(dtos) == 0:
+            if self.order.get_order() == "DESC":
+                links["prev"] = link_with_start
+            else:
+                links["prev"] = link_with_end
+            # First page
+            links["first"] = make_link()
+
+        # Same page
         if dtos:
-            base_url = self.get_base_url()
-
-            def value_to_string(value: Union[str, int, UUID, datetime]) -> str:
-                if isinstance(value, datetime):
-                    # Accross API boundaries, all naive datetime instances are assumed UTC.
-                    # Returns ISO timestamp.
-                    return datetime_iso_format(value, tz_aware=opt.server_tz_aware_timestamps.get())
-                return str(value)
-
-            def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:
-                params = url_query_params.copy()
-                params.update({k: value_to_string(v) for k, v in args.items() if v is not None})
-                return f"{base_url}?{urllib.parse.urlencode(params, doseq=True)}"
-
-            # TODO h something here
-            link_with_end = make_link(
-                end=paging_boundaries.end,
-                last_id=paging_boundaries.last_id,
-            )
-            link_with_start = make_link(
-                start=paging_boundaries.start,
-                first_id=paging_boundaries.first_id,
-            )
-
-            has_next = meta.after > 0
-            if has_next:
-                if self.order.get_order() == "DESC":
-                    links["next"] = link_with_end
-                else:
-                    links["next"] = link_with_start
-
-            has_prev = meta.before > 0
-            if has_prev:
-                if self.order.get_order() == "DESC":
-                    links["prev"] = link_with_start
-                else:
-                    links["prev"] = link_with_end
-                # First page
-                links["first"] = make_link()
-
-            # Same page
             links["self"] = make_link(
                 first_id=self.requested_page_boundaries.first_id,
                 start=self.requested_page_boundaries.start,
             )
-            # TODO: last links
+        # TODO: last links
+
         return links
 
     def validate_limit(self, limit: Optional[int]) -> int:

@@ -19,7 +19,6 @@
 import datetime
 import itertools
 import json
-import urllib.parse
 import uuid
 from collections import abc
 from operator import itemgetter
