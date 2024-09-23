@@ -40,7 +40,7 @@ previously created version) or just use the same entity but with different bindi
 .. literalinclude:: multi_version_sources/multiple_versions.cf
     :linenos:
     :language: inmanta
-    :lines: 1-86
+    :lines: 1-90
 
 In this example we add two new versions. Version 1 links to the same entity model but has a different lifecycle while
 Version 2 is a different entity altogether.
