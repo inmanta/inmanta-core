@@ -25,7 +25,6 @@ from typing import Callable, Generic, Optional, TypeVar
 
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import tasks
-from inmanta.resources import Id
 
 """
 Type alias for the union of all task types. Allows exhaustive case matches.

@@ -50,8 +50,6 @@ def convert_resource(resource: JsonType) -> ResourceDetails:
     id = Id.parse_id(resource["id"])
     rid = id.resource_str()
 
-    out = {"id": id.resource_version_str(), "model": id.version, "attributes": attributes}
-
     cleaned_requires = []
     for req in attributes["requires"]:
         theid = Id.parse_id(req)
