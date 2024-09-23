@@ -23,6 +23,8 @@ from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Optional
 
+import pkg_resources
+
 import inmanta.agent.cache
 import inmanta.protocol
 import inmanta.util
@@ -601,7 +603,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             await loop.run_in_executor(
                 self.thread_pool,
                 self._env.install_for_config,
-                inmanta.util.parse_requirements(blueprint.requirements),
+                list(pkg_resources.parse_requirements(blueprint.requirements)),
                 blueprint.pip_config,
             )
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
