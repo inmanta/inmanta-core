@@ -68,7 +68,7 @@ def convert_resource(resource: JsonType) -> ResourceDetails:
     m.update(character.encode("utf-8"))
     attribute_hash = m.hexdigest()
 
-    return ResourceDetails(attributes=attributes, attribute_hash=attribute_hash)
+    return ResourceDetails(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash)
 
 
 def convert_resources(resources: list[JsonType]) -> Mapping[ResourceIdStr, ResourceDetails]:

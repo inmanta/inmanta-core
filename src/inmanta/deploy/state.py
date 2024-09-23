@@ -39,8 +39,15 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
 
 @dataclass(frozen=True)
 class ResourceDetails:
+    resource_id: ResourceIdStr
     attribute_hash: str
     attributes: Mapping[str, object] = dataclasses.field(hash=False)
+
+    id: Id = dataclasses.field(init=False, compare=False, hash=False)
+
+    def __post_init__(self) -> None:
+        # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
+        object.__setattr__(self, "id", Id.parse_id(self.resource_id))
 
 
 class ResourceStatus(StrEnum):
@@ -133,8 +140,7 @@ class ModelState:
             self.resource_state[resource] = ResourceState(
                 status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW
             )
-            parsed_id = Id.parse_id(resource)
-            self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] += 1
+            self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.add(resource)
 
     def update_requires(
@@ -151,7 +157,7 @@ class ModelState:
         """
         Completely remove a resource from the resource state.
         """
-        del self.resources[resource]
+        details: ResourceDetails = self.resources.pop(resource)
         del self.resource_state[resource]
         # stand-alone resources may not be in requires
         with contextlib.suppress(KeyError):
@@ -160,8 +166,7 @@ class ModelState:
         with contextlib.suppress(KeyError):
             del self.requires.reverse_mapping()[resource]
 
-        parsed_id = Id.parse_id(resource)
-        self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] -= 1
-        if self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] == 0:
-            del self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type]
+        self.types_per_agent[details.id.agent_name][details.id.entity_type] -= 1
+        if self.types_per_agent[details.id.agent_name][details.id.entity_type] == 0:
+            del self.types_per_agent[details.id.agent_name][details.id.entity_type]
         self.dirty.discard(resource)

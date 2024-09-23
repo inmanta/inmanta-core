@@ -115,7 +115,7 @@ class TestAgent(Agent):
         async def build_resource_mappings_from_db(version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:
             return self.scheduler.mock_versions[version]
 
-        self.scheduler.build_resource_mappings_from_db = build_resource_mappings_from_db
+        self.scheduler._build_resource_mappings_from_db = build_resource_mappings_from_db
 
 
 @pytest.fixture
@@ -163,7 +163,7 @@ def make_resource_minimal(environment):
         m.update(character.encode("utf-8"))
         attribute_hash = m.hexdigest()
 
-        return state.ResourceDetails(attributes=attributes, attribute_hash=attribute_hash)
+        return state.ResourceDetails(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash)
 
     return make_resource_minimal
 

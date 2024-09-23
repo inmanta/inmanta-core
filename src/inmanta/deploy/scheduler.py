@@ -223,6 +223,7 @@ class ResourceScheduler(TaskManager):
 
         resource_mapping = {
             resource.resource_id: ResourceDetails(
+                resource_id=resource.resource_id,
                 attribute_hash=resource.attribute_hash,
                 attributes=resource.attributes,
             )
