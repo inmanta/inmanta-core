@@ -5,3 +5,10 @@ change-type: minor
 destination-branches: [master]
 sections:
   minor-improvement: "{{description}}"
+  update-note: >
+    Agent cache retention policy parameter `timeout` is now an alias for
+    the `evict_after_creation` parameter.
+  deprecation-note: >
+    Agent cache retention policy parameters `for_version` and `timeout` are deprecated.
+    The `evict_after_creation` and `evict_after_last_access` parameters should be
+    used instead.

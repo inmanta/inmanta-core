@@ -50,6 +50,7 @@ entity it is serializing.
 
     from inmanta.resources import resource, Resource
 
+
     @resource("std::File", agent="host.name", id_attribute="path")
     class File(Resource):
         fields = ("path", "owner", "hash", "group", "permissions", "purged", "reload")
@@ -63,6 +64,7 @@ entity it is serializing.
         @staticmethod
         def get_permissions(_, obj):
             return int(x.mode)
+
 
 
 Classes decorated with :func:`@resource<inmanta.resources.resource>` do not have to inherit directly from
@@ -132,14 +134,18 @@ method during resource deployment (in ``read_resource`` and/or ``create_resource
 
     @provider("openstack::FloatingIP", name="openstack")
     class FloatingIPHandler(OpenStackHandler):
-        def read_resource(self, ctx: handler.HandlerContext, resource: FloatingIP) -> None:
-            ...
+        def read_resource(
+            self, ctx: handler.HandlerContext, resource: FloatingIP
+        ) -> None: ...
 
-        def create_resource(self, ctx: handler.HandlerContext, resource: FloatingIP) -> None:
+        def create_resource(
+            self, ctx: handler.HandlerContext, resource: FloatingIP
+        ) -> None:
             ...
             # Setting fact manually
             for key, value in ...:
                 ctx.set_fact(fact_id=key, value=value, expires=True)
+
 
 
 By default, facts expire when they have not been refreshed or updated for a certain time, controlled by the
@@ -171,6 +177,7 @@ handler's :meth:`~inmanta.agent.handler.CRUDHandler.facts` method. e.g.:
             fip = self._neutron.list_floatingips(port_id=port_id)["floatingips"]
             if len(fip) > 0:
                 ctx.set_fact("ip_address", fip[0]["floating_ip_address"])
+
 
 
 .. warning::
@@ -252,8 +259,9 @@ For example, to cache the connection to a specific device for 120 seconds:
 
     @cache(ignore=["ctx"], evict_after_creation=120)
     def get_client_connection(self, ctx, device_id):
-       # ...
-       return connection
+        # ...
+        return connection
+
 
 Setting ``evict_after_last_access=60`` (or omitting the parameter) will evict
 the connection from the cache 60s after it was last read from the cache.
@@ -262,8 +270,8 @@ the connection from the cache 60s after it was last read from the cache.
 
     @cache(ignore=["ctx"])
     def get_client_connection(self, ctx, device_id, version):
-       # ...
-       return connection
+        # ...
+        return connection
 
 To also ensure the connection is properly closed, an ``on_delete`` function can be passed
 via the ``call_on_delete`` parameter. This function is called when the cache entry is removed
@@ -272,8 +280,11 @@ from the cache. It gets the cached item as argument.
 
 .. code-block:: python
 
-    @cache(ignore=["ctx"], evict_after_last_access=60,
-       call_on_delete=lambda connection:connection.close())
+    @cache(
+        ignore=["ctx"],
+        evict_after_last_access=60,
+        call_on_delete=lambda connection: connection.close(),
+    )
     def get_client_connection(self, ctx, device_id, version):
-       # ...
-       return connection
+        # ...
+        return connection

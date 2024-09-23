@@ -179,10 +179,16 @@ def cache(
                         _evict_after_creation = evict_after_creation
                     if timeout and timeout > 0:
                         _evict_after_creation = timeout
+
+                    LOGGER.warning(
+                        "Both the `evict_after_creation` and the `timeout` parameter are set "
+                        f"for cached method {f.__name__}. `evict_after_creation` will be "
+                        "overridden."
+                    )
             else:
                 # If both params are unset/negative, keep entries alive
                 # in the cache for 60s after their last usage.
-                if evict_after_creation <= 0 and evict_after_last_access <= 0:
+                if _evict_after_creation <= 0 and _evict_after_last_access <= 0:
                     _evict_after_last_access = 60
 
             return self.cache.get_or_else(
