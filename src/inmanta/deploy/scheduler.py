@@ -214,7 +214,7 @@ class ResourceScheduler(TaskManager):
         :return: resource_mapping {id -> resource details}
         """
         if version is None:
-            # TODO: create ticket: BUG: not necessarily released
+            # FIXME[8118]: resources have not necessarily been released
             resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(
                 environment=self.environment
             )
@@ -253,7 +253,8 @@ class ResourceScheduler(TaskManager):
         environment = await data.Environment.get_by_id(self.environment)
         if environment is None:
             raise ValueError(f"No environment found with this id: `{self.environment}`")
-        # TODO create ticket: BUG: version does not necessarily correspond to resources' version + last_version is reserved, not necessarily released
+        # FIXME[8119]: version does not necessarily correspond to resources' version
+        #       + last_version is reserved, not necessarily released
         #       -> call ConfigurationModel.get_version_nr_latest_version() instead?
         version = environment.last_version
         resources_from_db = await self._build_resource_mappings_from_db()
