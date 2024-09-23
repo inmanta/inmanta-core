@@ -1,4 +1,0 @@
----
-description: First part of `pkg_resources` library deprecation.
-change-type: patch
-destination-branches: [master, iso7]

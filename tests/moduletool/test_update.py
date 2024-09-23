@@ -20,8 +20,8 @@ import os
 
 import py.path
 import pytest
+from pkg_resources import Requirement
 
-import inmanta.util
 from inmanta import env
 from inmanta.config import Config
 from inmanta.data.model import PipConfig
@@ -127,9 +127,7 @@ def test_module_update_with_v2_module(
                 new_version=Version(current_version),
                 new_name=module_name,
                 new_requirements=(
-                    [InmantaModuleRequirement(inmanta.util.parse_requirement(requirement="module2<3.0.0"))]
-                    if module_name == "module1"
-                    else None
+                    [InmantaModuleRequirement(Requirement.parse("module2<3.0.0"))] if module_name == "module1" else None
                 ),
                 install=False,
                 publish_index=pip_index,
@@ -144,7 +142,7 @@ def test_module_update_with_v2_module(
         # Add a dependency on module2, without setting an explicit version constraint. Later version of module1
         # do set a version constraint on the dependency on module2. This way it is verified whether the module update
         # command takes into account the version constraints set in a new version of a module.
-        new_requirements=[InmantaModuleRequirement(inmanta.util.parse_requirement(requirement="module2"))],
+        new_requirements=[InmantaModuleRequirement(Requirement.parse("module2"))],
         install=False,
         publish_index=pip_index,
         new_content_init_cf="entity" if corrupt_module else None,  # Introduce syntax error in the module
@@ -241,11 +239,7 @@ def test_module_update_dependencies(
     create_python_package("a", Version("1.0.0"), str(tmpdir.join("a-1.0.0")), publish_index=index)
     for v in ("1.0.0", "1.0.1", "2.0.0"):
         create_python_package(
-            "b",
-            Version(v),
-            str(tmpdir.join(f"b-{v}")),
-            requirements=[inmanta.util.parse_requirement(requirement="c")],
-            publish_index=index,
+            "b", Version(v), str(tmpdir.join(f"b-{v}")), requirements=[Requirement.parse("c")], publish_index=index
         )
     for v in ("1.0.0", "2.0.0"):
         create_python_package("c", Version(v), str(tmpdir.join(f"c-{v}")), publish_index=index)
@@ -260,7 +254,7 @@ def test_module_update_dependencies(
 
     # install b-1.0.0 and c-1.0.0
     env.process_env.install_for_config(
-        [inmanta.util.parse_requirement(requirement=req) for req in ("b==1.0.0", "c==1.0.0")],
+        [Requirement.parse(req) for req in ("b==1.0.0", "c==1.0.0")],
         config=PipConfig(
             index_url=index.url,
             use_system_config=False,
@@ -272,7 +266,7 @@ def test_module_update_dependencies(
         source_dir=os.path.join(modules_dir, "minimalv1module"),
         dest_dir=str(tmpdir.join("modules", "my_mod")),
         new_name="my_mod",
-        new_requirements=inmanta.util.parse_requirements(["a", "b~=1.0.0"]),
+        new_requirements=[Requirement.parse(req) for req in ("a", "b~=1.0.0")],
     )
 
     # run `inmanta project update` without running install first

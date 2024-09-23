@@ -23,8 +23,8 @@ from typing import Optional
 
 import py
 import pytest
+from pkg_resources import Requirement
 
-import inmanta.util
 from inmanta import env
 from inmanta.command import CLIException
 from inmanta.module import ModuleV1, ModuleV1Metadata, ModuleV2, ModuleV2Source, Project, ProjectMetadata
@@ -89,7 +89,7 @@ def test_module_add_v2_module_to_project(
             dest_dir=os.path.join(tmpdir, f"elaboratev2module-v{version}"),
             new_version=Version(version),
             publish_index=pip_index,
-            new_extras={"optional": [inmanta.util.parse_requirement(requirement="inmanta-module-minimalv2module")]},
+            new_extras={"optional": [Requirement.parse("inmanta-module-minimalv2module")]},
         )
 
     # Create project
