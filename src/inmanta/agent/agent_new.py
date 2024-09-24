@@ -74,7 +74,10 @@ class Agent(SessionEndpoint):
 
         self._set_deploy_and_repair_intervals()
 
-    def _set_deploy_and_repair_intervals(self):
+    def _set_deploy_and_repair_intervals(self) -> None:
+        """
+        Fetch the settings related to automatic deploys and repairs from the config
+        """
         # do regular deploys
         self._deploy_interval = cfg.agent_deploy_interval.get()
         deploy_splay_time = cfg.agent_deploy_splay_time.get()
