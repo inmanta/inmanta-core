@@ -173,7 +173,7 @@ class ResourceScheduler(TaskManager):
         Trigger a deploy
         """
         async with self._scheduler_lock:
-            self._work.deploy_with_context(self._state.dirty, stale_deploys=self._deploying_stale)
+            self._work.deploy_with_context(self._state.dirty, deploying=self._deploying)
 
     async def repair(self) -> None:
         """
@@ -181,7 +181,7 @@ class ResourceScheduler(TaskManager):
         """
         async with self._scheduler_lock:
             self._state.dirty.update(self._state.resources.keys())
-            self._work.deploy_with_context(self._state.dirty, stale_deploys=self._deploying_stale)
+            self._work.deploy_with_context(self._state.dirty, deploying=self._deploying)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         resources = await self._build_resource_mappings_from_db(version)
@@ -313,7 +313,7 @@ class ResourceScheduler(TaskManager):
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
                     self._state.dirty,
-                    stale_deploys=self._deploying_stale,
+                    deploying=self._deploying,
                     added_requires=added_requires,
                     dropped_requires=dropped_requires,
                 )
@@ -390,12 +390,9 @@ class ResourceScheduler(TaskManager):
                 # TODO: test
                 # propagate events
                 if details.attributes.get("send_event", False):
-                    requires: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
-                    if requires:
-                        self._work.deploy_with_context(
-                            requires,
-                            stale_deploys=self._deploying_stale,
-                        )
+                    provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
+                    if provides:
+                        self._work.deploy_with_context(provides, deploying=self._deploying)
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
