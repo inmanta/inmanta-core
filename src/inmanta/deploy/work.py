@@ -457,7 +457,6 @@ class ScheduledWork:
         if resource in self._waiting or tasks.Deploy(resource=resource) in self.agent_queues:
             # a new deploy task was scheduled in the meantime, no need to do anything else
             return
-        # FIXME[#8012]: event propagation + test
         for dependant in self.provides.get(resource, []):
             blocked_deploy: Optional[BlockedDeploy] = self._waiting.get(dependant, None)
             if blocked_deploy is None:

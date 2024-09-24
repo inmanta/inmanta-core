@@ -387,6 +387,15 @@ class ResourceScheduler(TaskManager):
                 self._work.finished_deploy(resource)
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
+                # TODO: test
+                # propagate events
+                if details.attributes.get("send_event", False):
+                    requires: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
+                    if requires:
+                        self._work.deploy_with_context(
+                            requires,
+                            stale_deploys=self._deploying_stale,
+                        )
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
