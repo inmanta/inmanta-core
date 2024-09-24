@@ -106,8 +106,8 @@ class TestAgent(Agent):
     ):
         super().__init__(environment)
         self.executor_manager = DummyManager()
-        self.scheduler._executor_manager = self.executor_manager
-        self.scheduler._code_manager = DummyCodeManager(self._client)
+        self.scheduler.executor_manager = self.executor_manager
+        self.scheduler.code_manager = DummyCodeManager(self._client)
         # Bypass DB
         self.scheduler.read_version = pass_method
         self.scheduler.mock_versions = {}
@@ -115,7 +115,7 @@ class TestAgent(Agent):
         async def build_resource_mappings_from_db(version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:
             return self.scheduler.mock_versions[version]
 
-        self.scheduler.build_resource_mappings_from_db = build_resource_mappings_from_db
+        self.scheduler._build_resource_mappings_from_db = build_resource_mappings_from_db
 
 
 @pytest.fixture
@@ -163,7 +163,7 @@ def make_resource_minimal(environment):
         m.update(character.encode("utf-8"))
         attribute_hash = m.hexdigest()
 
-        return state.ResourceDetails(rid, version, attributes, attribute_hash)
+        return state.ResourceDetails(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash)
 
     return make_resource_minimal
 
@@ -180,9 +180,7 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
         ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
     }
 
-    # FIXME: SANDER: It seems we immediatly deploy if a new version arrives, we don't wait for an explicit deploy call?
-    # Is this by design?
-    await agent.scheduler.new_version(5, resources, make_requires(resources))
+    await agent.scheduler._new_version(5, resources, make_requires(resources))
 
     async def done():
         agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent1")
@@ -206,17 +204,17 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
         ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
     }
 
-    await agent.scheduler.new_version(5, resources, make_requires(resources))
+    await agent.scheduler._new_version(5, resources, make_requires(resources))
 
-    assert len(agent.scheduler._state.get_types_for_agent("agent1")) == 2
+    assert len(agent.scheduler.get_types_for_agent("agent1")) == 2
 
     resources = {
         ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, [], 6),
     }
 
-    await agent.scheduler.new_version(6, resources, make_requires(resources))
+    await agent.scheduler._new_version(6, resources, make_requires(resources))
 
-    assert len(agent.scheduler._state.get_types_for_agent("agent1")) == 1
+    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
     assert len(agent.scheduler._state.resources) == 1
 
 
@@ -261,9 +259,7 @@ async def test_get_facts(agent: TestAgent, make_resource_minimal):
         ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
     }
 
-    # FIXME: SANDER: It seems we immediatly deploy if a new version arrives, we don't wait for an explicit deploy call?
-    # Is this by design?
-    await agent.scheduler.new_version(5, resources, make_requires(resources))
+    await agent.scheduler._new_version(5, resources, make_requires(resources))
 
     await agent.scheduler.get_facts({"id": rid1})
 
