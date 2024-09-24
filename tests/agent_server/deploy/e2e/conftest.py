@@ -61,8 +61,8 @@ async def agent(server, environment):
         environment, a._client, asyncio.get_event_loop(), logger, a.thread_pool, a._storage["code"], a._storage["env"], False
     )
     a.executor_manager = executor
-    a.scheduler._executor_manager = executor
-    a.scheduler._code_manager = DummyCodeManager(a._client)
+    a.scheduler.executor_manager = executor
+    a.scheduler.code_manager = DummyCodeManager(a._client)
 
     await a.start()
 

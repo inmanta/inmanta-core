@@ -50,8 +50,6 @@ def convert_resource(resource: JsonType) -> ResourceDetails:
     id = Id.parse_id(resource["id"])
     rid = id.resource_str()
 
-    out = {"id": id.resource_version_str(), "model": id.version, "attributes": attributes}
-
     cleaned_requires = []
     for req in attributes["requires"]:
         theid = Id.parse_id(req)
@@ -68,7 +66,7 @@ def convert_resource(resource: JsonType) -> ResourceDetails:
     m.update(character.encode("utf-8"))
     attribute_hash = m.hexdigest()
 
-    return ResourceDetails(out, attribute_hash)
+    return ResourceDetails(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash)
 
 
 def convert_resources(resources: list[JsonType]) -> Mapping[ResourceIdStr, ResourceDetails]:
