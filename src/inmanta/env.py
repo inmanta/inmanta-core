@@ -769,7 +769,6 @@ class PythonEnvironment:
             )
         os.chmod(pip_path, 0o755)
 
-
     def _write_pth_file(self) -> None:
         """
         Write an inmanta-inherit-from-parent-venv.pth file to the venv to ensure that an activation of this venv will also
