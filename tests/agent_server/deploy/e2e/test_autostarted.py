@@ -18,12 +18,16 @@
 
 import asyncio
 import logging
+import time
 import uuid
+from uuid import UUID
 
 import pytest
 
 from inmanta import const, data
-from utils import _wait_until_deployment_finishes
+from inmanta.config import Config
+from inmanta.util import get_compiler_version
+from utils import _wait_until_deployment_finishes, resource_action_consistency_check
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -84,3 +88,159 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
 
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+
+
+@pytest.mark.parametrize(
+    "agent_deploy_interval",
+    ["2", "*/2 * * * * * *"],
+)
+async def test_spontaneous_deploy(
+    server,
+    client,
+    agent,
+    resource_container,
+    environment,
+    clienthelper,
+    caplog,
+    agent_deploy_interval,
+):
+    """
+    Test that a deploy run is executed every 2 seconds in the new agent
+     as specified in the agent_repair_interval (using a cron or not)
+    """
+    with caplog.at_level(logging.DEBUG):
+        resource_container.Provider.reset()
+
+        env_id = UUID(environment)
+
+        Config.set("config", "agent-deploy-interval", agent_deploy_interval)
+        Config.set("config", "agent-deploy-splay-time", "2")
+        Config.set("config", "agent-repair-interval", "0")
+
+        # This is just so we can reuse the agent from the fixtures with the new config options
+        agent._set_deploy_and_repair_intervals()
+        agent._enable_time_triggers()
+
+        resource_container.Provider.set_fail("agent1", "key1", 1)
+
+        version = await clienthelper.get_version()
+
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": "test::Resource[agent1,key=key1],v=%d" % version,
+                "purged": False,
+                "send_event": False,
+                "requires": [],
+            }
+        ]
+
+        await clienthelper.put_version_simple(resources, version)
+
+        # do a deploy
+        start = time.time()
+
+        result = await client.release_version(env_id, version, False)
+        assert result.code == 200
+
+        assert not result.result["model"]["deployed"]
+        assert result.result["model"]["released"]
+        assert result.result["model"]["total"] == 1
+        assert result.result["model"]["result"] == "deploying"
+
+        result = await client.get_version(env_id, version)
+        assert result.code == 200
+
+        await clienthelper.wait_for_deployed()
+
+        await clienthelper.wait_full_success(env_id)
+
+        duration = time.time() - start
+
+        result = await client.get_version(env_id, version)
+        assert result.result["model"]["done"] == 1
+
+        assert resource_container.Provider.isset("agent1", "key1")
+
+    # approximate check, the number of heartbeats can vary, but not by a factor of 10
+    beats = [message for logger_name, log_level, message in caplog.record_tuples if "Received heartbeat from" in message]
+    assert (
+        len(beats) < duration * 10
+    ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleep mechanism is broken"
+
+
+@pytest.mark.parametrize(
+    "agent_repair_interval",
+    [
+        "2",
+        "*/2 * * * * * *",
+    ],
+)
+async def test_spontaneous_repair(server, client, agent, resource_container, environment, clienthelper, agent_repair_interval):
+    """
+    Test that a repair run is executed every 2 seconds in the new agent
+     as specified in the agent_repair_interval (using a cron or not)
+    """
+    resource_container.Provider.reset()
+    env_id = environment
+
+    Config.set("config", "agent-repair-interval", agent_repair_interval)
+    Config.set("config", "agent-repair-splay-time", "2")
+    Config.set("config", "agent-deploy-interval", "0")
+
+    # This is just so we can reuse the agent from the fixtures with the new config options
+    agent._set_deploy_and_repair_intervals()
+    agent._enable_time_triggers()
+    version = await clienthelper.get_version()
+
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "purged": False,
+            "send_event": False,
+            "requires": [],
+        },
+    ]
+
+    result = await client.put_version(
+        tid=env_id, version=version, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version()
+    )
+    assert result.code == 200
+
+    # do a deploy
+    result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    result = await client.get_version(env_id, version)
+    assert result.code == 200
+
+    await clienthelper.wait_full_success(env_id)
+
+    async def verify_deployment_result():
+        result = await client.get_version(env_id, version)
+        # A repair run may put one resource from the deployed state to the deploying state.
+        assert len(resources) - 1 <= result.result["model"]["done"] <= len(resources)
+
+        assert resource_container.Provider.isset("agent1", "key1")
+        assert resource_container.Provider.get("agent1", "key1") == "value1"
+
+    await verify_deployment_result()
+
+    # Manual change
+    resource_container.Provider.set("agent1", "key1", "another_value")
+    # Wait until repair restores the state
+    now = time.time()
+    while resource_container.Provider.get("agent1", "key1") != "value1":
+        if time.time() > now + 10:
+            raise Exception("Timeout occurred while waiting for repair run")
+        await asyncio.sleep(0.1)
+
+    await verify_deployment_result()
+    await resource_action_consistency_check()
