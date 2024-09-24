@@ -450,7 +450,7 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     # TODO h here
 
     fake_id_url = (
-        f"{base_url}/api/v2/agents?limit=1&sort=agent.asc&filter.status=paused&start=ausf&first_id=athonet"
+        f"{base_url}/api/v2/agents?limit=1&sort=agent.asc&filter.status=pissuaused&start=ausf&first_id=athonet"
         "_core%3A%3Alicense%3A%3ALicense%5BDARI-LDARI-CP002%2Ccomponent_id%3Dausf%5D"
     )
     request = HTTPRequest(
