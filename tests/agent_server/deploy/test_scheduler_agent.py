@@ -157,7 +157,7 @@ async def agent(environment, config, event_loop):
 @pytest.fixture
 def make_resource_minimal(environment):
     # TODO: drop version
-    def make_resource_minimal(rid: str, values: dict[str, object], requires: list[str], version: int) -> state.ResourceDetails:
+    def make_resource_minimal(rid: str, values: dict[str, object], requires: list[str]) -> state.ResourceDetails:
         """Produce a resource that is valid to the scheduler"""
         attributes = dict(values)
         attributes["requires"] = requires
@@ -184,8 +184,8 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
     rid1 = "test::Resource[agent1,name=1]"
     rid2 = "test::Resource[agent1,name=2]"
     resources = {
-        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[], version=5),
-        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1]),
     }
 
     await agent.scheduler._new_version(5, resources, make_requires(resources))
@@ -221,12 +221,12 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     ) -> dict[ResourceIdStr, state.ResourceDetails]:
         return {
             ResourceIdStr(rid1): make_resource_minimal(
-                rid1, values={"value": r1_value, "send_event": True, FAIL_DEPLOY: r1_fail}, requires=[], version=version
+                rid1, values={"value": r1_value, "send_event": True, FAIL_DEPLOY: r1_fail}, requires=[]
             ),
             ResourceIdStr(rid2): make_resource_minimal(
-                rid2, values={"value": r2_value, "send_event": False, FAIL_DEPLOY: r2_fail}, requires=[rid1], version=version
+                rid2, values={"value": r2_value, "send_event": False, FAIL_DEPLOY: r2_fail}, requires=[rid1]
             ),
-            ResourceIdStr(rid3): make_resource_minimal(rid3, values={"value": r3_value}, requires=[rid2], version=version),
+            ResourceIdStr(rid3): make_resource_minimal(rid3, values={"value": r3_value}, requires=[rid2]),
         }
 
     resources: Mapping[ResourceIdStr, state.ResourceDetails]
@@ -298,8 +298,8 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
     rid1 = "test::Resource[agent1,name=1]"
     rid2 = "other::Resource[agent1,name=2]"
     resources = {
-        ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, [], 5),
-        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
+        ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, []),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1]),
     }
 
     await agent.scheduler._new_version(5, resources, make_requires(resources))
@@ -307,7 +307,7 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 2
 
     resources = {
-        ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, [], 6),
+        ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, []),
     }
 
     await agent.scheduler._new_version(6, resources, make_requires(resources))
@@ -324,8 +324,8 @@ async def test_dryrun(agent: TestAgent, make_resource_minimal, monkeypatch):
     rid1 = "test::Resource[agent1,name=1]"
     rid2 = "test::Resource[agent1,name=2]"
     resources = {
-        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[], version=5),
-        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1]),
     }
 
     agent.scheduler.mock_versions[5] = resources
@@ -353,8 +353,8 @@ async def test_get_facts(agent: TestAgent, make_resource_minimal):
     rid1 = "test::Resource[agent1,name=1]"
     rid2 = "test::Resource[agent1,name=2]"
     resources = {
-        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[], version=5),
-        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1]),
     }
 
     await agent.scheduler._new_version(5, resources, make_requires(resources))
