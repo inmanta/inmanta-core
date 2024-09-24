@@ -4748,6 +4748,7 @@ class Resource(BaseDocument):
         :param environment: The resources should belong to this environment.
         :param resource_type: The environment should have this resource_type.
         :param attributes: The resource should contain these key-value pairs in its attributes list.
+        :param released_only: Consider only released versions
         """
         values = [cls._get_value(environment)]
 
@@ -4764,7 +4765,6 @@ class Resource(BaseDocument):
         """
         if resource_type:
             query += " AND r1.resource_type=$2"
-            values.append(cls._get_value(resource_type))
 
         result = []
         async with cls.get_connection(connection) as con:
