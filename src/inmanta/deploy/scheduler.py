@@ -393,7 +393,10 @@ class ResourceScheduler(TaskManager):
                 if details.attributes.get("send_event", False):
                     provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
                     if provides:
-                        self._work.deploy_with_context(provides, deploying=self._deploying)
+                        # TODO: add test for deploying=set()
+                        # do not pass deploying tasks because for event propagation we really want to start a new one,
+                        # even if the current intent is already being deployed
+                        self._work.deploy_with_context(provides, deploying=set())
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
