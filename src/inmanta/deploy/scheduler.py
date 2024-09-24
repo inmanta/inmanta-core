@@ -141,6 +141,7 @@ class ResourceScheduler(TaskManager):
         self._deploying: set[ResourceIdStr] = set()
         # Set of resources for which a concrete stale deploy is in progress, i.e. we've committed for a given intent and
         # that intent has gone stale since
+        # TODO: is this still useful?
         self._deploying_stale: set[ResourceIdStr] = set()
 
         self.environment = environment

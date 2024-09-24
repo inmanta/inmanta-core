@@ -39,7 +39,6 @@ from inmanta.deploy import state
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.util import retry_limited
 
-
 FAIL_DEPLOY: str = "fail_deploy"
 
 
@@ -156,7 +155,6 @@ async def agent(environment, config, event_loop):
 
 @pytest.fixture
 def make_resource_minimal(environment):
-    # TODO: drop version
     def make_resource_minimal(rid: str, values: dict[str, object], requires: list[str]) -> state.ResourceDetails:
         """Produce a resource that is valid to the scheduler"""
         attributes = dict(values)
