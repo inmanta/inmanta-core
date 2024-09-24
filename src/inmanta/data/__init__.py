@@ -4765,6 +4765,7 @@ class Resource(BaseDocument):
         """
         if resource_type:
             query += " AND r1.resource_type=$2"
+            values.append(cls._get_value(resource_type))
 
         result = []
         async with cls.get_connection(connection) as con:
