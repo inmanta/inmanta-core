@@ -31,6 +31,7 @@ import pathlib
 import socket
 import threading
 import time
+import typing
 import uuid
 import warnings
 from abc import ABC, abstractmethod
@@ -886,17 +887,11 @@ def remove_comment_part_from_specifier(to_clean: str) -> str:
     return drop_comment
 
 
-class CanonicalRequirement(packaging.requirements.Requirement):
-    """
-    A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized,
-    which allows us to compare names without dealing afterwards with the format of these requirements.
-    """
-
-    def __init__(self, requirement_string: str):
-        super().__init__(requirement_string)
-        upper_cases = {i for i in range(len(requirement_string[: len(self.name)])) if requirement_string[i].isupper()}
-        self.project_name = "".join([self.name[i].upper() if i in upper_cases else self.name[i] for i in range(len(self.name))])
-        self.name = packaging.utils.canonicalize_name(self.name)
+CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
+"""
+A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized, which
+allows us to compare names without dealing afterwards with the format of these requirements.
+"""
 
 
 def parse_requirement(requirement: str) -> CanonicalRequirement:
@@ -912,7 +907,10 @@ def parse_requirement(requirement: str) -> CanonicalRequirement:
     # already installed
     # The following line could cause issue because we are not supposed to modify fields of an existing instance
     # The version of packaging is constrained to ensure this can not cause problems in production.
-    return CanonicalRequirement(requirement_string=requirement)
+    requirement_instance = packaging.requirements.Requirement(requirement_string=requirement)
+    requirement_instance.name = packaging.utils.canonicalize_name(requirement_instance.name)
+    canonical_requirement_instance = CanonicalRequirement(requirement_instance)
+    return canonical_requirement_instance
 
 
 def parse_requirements(requirements: Sequence[str]) -> list[CanonicalRequirement]:
