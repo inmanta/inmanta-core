@@ -4739,7 +4739,6 @@ class Resource(BaseDocument):
         attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
-        released_only: bool = False,
     ) -> list["Resource"]:
         """
         Returns the resources in the latest version of the configuration model of the given environment, that satisfy the
@@ -4748,20 +4747,14 @@ class Resource(BaseDocument):
         :param environment: The resources should belong to this environment.
         :param resource_type: The environment should have this resource_type.
         :param attributes: The resource should contain these key-value pairs in its attributes list.
-        :param released_only: Consider only released versions
         """
         values = [cls._get_value(environment)]
-
-        verion_filter = ""
-        if released_only:
-            verion_filter = " AND cm.released "
-
         query = f"""
             SELECT *
             FROM {Resource.table_name()} AS r1
             WHERE r1.environment=$1 AND r1.model=(SELECT MAX(cm.version)
                                                   FROM {ConfigurationModel.table_name()} AS cm
-                                                  WHERE cm.environment=$1{verion_filter})
+                                                  WHERE cm.environment=$1)
         """
         if resource_type:
             query += " AND r1.resource_type=$2"
