@@ -1,11 +1,11 @@
 # Modules
 
-This page gives an overview of all modules available by Inmanta on the Inmanta Orchestration Platform.
+This page gives an overview of all modules available by Inmanta on the Inmanta Service Orchestration Platform.
 
 
 ## Adapter
 
-The following table provides and overview of all available adapters by Inmanta. Depending on the adapter they are opensource, included in specific
+The following table provides an overview of all available adapters made by Inmanta. Depending on the adapter they can be opensource, included in specific
 product suites or directly licensed.
 
 | Name               |                                                                                                               |
@@ -20,7 +20,7 @@ product suites or directly licensed.
 | checkpoint         | Support for Checkpoint firewalls including VSX, rules, inventory, interfaces, routing, ...                    |
 | cisco-xe           | Support for Cisco XE based devices such as CSR1000v and ASR through Netconf/YANG                              |
 | cisco-xr           | Support for Cisco XR based devices such as ASR9k, XRd and NCS through Netconf/YANG                            |
-| cloudflare         | Support for Cloudflare all resources including zero-trust services                                            |
+| cloudflare         | Support for all Cloudflare resources including zero-trust services                                            |
 | cloudsmith         | Support for Cloudsmith repos and entitlements                                                                 |
 | druid              | Support for the full configuration of the Druid Raemis 4G/5G combo-core                                       |
 | dzs                | Support for DZS OLT through SSH and CLI                                                                       |
