@@ -21,6 +21,7 @@ import functools
 import itertools
 from collections.abc import Iterator, Mapping, Set
 from dataclasses import dataclass
+from enum import IntEnum
 from typing import Callable, Generic, Optional, TypeVar
 
 from inmanta.data.model import ResourceIdStr
@@ -34,6 +35,17 @@ Type alias for the union of all task types. Allows exhaustive case matches.
 T = TypeVar("T", bound=tasks.Task, covariant=True)
 
 
+class TaskPriority(IntEnum):
+    TERMINATED = -1
+    USER_DEPLOY = 0
+    NEW_VERSION_DEPLOY = 1
+    USER_REPAIR = 2
+    DRYRUN = 3
+    INTERVAL_DEPLOY = 4
+    FACT_REFRESH = 5
+    INTERVAL_REPAIR = 6
+
+
 @dataclass(frozen=True, kw_only=True)
 class PrioritizedTask(Generic[T]):
     """
@@ -45,7 +57,7 @@ class PrioritizedTask(Generic[T]):
     """
 
     task: T
-    priority: int
+    priority: TaskPriority
 
 
 @functools.total_ordering
@@ -198,7 +210,8 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         """
         poison_pill = TaskQueueItem(
             task=PrioritizedTask(
-                task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")), priority=-1
+                task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")),
+                priority=TaskPriority.TERMINATED,
             ),
             insert_order=0,
         )
@@ -294,6 +307,7 @@ class ScheduledWork:
     def deploy_with_context(
         self,
         resources: Set[ResourceIdStr],
+        priority: TaskPriority,
         *,
         stale_deploys: Optional[Set[ResourceIdStr]] = None,
         added_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
@@ -306,6 +320,7 @@ class ScheduledWork:
 
         :param resources: Set of resources that should be deployed. Adds a deploy task to the scheduled work for each
             of these, unless it is already scheduled.
+        :param priority: The priority of this deploy.
         :param stale_deploys: Set of resources for which a stale deploy is in progress, i.e. a deploy for an outdated resource
             intent.
         :param added_requires: Requires edges that were added since the previous state update, if any.
@@ -378,11 +393,10 @@ class ScheduledWork:
                 # discard rather than remove because task may already be running, in which case we leave it run its course
                 # and simply add a new one
                 task: tasks.Deploy = tasks.Deploy(resource=resource)
-                priority: Optional[int] = self.agent_queues.discard(task)
+                task_priority: Optional[TaskPriority] = self.agent_queues.discard(task)
                 queued.remove(resource)
                 self._waiting[resource] = BlockedDeploy(
-                    # FIXME[#8015]: default priority
-                    task=PrioritizedTask(task=task, priority=priority if priority is not None else 0),
+                    task=PrioritizedTask(task=task, priority=task_priority if task_priority is not None else priority),
                     # task was previously ready to execute => assume no other blockers than this one
                     blocked_on=new_blockers,
                 )
@@ -401,8 +415,7 @@ class ScheduledWork:
                 dependency for dependency in self.requires.get(resource, ()) if is_scheduled(dependency)
             }
             self._waiting[resource] = BlockedDeploy(
-                # FIXME[#8015]: priority
-                task=PrioritizedTask(task=tasks.Deploy(resource=resource), priority=0),
+                task=PrioritizedTask(task=tasks.Deploy(resource=resource), priority=priority),
                 blocked_on=blocked_on,
             )
             not_scheduled.discard(resource)

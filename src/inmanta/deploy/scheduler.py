@@ -32,7 +32,7 @@ from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import work
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import DryRun, RefreshFact, Task
-from inmanta.deploy.work import PrioritizedTask
+from inmanta.deploy.work import PrioritizedTask, TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
 
@@ -168,20 +168,20 @@ class ResourceScheduler(TaskManager):
         self._work.agent_queues.send_shutdown()
         await asyncio.gather(*self._workers.values())
 
-    async def deploy(self) -> None:
+    async def deploy(self, priority: TaskPriority) -> None:
         """
         Trigger a deploy
         """
         async with self._scheduler_lock:
-            self._work.deploy_with_context(self._state.dirty, stale_deploys=self._deploying_stale)
+            self._work.deploy_with_context(self._state.dirty, priority, stale_deploys=self._deploying_stale)
 
-    async def repair(self) -> None:
+    async def repair(self, priority: TaskPriority) -> None:
         """
         Trigger a repair, i.e. mark all resources as dirty, then trigger a deploy.
         """
         async with self._scheduler_lock:
             self._state.dirty.update(self._state.resources.keys())
-            self._work.deploy_with_context(self._state.dirty, stale_deploys=self._deploying_stale)
+            self._work.deploy_with_context(self._state.dirty, priority, stale_deploys=self._deploying_stale)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         resources = await self._build_resource_mappings_from_db(version)
@@ -194,7 +194,7 @@ class ResourceScheduler(TaskManager):
                         resource_details=resource,
                         dry_run_id=dry_run_id,
                     ),
-                    priority=10,
+                    priority=TaskPriority.DRYRUN,
                 )
             )
 
@@ -203,7 +203,7 @@ class ResourceScheduler(TaskManager):
         self._work.agent_queues.queue_put_nowait(
             PrioritizedTask(
                 task=RefreshFact(resource=rid),
-                priority=10,
+                priority=TaskPriority.FACT_REFRESH,
             )
         )
 
@@ -313,6 +313,7 @@ class ResourceScheduler(TaskManager):
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
                     self._state.dirty,
+                    TaskPriority.NEW_VERSION_DEPLOY,
                     stale_deploys=self._deploying_stale,
                     added_requires=added_requires,
                     dropped_requires=dropped_requires,
