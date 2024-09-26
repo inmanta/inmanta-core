@@ -34,6 +34,8 @@ Type alias for the union of all task types. Allows exhaustive case matches.
 T = TypeVar("T", bound=tasks.Task, covariant=True)
 
 
+# TODO: add the insert order field here as well so that deferred deploys jump the queue when re-added
+#       -> add test case
 @dataclass(frozen=True, kw_only=True)
 class PrioritizedTask(Generic[T]):
     """
