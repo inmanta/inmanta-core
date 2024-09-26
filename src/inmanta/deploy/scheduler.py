@@ -207,18 +207,13 @@ class ResourceScheduler(TaskManager):
             )
         )
 
-    async def _build_resource_mappings_from_db(self, version: int | None = None) -> Mapping[ResourceIdStr, ResourceDetails]:
+    async def _build_resource_mappings_from_db(self, version: int) -> Mapping[ResourceIdStr, ResourceDetails]:
         """
         Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
 
         :return: resource_mapping {id -> resource details}
         """
-        if version is None:
-            resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(
-                environment=self.environment, released_only=True
-            )
-        else:
-            resources_from_db = await data.Resource.get_resources_for_version(self.environment, version)
+        resources_from_db = await data.Resource.get_resources_for_version(self.environment, version)
 
         resource_mapping = {
             resource.resource_id: ResourceDetails(
@@ -253,7 +248,7 @@ class ResourceScheduler(TaskManager):
         if cm_version is None:
             return
         version = cm_version.version
-        resources_from_db = await self._build_resource_mappings_from_db()
+        resources_from_db = await self._build_resource_mappings_from_db(version=version)
         requires_from_db = self._construct_requires_mapping(resources_from_db)
         await self._new_version(version, resources_from_db, requires_from_db)
 
