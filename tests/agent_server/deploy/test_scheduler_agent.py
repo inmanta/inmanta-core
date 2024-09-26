@@ -18,6 +18,7 @@
     This file is intended to contain test that use the agent/scheduler combination in isolation: no server, no executor
 """
 
+import asyncio
 import hashlib
 import json
 import typing
@@ -73,6 +74,32 @@ class DummyExecutor(executor.Executor):
 
     async def join(self) -> None:
         pass
+
+
+class ManagedExecutor(DummyExecutor):
+    """
+    Dummy executor that can be driven explicitly by a test case.
+
+    Executor behavior must be controlled through the `deploys` property. It exposes a mapping from resource ids
+    to futures. Simply set the desired outcome as the result on the appropriate future.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._deploys: dict[ResourceIdStr, asyncio.Future[const.ResourceState]] = {}
+
+    @property
+    def deploys(self) -> Mapping[ResourceIdStr, asyncio.Future[const.ResourceState]]:
+        return self._deploys
+
+    async def execute(self, gid: uuid.UUID, resource_details: ResourceDetails, reason: str) -> const.ResourceState:
+        assert resource_details.rid not in self._deploys
+        self._deploys[resource_details.rid] = asyncio.Future()
+        # wait until the test case sets desired resource state
+        result: const.ResourceState = await self._deploys[resource_details.rid]
+        del self._deploys[resource_details.rid]
+        self.execute_count += 1
+        return result
 
 
 class DummyManager(executor.ExecutorManager[executor.Executor]):
@@ -217,6 +244,12 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         r1_fail: bool = False,
         r2_fail: bool = False,
     ) -> dict[ResourceIdStr, state.ResourceDetails]:
+        """
+        Returns three resources with a single attribute, whose value is set by the value parameters. The fail parameters
+        control whether the executor should fail or deploy successfully.
+
+        The resources depend on one another like r1 -> r2 -> r3 (r1 provides r2 etc), but only r1 sends events.
+        """
         return {
             ResourceIdStr(rid1): make_resource_minimal(
                 rid1, values={"value": r1_value, "send_event": True, FAIL_DEPLOY: r1_fail}, requires=[]
@@ -287,6 +320,65 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+
+
+async def test_deploy_in_progress(agent: TestAgent, make_resource_minimal) -> None:
+    """
+    Verify the behavior of various scheduler intricacies relating to in-progress or already scheduled deploys.
+    """
+    # TODO
+
+    rid1 = "test::Resource[agent1,name=1]"
+    rid2 = "test::Resource[agent2,name=2]"
+    rid3 = "test::Resource[agent3,name=3]"
+
+    # make agent2's executor a managed executor, leave the others to execute without delay
+    executor2: ManagedExecutor = ManagedExecutor()
+    agent.executor_manager.executors["agent2"] = executor2
+
+    def make_resources(
+        *,
+        version: int,
+        r1_value: int,
+        r2_value: int,
+        r3_value: int,
+        r1_fail: bool = False,
+    ) -> dict[ResourceIdStr, state.ResourceDetails]:
+        """
+        Returns three resources with a single attribute, whose value is set by the value parameters. The fail parameters
+        control whether the executor should fail or deploy successfully.
+
+        The resources depend on one another like r1 -> r2 -> r3 (r1 provides r2 etc), but only r1 sends events.
+        """
+        return {
+            ResourceIdStr(rid1): make_resource_minimal(
+                rid1, values={"value": r1_value, "send_event": True, FAIL_DEPLOY: r1_fail}, requires=[]
+            ),
+            ResourceIdStr(rid2): make_resource_minimal(
+                rid2, values={"value": r2_value, "send_event": False}, requires=[rid1]
+            ),
+            ResourceIdStr(rid3): make_resource_minimal(rid3, values={"value": r3_value}, requires=[rid2]),
+        }
+
+    resources: Mapping[ResourceIdStr, state.ResourceDetails]
+    resources = make_resources(version=1, r1_value=0, r2_value=0, r3_value=0)
+    await agent.scheduler._new_version(1, resources, make_requires(resources))
+
+    def done():
+        agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent2")
+        if not agent_1_queue:
+            return False
+        return agent_1_queue._unfinished_tasks == 0
+
+    await retry_limited(lambda: rid2 in executor2.deploys, 2)
+    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+
+    await retry_limited(done, 5)
+
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+    assert agent.executor_manager.executors["agent3"].execute_count == 1
+    assert rid2 not in executor2.deploys, f"deploy for {rid2} should have finished"
 
 
 async def test_removal(agent: TestAgent, make_resource_minimal):
