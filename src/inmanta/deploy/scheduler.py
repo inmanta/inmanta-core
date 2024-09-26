@@ -138,11 +138,7 @@ class ResourceScheduler(TaskManager):
         # tasks that have been picked up while this set contains only those tasks for which we've already committed. For each
         # deploy task, there is a (typically) short window of time where it's considered in progress by the agent queue, but
         # it has not yet started on the actual deploy, i.e. it will still see updates to the resource intent.
-        self._deploying: set[ResourceIdStr] = set()
-        # Set of resources for which a concrete stale deploy is in progress, i.e. we've committed for a given intent and
-        # that intent has gone stale since
-        # TODO: is this still useful?
-        self._deploying_stale: set[ResourceIdStr] = set()
+        self._deploying_latest: set[ResourceIdStr] = set()
 
         self.environment = environment
         self.client = client
@@ -174,7 +170,7 @@ class ResourceScheduler(TaskManager):
         Trigger a deploy
         """
         async with self._scheduler_lock:
-            self._work.deploy_with_context(self._state.dirty, deploying=self._deploying)
+            self._work.deploy_with_context(self._state.dirty, deploying=self._deploying_latest)
 
     async def repair(self) -> None:
         """
@@ -182,7 +178,7 @@ class ResourceScheduler(TaskManager):
         """
         async with self._scheduler_lock:
             self._state.dirty.update(self._state.resources.keys())
-            self._work.deploy_with_context(self._state.dirty, deploying=self._deploying)
+            self._work.deploy_with_context(self._state.dirty, deploying=self._deploying_latest)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         resources = await self._build_resource_mappings_from_db(version)
@@ -307,14 +303,12 @@ class ResourceScheduler(TaskManager):
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
-                # Calculate in-progress deploys that have gone stale and update internal state accordingly
-                new_stale: Set[ResourceIdStr] = self._deploying.intersection(new_desired_state.union(deleted_resources))
-                self._deploying.difference_update(new_stale)
-                self._deploying_stale.update(new_stale)
+                # Update set of in-progress non-stale deploys by trimming resources with new state
+                self._deploying_latest.difference_update(new_desired_state, deleted_resources)
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
                     self._state.dirty,
-                    deploying=self._deploying,
+                    deploying=self._deploying_latest,
                     added_requires=added_requires,
                     dropped_requires=dropped_requires,
                 )
@@ -358,7 +352,7 @@ class ResourceScheduler(TaskManager):
             else:
                 if for_deploy:
                     # still under lock => can safely add to non-stale in-progress set
-                    self._deploying.add(resource)
+                    self._deploying_latest.add(resource)
                 return result
 
     async def report_resource_state(
@@ -376,19 +370,15 @@ class ResourceScheduler(TaskManager):
             details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
             if details is None or details.attribute_hash != attribute_hash:
                 # The reported resource state is for a stale resource and therefore no longer relevant.
-                if deployment_result is not None:
-                    # if this was a deploy, update internal deploying state
-                    self._deploying_stale.remove(resource)
                 return
             state: ResourceState = self._state.resource_state[resource]
             state.status = status
             if deployment_result is not None:
-                self._deploying.remove(resource)
+                self._deploying_latest.remove(resource)
                 state.deployment_result = deployment_result
                 self._work.finished_deploy(resource)
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
-                # TODO: test
                 # propagate events
                 if details.attributes.get("send_event", False):
                     provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
