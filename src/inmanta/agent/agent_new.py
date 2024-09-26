@@ -160,8 +160,10 @@ class Agent(SessionEndpoint):
         assert env == self.environment
         assert agent == AGENT_SCHEDULER_ID
         if incremental_deploy:
+            LOGGER.info("Agent %s got a trigger to run deploy in environment %s", agent, env)
             await self.scheduler.deploy()
         else:
+            LOGGER.info("Agent %s got a trigger to run repair in environment %s", agent, env)
             await self.scheduler.repair()
         return 200
 
@@ -205,6 +207,7 @@ class Agent(SessionEndpoint):
         # FIXME: this api is very inefficient: it sends the entire resource, we only need the id now
         assert env == self.environment
         assert agent == AGENT_SCHEDULER_ID
+        LOGGER.info("Agent %s got a trigger to run get_facts for resource %s in environment %s", agent, resource.get("id"), env)
         await self.scheduler.get_facts(resource)
         return 200
 
