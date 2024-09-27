@@ -199,6 +199,39 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
     assert agent.executor_manager.executors["agent1"].execute_count == 2
 
 
+async def test_halt_deploy(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure the following points:
+        - If environment is stopped, everything is killed after max 15 secs
+        - If environment is stopped, you cannot start any new agent
+        - If agent is stopped, the agent finishes its task and stop
+        - If agent is stopped, the agent doesn't pick any new task even if new version is released
+    """
+
+    rid1 = "test::Wait[agent1,name=1]"
+    rid2 = "test::Wait[agent2,name=2]"
+    resources = {
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, values={"value": "a"}, requires=[]),
+    }
+
+    await agent.scheduler._new_version(5, resources, make_requires(resources))
+
+    async def done():
+        agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent1")
+        if not agent_1_queue:
+            return False
+        agent_2_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent2")
+        if not agent_2_queue:
+            return False
+        return agent_1_queue._unfinished_tasks == 0 and agent_2_queue._unfinished_tasks == 0
+
+    await retry_limited(done, 5)
+
+    assert agent.executor_manager.executors["agent1"].execute_count == 2
+    assert agent.executor_manager.executors["agent2"].execute_count == 2
+
+
 async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal):
     """
     Ensure that events are propagated when a deploy finishes

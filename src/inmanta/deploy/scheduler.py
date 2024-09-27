@@ -21,6 +21,7 @@ import asyncio
 import logging
 import uuid
 from abc import abstractmethod
+from asyncio import CancelledError
 from collections.abc import Collection, Mapping, Set
 from typing import Optional
 
@@ -30,7 +31,7 @@ from inmanta.agent.code_manager import CodeManager
 from inmanta.data import Resource
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import work
-from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
+from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask
 from inmanta.protocol import Client
@@ -115,7 +116,7 @@ class ResourceScheduler(TaskManager):
         self._work: work.ScheduledWork = work.ScheduledWork(
             requires=self._state.requires.requires_view(),
             provides=self._state.requires.provides_view(),
-            new_agent_notify=self._start_for_agent,
+            new_agent_notify=self._start_for_agent,  # TODO h this
         )
 
         # We uphold two locks to prevent concurrency conflicts between external events (e.g. new version or deploy request)
@@ -327,18 +328,55 @@ class ResourceScheduler(TaskManager):
 
     def _start_for_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
+        self._state.agent_status[agent] = AgentStatus.STARTED
         self._workers[agent] = asyncio.create_task(self._run_for_agent(agent))
 
     async def _run_for_agent(self, agent: str) -> None:
         """Main loop for one agent"""
-        while self._running:
-            task: Task = await self._work.agent_queues.queue_get(agent)
-            try:
-                await task.execute(self, agent)
-            except Exception:
-                LOGGER.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
+        try:
+            while self._running and self._state.agent_status[agent] == AgentStatus.STARTED:
+                task: Task = await self._work.agent_queues.queue_get(agent)
+                try:
+                    await task.execute(self, agent)
+                except Exception:
+                    LOGGER.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
+        except CancelledError:
+            # We are woken up because the environment is halted
+            pass
 
             self._work.agent_queues.task_done(agent, task)
+
+    def _pause_for_agent(self, agent: str) -> None:
+        """Pause the given agent"""
+        if agent not in self._state.agent_status:
+            raise LookupError("")
+
+        self._state.agent_status[agent] = AgentStatus.STOPPED
+
+    def _unpause_for_agent(self, agent: str) -> None:
+        """Unpause / Restart processing for the given agent"""
+        if agent not in self._state.agent_status:
+            raise LookupError("")
+
+        self._start_for_agent(agent)
+
+    async def _pause_environment(self) -> None:
+        # TODO h missing db integration
+        """Pause the environment of the scheduler"""
+        for agent in self._workers.keys():
+            agent_state = self._state.agent_status[agent]
+            # if agent_state == AgentStatus.STOPPED:
+            #     # TODO not true as the task could still be running
+            #     continue
+            if not self._workers[agent].done():
+                self._workers[agent].cancel("Environment has been paused")
+            if agent_state != AgentStatus.STOPPED:
+                self._state.agent_status[agent] = AgentStatus.STOPPED
+
+        self._state.agent_status[agent] = AgentStatus.STOPPED
+
+        self._work.agent_queues.send_shutdown()
+        await asyncio.gather(*self._workers.values())
 
     # TaskManager interface
 

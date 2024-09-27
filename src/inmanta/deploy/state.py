@@ -81,6 +81,19 @@ class DeploymentResult(StrEnum):
     FAILED = enum.auto()
 
 
+class AgentStatus(StrEnum):
+    """
+    The status of the agent responsible of a given resource.
+    FIXME The `DOWN` status is not taken into account here as it is a following ticket, see
+
+    STARTED: Agent has been started.
+    STOPPED: Agent has been stopped (previously called PAUSED).
+    """
+
+    STARTED = enum.auto()
+    STOPPED = enum.auto()
+
+
 @dataclass
 class ResourceState:
     """
@@ -91,6 +104,7 @@ class ResourceState:
     #   https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
     status: ResourceStatus
     deployment_result: DeploymentResult
+    agent_stauts: AgentStatus
 
 
 @dataclass(kw_only=True)
@@ -112,6 +126,7 @@ class ModelState:
     types_per_agent: dict[str, dict[ResourceType, int]] = dataclasses.field(
         default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
     )
+    agent_status: dict[str, AgentStatus] = dataclasses.field(default_factory=dict)
     """
     Resources that have a new desired state (might be simply a change of its dependencies), which are still being processed by
     the resource scheduler. This is a shortlived transient state, used for internal concurrency control. Kept separate from
@@ -124,6 +139,7 @@ class ModelState:
         self.requires.clear()
         self.resource_state.clear()
         self.types_per_agent.clear()
+        self.agent_status.clear()
 
     def update_desired_state(
         self,
@@ -138,7 +154,9 @@ class ModelState:
             self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
         else:
             self.resource_state[resource] = ResourceState(
-                status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW
+                status=ResourceStatus.HAS_UPDATE,
+                deployment_result=DeploymentResult.NEW,
+                agent_stauts=AgentStatus.STARTED,
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.add(resource)

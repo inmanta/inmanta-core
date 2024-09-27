@@ -236,7 +236,7 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             raise BadRequest(f"Unknown agent action: {action.name}")
 
-    @handle(methods_v2.agent_action, env="tid")
+    @handle(methods_v2.agent_action, env="tid")  # TODO h here
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
         if env.halted and action in {AgentAction.pause, AgentAction.unpause}:
             raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
@@ -1012,7 +1012,10 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         else:
             agents = await data.Agent.get_list(environment=env.id)
             agent_list = [a.name for a in agents]
-            await self._ensure_agents(env, agent_list, restart=True)
+            if opt.server_use_resource_scheduler.get():
+                await self._ensure_scheduler(env)
+            else:
+                await self._ensure_agents(env, agent_list, restart=True)
 
     async def stop_agents(
         self,

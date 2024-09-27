@@ -1005,6 +1005,7 @@ def get_status():
 # Methods to allow the server to set the agents state
 
 
+# TODO h docstring
 @method(path="/agentstate", operation="POST", server_agent=True, enforce_auth=False, timeout=5, client_types=[])
 def set_state(agent: str, enabled: bool):
     """

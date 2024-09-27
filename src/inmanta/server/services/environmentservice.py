@@ -261,6 +261,7 @@ class EnvironmentService(protocol.ServerSlice):
         """
         Internal helper to resume an environment. This method must be called under the self.environment_state_operation_lock.
         """
+        # TODO h we are missing the stop of executor manager + scheduler
         async with data.Environment.get_connection(connection) as con:
             async with con.transaction():
                 refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=con)
