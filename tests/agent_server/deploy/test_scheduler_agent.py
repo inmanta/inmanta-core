@@ -18,6 +18,7 @@
     This file is intended to contain test that use the agent/scheduler combination in isolation: no server, no executor
 """
 
+import asyncio
 import hashlib
 import json
 import typing
@@ -71,14 +72,53 @@ class DummyExecutor(executor.Executor):
     async def close_version(self, version: int) -> None:
         pass
 
+    async def stop(self) -> None:
+        pass
+
     async def join(self) -> None:
         pass
+
+
+class ManagedExecutor(DummyExecutor):
+    """
+    Dummy executor that can be driven explicitly by a test case.
+
+    Executor behavior must be controlled through the `deploys` property. It exposes a mapping from resource ids
+    to futures. Simply set the desired outcome as the result on the appropriate future.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._deploys: dict[ResourceIdStr, asyncio.Future[const.ResourceState]] = {}
+
+    @property
+    def deploys(self) -> Mapping[ResourceIdStr, asyncio.Future[const.ResourceState]]:
+        return self._deploys
+
+    async def stop(self) -> None:
+        # resolve hanging futures to prevent test hanging during teardown
+        for deploy in self._deploys.values():
+            deploy.set_result(const.ResourceState.undefined)
+
+    async def execute(self, gid: uuid.UUID, resource_details: ResourceDetails, reason: str) -> const.ResourceState:
+        assert resource_details.rid not in self._deploys
+        self._deploys[resource_details.rid] = asyncio.Future()
+        # wait until the test case sets desired resource state
+        result: const.ResourceState = await self._deploys[resource_details.rid]
+        del self._deploys[resource_details.rid]
+        self.execute_count += 1
+        return result
 
 
 class DummyManager(executor.ExecutorManager[executor.Executor]):
 
     def __init__(self):
         self.executors = {}
+        self._managed_executors: list[ManagedExecutor] = []
+
+    def register_managed_executor(self, agent_name: str, executor: ManagedExecutor) -> None:
+        self.executors[agent_name] = executor
+        self._managed_executors.append(executor)
 
     async def get_executor(
         self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
@@ -94,7 +134,8 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
     async def stop(self) -> None:
-        pass
+        for ex in self.executors.values():
+            await ex.stop()
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
         pass
