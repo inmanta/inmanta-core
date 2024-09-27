@@ -27,7 +27,7 @@ from typing import Optional
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.data import ConfigurationModel, Resource
+from inmanta.data import ConfigurationModel
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import work
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
