@@ -102,7 +102,7 @@ class ManagedExecutor(DummyExecutor):
 
     async def execute(self, gid: uuid.UUID, resource_details: ResourceDetails, reason: str) -> const.ResourceState:
         assert resource_details.rid not in self._deploys
-        self._deploys[resource_details.rid] = asyncio.Future()
+        self._deploys[resource_details.rid] = asyncio.get_running_loop().create_future()
         # wait until the test case sets desired resource state
         result: const.ResourceState = await self._deploys[resource_details.rid]
         del self._deploys[resource_details.rid]
