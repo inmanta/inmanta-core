@@ -36,6 +36,7 @@ from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.data import ResourceIdStr
 from inmanta.deploy import state
+from inmanta.deploy.work import TaskPriority
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.util import retry_limited
 
@@ -120,7 +121,7 @@ class TestAgent(Agent):
 
 @pytest.fixture
 def environment() -> uuid.UUID:
-    return "83d604a0-691a-11ef-ae04-c8f750463317"
+    return uuid.UUID("83d604a0-691a-11ef-ae04-c8f750463317")
 
 
 @pytest.fixture
@@ -272,3 +273,38 @@ async def test_get_facts(agent: TestAgent, make_resource_minimal):
     await retry_limited(done, 5)
 
     assert agent.executor_manager.executors["agent1"].facts_count == 1
+
+
+async def test_scheduler_priority(agent: TestAgent, environment, make_resource_minimal):
+    """
+    Ensure that the tasks are placed in the queue in the correct order
+    """
+
+    await agent.stop()
+
+    rid1 = "test::Resource[agent1,name=1]"
+    rid2 = "test::Resource[agent1,name=2]"
+    resources = {
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[], version=5),
+    }
+
+    agent.scheduler.mock_versions[5] = resources
+
+    await agent.scheduler.get_facts({"id": rid1})
+
+    await agent.scheduler._new_version(5, resources, make_requires(resources))
+
+    await agent.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
+
+    dryrun = uuid.uuid4()
+    await agent.scheduler.dryrun(dryrun, 5)
+
+    await agent.trigger_update(environment, "$__scheduler", incremental_deploy=False)
+    await agent.trigger_update(environment, "$__scheduler", incremental_deploy=True)
+
+    await agent.scheduler.repair(TaskPriority.INTERVAL_REPAIR)
+
+    agent_1_queue = agent.scheduler._work.agent_queues.sorted("agent1")
+    assert len(agent_1_queue) == 7
+
+    await agent.start_working()

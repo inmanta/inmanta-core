@@ -407,8 +407,15 @@ class ScheduledWork:
         # ensure desired resource deploys are scheduled
         for resource in resources:
             if is_scheduled(resource):
-                # Deploy is already scheduled / running. No need to do anything here. If any of its dependencies are to be
+                # Deploy is already scheduled / running. Check to see if this task has a higher priority than the one already
+                # scheduled. If it has, update the priority. If any of its dependencies are to be
                 # scheduled as well, they will follow the provides relation to ensure this deploy waits its turn.
+                task = PrioritizedTask(task=tasks.Deploy(resource=resource), priority=priority)
+                if tasks.Deploy(resource=resource) in self.agent_queues:
+                    self.agent_queues.queue_put_nowait(task)
+                if resource in self._waiting:
+                    if self._waiting[resource].task.priority > priority:
+                        self._waiting[resource].task = task
                 continue
             # task is not yet scheduled, schedule it now
             blocked_on: set[ResourceIdStr] = {
