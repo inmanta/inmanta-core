@@ -237,7 +237,7 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     resource_container.Provider.set("agent1", "key1", "another_value")
 
     # Wait until repair restores the state
-    def repaired() -> None:
+    def repaired() -> bool:
         return resource_container.Provider.get("agent1", "key1") == "value1"
 
     await retry_limited(repaired, 10)
