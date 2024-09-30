@@ -279,10 +279,11 @@ def halt_environment_agent(tid: uuid.UUID) -> None:
 
 
 @typedmethod(
-    path="/actions/environment/resume",
+    path="/actions/environment/scheduler/resume",
     operation="POST",
     arg_options=methods.ENV_OPTS,
     client_types=[ClientType.api],
+    timeout=5,
     agent_server=True,
     api_version=2,
 )

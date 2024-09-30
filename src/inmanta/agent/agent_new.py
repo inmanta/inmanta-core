@@ -20,6 +20,7 @@ import logging
 import os
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
+from tkinter.font import names
 from typing import Any, Optional
 
 from inmanta import config, const, protocol
@@ -239,37 +240,24 @@ class Agent(SessionEndpoint):
             await self.start_working()
         else:
             try:
-                self.scheduler._unpause_for_agent()
+                self.scheduler._unpause_for_agent(agent=name)
             except LookupError:
                 return 404, "No such agent"
 
         # We don't need to restart it, through the executor manager, because either the executor is still there or
         # it will be recreated when needed
-        return 200, "unpaused"
+        return 200, "resumed"
 
     async def pause(self, name: str) -> Apireturn:
         if name == AGENT_SCHEDULER_ID:
             await self.stop_working()
+            await self.executor_manager.join([], timeout=const.SHUTDOWN_GRACE_HARD)
         else:
             try:
-                self.scheduler._pause_for_agent()
+                self.scheduler._pause_for_agent(agent=name)
             except LookupError:
                 return 404, "No such agent"
 
         # We don't need to stop it, through the executor manager, because we will stop the task popping task from the queue,
         # so it will time out eventually
         return 200, "paused"
-
-    @protocol.handle(methods_v2.halt_environment_agent, env="tid")
-    async def halt(self) -> None:
-        assert env == self.environment
-
-        await self.stop_working()
-        await self.executor_manager.join([], timeout=const.SHUTDOWN_GRACE_HARD)
-
-    @protocol.handle(methods_v2.resume_environment_agent, env="tid")
-    async def resume(self) -> None:
-        assert env == self.environment
-
-        await self.start_working()
-        return 200, "resumed"

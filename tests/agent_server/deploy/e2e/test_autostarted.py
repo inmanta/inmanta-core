@@ -18,8 +18,10 @@
 
 import asyncio
 import logging
+import os
 import uuid
 
+import psutil
 import pytest
 from inmanta import config, const
 
@@ -98,6 +100,10 @@ async def test_halt_deploy(snippetcompiler, server, client, clienthelper, enviro
     await env.set(data.AUTOSTART_ON_START, True)
 
     config.Config.set("config", "environment", environment)
+    current_pid = os.getpid()
+
+    start_children = {process: process.children(recursive=True) for process in psutil.process_iter() if process.pid == current_pid}
+    breakpoint()
     snippetcompiler.setup_for_snippet(
         """
 import minimalv2waitingmodule
@@ -107,7 +113,15 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1")
         autostd=True
     )
 
-    await snippetcompiler.do_export_and_deploy()
+    version, res, status = await snippetcompiler.do_export_and_deploy(
+        include_status=True
+    )
+    try:
+        await _wait_until_deployment_finishes(client, environment, version)
+    except Exception:
+        start_exception_children = {process: process.children(recursive=True) for process in psutil.process_iter() if
+                          process.pid == current_pid}
+        breakpoint()
 
     result = await client.list_versions(tid=environment)
     assert result.code == 200
@@ -123,6 +137,23 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1")
 
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+
+    def get_process_state() -> dict[psutil.Process, list[psutil.Process]]:
+        """
+        Retrieves the current list of Python processes running under this process
+        """
+        return {process: process.children(recursive=True) for process in psutil.process_iter() if process.pid == current_pid}
+
+    process_state_before_halting = get_process_state()
+    assert len(process_state_before_halting) == 1, "Only one process should be present!"
+    for key, value in process_state_before_halting:
+        assert len(value) == 2, "Two children should be running: Postgres + Scheduler"
+    processes_iter = psutil.process_iter()
+    processes = [process for process in processes_iter if process.name() == "python" or process.name() == "python3"]
+    for process in psutil.process_iter():
+        print(f"Process ID: {process.pid}, Name: {process.name()}")
+
+    children = {process: process.children(recursive=True) for process in processes if process.pid == current_pid}
 
     result = await client.halt_environment(tid=environment)
 
@@ -149,7 +180,6 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1")
 
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
-
     await asyncio.sleep(1)
 
     result = await client.list_agents(tid=environment)
@@ -162,7 +192,34 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1")
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
 
+    halted_processes_iter = psutil.process_iter()
+    halted_processes = [process for process in halted_processes_iter if process.name() == "python" or process.name() == "python3"]
+    for process in psutil.process_iter():
+        print(f"Process ID: {process.pid}, Name: {process.name()}")
+
+    halted_children = {process: process.children(recursive=True) for process in halted_processes}
+
     await client.resume_environment(environment)
+
+    resumed_processes_iter = psutil.process_iter()
+    resumed_processes = [process for process in resumed_processes_iter if process.name() == "python" or process.name() == "python3"]
+    for process in psutil.process_iter():
+        print(f"Process ID: {process.pid}, Name: {process.name()}")
+
+    resumed_children = {process: process.children(recursive=True) for process in resumed_processes}
+    current_id = os.getpid()
+    breakpoint()
+
+    """
+    agent_client = server._slices['core.agentmanager'].get_agent_client(tid=environment, endpoint=const.AGENT_SCHEDULER_ID,
+                                                 live_agent_only=False)
+
+
+    result = await agent_client.trigger_read_version(tid=env.id)
+    result3 = await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=True)
+    breakpoint()
+    """
 
 # TODO h test scheduler part apart and check that everything holds there
 # TODO here we only want to check that request still works
+# TODO we need to restart the session -> ensure scheduler

@@ -1052,6 +1052,25 @@ def trigger_read_version(tid: uuid.UUID) -> int:
     """
 
 
+@typedmethod(
+    path="/actions/environment/scheduler/resume",
+    operation="POST",
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+    timeout=5,
+    agent_server=True,
+    enforce_auth=False,
+)
+def resume_environment_agent(tid: uuid.UUID) -> int:
+    """
+    Resume all orchestrator operations for an environment. Resumes normal environment operation and unpauses all agents
+    that were active when the environment was halted.
+
+    :param tid: The environment id
+
+    :raises NotFound: The given environment doesn't exist.
+    """
+
 # Methods to send event to the server
 
 

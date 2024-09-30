@@ -216,13 +216,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Resumes after halting. Unpauses all agents that had been paused by halting.
         """
-        if opt.server_use_resource_scheduler.get():
-            agent_client = self.get_agent_client(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID,
-                                                                                           live_agent_only=False)
-
-            result = await agent_client.resume_environment_agent()
-            breakpoint()
-        else:
+        if not opt.server_use_resource_scheduler.get():
             to_unpause: list[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
             await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
 
@@ -620,6 +614,7 @@ class AgentManager(ServerSlice, SessionListener):
                 if endpoint in session.endpoint_names and session.tid == tid:
                     return session
             # Agent is down
+            LOGGER.error(f"HERE ARE VALUES: {self.sessions.values()}")
             return None
 
     def _get_session_to_failover_agent(self, tid: uuid.UUID, endpoint: str) -> Optional[protocol.Session]:
@@ -1016,13 +1011,15 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         LOGGER.debug("Restarting agents in environment %s", env.id)
         if opt.server_use_resource_scheduler.get():
             await self._ensure_scheduler(env)
+            await asyncio.sleep(5)
+
+            agent_client = self._agent_manager.get_agent_client(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID,
+                                                 live_agent_only=False)
+            result = await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=True)
         else:
             agents = await data.Agent.get_list(environment=env.id)
             agent_list = [a.name for a in agents]
-            if opt.server_use_resource_scheduler.get():
-                await self._ensure_scheduler(env)
-            else:
-                await self._ensure_agents(env, agent_list, restart=True)
+            await self._ensure_agents(env, agent_list, restart=True)
 
     async def stop_agents(
         self,
