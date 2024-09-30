@@ -16,21 +16,20 @@
     Contact: code@inmanta.com
 """
 
+import contextlib
 import dataclasses
 import enum
 from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Collection, TypeAlias
 
-from inmanta.agent import executor
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.resources import Id
-from inmanta.util.collections import BidirectionalManyToManyMapping
+from inmanta.util.collections import BidirectionalManyMapping
 
 
-class RequiresProvidesMapping(BidirectionalManyToManyMapping[ResourceIdStr, ResourceIdStr]):
+class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceIdStr]):
     def requires_view(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
         return self
 
@@ -38,18 +37,17 @@ class RequiresProvidesMapping(BidirectionalManyToManyMapping[ResourceIdStr, Reso
         return self.reverse_mapping()
 
 
-AttributeHash: TypeAlias = str
+@dataclass(frozen=True)
+class ResourceDetails:
+    resource_id: ResourceIdStr
+    attribute_hash: str
+    attributes: Mapping[str, object] = dataclasses.field(hash=False)
 
+    id: Id = dataclasses.field(init=False, compare=False, hash=False)
 
-class ResourceDetails(executor.ResourceDetails):
-
-    # FIXME: flatten out inheritance?
-
-    def __init__(self, id: ResourceIdStr, version: int, attributes: dict[str, object], attribute_hash: AttributeHash) -> None:
-        super().__init__(id, version, attributes)
-        self.attribute_hash = attribute_hash
-
-    attribute_hash: AttributeHash
+    def __post_init__(self) -> None:
+        # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
+        object.__setattr__(self, "id", Id.parse_id(self.resource_id))
 
 
 class ResourceStatus(StrEnum):
@@ -65,10 +63,7 @@ class ResourceStatus(StrEnum):
     """
 
     UP_TO_DATE = enum.auto()
-    # FIXME[#8008]: HAS_UPDATE name comes from improved resource states design,
-    #       but we're using it both for "it has an update" and "it's dirty", consider splitting it?
     HAS_UPDATE = enum.auto()
-    # FIXME[#8008]: undefined / orphan? Otherwise a simple boolean `has_update` or `dirty` might suffice
 
 
 class DeploymentResult(StrEnum):
@@ -84,29 +79,34 @@ class DeploymentResult(StrEnum):
     NEW = enum.auto()
     DEPLOYED = enum.auto()
     FAILED = enum.auto()
-    # FIXME[#8008]: design also has SKIPPED, do we need it now or add it later?
 
 
 @dataclass
 class ResourceState:
-    # FIXME[#8008]: remove link, replace with documentation
-    # based on
-    # https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
+    """
+    State of a resource. Consists of multiple independent (mostly) state vectors that make up the final state.
+    """
+
+    # FIXME: review / finalize resource state. Based on draft design in
+    #   https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
     status: ResourceStatus
     deployment_result: DeploymentResult
-
-    def needs_deploy(self) -> bool:
-        return self.status == ResourceStatus.HAS_UPDATE or self.deployment_result != DeploymentResult.DEPLOYED
 
 
 @dataclass(kw_only=True)
 class ModelState:
-    # FIXME[#8008]: docstring + mention invariant: all resources in the current model, and only those, are in all mappings
+    """
+    The state of the model, meaning both resource intent and resource state.
+
+    Invariant: all resources in the current model, and only those, exist in the resources and resource_state mappings.
+    """
+
     version: int
     resources: dict[ResourceIdStr, ResourceDetails] = dataclasses.field(default_factory=dict)
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict[ResourceIdStr, ResourceState] = dataclasses.field(default_factory=dict)
-    update_pending: set[ResourceIdStr] = dataclasses.field(default_factory=set)
+    # resources with a known or assumed difference between intent and actual state
+    dirty: set[ResourceIdStr] = dataclasses.field(default_factory=set)
     # types per agent keeps track of which resource types live on which agent by doing a reference count
     # the dict is agent_name -> resource_type -> resource_count
     types_per_agent: dict[str, dict[ResourceType, int]] = dataclasses.field(
@@ -123,40 +123,50 @@ class ModelState:
         self.resources.clear()
         self.requires.clear()
         self.resource_state.clear()
-        self.update_pending.clear()
         self.types_per_agent.clear()
 
     def update_desired_state(
         self,
-        resource: ResourceDetails,
+        resource: ResourceIdStr,
+        details: ResourceDetails,
     ) -> None:
-        # FIXME[#8008]: raise KeyError if already lives in state?
-        resource_id = resource.rid
-        self.resources[resource_id] = resource
-        if resource_id in self.resource_state:
-            self.resource_state[resource_id].status = ResourceStatus.HAS_UPDATE
+        """
+        Register a new desired state for a resource.
+        """
+        self.resources[resource] = details
+        if resource in self.resource_state:
+            self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
         else:
-            self.resource_state[resource_id] = ResourceState(
+            self.resource_state[resource] = ResourceState(
                 status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW
             )
-            self.types_per_agent[resource.id.agent_name][resource.id.entity_type] += 1
+            self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
+        self.dirty.add(resource)
 
     def update_requires(
         self,
         resource: ResourceIdStr,
         requires: Set[ResourceIdStr],
     ) -> None:
+        """
+        Update the requires relation for a resource. Updates the reverse relation accordingly.
+        """
         self.requires[resource] = requires
 
     def drop(self, resource: ResourceIdStr) -> None:
-        del self.resources[resource]
+        """
+        Completely remove a resource from the resource state.
+        """
+        details: ResourceDetails = self.resources.pop(resource)
         del self.resource_state[resource]
-        del self.requires[resource]
+        # stand-alone resources may not be in requires
+        with contextlib.suppress(KeyError):
+            del self.requires[resource]
+        # top-level resources may not be in provides
+        with contextlib.suppress(KeyError):
+            del self.requires.reverse_mapping()[resource]
 
-        parsed_id = Id.parse_id(resource)
-        self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] -= 1
-        if self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type] == 0:
-            del self.types_per_agent[parsed_id.agent_name][parsed_id.entity_type]
-
-    def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
-        return list(self.types_per_agent[agent])
+        self.types_per_agent[details.id.agent_name][details.id.entity_type] -= 1
+        if self.types_per_agent[details.id.agent_name][details.id.entity_type] == 0:
+            del self.types_per_agent[details.id.agent_name][details.id.entity_type]
+        self.dirty.discard(resource)

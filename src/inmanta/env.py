@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import site
 import subprocess
 import sys
@@ -1078,8 +1079,9 @@ class CommandRunner:
         full_output = []
         # We use shell here to avoid
         # the bug https://github.com/python/cpython/issues/103911#issuecomment-2333963137
+        cmd_as_str = " ".join(shlex.quote(x) for x in cmd)
         process = await asyncio.create_subprocess_shell(
-            subprocess.list2cmdline(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env_vars
+            cmd_as_str, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env_vars, cwd="/"
         )
         assert process.stdout is not None  # Make mypy happy
         async for line in process.stdout:
