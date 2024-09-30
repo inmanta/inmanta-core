@@ -69,7 +69,6 @@ environment.
 """
 
 import asyncio
-import weakref
 import concurrent
 import csv
 import datetime
@@ -90,6 +89,7 @@ import time
 import traceback
 import uuid
 import venv
+import weakref
 from collections import abc
 from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
