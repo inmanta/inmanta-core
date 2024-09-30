@@ -86,6 +86,7 @@ T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
 TProject = TypeVar("TProject", bound="Project")
 TInmantaModuleRequirement = TypeVar("TInmantaModuleRequirement", bound="InmantaModuleRequirement")
+REGEX_DISTRIBUTION_NAME = re.compile(r"[^A-Za-z0-9.]+")
 
 
 @stable_api
@@ -104,8 +105,11 @@ class InmantaModuleRequirement:
                 f"InmantaModuleRequirement instances work with inmanta module names, not python package names. "
                 f"Problematic case: {str(requirement)}"
             )
-        self._requirement: inmanta.util.CanonicalRequirement = inmanta.util.parse_requirement(str(requirement))
-        self._project_name = re.sub("[^A-Za-z0-9.]+", "-", requirement.name)
+        # Retaken from pkg_resources.safe_name() -> Convert an arbitrary string to a standard distribution name
+        self._project_name = REGEX_DISTRIBUTION_NAME.sub("-", requirement.name)
+        # We canonicalize the name directly here instead of having to parse a second time the requirement
+        requirement.name = packaging.utils.canonicalize_name(requirement.name)
+        self._requirement: inmanta.util.CanonicalRequirement = inmanta.util.CanonicalRequirement(requirement)
 
     @property
     def project_name(self) -> str:
@@ -119,7 +123,7 @@ class InmantaModuleRequirement:
     def key(self) -> str:
         # Requirement converts all "_" to "-". Inmanta modules use "_"
         warnings.warn(InmantaWarning("The `key` property has been deprecated in favor of `name`"))
-        return self._requirement.name.replace("-", "_")
+        return self.name
 
     @property
     def specifier(self) -> SpecifierSet:
