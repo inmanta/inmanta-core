@@ -48,7 +48,6 @@ from time import time
 from typing import Annotated, ClassVar, Dict, Generic, List, NewType, Optional, TextIO, TypeVar, Union, cast
 
 import more_itertools
-import pkg_resources
 import pydantic
 import yaml
 from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
@@ -73,7 +72,6 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from ruamel.yaml.comments import CommentedMap
 
-from pkg_resources import Requirement
 try:
     from typing import TYPE_CHECKING
 except ImportError:
@@ -107,7 +105,7 @@ class InmantaModuleRequirement:
                 f"Problematic case: {str(requirement)}"
             )
         self._requirement: inmanta.util.CanonicalRequirement = inmanta.util.parse_requirement(str(requirement))
-        self._project_name = re.sub('[^A-Za-z0-9.]+', '-', requirement.name)
+        self._project_name = re.sub("[^A-Za-z0-9.]+", "-", requirement.name)
 
     @property
     def project_name(self) -> str:
