@@ -27,9 +27,6 @@ import pytest
 from inmanta import const, data
 from inmanta.config import Config
 from inmanta.util import get_compiler_version
-from utils import _wait_until_deployment_finishes, resource_action_consistency_check
-from inmanta.config import Config
-from inmanta.util import get_compiler_version
 from utils import _wait_until_deployment_finishes, resource_action_consistency_check, retry_limited
 
 logger = logging.getLogger("inmanta.test.server_agent")

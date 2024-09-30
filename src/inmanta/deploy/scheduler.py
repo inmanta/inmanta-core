@@ -176,7 +176,6 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             self._work.deploy_with_context(self._state.dirty, priority, deploying=self._deploying_stale)
 
-
     async def repair(self, priority: TaskPriority) -> None:
         """
         Trigger a repair, i.e. mark all resources as dirty, then trigger a deploy.
