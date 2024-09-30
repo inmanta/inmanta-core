@@ -48,6 +48,7 @@ from time import time
 from typing import Annotated, ClassVar, Dict, Generic, List, NewType, Optional, TextIO, TypeVar, Union, cast
 
 import more_itertools
+import pkg_resources
 import pydantic
 import yaml
 from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
@@ -72,6 +73,7 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from ruamel.yaml.comments import CommentedMap
 
+from pkg_resources import Requirement
 try:
     from typing import TYPE_CHECKING
 except ImportError:
@@ -98,17 +100,18 @@ class InmantaModuleRequirement:
             used by distinguishing the two on a type level.
     """
 
-    def __init__(self, requirement: inmanta.util.CanonicalRequirement) -> None:
+    def __init__(self, requirement: packaging.requirements.Requirement) -> None:
         if requirement.name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError(
                 f"InmantaModuleRequirement instances work with inmanta module names, not python package names. "
                 f"Problematic case: {str(requirement)}"
             )
-        self._requirement: inmanta.util.CanonicalRequirement = requirement
+        self._requirement: inmanta.util.CanonicalRequirement = inmanta.util.parse_requirement(str(requirement))
+        self._project_name = re.sub('[^A-Za-z0-9.]+', '-', requirement.name)
 
     @property
     def project_name(self) -> str:
-        return self._requirement.project_name.replace("-", "_")
+        return self._project_name.replace("-", "_")
 
     @property
     def name(self) -> str:
@@ -146,7 +149,7 @@ class InmantaModuleRequirement:
             )
         if "-" in spec:
             raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
-        return cls(inmanta.util.parse_requirement(requirement=spec))
+        return cls(packaging.requirements.Requirement(requirement_string=spec))
 
     def get_python_package_requirement(self) -> inmanta.util.CanonicalRequirement:
         """
