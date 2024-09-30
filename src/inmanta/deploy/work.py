@@ -307,7 +307,7 @@ class ScheduledWork:
 
         :param resources: Set of resources that should be deployed. Adds a deploy task to the scheduled work for each
             of these, unless it is already scheduled.
-        :param stale_deploys: Set of resources for which a stale deploy is in progress, i.e. a deploy for an outdated resource
+        :param deploying: Set of resources for which a stale deploy is in progress, i.e. a deploy for an outdated resource
             intent.
         :param added_requires: Requires edges that were added since the previous state update, if any.
         :param dropped_requires: Requires edges that were removed since the previous state update, if any.

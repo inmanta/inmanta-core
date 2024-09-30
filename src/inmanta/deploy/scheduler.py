@@ -221,6 +221,7 @@ class ResourceScheduler(TaskManager):
                 resource_id=resource.resource_id,
                 attribute_hash=resource.attribute_hash,
                 attributes=resource.attributes,
+                status=resource.status,
             )
             for resource in resources_from_db
         }
@@ -260,16 +261,19 @@ class ResourceScheduler(TaskManager):
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
     ) -> None:
         async with self._intent_lock:
+            deployable_resources: Mapping[ResourceIdStr, ResourceDetails] = {
+                r: d for r, d in resources.items() if d.is_undeployable()
+            }
             # Inspect new state and compare it with the old one before acquiring scheduler the lock.
             # This is safe because we only read intent-related state here, for which we've already acquired the lock
-            deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
+            deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - deployable_resources
             for resource in deleted_resources:
                 self._work.delete_resource(resource)
 
             new_desired_state: set[ResourceIdStr] = set()
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
-            for resource, details in resources.items():
+            for resource, details in deployable_resources:
                 if (
                     resource not in self._state.resources
                     or details.attribute_hash != self._state.resources[resource].attribute_hash

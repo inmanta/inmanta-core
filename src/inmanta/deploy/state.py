@@ -24,6 +24,7 @@ from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
 
+from inmanta import const
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.resources import Id
 from inmanta.util.collections import BidirectionalManyMapping
@@ -42,8 +43,12 @@ class ResourceDetails:
     resource_id: ResourceIdStr
     attribute_hash: str
     attributes: Mapping[str, object] = dataclasses.field(hash=False)
+    status: const.ResourceState
 
     id: Id = dataclasses.field(init=False, compare=False, hash=False)
+
+    def is_undeployable(self) -> bool:
+        return self.status in const.UNDEPLOYABLE_STATES
 
     def __post_init__(self) -> None:
         # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
