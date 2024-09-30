@@ -570,7 +570,6 @@ class InmantaLoggerConfig:
             logging.root.removeHandler(handler)
             handler.flush()
             handler.close()
-        logging.shutdown()
         cls._instance = None
 
     def _get_path_to_logging_config_file(self, options: Options) -> Optional[str]:
@@ -627,8 +626,7 @@ class InmantaLoggerConfig:
 
     def _apply_logging_config_from_options(self, options: Options) -> None:
         """
-        Apply the logging configuration as defined by the CLI options when the
-        --logging-config option is not set.
+        Apply the logging configuration as defined by the CLI options when the --logging-config option is not set.
         """
         config_builder = LoggingConfigBuilder()
         logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
