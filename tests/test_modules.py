@@ -94,6 +94,7 @@ class TestModuleName(unittest.TestCase):
         self.handler.close()
 
 
+@pytest.mark.fundamental
 def test_to_v2():
     """
     Test whether the `to_v2()` method of `ModuleV1Metadata` works correctly.

@@ -20,6 +20,8 @@ import json
 import logging
 import uuid
 
+import pytest
+
 from inmanta import const, data, execute
 from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
@@ -29,6 +31,7 @@ from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
 logger = logging.getLogger("inmanta.test.dryrun")
 
 
+@pytest.mark.fundamental
 async def test_dryrun_and_deploy(server, client, resource_container, environment, async_finalizer):
     """
     dryrun and deploy a configuration model
@@ -363,6 +366,7 @@ async def test_dryrun_code_loading_failure(server, client, resource_container, e
     }
 
 
+@pytest.mark.fundamental
 async def test_dryrun_v2(server, client, resource_container, environment, agent_factory):
     """
     Dryrun a configuration model with the v2 api, where applicable

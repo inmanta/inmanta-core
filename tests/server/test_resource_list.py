@@ -354,6 +354,7 @@ def resource_ids(resource_objects):
         ("resource_id_value", "ASC"),
     ],
 )
+@pytest.mark.fundamental
 async def test_resources_paging(server, client, order_by_column, order, env_with_resources):
     """Test querying resources with paging, using different sorting parameters."""
     env = env_with_resources

@@ -246,6 +246,7 @@ async def test_param(server, client, environment, cli):
     assert "var1" in result.output
 
 
+@pytest.mark.fundamental
 async def test_create_environment(tmpdir, server, client, cli):
     """
     Tests the "inmanta-cli environment create" command

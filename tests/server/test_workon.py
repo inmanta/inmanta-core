@@ -254,6 +254,7 @@ async def test_workon_python_check(
 
 
 @pytest.mark.parametrize_any("option", [None, "-h", "--help"])
+@pytest.mark.fundamental
 async def test_workon_help(workon_bash: Bash, option: Optional[str]) -> None:
     """
     Verify output of `inmanta-workon --help`.

@@ -386,6 +386,7 @@ def attribute_hashes(resource_objects):
         ("date", "ASC"),
     ],
 )
+@pytest.mark.fundamental
 async def test_resource_history_paging(server, client, order_by_column, order, env_with_resources):
     """Test querying resource history with paging, using different sorting parameters."""
     env, cm_times, ids, resources = env_with_resources

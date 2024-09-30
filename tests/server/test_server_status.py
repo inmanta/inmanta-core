@@ -18,11 +18,14 @@
 
 import asyncio
 
+import pytest
+
 from inmanta import data
 from inmanta.server.server import Server
 from inmanta.server.services.compilerservice import CompilerService
 
 
+@pytest.mark.fundamental
 async def test_server_status(server, client):
     result = await client.get_server_status()
 

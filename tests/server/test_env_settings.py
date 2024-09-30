@@ -51,6 +51,7 @@ async def test_api_return_type(client, server, environment):
     assert result.result["value"] == "86400"
 
 
+@pytest.mark.fundamental
 async def test_environment_settings(client, server, environment_default):
     """
     Test environment settings

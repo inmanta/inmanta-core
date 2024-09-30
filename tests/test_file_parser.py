@@ -18,11 +18,13 @@
 
 import os
 
+import pytest
 from pkg_resources import Requirement
 
 from inmanta.file_parser import RequirementsTxtParser
 
 
+@pytest.mark.fundamental
 def test_requirements_txt_parser(tmpdir) -> None:
     content = """
         test==1.2.3

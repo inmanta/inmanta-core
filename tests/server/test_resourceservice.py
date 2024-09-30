@@ -295,6 +295,7 @@ async def test_events_api_endpoints_increment(server, client, environment, clien
     await resource_deployer.deployment_finished(rvid=rvid_r1_v2, action_id=action_id)
 
 
+@pytest.mark.fundamental
 async def test_events_api_endpoints_events_across_versions(server, client, environment, clienthelper, agent, resource_deployer):
     """
     Ensure that events are captured across versions.

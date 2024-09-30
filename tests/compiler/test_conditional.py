@@ -111,6 +111,7 @@ end
     assert "alt" == root.lookup("test").get_value().lookup("field").get_value()
 
 
+@pytest.mark.fundamental
 def test_if_else_extended(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

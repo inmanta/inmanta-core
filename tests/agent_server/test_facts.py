@@ -20,6 +20,8 @@ import asyncio
 import logging
 import uuid
 
+import pytest
+
 from inmanta import const, data, resources
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
@@ -124,6 +126,7 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
     no_error_in_logs(caplog)
 
 
+@pytest.mark.fundamental
 async def test_get_facts_extended(server, client, agent, clienthelper, resource_container, environment, caplog):
     """
     dryrun and deploy a configuration model automatically

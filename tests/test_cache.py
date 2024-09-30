@@ -189,6 +189,7 @@ def test_default_timeout(my_resource, time_machine):
         cache.find("testx")
 
 
+@pytest.mark.fundamental
 async def test_multi_threaded(agent_cache: AgentCache):
 
     class Spy:

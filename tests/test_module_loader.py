@@ -51,6 +51,7 @@ from utils import PipIndex, create_python_package, log_contains, module_from_tem
 
 
 @pytest.mark.parametrize_any("editable_install", [True, False])
+@pytest.mark.fundamental
 def test_v2_module_loading(
     editable_install: bool,
     tmpdir: py.path.local,

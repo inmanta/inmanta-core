@@ -145,6 +145,7 @@ def test_build_v2_module(
         )
 
 
+@pytest.mark.fundamental
 def test_build_v2_module_set_output_directory(tmpdir, modules_v2_dir: str) -> None:
     """
     Verify that the output_dir argument of the `inmanta module build` command works correctly.

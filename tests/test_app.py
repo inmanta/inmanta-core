@@ -280,6 +280,7 @@ def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed
             pytest.fail(f"Forbidden pattern found in log lines: {regex}")
 
 
+@pytest.mark.fundamental
 def test_check_shutdown():
     process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py")])
     # wait for handler to be in place

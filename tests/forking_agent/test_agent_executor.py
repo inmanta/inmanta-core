@@ -22,6 +22,8 @@ import pathlib
 import subprocess
 import sys
 
+import pytest
+
 from inmanta import const
 from inmanta.agent import executor, forking_executor
 from inmanta.agent.forking_executor import MPExecutor
@@ -37,6 +39,7 @@ def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpe
     return [executor.ResourceInstallSpec("test::Test", 5, bp)]
 
 
+@pytest.mark.fundamental
 async def test_process_manager(environment, pip_index, mpmanager_light: forking_executor.MPManager) -> None:
     """
     This test verifies the creation and reuse of executors and their underlying environments. It checks whether

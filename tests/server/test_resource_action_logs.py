@@ -176,6 +176,7 @@ def log_messages(resource_log_objects):
         ("timestamp", "ASC"),
     ],
 )
+@pytest.mark.fundamental
 async def test_resource_logs_paging(server, client, order_by_column, order, env_with_logs: tuple[str, list[datetime.datetime]]):
     """Test querying resource logs with paging, using different sorting parameters."""
     environment, msg_timings = env_with_logs
