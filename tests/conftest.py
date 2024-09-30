@@ -1898,9 +1898,9 @@ async def dont_remove_caplog_handlers(request, monkeypatch):
 
     def patched_apply_config(self) -> None:
         # Make sure the root log level is not altered.
-        root_log_level = logging.root.level
+        root_log_level: int = logging.root.level
         # Make sure that the caplog root handlers are not removed/closed.
-        caplog_root_handler = [h for h in logging.root.handlers if is_caplog_handler(h)]
+        caplog_root_handler: list[logging.Handler] = [h for h in logging.root.handlers if is_caplog_handler(h)]
         for current_handler in caplog_root_handler:
             logging.root.removeHandler(current_handler)
         # Make sure that the weak references to the caplog handlers in the logging._handlerList are not removed.
