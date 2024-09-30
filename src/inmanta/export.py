@@ -437,7 +437,7 @@ class Exporter:
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
-        elif (not self.failed or len(self._resources) > 0 or len(unknown_parameters) > 0) and not no_commit:
+        elif (not self.failed or len(self._resources) > 0) and not no_commit:
             self._version = self.commit_resources(
                 self._version,
                 resources,
