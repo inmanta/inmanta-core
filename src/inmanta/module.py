@@ -107,9 +107,7 @@ class InmantaModuleRequirement:
             )
         # Retaken from pkg_resources.safe_name() -> Convert an arbitrary string to a standard distribution name
         self._project_name = REGEX_DISTRIBUTION_NAME.sub("-", requirement.name)
-        # We canonicalize the name directly here instead of having to parse a second time the requirement
-        requirement.name = packaging.utils.canonicalize_name(requirement.name)
-        self._requirement: inmanta.util.CanonicalRequirement = inmanta.util.CanonicalRequirement(requirement)
+        self._requirement: inmanta.util.CanonicalRequirement = inmanta.util.parse_requirement(str(requirement))
 
     @property
     def project_name(self) -> str:
