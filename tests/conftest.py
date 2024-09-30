@@ -69,6 +69,7 @@ environment.
 """
 
 import asyncio
+import weakref
 import concurrent
 import csv
 import datetime
@@ -1896,12 +1897,29 @@ async def dont_remove_caplog_handlers(request, monkeypatch):
     original_apply_config = inmanta_logging.FullLoggingConfig.apply_config
 
     def patched_apply_config(self) -> None:
-        caplog_handlers = [h for h in logging.root.handlers if is_caplog_handler(h)]
+        # Make sure the root log level is not altered.
+        root_log_level = logging.root.level
+        # Make sure that the caplog root handlers are not removed/closed.
+        caplog_root_handler = [h for h in logging.root.handlers if is_caplog_handler(h)]
+        for current_handler in caplog_root_handler:
+            logging.root.removeHandler(current_handler)
+        # Make sure that the weak references to the caplog handlers in the logging._handlerList are not removed.
+        # This list is used to tear down the handlers in the reverse order with respect to the setup order.
+        # As such, this method should not alter the order. We assume the caplog handlers are entirely independent
+        # from any other handler. Like that the order only matters within the set of caplog handlers.
+        re_add_to_handler_list: list[weakref.ReferenceType] = [
+            weak_ref for weak_ref in logging._handlerList if is_caplog_handler(weak_ref())
+        ]
+        for weak_ref in re_add_to_handler_list:
+            logging._handlerList.remove(weak_ref)
+
         original_apply_config(self)
-        # Re-add caplog handlers that were removed by the call to apply_config()
-        for current_handler in caplog_handlers:
-            if current_handler not in logging.root.handlers:
-                logging.root.addHandler(current_handler)
+
+        for weak_ref in re_add_to_handler_list:
+            logging._handlerList.append(weak_ref)
+        for current_handler in caplog_root_handler:
+            logging.root.addHandler(current_handler)
+        logging.root.setLevel(root_log_level)
 
     monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "apply_config", patched_apply_config)
 
