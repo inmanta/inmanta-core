@@ -340,11 +340,11 @@ class ResourceScheduler(TaskManager):
                     await task.execute(self, agent)
                 except Exception:
                     LOGGER.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
+
+                self._work.agent_queues.task_done(agent, task)
         except CancelledError:
             # We are woken up because the environment is halted
             pass
-
-            self._work.agent_queues.task_done(agent, task)
 
     def _pause_for_agent(self, agent: str) -> None:
         """Pause the given agent"""

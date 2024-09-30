@@ -22,8 +22,32 @@ import pytest
 
 from agent_server.deploy.scheduler_test_util import wait_full_success
 from inmanta import const
+from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import DeploymentResult
 from utils import resource_action_consistency_check
+
+import asyncio
+import hashlib
+import json
+import typing
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from sched import scheduler
+from typing import Mapping, Optional, Sequence
+
+import pytest
+
+import inmanta.types
+from agent_server.deploy.scheduler_test_util import make_requires
+from inmanta import const
+from inmanta.agent import executor
+from inmanta.agent.agent_new import Agent
+from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
+from inmanta.config import Config
+from inmanta.data import ResourceIdStr
+from inmanta.deploy import state
+from inmanta.protocol.common import custom_json_encoder
+from inmanta.util import retry_limited
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +81,170 @@ async def test_basics(set_custom_executor_policy, agent, resource_container, cli
 
     env_id = environment
     scheduler = agent.scheduler
+
+    resource_container.Provider.reset()
+    # set the deploy environment
+    resource_container.Provider.set("agent1", "key", "value")
+    resource_container.Provider.set("agent2", "key", "value")
+    resource_container.Provider.set("agent3", "key", "value")
+    resource_container.Provider.set_fail("agent1", "key3", 2)
+
+    async def make_version(is_different=False, add_waiting: bool = False):
+        """
+
+        :param is_different: make the standard version or one with a change
+        :return:
+        """
+        version = await clienthelper.get_version()
+        resources = []
+        for agent in ["agent1", "agent2", "agent3", "waitagent4", "waitagent5"]:
+            if "waitagent" in agent:
+                if not add_waiting:
+                    continue
+
+                resources.append(
+                    {
+                        "key": "key",
+                        "value": "value",
+                        "id": "test::Wait[%s,key=key],v=%d" % (agent, version),
+                        "requires": [],
+                        "purged": False,
+                        "send_event": False,
+                    }
+                )
+            else:
+                resources.extend(
+                    [
+                        {
+                            "key": "key",
+                            "value": "value",
+                            "id": "test::Resource[%s,key=key],v=%d" % (agent, version),
+                            "requires": ["test::Resource[%s,key=key3],v=%d" % (agent, version)],
+                            "purged": False,
+                            "send_event": False,
+                        },
+                        {
+                            "key": "key2",
+                            "value": "value",
+                            "id": "test::Resource[%s,key=key2],v=%d" % (agent, version),
+                            "requires": ["test::Resource[%s,key=key],v=%d" % (agent, version)],
+                            "purged": not is_different,
+                            "send_event": False,
+                        },
+                        {
+                            "key": "key3",
+                            "value": "value",
+                            "id": "test::Resource[%s,key=key3],v=%d" % (agent, version),
+                            "requires": [],
+                            "purged": False,
+                            "send_event": False,
+                        },
+                        {
+                            "key": "key4",
+                            "value": "value",
+                            "id": "test::Resource[%s,key=key4],v=%d" % (agent, version),
+                            "requires": ["test::Resource[%s,key=key3],v=%d" % (agent, version)],
+                            "purged": False,
+                            "send_event": False,
+                        },
+                        {
+                            "key": "key5",
+                            "value": "value",
+                            "id": "test::Resource[%s,key=key5],v=%d" % (agent, version),
+                            "requires": [
+                                "test::Resource[%s,key=key4],v=%d" % (agent, version),
+                                "test::Resource[%s,key=key],v=%d" % (agent, version),
+                            ],
+                            "purged": False,
+                            "send_event": False,
+                        },
+                    ]
+                )
+        return version, resources
+
+    logger.info("setup done")
+
+    version1, resources = await make_version()
+    await clienthelper.put_version_simple(version=version1, resources=resources)
+
+    logger.info("first version pushed")
+
+    # deploy and wait until one is ready
+    result = await client.release_version(env_id, version1)
+    assert result.code == 200
+
+    await clienthelper.wait_for_released(version1)
+
+    logger.info("first version released")
+
+    await clienthelper.wait_for_deployed()
+
+    await check_scheduler_state(resources, scheduler)
+    await resource_action_consistency_check()
+    await check_server_state_vs_scheduler_state(client, environment, scheduler)
+
+    # check states
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    summary = result.result["metadata"]["deploy_summary"]
+    # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
+    #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
+    print(summary)
+    assert 10 == summary["by_state"]["deployed"]
+    assert 1 == summary["by_state"]["failed"]
+    assert 4 == summary["by_state"]["skipped"]
+
+    version1, resources = await make_version(True)
+    await clienthelper.put_version_simple(version=version1, resources=resources)
+
+    # deploy and wait until one is ready
+    result = await client.release_version(env_id, version1, push=False)
+    await clienthelper.wait_for_released(version1)
+
+    await clienthelper.wait_for_deployed()
+
+    await check_scheduler_state(resources, scheduler)
+
+    await resource_action_consistency_check()
+
+    # deploy trigger
+    await client.deploy(environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy)
+
+    # await wait_full_success(client, environment)
+
+    version1, resources = await make_version(is_different=True, add_waiting=True)
+    await clienthelper.put_version_simple(version=version1, resources=resources)
+
+    logger.info("third version pushed")
+
+    result = await client.release_version(env_id, version1)
+    assert result.code == 200
+
+    await clienthelper.wait_for_released(version1)
+
+    logger.info("third version released")
+
+    await scheduler.executor_manager.stop()
+
+    await asyncio.sleep(4)
+
+
+async def test_halt_deploy(set_custom_executor_policy, server, resource_container, clienthelper, client, environment):
+    """
+    This tests make sure the resource scheduler is working as expected for these parts:
+        - Construction of initial model state
+        - Retrieval of data when a new version is released
+    """
+
+    Config.set("server", "agent-timeout", "2")
+    Config.set("agent", "agent-repair-interval", "0")
+    Config.set("agent", "executor-mode", "forking")
+    Config.set("agent", "executor-venv-retention-time", "60")
+    Config.set("agent", "executor-retention-time", "10")
+
+    env_id = environment
+    scheduler = ResourceScheduler(env_id)
+    await scheduler.start()
 
     resource_container.Provider.reset()
     # set the deploy environment

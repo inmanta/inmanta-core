@@ -216,8 +216,15 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Resumes after halting. Unpauses all agents that had been paused by halting.
         """
-        to_unpause: list[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
-        await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
+        if opt.server_use_resource_scheduler.get():
+            agent_client = self.get_agent_client(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID,
+                                                                                           live_agent_only=False)
+
+            result = await agent_client.resume_environment_agent()
+            breakpoint()
+        else:
+            to_unpause: list[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
+            await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
 
     @handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:

@@ -1,0 +1,8 @@
+entity Sleep:
+    string name
+    string agent
+    int time_to_sleep=120
+    bool managed=true
+end
+
+implement Sleep using std::none

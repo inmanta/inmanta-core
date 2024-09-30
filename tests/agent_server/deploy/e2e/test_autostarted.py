@@ -21,6 +21,7 @@ import logging
 import uuid
 
 import pytest
+from inmanta import config, const
 
 from inmanta import const, data
 from utils import _wait_until_deployment_finishes
@@ -84,3 +85,84 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
 
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+
+
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_halt_deploy(snippetcompiler, server, client, clienthelper, environment, no_agent_backoff):
+    """
+    Verify that the new scheduler can actually fork
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    agent_name = "agent1"
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
+    await env.set(data.AUTOSTART_ON_START, True)
+
+    config.Config.set("config", "environment", environment)
+    snippetcompiler.setup_for_snippet(
+        """
+import minimalv2waitingmodule
+
+a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1")
+""",
+        autostd=True
+    )
+
+    await snippetcompiler.do_export_and_deploy()
+
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    assert len(result.result["versions"]) == 1
+    assert result.result["versions"][0]["total"] == 1
+
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+
+    while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
+        result = await client.list_agents(tid=environment)
+        await asyncio.sleep(0.1)
+
+    assert len(result.result["agents"]) == 1
+    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+
+    result = await client.halt_environment(tid=environment)
+
+    await asyncio.sleep(3)
+
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+
+    while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
+        result = await client.list_agents(tid=environment)
+        await asyncio.sleep(0.1)
+
+    assert len(result.result["agents"]) == 1
+    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+
+    await client.halt_environment(environment)
+
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+
+    while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
+        result = await client.list_agents(tid=environment)
+        await asyncio.sleep(0.1)
+
+    assert len(result.result["agents"]) == 1
+    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+
+    await asyncio.sleep(1)
+
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+
+    while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
+        result = await client.list_agents(tid=environment)
+        await asyncio.sleep(0.1)
+
+    assert len(result.result["agents"]) == 1
+    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+
+    await client.resume_environment(environment)
+
+# TODO h test scheduler part apart and check that everything holds there
+# TODO here we only want to check that request still works

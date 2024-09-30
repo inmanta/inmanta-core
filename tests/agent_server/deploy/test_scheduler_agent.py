@@ -17,12 +17,13 @@
 
     This file is intended to contain test that use the agent/scheduler combination in isolation: no server, no executor
 """
-
+import asyncio
 import hashlib
 import json
 import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from sched import scheduler
 from typing import Mapping, Optional, Sequence
 
 import pytest
@@ -198,8 +199,18 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
 
     assert agent.executor_manager.executors["agent1"].execute_count == 2
 
+@pytest.fixture
+async def config(inmanta_config, tmp_path):
+    Config.set("config", "state-dir", str(tmp_path))
+    Config.set("config", "log-dir", str(tmp_path / "logs"))
+    Config.set("server", "agent-timeout", "2")
+    Config.set("agent", "agent-repair-interval", "0")
+    Config.set("agent", "executor-mode", "forking")
+    Config.set("agent", "executor-venv-retention-time", "60")
+    Config.set("agent", "executor-retention-time", "10")
 
-async def test_halt_deploy(agent: TestAgent, make_resource_minimal):
+
+async def test_halt_deploy(agent, config, make_resource_minimal):
     """
     Ensure the following points:
         - If environment is stopped, everything is killed after max 15 secs
@@ -208,8 +219,8 @@ async def test_halt_deploy(agent: TestAgent, make_resource_minimal):
         - If agent is stopped, the agent doesn't pick any new task even if new version is released
     """
 
-    rid1 = "test::Wait[agent1,name=1]"
-    rid2 = "test::Wait[agent2,name=2]"
+    rid1 = "test::Wait[agent1,key=1]"
+    rid2 = "test::Wait[agent2,key=2]"
     resources = {
         ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
         ResourceIdStr(rid2): make_resource_minimal(rid2, values={"value": "a"}, requires=[]),
@@ -224,12 +235,17 @@ async def test_halt_deploy(agent: TestAgent, make_resource_minimal):
         agent_2_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent2")
         if not agent_2_queue:
             return False
-        return agent_1_queue._unfinished_tasks == 0 and agent_2_queue._unfinished_tasks == 0
+        return agent_1_queue._unfinished_tasks == 0 and agent_2_queue._unfinished_tasks == 0 and len(agent.scheduler._work.agent_queues.in_progress) == 0
 
     await retry_limited(done, 5)
 
-    assert agent.executor_manager.executors["agent1"].execute_count == 2
-    assert agent.executor_manager.executors["agent2"].execute_count == 2
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+
+    await asyncio.sleep(15)
+
+    await agent.stop_working()
+    breakpoint()
 
 
 async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal):

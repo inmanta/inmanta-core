@@ -272,3 +272,4 @@ class Agent(SessionEndpoint):
         assert env == self.environment
 
         await self.start_working()
+        return 200, "resumed"

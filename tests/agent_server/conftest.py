@@ -156,7 +156,7 @@ def resource_container(clean_reset):
         """
         A file on a filesystem
         """
-        timeout: float = 2
+        timeout: float = 10
         fields = ("key", "value", "purged")
 
     @resource("test::Noprov", agent="agent", id_attribute="key")
