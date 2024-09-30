@@ -78,10 +78,13 @@ class Agent(SessionEndpoint):
     def _set_deploy_and_repair_intervals(self) -> None:
         """
         Fetch the settings related to automatic deploys and repairs from the config
+        FIXME: These settings are not currently updated (unlike the old agent)
+            We should fix or remove this timer in the future.
         """
         # do regular deploys
         self._deploy_interval = cfg.agent_deploy_interval.get()
         deploy_splay_time = cfg.agent_deploy_splay_time.get()
+
         self._deploy_splay_value = random.randint(0, deploy_splay_time)
 
         # do regular repair runs
@@ -130,14 +133,8 @@ class Agent(SessionEndpoint):
                 return True
             return False
 
-        async def interval_deploy() -> None:
-            await self.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
-
-        async def interval_repair() -> None:
-            await self.scheduler.repair(TaskPriority.INTERVAL_REPAIR)
-
-        periodic_schedule("deploy", interval_deploy, self._deploy_interval, self._deploy_splay_value)
-        periodic_schedule("repair", interval_repair, self._repair_interval, self._repair_splay_value)
+        periodic_schedule("deploy", self.scheduler.deploy, self._deploy_interval, self._deploy_splay_value)
+        periodic_schedule("repair", self.scheduler.repair, self._repair_interval, self._repair_splay_value)
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self._sched.add_action(action, schedule)

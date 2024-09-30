@@ -27,7 +27,7 @@ from typing import Optional
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.data import Resource
+from inmanta.data import ConfigurationModel
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import work
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
@@ -141,6 +141,7 @@ class ResourceScheduler(TaskManager):
         self._deploying: set[ResourceIdStr] = set()
         # Set of resources for which a concrete stale deploy is in progress, i.e. we've committed for a given intent and
         # that intent has gone stale since
+        # TODO: is this still useful?
         self._deploying_stale: set[ResourceIdStr] = set()
 
         self.environment = environment
@@ -173,7 +174,8 @@ class ResourceScheduler(TaskManager):
         Trigger a deploy
         """
         async with self._scheduler_lock:
-            self._work.deploy_with_context(self._state.dirty, priority, stale_deploys=self._deploying_stale)
+            self._work.deploy_with_context(self._state.dirty, priority, deploying=self._deploying_stale)
+
 
     async def repair(self, priority: TaskPriority) -> None:
         """
@@ -181,7 +183,7 @@ class ResourceScheduler(TaskManager):
         """
         async with self._scheduler_lock:
             self._state.dirty.update(self._state.resources.keys())
-            self._work.deploy_with_context(self._state.dirty, priority, stale_deploys=self._deploying_stale)
+            self._work.deploy_with_context(self._state.dirty, priority, deploying=self._deploying_stale)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         resources = await self._build_resource_mappings_from_db(version)
@@ -207,19 +209,13 @@ class ResourceScheduler(TaskManager):
             )
         )
 
-    async def _build_resource_mappings_from_db(self, version: int | None = None) -> Mapping[ResourceIdStr, ResourceDetails]:
+    async def _build_resource_mappings_from_db(self, version: int) -> Mapping[ResourceIdStr, ResourceDetails]:
         """
         Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
 
         :return: resource_mapping {id -> resource details}
         """
-        if version is None:
-            # FIXME[8118]: resources have not necessarily been released
-            resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(
-                environment=self.environment
-            )
-        else:
-            resources_from_db = await data.Resource.get_resources_for_version(self.environment, version)
+        resources_from_db = await data.Resource.get_resources_for_version(self.environment, version)
 
         resource_mapping = {
             resource.resource_id: ResourceDetails(
@@ -250,14 +246,11 @@ class ResourceScheduler(TaskManager):
         - schedules any resources that are not in a known good state.
         - rearranges deploy tasks by requires if required
         """
-        environment = await data.Environment.get_by_id(self.environment)
-        if environment is None:
-            raise ValueError(f"No environment found with this id: `{self.environment}`")
-        # FIXME[8119]: version does not necessarily correspond to resources' version
-        #       + last_version is reserved, not necessarily released
-        #       -> call ConfigurationModel.get_version_nr_latest_version() instead?
-        version = environment.last_version
-        resources_from_db = await self._build_resource_mappings_from_db()
+        cm_version = await ConfigurationModel.get_latest_version(self.environment)
+        if cm_version is None:
+            return
+        version = cm_version.version
+        resources_from_db = await self._build_resource_mappings_from_db(version=version)
         requires_from_db = self._construct_requires_mapping(resources_from_db)
         await self._new_version(version, resources_from_db, requires_from_db)
 
@@ -314,7 +307,7 @@ class ResourceScheduler(TaskManager):
                 self._work.deploy_with_context(
                     self._state.dirty,
                     TaskPriority.NEW_VERSION_DEPLOY,
-                    stale_deploys=self._deploying_stale,
+                    deploying=self._deploying,
                     added_requires=added_requires,
                     dropped_requires=dropped_requires,
                 )
@@ -388,6 +381,12 @@ class ResourceScheduler(TaskManager):
                 self._work.finished_deploy(resource)
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
+                # TODO: test
+                # propagate events
+                if details.attributes.get("send_event", False):
+                    provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
+                    if provides:
+                        self._work.deploy_with_context(provides, deploying=self._deploying)
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])

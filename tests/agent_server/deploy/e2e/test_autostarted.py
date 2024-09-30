@@ -28,6 +28,9 @@ from inmanta import const, data
 from inmanta.config import Config
 from inmanta.util import get_compiler_version
 from utils import _wait_until_deployment_finishes, resource_action_consistency_check
+from inmanta.config import Config
+from inmanta.util import get_compiler_version
+from utils import _wait_until_deployment_finishes, resource_action_consistency_check, retry_limited
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -235,12 +238,12 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
 
     # Manual change
     resource_container.Provider.set("agent1", "key1", "another_value")
+
     # Wait until repair restores the state
-    now = time.time()
-    while resource_container.Provider.get("agent1", "key1") != "value1":
-        if time.time() > now + 10:
-            raise Exception("Timeout occurred while waiting for repair run")
-        await asyncio.sleep(0.1)
+    def repaired() -> bool:
+        return resource_container.Provider.get("agent1", "key1") == "value1"
+
+    await retry_limited(repaired, 10)
 
     await verify_deployment_result()
     await resource_action_consistency_check()

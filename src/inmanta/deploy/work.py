@@ -309,7 +309,8 @@ class ScheduledWork:
         resources: Set[ResourceIdStr],
         priority: TaskPriority,
         *,
-        stale_deploys: Optional[Set[ResourceIdStr]] = None,
+        # TODO: update docstring + consider in_progress_deploys for name?
+        deploying: Optional[Set[ResourceIdStr]] = None,
         added_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
         dropped_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
     ) -> None:
@@ -326,7 +327,7 @@ class ScheduledWork:
         :param added_requires: Requires edges that were added since the previous state update, if any.
         :param dropped_requires: Requires edges that were removed since the previous state update, if any.
         """
-        stale_deploys = stale_deploys if stale_deploys is not None else set()
+        deploying = deploying if deploying is not None else set()
         added_requires = added_requires if added_requires is not None else {}
         dropped_requires = dropped_requires if dropped_requires is not None else {}
 
@@ -334,9 +335,7 @@ class ScheduledWork:
         maybe_runnable: set[ResourceIdStr] = set()
 
         # lookup caches for visited nodes
-        queued: set[ResourceIdStr] = {  # queued or running, pre-populate with in-progress deploys
-            t.resource for t in self.agent_queues.in_progress if isinstance(t, tasks.Deploy) if t.resource not in stale_deploys
-        }
+        queued: set[ResourceIdStr] = set(deploying)  # queued or running, pre-populate with in-progress deploys
         not_scheduled: set[ResourceIdStr] = set()
 
         # First drop all dropped requires so that we work on the smallest possible set for this operation.
@@ -477,7 +476,6 @@ class ScheduledWork:
         if resource in self._waiting or tasks.Deploy(resource=resource) in self.agent_queues:
             # a new deploy task was scheduled in the meantime, no need to do anything else
             return
-        # FIXME[#8012]: event propagation + test
         for dependant in self.provides.get(resource, []):
             blocked_deploy: Optional[BlockedDeploy] = self._waiting.get(dependant, None)
             if blocked_deploy is None:

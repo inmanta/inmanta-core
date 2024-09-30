@@ -18,6 +18,7 @@
     This file is intended to contain test that use the agent/scheduler combination in isolation: no server, no executor
 """
 
+import asyncio
 import hashlib
 import json
 import typing
@@ -40,6 +41,8 @@ from inmanta.deploy.work import TaskPriority
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.util import retry_limited
 
+FAIL_DEPLOY: str = "fail_deploy"
+
 
 class DummyExecutor(executor.Executor):
 
@@ -52,7 +55,11 @@ class DummyExecutor(executor.Executor):
 
     async def execute(self, gid: uuid.UUID, resource_details: ResourceDetails, reason: str) -> const.ResourceState:
         self.execute_count += 1
-        return const.ResourceState.deployed
+        return (
+            const.ResourceState.failed
+            if resource_details.attributes.get(FAIL_DEPLOY, False) is True
+            else const.ResourceState.deployed
+        )
 
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
         self.dry_run_count += 1
@@ -66,14 +73,53 @@ class DummyExecutor(executor.Executor):
     async def close_version(self, version: int) -> None:
         pass
 
+    async def stop(self) -> None:
+        pass
+
     async def join(self) -> None:
         pass
+
+
+class ManagedExecutor(DummyExecutor):
+    """
+    Dummy executor that can be driven explicitly by a test case.
+
+    Executor behavior must be controlled through the `deploys` property. It exposes a mapping from resource ids
+    to futures. Simply set the desired outcome as the result on the appropriate future.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._deploys: dict[ResourceIdStr, asyncio.Future[const.ResourceState]] = {}
+
+    @property
+    def deploys(self) -> Mapping[ResourceIdStr, asyncio.Future[const.ResourceState]]:
+        return self._deploys
+
+    async def stop(self) -> None:
+        # resolve hanging futures to prevent test hanging during teardown
+        for deploy in self._deploys.values():
+            deploy.set_result(const.ResourceState.undefined)
+
+    async def execute(self, gid: uuid.UUID, resource_details: ResourceDetails, reason: str) -> const.ResourceState:
+        assert resource_details.rid not in self._deploys
+        self._deploys[resource_details.rid] = asyncio.get_running_loop().create_future()
+        # wait until the test case sets desired resource state
+        result: const.ResourceState = await self._deploys[resource_details.rid]
+        del self._deploys[resource_details.rid]
+        self.execute_count += 1
+        return result
 
 
 class DummyManager(executor.ExecutorManager[executor.Executor]):
 
     def __init__(self):
         self.executors = {}
+        self._managed_executors: list[ManagedExecutor] = []
+
+    def register_managed_executor(self, agent_name: str, executor: ManagedExecutor) -> None:
+        self.executors[agent_name] = executor
+        self._managed_executors.append(executor)
 
     async def get_executor(
         self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
@@ -89,7 +135,8 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
     async def stop(self) -> None:
-        pass
+        for ex in self.executors.values():
+            await ex.stop()
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
         pass
@@ -150,7 +197,7 @@ async def agent(environment, config, event_loop):
 
 @pytest.fixture
 def make_resource_minimal(environment):
-    def make_resource_minimal(rid: str, values: dict[str, object], requires: list[str], version: int) -> state.ResourceDetails:
+    def make_resource_minimal(rid: str, values: dict[str, object], requires: list[str]) -> state.ResourceDetails:
         """Produce a resource that is valid to the scheduler"""
         attributes = dict(values)
         attributes["requires"] = requires
@@ -177,8 +224,8 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
     rid1 = "test::Resource[agent1,name=1]"
     rid2 = "test::Resource[agent1,name=2]"
     resources = {
-        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[], version=5),
-        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1]),
     }
 
     await agent.scheduler._new_version(5, resources, make_requires(resources))
@@ -194,6 +241,96 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
     assert agent.executor_manager.executors["agent1"].execute_count == 2
 
 
+async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure that events are propagated when a deploy finishes
+    """
+
+    rid1 = "test::Resource[agent1,name=1]"
+    rid2 = "test::Resource[agent2,name=2]"
+    rid3 = "test::Resource[agent3,name=3]"
+
+    def make_resources(
+        *,
+        version: int,
+        r1_value: int,
+        r2_value: int,
+        r3_value: int,
+        r1_fail: bool = False,
+        r2_fail: bool = False,
+    ) -> dict[ResourceIdStr, state.ResourceDetails]:
+        return {
+            ResourceIdStr(rid1): make_resource_minimal(
+                rid1, values={"value": r1_value, "send_event": True, FAIL_DEPLOY: r1_fail}, requires=[]
+            ),
+            ResourceIdStr(rid2): make_resource_minimal(
+                rid2, values={"value": r2_value, "send_event": False, FAIL_DEPLOY: r2_fail}, requires=[rid1]
+            ),
+            ResourceIdStr(rid3): make_resource_minimal(rid3, values={"value": r3_value}, requires=[rid2]),
+        }
+
+    resources: Mapping[ResourceIdStr, state.ResourceDetails]
+    resources = make_resources(version=5, r1_value=0, r2_value=0, r3_value=0)
+    await agent.scheduler._new_version(5, resources, make_requires(resources))
+
+    # TODO: test case with intricate updates, e.g.
+    #   - resource already deploying
+    #   - stale deploy
+    #   - no diff but resource in known bad state
+    #   - new/dropped requires/provides
+    #   - ...
+    #       => seperate ticket!
+
+    def done():
+        agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent2")
+        if not agent_1_queue:
+            return False
+        return agent_1_queue._unfinished_tasks == 0
+
+    await retry_limited(done, 5)
+
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+    assert agent.executor_manager.executors["agent3"].execute_count == 1
+
+    # make a change to r2 only -> verify that only r2 gets redeployed
+    resources = make_resources(version=6, r1_value=0, r2_value=1, r3_value=0)
+    await agent.scheduler._new_version(6, resources, make_requires(resources))
+    await retry_limited(
+        lambda: agent.executor_manager.executors["agent2"].execute_count == 2,
+        6,
+    )
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent3"].execute_count == 1
+
+    # make a change to r1 only -> verify that r2 gets deployed due to event propagation
+    resources = make_resources(version=7, r1_value=1, r2_value=1, r3_value=0)
+    await agent.scheduler._new_version(7, resources, make_requires(resources))
+    await retry_limited(
+        lambda: agent.executor_manager.executors["agent2"].execute_count == 3,
+        7,
+    )
+    assert agent.executor_manager.executors["agent1"].execute_count == 2
+    # verify that r3 didn't get an event, i.e. it did not deploy and it is not scheduled or executing
+    assert agent.executor_manager.executors["agent3"].execute_count == 1
+    assert len(agent.scheduler._work._waiting) == 0
+    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+
+    # verify that failure events get delivered as well
+    resources = make_resources(version=8, r1_value=2, r2_value=1, r3_value=0, r1_fail=True, r2_fail=True)
+    await agent.scheduler._new_version(8, resources, make_requires(resources))
+    await retry_limited(
+        lambda: agent.executor_manager.executors["agent2"].execute_count == 4,
+        8,
+    )
+    assert agent.executor_manager.executors["agent1"].execute_count == 3
+    assert agent.executor_manager.executors["agent3"].execute_count == 1
+    assert len(agent.scheduler._work._waiting) == 0
+    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+
+
 async def test_removal(agent: TestAgent, make_resource_minimal):
     """
     Test that resources are removed from the state store correctly
@@ -201,8 +338,8 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
     rid1 = "test::Resource[agent1,name=1]"
     rid2 = "other::Resource[agent1,name=2]"
     resources = {
-        ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, [], 5),
-        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
+        ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, []),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1]),
     }
 
     await agent.scheduler._new_version(5, resources, make_requires(resources))
@@ -210,7 +347,7 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 2
 
     resources = {
-        ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, [], 6),
+        ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, []),
     }
 
     await agent.scheduler._new_version(6, resources, make_requires(resources))
@@ -227,8 +364,8 @@ async def test_dryrun(agent: TestAgent, make_resource_minimal, monkeypatch):
     rid1 = "test::Resource[agent1,name=1]"
     rid2 = "test::Resource[agent1,name=2]"
     resources = {
-        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[], version=5),
-        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1]),
     }
 
     agent.scheduler.mock_versions[5] = resources
@@ -256,8 +393,8 @@ async def test_get_facts(agent: TestAgent, make_resource_minimal):
     rid1 = "test::Resource[agent1,name=1]"
     rid2 = "test::Resource[agent1,name=2]"
     resources = {
-        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[], version=5),
-        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1], 5),
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1]),
     }
 
     await agent.scheduler._new_version(5, resources, make_requires(resources))
