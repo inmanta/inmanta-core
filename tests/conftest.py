@@ -1893,7 +1893,7 @@ async def dont_remove_caplog_handlers(request, monkeypatch):
     """
     Caplog captures log messages by attaching handlers to the root logger. Applying a logging config with
     `inmanta_logging.FullLoggingConfig.apply_config()` removes any existing logging configuration.
-    As such, this fixtures puts a wrapper around the `apply_config()` method to make sure that:
+    As such, this fixture puts a wrapper around the `apply_config()` method to make sure that:
 
      * The pytest handlers are not removed/closed after the execution of the apply_config() method.
      * The configured root log level is not altered by the call to apply_config().
