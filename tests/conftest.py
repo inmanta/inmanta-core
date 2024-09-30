@@ -1896,7 +1896,7 @@ async def dont_remove_caplog_handlers(request, monkeypatch):
     As such, this fixtures puts a wrapper around the `apply_config()` method to make sure that:
 
      * The pytest handlers are not removed/closed after the execution of the apply_config() method.
-     * The root log level, configured by pytest, is not altered by the call to apply_config().
+     * The configured root log level is not altered by the call to apply_config().
     """
     original_apply_config = inmanta_logging.FullLoggingConfig.apply_config
 
