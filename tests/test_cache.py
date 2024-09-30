@@ -937,7 +937,7 @@ async def test_cache_warning(time_machine, caplog):
     """
 
     class CacheWarningTest(CacheMissCounter):
-        @cache(for_version=False, timeout=20, evict_after_creation=60)
+        @cache(for_version=False, timeout=60, evict_after_creation=20)
         def test_warning_and_override(self):
             """ """
             self.increment_miss_counter()
@@ -966,6 +966,8 @@ async def test_cache_warning(time_machine, caplog):
         caplog,
         "inmanta.agent.handler",
         logging.WARNING,
-        "Both the `evict_after_creation` and the `timeout` parameter are set for cached "
-        "method test_warning_and_override. `evict_after_creation` will be overridden.",
+        "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
+        "for cached method test_warning_and_override. Cached entries will be kept in the cache for 20.00s "
+        "after entering it."
     )
+

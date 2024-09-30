@@ -127,10 +127,6 @@ def cache(
     If an argument named resource is present,
     it is assumed to be a resource and its ID is used, without the version information
 
-    :param timeout: Hard timeout for cache items when `evict_after_creation=True`.
-        Ignored otherwise.
-
-
     :param evict_after_creation: This cache item will be considered stale this number of seconds after
         entering the cache.
     :param evict_after_last_access: This cache item will be considered stale this number of seconds after
@@ -153,12 +149,8 @@ def cache(
             def bound(**kwds: object) -> object:
                 return f(self, **kwds)
 
-            _evict_after_last_access: float = evict_after_last_access
-            _evict_after_creation: float = evict_after_creation
-
-            # If legacy param `timeout` is set, it overrides `evict_after_creation`
-            if timeout and timeout > 0:
-                _evict_after_creation = timeout
+            _evict_after_last_access: float
+            _evict_after_creation: float
 
             # Legacy `for_version` parameter is used, compute
             # evict_after_last_access and evict_after_creation
@@ -173,23 +165,32 @@ def cache(
                 else:
                     _evict_after_last_access = 0
 
-                    # Successive overrides with a 5000s default
-                    _evict_after_creation = 5000
                     if evict_after_creation > 0:
                         _evict_after_creation = evict_after_creation
-                    if timeout and timeout > 0:
+                    elif timeout and timeout > 0:
                         _evict_after_creation = timeout
+                    else:
+                        _evict_after_creation = 5000
 
-                    LOGGER.warning(
-                        "Both the `evict_after_creation` and the `timeout` parameter are set "
-                        f"for cached method {f.__name__}. `evict_after_creation` will be "
-                        "overridden."
-                    )
+                    if evict_after_creation > 0 and timeout and timeout > 0:
+                        LOGGER.warning(
+                            msg =
+                                "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
+                                "for cached method %s. Cached entries will be kept in the cache for %.2fs "
+                                "after entering it."% (f.__name__, evict_after_creation)
+                        )
             else:
-                # If both params are unset/negative, keep entries alive
-                # in the cache for 60s after their last usage.
+                _evict_after_last_access = evict_after_last_access
+                _evict_after_creation = evict_after_creation
+
+                # If both params are unset/negative,
                 if _evict_after_creation <= 0 and _evict_after_last_access <= 0:
-                    _evict_after_last_access = 60
+                    if timeout and timeout > 0:
+                        # Use legacy parameter timeout if it is set.
+                        _evict_after_creation = timeout
+                    else:
+                        # keep entries alive in the cache for 60s after their last usage by default.
+                        _evict_after_last_access = 60
 
             return self.cache.get_or_else(
                 key=f.__name__,

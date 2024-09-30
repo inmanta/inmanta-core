@@ -59,13 +59,13 @@ class CacheItem:
 
         now = time.time()
         self.expiry_time: float = sys.float_info.max
-        self.hard_expiry: float = sys.float_info.max
+        self.after_creation_expiry_time: float = sys.float_info.max
 
         if evict_after_last_access > 0:
             self.expiry_time = now + evict_after_last_access
         if evict_after_creation > 0:
-            self.hard_expiry = now + evict_after_creation
-            self.expiry_time = min(self.expiry_time, self.hard_expiry)
+            self.after_creation_expiry_time = now + evict_after_creation
+            self.expiry_time = min(self.expiry_time, self.after_creation_expiry_time)
 
         # Make sure finalizers are only called once
         self.finalizer_lock = Lock()
@@ -94,7 +94,7 @@ class CacheItem:
         if self.refresh_after_access <= 0:
             # Refreshing on access is disabled on the CacheItem.
             return
-        self.expiry_time = min(now + self.refresh_after_access, self.hard_expiry)
+        self.expiry_time = min(now + self.refresh_after_access, self.after_creation_expiry_time)
 
 
 @stable_api
