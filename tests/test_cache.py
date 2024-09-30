@@ -968,6 +968,5 @@ async def test_cache_warning(time_machine, caplog):
         logging.WARNING,
         "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
         "for cached method test_warning_and_override. Cached entries will be kept in the cache for 20.00s "
-        "after entering it."
+        "after entering it.",
     )
-

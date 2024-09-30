@@ -174,10 +174,9 @@ def cache(
 
                     if evict_after_creation > 0 and timeout and timeout > 0:
                         LOGGER.warning(
-                            msg =
-                                "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
-                                "for cached method %s. Cached entries will be kept in the cache for %.2fs "
-                                "after entering it."% (f.__name__, evict_after_creation)
+                            msg="Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
+                            "for cached method %s. Cached entries will be kept in the cache for %.2fs "
+                            "after entering it." % (f.__name__, evict_after_creation)
                         )
             else:
                 _evict_after_last_access = evict_after_last_access
