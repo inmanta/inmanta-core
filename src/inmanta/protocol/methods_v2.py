@@ -221,7 +221,7 @@ def environment_get(id: uuid.UUID, details: bool = False) -> model.Environment:
     """
 
 
-@typedmethod(  # TODO h here
+@typedmethod(
     path="/actions/environment/halt",
     operation="POST",
     arg_options=methods.ENV_OPTS,
@@ -432,7 +432,6 @@ def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> Ret
     """
 
 
-# TODO h here for v2
 @typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )

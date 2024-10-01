@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 import os
 import uuid
@@ -246,18 +245,18 @@ class Agent(SessionEndpoint):
 
         # We don't need to restart it, through the executor manager, because either the executor is still there or
         # it will be recreated when needed
-        return 200, "resumed"
+        return 200, f"{name} has been resumed"
 
     async def pause(self, name: str) -> Apireturn:
         if name == AGENT_SCHEDULER_ID:
             await self.stop_working()
-            await self.executor_manager.join([], timeout=1)
+            await self.executor_manager.join([], timeout=const.EXECUTOR_GRACE_HARD)
         else:
             try:
                 self.scheduler._pause_for_agent(agent=name)
+                # We don't need to stop it, through the executor manager, because it will taking new task from the queue,
+                # so it will time out eventually
             except LookupError:
                 return 404, "No such agent"
 
-        # We don't need to stop it, through the executor manager, because we will stop the task popping task from the queue,
-        # so it will time out eventually
-        return 200, "paused"
+        return 200, f"{name} has been paused"

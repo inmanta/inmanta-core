@@ -116,7 +116,7 @@ class ResourceScheduler(TaskManager):
         self._work: work.ScheduledWork = work.ScheduledWork(
             requires=self._state.requires.requires_view(),
             provides=self._state.requires.provides_view(),
-            new_agent_notify=self._start_for_agent,  # TODO h this
+            new_agent_notify=self._start_for_agent,
         )
 
         # We uphold two locks to prevent concurrency conflicts between external events (e.g. new version or deploy request)
@@ -361,13 +361,9 @@ class ResourceScheduler(TaskManager):
         self._start_for_agent(agent)
 
     async def _pause_environment(self) -> None:
-        # TODO h missing db integration
         """Pause the environment of the scheduler"""
         for agent in self._workers.keys():
             agent_state = self._state.agent_status[agent]
-            # if agent_state == AgentStatus.STOPPED:
-            #     # TODO not true as the task could still be running
-            #     continue
             if not self._workers[agent].done():
                 self._workers[agent].cancel("Environment has been paused")
             if agent_state != AgentStatus.STOPPED:

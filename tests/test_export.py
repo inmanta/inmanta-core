@@ -270,7 +270,7 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
         autostd=True,
     )
 
-    await snippetcompiler.do_export_and_deploy()  # TODO h do something like this
+    await snippetcompiler.do_export_and_deploy()
 
     result = await client.list_versions(tid=environment)
     assert result.code == 200
