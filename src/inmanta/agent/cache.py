@@ -110,13 +110,14 @@ class AgentCache:
     1. evict_after_last_access
 
         These items are expected to be reused across multiple
-        model versions. Their expiry time is reset to 60s any
-        time they're accessed.
+        model versions. Their expiry time is reset to the value
+        set by the `evict_after_last_access` parameter of the
+        `@cache` decorator any time they're accessed.
 
     2. evict_after_creation
 
         These items have a fixed lifetime. Their expiry time
-        is set by the timeout parameter of the @cache decorator.
+        is set by the `evict_after_creation` parameter of the `@cache` decorator.
 
     To enforce consistency, this cache should be used as a context manager
     by the agent when performing a resource action (deploy / repair / fact retrieval / dry run).
