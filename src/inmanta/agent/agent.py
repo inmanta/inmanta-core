@@ -1360,11 +1360,3 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods.get_status)
     async def get_status(self) -> Apireturn:
         return 200, collect_report(self)
-
-
-    @protocol.handle(methods_v2.resume_environment_agent, env="tid")
-    async def resume(self) -> None:
-        #assert env == self.environment
-
-        #await self.start_working()
-        return 400, "Invalid resumed"

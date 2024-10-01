@@ -1013,9 +1013,11 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             await self._ensure_scheduler(env)
             await asyncio.sleep(5)
 
-            agent_client = self._agent_manager.get_agent_client(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID,
-                                                 live_agent_only=False)
-            result = await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=True)
+            agent_client = self._agent_manager.get_agent_client(
+                tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
+            )
+            assert agent_client is not None, "The client towards the scheduler should not be down!"
+            await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=True)
         else:
             agents = await data.Agent.get_list(environment=env.id)
             agent_list = [a.name for a in agents]
@@ -1030,6 +1032,8 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         Stop all agents for this environment and close sessions
         """
+        if opt.server_use_resource_scheduler.get():
+            return
         async with self.agent_lock:
             LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
             if env.id in self._agent_procs:

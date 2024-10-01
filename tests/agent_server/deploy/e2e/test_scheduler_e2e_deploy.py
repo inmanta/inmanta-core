@@ -15,39 +15,19 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
-import inmanta.agent.config
+
 import pytest
 
-from agent_server.deploy.scheduler_test_util import wait_full_success
+import inmanta.agent.config
+import inmanta.types
 from inmanta import const
+from inmanta.config import Config
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import DeploymentResult
 from utils import resource_action_consistency_check
-
-import asyncio
-import hashlib
-import json
-import typing
-import uuid
-from concurrent.futures import ThreadPoolExecutor
-from sched import scheduler
-from typing import Mapping, Optional, Sequence
-
-import pytest
-
-import inmanta.types
-from agent_server.deploy.scheduler_test_util import make_requires
-from inmanta import const
-from inmanta.agent import executor
-from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
-from inmanta.config import Config
-from inmanta.data import ResourceIdStr
-from inmanta.deploy import state
-from inmanta.protocol.common import custom_json_encoder
-from inmanta.util import retry_limited
 
 logger = logging.getLogger(__name__)
 
@@ -393,8 +373,6 @@ async def test_halt_deploy(set_custom_executor_policy, server, resource_containe
     await asyncio.sleep(4)
 
     breakpoint()
-
-
 
 
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import time
 
 from inmanta import resources
@@ -26,6 +27,7 @@ class SleepResource(resources.ManagedResource):
     """
     This class represents a service on a system.
     """
+
     name: str
     agent: str
     time_to_sleep: int

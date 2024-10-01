@@ -1071,6 +1071,7 @@ def resume_environment_agent(tid: uuid.UUID) -> int:
     :raises NotFound: The given environment doesn't exist.
     """
 
+
 # Methods to send event to the server
 
 

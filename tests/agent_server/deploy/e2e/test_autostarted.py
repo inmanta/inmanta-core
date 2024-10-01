@@ -23,9 +23,8 @@ import uuid
 
 import psutil
 import pytest
-from inmanta import config, const
 
-from inmanta import const, data
+from inmanta import config, const, data
 from utils import _wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.server_agent")
@@ -102,26 +101,48 @@ async def test_halt_deploy(snippetcompiler, server, client, clienthelper, enviro
     config.Config.set("config", "environment", environment)
     current_pid = os.getpid()
 
-    start_children = {process: process.children(recursive=True) for process in psutil.process_iter() if process.pid == current_pid}
-    breakpoint()
+    def get_process_state() -> dict[psutil.Process, list[psutil.Process]]:
+        """
+        Retrieves the current list of Python processes running under this process
+        """
+        return {process: process.children(recursive=True) for process in psutil.process_iter() if process.pid == current_pid}
+
+    start_children = get_process_state()
+    assert len(start_children) == 1
+    assert len(start_children.values()) == 1
+    current_children = list(start_children.values())[0]
+    assert len(current_children) == 2, "There should be only 2 processes: Pg_ctl and the Server!"
+    for children in current_children:
+        assert children.is_running()
+
     snippetcompiler.setup_for_snippet(
         """
 import minimalv2waitingmodule
 
-a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1")
+a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=2)
 """,
-        autostd=True
+        autostd=True,
     )
 
-    version, res, status = await snippetcompiler.do_export_and_deploy(
-        include_status=True
-    )
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
     try:
         await _wait_until_deployment_finishes(client, environment, version)
-    except Exception:
-        start_exception_children = {process: process.children(recursive=True) for process in psutil.process_iter() if
-                          process.pid == current_pid}
-        breakpoint()
+    except TimeoutError:
+        pass
+    finally:
+        children_after_deployment = get_process_state()
+
+    assert len(children_after_deployment) == 1
+    assert len(children_after_deployment.values()) == 1
+    current_children_after_deployment: list[psutil.Process] = list(children_after_deployment.values())[0]
+    assert (
+        len(current_children_after_deployment) == 5
+    ), "There should be only 5 processes: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
+    for children in current_children_after_deployment:
+        assert children.is_running()
 
     result = await client.list_versions(tid=environment)
     assert result.code == 200
@@ -130,95 +151,47 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1")
 
     result = await client.list_agents(tid=environment)
     assert result.code == 200
-
-    while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
-        result = await client.list_agents(tid=environment)
-        await asyncio.sleep(0.1)
-
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
-
-    def get_process_state() -> dict[psutil.Process, list[psutil.Process]]:
-        """
-        Retrieves the current list of Python processes running under this process
-        """
-        return {process: process.children(recursive=True) for process in psutil.process_iter() if process.pid == current_pid}
-
-    process_state_before_halting = get_process_state()
-    assert len(process_state_before_halting) == 1, "Only one process should be present!"
-    for key, value in process_state_before_halting:
-        assert len(value) == 2, "Two children should be running: Postgres + Scheduler"
-    processes_iter = psutil.process_iter()
-    processes = [process for process in processes_iter if process.name() == "python" or process.name() == "python3"]
-    for process in psutil.process_iter():
-        print(f"Process ID: {process.pid}, Name: {process.name()}")
-
-    children = {process: process.children(recursive=True) for process in processes if process.pid == current_pid}
 
     result = await client.halt_environment(tid=environment)
-
-    await asyncio.sleep(3)
+    assert result.code == 200
 
     result = await client.list_agents(tid=environment)
     assert result.code == 200
 
-    while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
-        result = await client.list_agents(tid=environment)
-        await asyncio.sleep(0.1)
-
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
 
-    await client.halt_environment(environment)
+    halted_children = get_process_state()
 
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-
-    while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
-        result = await client.list_agents(tid=environment)
-        await asyncio.sleep(0.1)
-
-    assert len(result.result["agents"]) == 1
-    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
-    await asyncio.sleep(1)
-
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-
-    while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
-        result = await client.list_agents(tid=environment)
-        await asyncio.sleep(0.1)
-
-    assert len(result.result["agents"]) == 1
-    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
-
-    halted_processes_iter = psutil.process_iter()
-    halted_processes = [process for process in halted_processes_iter if process.name() == "python" or process.name() == "python3"]
-    for process in psutil.process_iter():
-        print(f"Process ID: {process.pid}, Name: {process.name()}")
-
-    halted_children = {process: process.children(recursive=True) for process in halted_processes}
+    assert len(halted_children) == 1
+    assert len(halted_children.values()) == 1
+    current_halted_children = list(halted_children.values())[0]
+    assert len(current_halted_children) == 4, (
+        "There should be only 4 processes: Pg_ctl, the Server, the Scheduler and  the fork server. "
+        "The agent created by the scheduler should have been killed!"
+    )
+    for children in current_halted_children:
+        assert children.is_running()
 
     await client.resume_environment(environment)
 
-    resumed_processes_iter = psutil.process_iter()
-    resumed_processes = [process for process in resumed_processes_iter if process.name() == "python" or process.name() == "python3"]
-    for process in psutil.process_iter():
-        print(f"Process ID: {process.pid}, Name: {process.name()}")
+    resumed_children = get_process_state()
 
-    resumed_children = {process: process.children(recursive=True) for process in resumed_processes}
-    current_id = os.getpid()
+    await asyncio.sleep(5)
+
+    assert len(resumed_children) == 1
+    assert len(resumed_children.values()) == 1
+    current_resumed_children = list(resumed_children.values())[0]
+    assert (
+        len(current_resumed_children) == 5
+    ), "There should be only 5 processes: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
+    for children in current_resumed_children:
+        assert children.is_running()
+
     breakpoint()
 
-    """
-    agent_client = server._slices['core.agentmanager'].get_agent_client(tid=environment, endpoint=const.AGENT_SCHEDULER_ID,
-                                                 live_agent_only=False)
-
-
-    result = await agent_client.trigger_read_version(tid=env.id)
-    result3 = await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=True)
-    breakpoint()
-    """
 
 # TODO h test scheduler part apart and check that everything holds there
 # TODO here we only want to check that request still works

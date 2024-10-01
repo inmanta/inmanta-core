@@ -16,11 +16,11 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
 import logging
 import os
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
-from tkinter.font import names
 from typing import Any, Optional
 
 from inmanta import config, const, protocol
@@ -251,7 +251,7 @@ class Agent(SessionEndpoint):
     async def pause(self, name: str) -> Apireturn:
         if name == AGENT_SCHEDULER_ID:
             await self.stop_working()
-            await self.executor_manager.join([], timeout=const.SHUTDOWN_GRACE_HARD)
+            await self.executor_manager.join([], timeout=1)
         else:
             try:
                 self.scheduler._pause_for_agent(agent=name)
