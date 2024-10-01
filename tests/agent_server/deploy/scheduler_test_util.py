@@ -129,3 +129,6 @@ class ClientHelper(utils.ClientHelper):
 
     async def wait_for_deployed(self, version: int = -1) -> None:
         await _wait_until_deployment_finishes(self.client, self.environment)
+
+    async def wait_full_success(self, environment: str) -> None:
+        await wait_full_success(self.client, environment)
