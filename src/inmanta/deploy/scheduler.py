@@ -28,7 +28,7 @@ from typing import Optional
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.data import Resource
+from inmanta.data import ConfigurationModel
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import work
 from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
@@ -209,19 +209,13 @@ class ResourceScheduler(TaskManager):
             )
         )
 
-    async def _build_resource_mappings_from_db(self, version: int | None = None) -> Mapping[ResourceIdStr, ResourceDetails]:
+    async def _build_resource_mappings_from_db(self, version: int) -> Mapping[ResourceIdStr, ResourceDetails]:
         """
         Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
 
         :return: resource_mapping {id -> resource details}
         """
-        if version is None:
-            # FIXME[8118]: resources have not necessarily been released
-            resources_from_db: list[Resource] = await data.Resource.get_resources_in_latest_version(
-                environment=self.environment
-            )
-        else:
-            resources_from_db = await data.Resource.get_resources_for_version(self.environment, version)
+        resources_from_db = await data.Resource.get_resources_for_version(self.environment, version)
 
         resource_mapping = {
             resource.resource_id: ResourceDetails(
@@ -252,14 +246,11 @@ class ResourceScheduler(TaskManager):
         - schedules any resources that are not in a known good state.
         - rearranges deploy tasks by requires if required
         """
-        environment = await data.Environment.get_by_id(self.environment)
-        if environment is None:
-            raise ValueError(f"No environment found with this id: `{self.environment}`")
-        # FIXME[8119]: version does not necessarily correspond to resources' version
-        #       + last_version is reserved, not necessarily released
-        #       -> call ConfigurationModel.get_version_nr_latest_version() instead?
-        version = environment.last_version
-        resources_from_db = await self._build_resource_mappings_from_db()
+        cm_version = await ConfigurationModel.get_latest_version(self.environment)
+        if cm_version is None:
+            return
+        version = cm_version.version
+        resources_from_db = await self._build_resource_mappings_from_db(version=version)
         requires_from_db = self._construct_requires_mapping(resources_from_db)
         await self._new_version(version, resources_from_db, requires_from_db)
 
