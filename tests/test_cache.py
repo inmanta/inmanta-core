@@ -438,26 +438,25 @@ async def test_cache_decorator_last_access_expiry(time_machine):
     class EvictAfterLastAccessTest(CacheMissCounter):
 
         @cache(for_version=True)
-        def legacy_for_version_true(self):
+        def _60s_legacy_for_version_true(self):
             self.increment_miss_counter()
             return "x2"
 
         @cache(timeout=1, for_version=True)
-        def legacy_for_version_true_timeout_1s_override_60s(self):
+        def _60s_legacy_for_version_true_timeout_1s(self):
             """
-            The timeout parameter is now an alias for the `evict_after_creation`
-            parameter.
+            timeout param is ignored since it is an alias for evict_after_creation
             """
             self.increment_miss_counter()
             return "x4"
 
         @cache(timeout=1, evict_after_last_access=10)
-        def legacy_test_10s_override(self):
+        def _10s_legacy_test_new_param_override(self):
             self.increment_miss_counter()
             return "x4"
 
         @cache(timeout=1, evict_after_last_access=10, for_version=True)
-        def legacy_test_10s_override_for_version_true(self):
+        def _10s_legacy_test_new_param_override_for_version_true(self):
             self.increment_miss_counter()
             return "x4"
 
@@ -496,13 +495,9 @@ async def test_cache_decorator_last_access_expiry(time_machine):
     with agent_cache:
         # Populate the cache
         assert "x1" == test.evict_60s_after_last_access_default()  # +1 miss
-        assert "x2" == test.legacy_for_version_true()  # +1 miss
         assert "x2" == test.evict_60s_after_last_access()  # +1 miss
-        assert "x4" == test.legacy_for_version_true_timeout_1s_override_60s()  # +1 miss
-        assert "x4" == test.legacy_test_10s_override()  # +1 miss
-        assert "x4" == test.legacy_test_10s_override_for_version_true()  # +1 miss
 
-        test.check_n_cache_misses(6)
+        test.check_n_cache_misses(2)
         test.reset_miss_counter()
 
         assert "recurring_read" == test.evict_60s_after_last_access_default_with_arg(dummy_arg="recurring_read")  # +1 miss
@@ -518,16 +513,10 @@ async def test_cache_decorator_last_access_expiry(time_machine):
     # All entries expiry times were refreshed after last access, check that we have 0 miss
     with agent_cache:
         assert "x1" == test.evict_60s_after_last_access_default()  # cache hit
-        assert "x2" == test.legacy_for_version_true()  # cache hit
         assert "x2" == test.evict_60s_after_last_access()  # cache hit
-        assert "x4" == test.legacy_for_version_true_timeout_1s_override_60s()  # cache hit
         assert "recurring_read" == test.evict_60s_after_last_access_default_with_arg(dummy_arg="recurring_read")  # cache hit
         assert "recurring_read" == test.evict_after_last_access_60s_with_arg(dummy_arg="recurring_read")  # cache hit
         test.check_n_cache_misses(0)
-        assert "x4" == test.legacy_test_10s_override()  # cache miss
-        assert "x4" == test.legacy_test_10s_override_for_version_true()  # +1 miss
-
-        test.check_n_cache_misses(2)
 
     test.reset_miss_counter()
     # Check that the "initial_read" entry was properly cleaned up but all other
@@ -536,19 +525,15 @@ async def test_cache_decorator_last_access_expiry(time_machine):
 
     with agent_cache:
         assert "x1" == test.evict_60s_after_last_access_default()  # cache hit
-        assert "x2" == test.legacy_for_version_true()  # cache hit
         assert "x2" == test.evict_60s_after_last_access()  # cache hit
-        assert "x4" == test.legacy_for_version_true_timeout_1s_override_60s()  # cache hit
         assert "recurring_read" == test.evict_60s_after_last_access_default_with_arg(dummy_arg="recurring_read")  # cache hit
         assert "recurring_read" == test.evict_after_last_access_60s_with_arg(dummy_arg="recurring_read")  # cache hit
         test.check_n_cache_misses(0)
 
         assert "initial_read" == test.evict_60s_after_last_access_default_with_arg(dummy_arg="initial_read")  # +1 miss
         assert "initial_read" == test.evict_after_last_access_60s_with_arg(dummy_arg="initial_read")  # +1 miss
-        assert "x4" == test.legacy_test_10s_override()  # cache miss
-        assert "x4" == test.legacy_test_10s_override_for_version_true()  # +1 miss
 
-        test.check_n_cache_misses(4)
+        test.check_n_cache_misses(2)
 
     test.reset_miss_counter()
 
@@ -558,16 +543,59 @@ async def test_cache_decorator_last_access_expiry(time_machine):
 
     with agent_cache:
         assert "x1" == test.evict_60s_after_last_access_default()  # +1 miss
-        assert "x2" == test.legacy_for_version_true()  # +1 miss
         assert "x2" == test.evict_60s_after_last_access()  # +1 miss
-        assert "x4" == test.legacy_for_version_true_timeout_1s_override_60s()  # +1 miss
-        assert "x4" == test.legacy_test_10s_override()  # +1 miss
-        assert "x4" == test.legacy_test_10s_override_for_version_true()  # +1 miss
         assert "recurring_read" == test.evict_60s_after_last_access_default_with_arg(dummy_arg="recurring_read")  # +1 miss
         assert "recurring_read" == test.evict_after_last_access_60s_with_arg(dummy_arg="recurring_read")  # +1 miss
         assert "initial_read" == test.evict_60s_after_last_access_default_with_arg(dummy_arg="initial_read")  # +1 miss
         assert "initial_read" == test.evict_after_last_access_60s_with_arg(dummy_arg="initial_read")  # +1 miss
-        test.check_n_cache_misses(10)
+        test.check_n_cache_misses(6)
+
+    test.reset_miss_counter()
+
+    # test legacy parameters
+    with agent_cache:
+        assert "x2" == test._60s_legacy_for_version_true()  # +1 miss
+        assert "x4" == test._60s_legacy_for_version_true_timeout_1s()  # +1 miss
+
+        test.check_n_cache_misses(2)
+
+    test.reset_miss_counter()
+    time_machine.shift(datetime.timedelta(seconds=59))
+
+    with agent_cache:
+        assert "x2" == test._60s_legacy_for_version_true()  # +1 hit
+        assert "x4" == test._60s_legacy_for_version_true_timeout_1s()  # +1 hit
+
+        test.check_n_cache_misses(0)
+
+    test.reset_miss_counter()
+    time_machine.shift(datetime.timedelta(seconds=61))
+
+    with agent_cache:
+        assert "x2" == test._60s_legacy_for_version_true()  # +1 miss
+        assert "x4" == test._60s_legacy_for_version_true_timeout_1s()  # +1 miss
+
+        test.check_n_cache_misses(2)
+
+    test.reset_miss_counter()
+
+    with agent_cache:
+        assert "x4" == test._10s_legacy_test_new_param_override()  # +1 miss
+        test.check_n_cache_misses(1)
+
+    test.reset_miss_counter()
+    time_machine.shift(datetime.timedelta(seconds=9))
+
+    with agent_cache:
+        assert "x4" == test._10s_legacy_test_new_param_override()  # +1 hit
+        test.check_n_cache_misses(0)
+
+    test.reset_miss_counter()
+    time_machine.shift(datetime.timedelta(seconds=11))
+
+    with agent_cache:
+        assert "x4" == test._10s_legacy_test_new_param_override()  # +1 miss
+        test.check_n_cache_misses(1)
 
 
 async def test_cache_decorator_since_creation_expiry(time_machine):
@@ -722,7 +750,7 @@ async def test_cache_decorator_since_creation_expiry(time_machine):
     time_machine.shift(datetime.timedelta(seconds=20))
 
     with agent_cache:
-        # Check that entries with a 'hard' 80s timeout got cleaned up:
+        # Check that entries with a lifetime of 80s after entering the cache got cleaned up:
         assert "x2" == test.test_80s_timeout_legacy()  # +1 miss
         assert "x2" == test.test_80s_timeout()  # +1 miss
         assert "recurring_read" == test.test_80s_timeout_with_arg_legacy(dummy_arg="recurring_read")  # +1 miss

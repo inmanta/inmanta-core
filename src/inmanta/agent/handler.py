@@ -127,15 +127,14 @@ def cache(
     If an argument named resource is present,
     it is assumed to be a resource and its ID is used, without the version information
 
-    :param evict_after_creation: This cache item will be considered stale this number of seconds after
-        entering the cache.
-    :param evict_after_last_access: This cache item will be considered stale this number of seconds after
-        it was last accessed.
-
     :param ignore: a list of argument names that should not be part of the cache key
     :param cache_none: allow the caching of None values
     :param call_on_delete: A callback function that is called when the value is removed from the cache,
             with the value as argument.
+    :param evict_after_creation: This cache item will be considered stale this number of seconds after
+        entering the cache.
+    :param evict_after_last_access: This cache item will be considered stale this number of seconds after
+        it was last accessed.
     """
 
     def actual(f: Callable[..., object]) -> T_FUNC:
@@ -174,9 +173,11 @@ def cache(
 
                     if evict_after_creation > 0 and timeout and timeout > 0:
                         LOGGER.warning(
-                            msg="Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
+                            "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
                             "for cached method %s. Cached entries will be kept in the cache for %.2fs "
-                            "after entering it." % (f.__name__, evict_after_creation)
+                            "after entering it.",
+                            f.__name__,
+                            _evict_after_creation,
                         )
             else:
                 _evict_after_last_access = evict_after_last_access

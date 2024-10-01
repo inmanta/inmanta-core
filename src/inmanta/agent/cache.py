@@ -47,10 +47,10 @@ class CacheItem:
         :param value: The value being cached associated to the key.
         :param call_on_delete: Optional finalizer to call when the cache item is deleted. This is
             a callable expecting the cached value as an argument.
-        :param evict_after_creation: This cache item will be considered stale this number of seconds after
-            entering the cache.
         :param evict_after_last_access: This cache item will be considered stale this number of seconds after
             it was last accessed.
+        :param evict_after_creation: This cache item will be considered stale this number of seconds after
+            entering the cache.
         """
         self.key = key
         self.value = value
@@ -252,12 +252,12 @@ class AgentCache:
 
         :param key: Key for this item
         :param value: The value to cache
-        :param resource: The resource associated with this entry
-        :param call_on_delete: A callback function that is called when the value is removed from the cache.
-        :param evict_after_creation: This cache item will be considered stale this number of seconds after
-            entering the cache.
         :param evict_after_last_access: This cache item will be considered stale this number of seconds after
             it was last accessed.
+        :param evict_after_creation: This cache item will be considered stale this number of seconds after
+            entering the cache.
+        :param resource: The resource associated with this entry
+        :param call_on_delete: A callback function that is called when the value is removed from the cache.
         """
         self._cache(
             CacheItem(
@@ -300,10 +300,10 @@ class AgentCache:
 
         all kwargs are prepended to the key
 
-        :param evict_after_creation: This cache item will be considered stale this number of seconds after
-            entering the cache.
         :param evict_after_last_access: This cache item will be considered stale this number of seconds after
             it was last accessed.
+        :param evict_after_creation: This cache item will be considered stale this number of seconds after
+            entering the cache.
 
         """
         acceptable = {"resource"}
@@ -353,6 +353,7 @@ class AgentCache:
     ) -> None:
         """
         When done using the cache, reset the expiry time
-        of all cache items without a hard timeout.
+        of all cache items that should be refreshed after
+        access.
         """
         self.touch_used_cache_items()
