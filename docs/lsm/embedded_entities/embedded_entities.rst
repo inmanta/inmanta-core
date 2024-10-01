@@ -129,9 +129,10 @@ to uniquely identify the embedded entity.
 
 .. literalinclude:: embedded_entities_sources/example_key_attributes.cf
     :linenos:
-    :emphasize-lines: 26,29,30
+    :emphasize-lines: 25,28,29
     :language: inmanta
     :caption: main.cf
+
 
 If the upper arity of the relationship towards an embedded entity is one, it's not required to define an
 index on the embedded entity. In that case, the embedded entity will always have the same identity, no matter what the
