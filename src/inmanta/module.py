@@ -98,13 +98,13 @@ class InmantaModuleRequirement:
             used by distinguishing the two on a type level.
     """
 
-    def __init__(self, requirement: packaging.requirements.Requirement) -> None:
+    def __init__(self, requirement: inmanta.util.CanonicalRequirement) -> None:
         if requirement.name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError(
                 f"InmantaModuleRequirement instances work with inmanta module names, not python package names. "
                 f"Problematic case: {str(requirement)}"
             )
-        self._requirement: inmanta.util.CanonicalRequirement = inmanta.util.parse_requirement(str(requirement))
+        self._requirement = inmanta.util.parse_requirement(str(requirement))
 
     @property
     def project_name(self) -> str:
@@ -667,7 +667,7 @@ class ModuleSource(Generic[TModule]):
         raise NotImplementedError("Abstract method")
 
     def _get_module_name(self, module_spec: list[InmantaModuleRequirement]) -> str:
-        module_names: set[str] = {req.project_name for req in module_spec}
+        module_names: set[str] = {req.name for req in module_spec}
         module_name: str = more_itertools.one(
             module_names,
             too_short=ValueError("module_spec should contain at least one requirement"),
