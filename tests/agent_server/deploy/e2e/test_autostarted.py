@@ -249,6 +249,42 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     await resource_action_consistency_check()
 
 
+def get_process_state(current_pid: int) -> dict[psutil.Process, list[psutil.Process]]:
+    """
+    Retrieves the current list of processes running under this process
+
+    :param current_pid: The PID of this process
+    """
+    return {process: process.children(recursive=True) for process in psutil.process_iter() if process.pid == current_pid}
+
+
+def check_consistent_starting_point(current_processes: list[psutil.Process]):
+    """
+    Return if the starting point is what we expect: only 2 (first ones) or 3 processes should be running:
+        - The actual server
+        - pg_ctl
+        - Inmanta multiprocessing Fork server
+
+    :param current_processes: Running processes
+    :return: Is the starting state consistent
+    """
+    if len(current_processes) == 2:
+        return True, f"There should be only 2 processes: Pg_ctl and the Server! Actual state: {current_processes}"
+    elif len(current_processes) == 3:
+        fork_servers = []
+        for e in current_processes:
+            if e.name() == "inmanta: multiprocessing fork server":
+                fork_servers.append(e)
+
+        return (
+            len(fork_servers) == 1,
+            "There should be only 3 processes: Pg_ctl, the Server and the Multiprocessing Fork server! "
+            f"Actual state: {current_processes}",
+        )
+    else:
+        return False
+
+
 @pytest.mark.parametrize(
     "auto_start_agent,should_time_out,time_to_sleep,", [(True, False, 2), (True, True, 120)]
 )  # this overrides a fixture to allow the agent to fork!
@@ -277,17 +313,13 @@ async def test_halt_deploy(
     config.Config.set("config", "environment", environment)
     current_pid = os.getpid()
 
-    def get_process_state() -> dict[psutil.Process, list[psutil.Process]]:
-        """
-        Retrieves the current list of Python processes running under this process
-        """
-        return {process: process.children(recursive=True) for process in psutil.process_iter() if process.pid == current_pid}
-
-    start_children = get_process_state()
+    start_children = get_process_state(current_pid)
     assert len(start_children) == 1
     assert len(start_children.values()) == 1
     current_children = list(start_children.values())[0]
-    assert len(current_children) == 2, "There should be only 2 processes: Pg_ctl and the Server!"
+
+    condition, message = check_consistent_starting_point(current_children)
+    assert condition, message
     for children in current_children:
         assert children.is_running()
 
@@ -310,7 +342,7 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     except (asyncio.TimeoutError, AssertionError):
         assert should_time_out, f"This wasn't supposed to time out with a deployment sleep set to {time_to_sleep}!"
     finally:
-        children_after_deployment = get_process_state()
+        children_after_deployment = get_process_state(current_pid)
 
     assert len(children_after_deployment) == 1
     assert len(children_after_deployment.values()) == 1
@@ -342,7 +374,7 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
 
     await asyncio.sleep(const.EXECUTOR_GRACE_HARD + 1)
 
-    halted_children = get_process_state()
+    halted_children = get_process_state(current_pid)
 
     assert len(halted_children) == 1
     assert len(halted_children.values()) == 1
@@ -381,7 +413,7 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
 
     await asyncio.sleep(10)
 
-    resumed_children = get_process_state()
+    resumed_children = get_process_state(current_pid)
 
     assert len(resumed_children) == 1
     assert len(resumed_children.values()) == 1
