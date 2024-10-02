@@ -365,28 +365,40 @@ class ResourceScheduler(TaskManager):
     ) -> None:
         if deployment_result is DeploymentResult.NEW:
             raise ValueError("report_resource_state should not be called to register new resources")
+
+        def propagate_events(details: ResourceDetails) -> None:
+            # TODO: consider introducing "event_listener: bool" for less trigger-happy events
+            #       => introduce in iso7, make mandatory in iso8
+            if details.attributes.get("send_event", False):
+                provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
+                if provides:
+                    # do not pass deploying tasks because for event propagation we really want to start a new one,
+                    # even if the current intent is already being deployed
+                    self._work.deploy_with_context(provides, deploying=set())
+
         async with self._scheduler_lock:
             # refresh resource details for latest model state
             details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
-            if details is None or details.attribute_hash != attribute_hash:
-                # The reported resource state is for a stale resource and therefore no longer relevant.
+            if details is None:
+                # The reported resource state is for a stale resource that doesn't even exist anymore in the latest model.
+                # It has no relevance at all anymore.
+                return
+            if details.attribute_hash != attribute_hash:
+                # The reported resource state is for a stale resource and therefore no longer relevant for state updates.
+                # We do still need to send events to its listeners.
+                if deployment_result is not None:
+                    propagate_events(details)
                 return
             state: ResourceState = self._state.resource_state[resource]
             state.status = status
             if deployment_result is not None:
+                # first update state, then send out events
                 self._deploying_latest.remove(resource)
                 state.deployment_result = deployment_result
                 self._work.finished_deploy(resource)
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
-                # propagate events
-                if details.attributes.get("send_event", False):
-                    provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
-                    if provides:
-                        # TODO: add test for deploying=set()
-                        # do not pass deploying tasks because for event propagation we really want to start a new one,
-                        # even if the current intent is already being deployed
-                        self._work.deploy_with_context(provides, deploying=set())
+                propagate_events(details)
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
