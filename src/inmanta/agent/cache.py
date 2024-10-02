@@ -312,7 +312,27 @@ class AgentCache:
 
         """
 
-        def get_retention_policy(for_version, timeout, evict_after_last_access, evict_after_creation) -> tuple[float, float]:
+        def _get_retention_policy(
+            for_version: Optional[bool], timeout: Optional[int], evict_after_last_access: float, evict_after_creation: float
+        ) -> tuple[float, float]:
+            """
+            This method is a backwards compatibility layer to compute a "new-style" retention policy (i.e. that is using
+            evict_after_last_access and/or evict_after_creation semantics) from the parameters of the `get_or_else` method.
+
+            :param for_version: Compatibility rules for this deprecated parameter:
+                If passed and True, entries will expire <evict_after_last_access>s after their last access (60s default)
+                If passed and False, entries will expire a certain number of seconds after entering the cache. This time
+                is either <evict_after_creation>, <timeout> or a default of 5000s, whichever is set, inspected in this order.
+            :param timeout: Compatibility rules for this deprecated parameter:
+                If `for_version=False` and the new-style parameter `evict_after_creation` is not set, this parameter
+                controls the expiry time (in seconds) of entries after entering the cache.
+                If `for_version` is not set, this parameter is an alias for the new-style parameter `evict_after_creation`.
+                (If both are set, the new-style parameter `evict_after_creation` has precedence)
+            :param evict_after_last_access: This cache item will be considered stale this number of seconds after
+                it was last accessed.
+            :param evict_after_creation: This cache item will be considered stale this number of seconds after
+                entering the cache.
+            """
             _evict_after_last_access: float
             _evict_after_creation: float
 
@@ -374,7 +394,7 @@ class AgentCache:
                 except KeyError:
                     value = function(**kwargs)
                     if cache_none or value is not None:
-                        _evict_after_last_access, _evict_after_creation = get_retention_policy(
+                        _evict_after_last_access, _evict_after_creation = _get_retention_policy(
                             for_version=for_version,
                             timeout=timeout,
                             evict_after_last_access=evict_after_last_access,
