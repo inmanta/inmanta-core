@@ -312,44 +312,47 @@ class AgentCache:
 
         """
 
-        _evict_after_last_access: float
-        _evict_after_creation: float
+        def get_retention_policy(for_version, timeout, evict_after_last_access, evict_after_creation) -> tuple[float, float]:
+            _evict_after_last_access: float
+            _evict_after_creation: float
 
-        # Legacy `for_version` parameter is used, compute
-        # evict_after_last_access and evict_after_creation
-        if for_version is not None:
-            if for_version:
-                _evict_after_creation = 0
-                _evict_after_last_access = evict_after_last_access if evict_after_last_access > 0 else 60
+            # Legacy `for_version` parameter is used, compute
+            # evict_after_last_access and evict_after_creation
+            if for_version is not None:
+                if for_version:
+                    _evict_after_creation = 0
+                    _evict_after_last_access = evict_after_last_access if evict_after_last_access > 0 else 60
+                else:
+                    _evict_after_last_access = 0
+                    if evict_after_creation > 0:
+                        _evict_after_creation = evict_after_creation
+                    elif timeout and timeout > 0:
+                        _evict_after_creation = timeout
+                    else:
+                        _evict_after_creation = 5000
+
+                    if evict_after_creation > 0 and timeout and timeout > 0:
+                        LOGGER.warning(
+                            "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
+                            "for cached method %s. Cached entries will be kept in the cache for %.2fs "
+                            "after entering it.",
+                            key,
+                            _evict_after_creation,
+                        )
             else:
-                _evict_after_last_access = 0
-                if evict_after_creation > 0:
-                    _evict_after_creation = evict_after_creation
-                elif timeout and timeout > 0:
-                    _evict_after_creation = timeout
-                else:
-                    _evict_after_creation = 5000
+                _evict_after_last_access = evict_after_last_access
+                _evict_after_creation = evict_after_creation
 
-                if evict_after_creation > 0 and timeout and timeout > 0:
-                    LOGGER.warning(
-                        "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
-                        "for cached method %s. Cached entries will be kept in the cache for %.2fs "
-                        "after entering it.",
-                        key,
-                        _evict_after_creation,
-                    )
-        else:
-            _evict_after_last_access = evict_after_last_access
-            _evict_after_creation = evict_after_creation
+                # If both params are unset/negative,
+                if _evict_after_creation <= 0 and _evict_after_last_access <= 0:
+                    if timeout and timeout > 0:
+                        # Use legacy parameter timeout if it is set.
+                        _evict_after_creation = timeout
+                    else:
+                        # keep entries alive in the cache for 60s after their last usage by default.
+                        _evict_after_last_access = 60
 
-            # If both params are unset/negative,
-            if _evict_after_creation <= 0 and _evict_after_last_access <= 0:
-                if timeout and timeout > 0:
-                    # Use legacy parameter timeout if it is set.
-                    _evict_after_creation = timeout
-                else:
-                    # keep entries alive in the cache for 60s after their last usage by default.
-                    _evict_after_last_access = 60
+            return _evict_after_last_access, _evict_after_creation
 
         acceptable = {"resource"}
         args = {k: v for k, v in kwargs.items() if k in acceptable and k not in ignore}
@@ -371,6 +374,12 @@ class AgentCache:
                 except KeyError:
                     value = function(**kwargs)
                     if cache_none or value is not None:
+                        _evict_after_last_access, _evict_after_creation = get_retention_policy(
+                            for_version=for_version,
+                            timeout=timeout,
+                            evict_after_last_access=evict_after_last_access,
+                            evict_after_creation=evict_after_creation,
+                        )
                         self.cache_value(
                             key=key,
                             value=value,
