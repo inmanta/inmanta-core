@@ -318,10 +318,11 @@ class Agent(SessionEndpoint):
 
     async def unpause(self, name: str) -> Apireturn:
         if name == AGENT_SCHEDULER_ID:
+            await self.executor_manager.start()
             await self.start_working()
         else:
             try:
-                self.scheduler._unpause_for_agent(agent=name)
+                self.scheduler.unpause_for_agent(agent=name)
             except LookupError:
                 return 404, "No such agent"
 
@@ -331,11 +332,12 @@ class Agent(SessionEndpoint):
 
     async def pause(self, name: str) -> Apireturn:
         if name == AGENT_SCHEDULER_ID:
-            await self.stop_working()
+            await self.executor_manager.stop()
             await self.executor_manager.join([], timeout=const.EXECUTOR_GRACE_HARD)
+            await self.stop_working()
         else:
             try:
-                self.scheduler._pause_for_agent(agent=name)
+                self.scheduler.pause_for_agent(agent=name)
                 # We don't need to stop it, through the executor manager, because it will taking new task from the queue,
                 # so it will time out eventually
             except LookupError:

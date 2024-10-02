@@ -378,7 +378,6 @@ src/inmanta/protocol/methods.py:0: note: Use "-> None" if function does not retu
 src/inmanta/protocol/methods.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/protocol/methods.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/protocol/methods.py:0: error: Missing return statement  [empty-body]
-src/inmanta/protocol/methods.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/protocol/methods.py:0: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
 src/inmanta/protocol/methods.py:0: error: Function is missing a return type annotation  [no-untyped-def]

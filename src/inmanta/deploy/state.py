@@ -84,7 +84,6 @@ class DeploymentResult(StrEnum):
 class AgentStatus(StrEnum):
     """
     The status of the agent responsible of a given resource.
-    FIXME The `DOWN` status is not taken into account here as it is a following ticket, see
 
     STARTED: Agent has been started.
     STOPPED: Agent has been stopped (previously called PAUSED).

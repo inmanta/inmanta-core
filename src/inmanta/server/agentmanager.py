@@ -265,11 +265,14 @@ class AgentManager(ServerSlice, SessionListener):
             if opt.server_use_resource_scheduler.get():
                 key = (env.id, const.AGENT_SCHEDULER_ID)
                 live_session = self.tid_endpoint_to_session.get(key)
-                if live_session:
-                    # The agent has an active agent instance that has to be paused
-                    agent_to_pause = const.AGENT_SCHEDULER_ID if endpoint is None else endpoint
-                    await live_session.get_client().set_state(agent_to_pause, enabled=False)
-                # TODO h maybe raise a warning if no live session
+                # This should never be the case but as a safety measure, we need to make sure that the scheduler is up and
+                # running
+                if not live_session:
+                    await self._autostarted_agent_manager._ensure_scheduler(env)
+                    live_session = self.tid_endpoint_to_session.get(key)
+                    assert live_session
+                agent_to_pause = const.AGENT_SCHEDULER_ID if endpoint is None else endpoint
+                await live_session.get_client().set_state(agent_to_pause, enabled=False)
             else:
                 agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
                 endpoints_with_new_primary = []
@@ -293,13 +296,12 @@ class AgentManager(ServerSlice, SessionListener):
                 key = (env.id, const.AGENT_SCHEDULER_ID)
                 live_session = self.tid_endpoint_to_session.get(key)
                 if not live_session:
-                    live_session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
-                    if live_session:
-                        self.tid_endpoint_to_session[key] = live_session
-                assert live_session
+                    await self._autostarted_agent_manager._ensure_scheduler(env)
+                    live_session = self.tid_endpoint_to_session.get(key)
+                    assert live_session
+                    self.tid_endpoint_to_session[key] = live_session
                 agent_to_unpause = const.AGENT_SCHEDULER_ID if endpoint is None else endpoint
                 await live_session.get_client().set_state(agent_to_unpause, enabled=True)
-                # TODO h maybe raise a warning if no live session
             else:
                 agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
                 endpoints_with_new_primary = []
@@ -635,7 +637,6 @@ class AgentManager(ServerSlice, SessionListener):
                 if endpoint in session.endpoint_names and session.tid == tid:
                     return session
             # Agent is down
-            LOGGER.error(f"HERE ARE VALUES: {self.sessions.values()}")
             return None
 
     def _get_session_to_failover_agent(self, tid: uuid.UUID, endpoint: str) -> Optional[protocol.Session]:
@@ -1032,8 +1033,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         LOGGER.debug("Restarting agents in environment %s", env.id)
         if opt.server_use_resource_scheduler.get():
             await self._ensure_scheduler(env)
-            await asyncio.sleep(5)
-
             agent_client = self._agent_manager.get_agent_client(
                 tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
             )

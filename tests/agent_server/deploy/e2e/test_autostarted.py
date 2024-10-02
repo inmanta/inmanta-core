@@ -337,14 +337,35 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
 
+    await asyncio.sleep(const.EXECUTOR_GRACE_HARD + 1)
+
     halted_children = get_process_state()
 
     assert len(halted_children) == 1
     assert len(halted_children.values()) == 1
     current_halted_children = list(halted_children.values())[0]
 
-    await asyncio.sleep(const.EXECUTOR_GRACE_HARD)
-    await retry_limited(lambda: len(current_halted_children) == 4, 2)
+    def wait_for_terminated_status():
+        if len(current_halted_children) == 4:
+            # The process has already disappeared
+            return True
+        elif len(current_halted_children) == 5:
+            # Or the process is still there but with a `Terminated` status
+            terminated_process = []
+            for process in current_halted_children:
+                try:
+                    if process.status() == "terminated":
+                        terminated_process.append(process)
+                except psutil.NoSuchProcess:
+                    terminated_process.append(None)
+
+            # Only one process should end up in terminated
+            return len(terminated_process) == 1
+        else:
+            # Unhandled case
+            return False
+
+    await retry_limited(wait_for_terminated_status, 2)
 
     assert len(current_halted_children) == 4, (
         "There should be only 4 processes: Pg_ctl, the Server, the Scheduler and  the fork server. "
@@ -355,9 +376,9 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
 
     await client.resume_environment(environment)
 
-    resumed_children = get_process_state()
+    await asyncio.sleep(10)
 
-    await asyncio.sleep(5)
+    resumed_children = get_process_state()
 
     assert len(resumed_children) == 1
     assert len(resumed_children.values()) == 1

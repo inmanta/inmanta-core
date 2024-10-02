@@ -259,46 +259,6 @@ def resume_environment(tid: uuid.UUID) -> None:
 
 
 @typedmethod(
-    path="/actions/environment/halt",
-    operation="POST",
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
-    agent_server=True,
-    api_version=2,
-)
-def halt_environment_agent(tid: uuid.UUID) -> None:
-    """
-    Halt all orchestrator operations for an environment. The environment will enter a state where all agents are paused and
-    can not be unpaused. Incoming compile requests will still be queued but compilation will halt. Normal operation can be
-    restored using the `resume_environment` endpoint.
-
-    :param tid: The environment id
-
-    :raises NotFound: The given environment doesn't exist.
-    """
-
-
-@typedmethod(
-    path="/actions/environment/scheduler/resume",
-    operation="POST",
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
-    timeout=5,
-    agent_server=True,
-    api_version=2,
-)
-def resume_environment_agent(tid: uuid.UUID) -> None:
-    """
-    Resume all orchestrator operations for an environment. Resumes normal environment operation and unpauses all agents
-    that were active when the environment was halted.
-
-    :param tid: The environment id
-
-    :raises NotFound: The given environment doesn't exist.
-    """
-
-
-@typedmethod(
     path="/decommission/<id>",
     operation="DELETE",
     arg_options={"id": methods.ArgOption(getter=methods.convert_environment)},

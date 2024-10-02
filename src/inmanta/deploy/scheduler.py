@@ -337,30 +337,28 @@ class ResourceScheduler(TaskManager):
             # We are woken up because the environment is halted
             pass
 
-    def _pause_for_agent(self, agent: str) -> None:
+    def pause_for_agent(self, agent: str) -> None:
         """Pause the given agent"""
         if agent not in self._state.agent_status:
-            raise LookupError("")
+            raise LookupError(f"The agent {agent} does not exist!")
 
         self._state.agent_status[agent] = AgentStatus.STOPPED
 
-    def _unpause_for_agent(self, agent: str) -> None:
+    def unpause_for_agent(self, agent: str) -> None:
         """Unpause / Restart processing for the given agent"""
         if agent not in self._state.agent_status:
-            raise LookupError("")
+            raise LookupError(f"The agent {agent} does not exist!")
 
         self._start_for_agent(agent)
 
-    async def _pause_environment(self) -> None:
-        """Pause the environment of the scheduler"""
+    async def pause_environment(self) -> None:
+        """Pause the environment of the scheduler and every execturos that have been created"""
         for agent in self._workers.keys():
             agent_state = self._state.agent_status[agent]
             if not self._workers[agent].done():
                 self._workers[agent].cancel("Environment has been paused")
             if agent_state != AgentStatus.STOPPED:
                 self._state.agent_status[agent] = AgentStatus.STOPPED
-
-        self._state.agent_status[agent] = AgentStatus.STOPPED
 
         self._work.agent_queues.send_shutdown()
         await asyncio.gather(*self._workers.values())
