@@ -104,7 +104,7 @@ class InmantaModuleRequirement:
                 f"InmantaModuleRequirement instances work with inmanta module names, not python package names. "
                 f"Problematic case: {str(requirement)}"
             )
-        self._requirement = inmanta.util.parse_requirement(str(requirement))
+        self._requirement = requirement
 
     @property
     def project_name(self) -> str:
