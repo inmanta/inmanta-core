@@ -21,7 +21,6 @@ import asyncio
 import logging
 import uuid
 from abc import abstractmethod
-from asyncio import CancelledError
 from collections.abc import Collection, Mapping, Set
 from typing import Optional
 
@@ -324,44 +323,32 @@ class ResourceScheduler(TaskManager):
 
     async def _run_for_agent(self, agent: str) -> None:
         """Main loop for one agent"""
-        try:
-            while self._running and self._state.agent_status[agent] == AgentStatus.STARTED:
-                task: Task = await self._work.agent_queues.queue_get(agent)
-                try:
-                    await task.execute(self, agent)
-                except Exception:
-                    LOGGER.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
+        while self._running and self._state.agent_status[agent] == AgentStatus.STARTED:
+            task: Task = await self._work.agent_queues.queue_get(agent)
+            try:
+                await task.execute(self, agent)
+            except Exception:
+                LOGGER.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
 
-                self._work.agent_queues.task_done(agent, task)
-        except CancelledError:
-            # We are woken up because the environment is halted
-            pass
+            self._work.agent_queues.task_done(agent, task)
 
-    def pause_for_agent(self, agent: str) -> None:
-        """Pause the given agent"""
+    def stop_agent(self, agent: str) -> None:
+        """
+        Stop the given agent. The agent will be allowed to finish its current task
+        """
         if agent not in self._state.agent_status:
             raise LookupError(f"The agent {agent} does not exist!")
 
         self._state.agent_status[agent] = AgentStatus.STOPPED
 
-    def unpause_for_agent(self, agent: str) -> None:
-        """Unpause / Restart processing for the given agent"""
+    def resume_agent(self, agent: str) -> None:
+        """
+        Restart the given agent. The agent will be able to pop new tasks from the queue
+        """
         if agent not in self._state.agent_status:
             raise LookupError(f"The agent {agent} does not exist!")
 
         self._start_for_agent(agent)
-
-    async def pause_environment(self) -> None:
-        """Pause the environment of the scheduler and every execturos that have been created"""
-        for agent in self._workers.keys():
-            agent_state = self._state.agent_status[agent]
-            if not self._workers[agent].done():
-                self._workers[agent].cancel("Environment has been paused")
-            if agent_state != AgentStatus.STOPPED:
-                self._state.agent_status[agent] = AgentStatus.STOPPED
-
-        self._work.agent_queues.send_shutdown()
-        await asyncio.gather(*self._workers.values())
 
     # TaskManager interface
 

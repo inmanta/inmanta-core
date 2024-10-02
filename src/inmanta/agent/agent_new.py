@@ -198,9 +198,9 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
         if enabled:
-            return await self.unpause(agent)
+            return await self.resume_agent(agent)
         else:
-            return await self.pause(agent)
+            return await self.stop_agent(agent)
 
     async def on_reconnect(self) -> None:
         name = AGENT_SCHEDULER_ID
@@ -316,13 +316,20 @@ class Agent(SessionEndpoint):
 
         return dir_map
 
-    async def unpause(self, name: str) -> Apireturn:
+    async def resume_agent(self, name: str) -> Apireturn:
+        """
+        Resume the scheduler / a particular agent. Depending on the provided name, one or the other will be impacted by this
+        action. If the scheduler is resumed, the executor manager will be resumed. Otherwise, only the agent will be resumed
+        (if it exists)
+
+        :param name: The name of the agent to resume
+        """
         if name == AGENT_SCHEDULER_ID:
             await self.executor_manager.start()
             await self.start_working()
         else:
             try:
-                self.scheduler.unpause_for_agent(agent=name)
+                self.scheduler.resume_agent(agent=name)
             except LookupError:
                 return 404, "No such agent"
 
@@ -330,17 +337,24 @@ class Agent(SessionEndpoint):
         # it will be recreated when needed
         return 200, f"{name} has been resumed"
 
-    async def pause(self, name: str) -> Apireturn:
+    async def stop_agent(self, name: str) -> Apireturn:
+        """
+        Stop the scheduler / a particular agent. Depending on the provided name, one or the other will be impacted by this
+        action. If the scheduler is stopped, the executor manager will also be stopped to kill any remaining processes.
+        Otherwise, only the agent will be stopped (if it exists)
+
+        :param name: The name of the agent to stop
+        """
         if name == AGENT_SCHEDULER_ID:
             await self.executor_manager.stop()
             await self.executor_manager.join([], timeout=const.EXECUTOR_GRACE_HARD)
             await self.stop_working()
         else:
             try:
-                self.scheduler.pause_for_agent(agent=name)
+                self.scheduler.stop_agent(agent=name)
                 # We don't need to stop it, through the executor manager, because it will taking new task from the queue,
                 # so it will time out eventually
             except LookupError:
                 return 404, "No such agent"
 
-        return 200, f"{name} has been paused"
+        return 200, f"{name} has been stopped"

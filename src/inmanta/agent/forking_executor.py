@@ -1105,8 +1105,8 @@ class MPManager(
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor] = [], timeout: float = 0.0) -> None:
         # the last two parameters are there to glue the signatures of the join methods in the two super classes
-        await self.process_pool.join()
         await super().join()
+        await self.process_pool.join()
 
     async def stop_for_agent(self, agent_name: str) -> list[MPExecutor]:
         children = list(self.agent_map[agent_name])

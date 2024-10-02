@@ -210,7 +210,7 @@ class AgentManager(ServerSlice, SessionListener):
         Halts all agents for an environment. Persists prior paused state.
         """
         await data.Agent.persist_on_halt(env.id, connection=connection)
-        await self._pause_agent(env, connection=connection)
+        await self._stop_agent(env, connection=connection)
 
     async def resume_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
@@ -218,7 +218,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
         if not opt.server_use_resource_scheduler.get():
             to_unpause: list[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
-            await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
+            await asyncio.gather(*[self._start_agent(env, agent, connection=connection) for agent in to_unpause])
 
     @handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:
@@ -227,9 +227,9 @@ class AgentManager(ServerSlice, SessionListener):
         if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
             raise Forbidden("Cannot set on_resume state of agents when the environment is not halted.")
         if action is AgentAction.pause:
-            await self._pause_agent(env)
+            await self._stop_agent(env)
         elif action is AgentAction.unpause:
-            await self._unpause_agent(env)
+            await self._start_agent(env)
         elif action is AgentAction.keep_paused_on_resume:
             await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False)
         elif action is AgentAction.unpause_on_resume:
@@ -244,9 +244,9 @@ class AgentManager(ServerSlice, SessionListener):
         if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
             raise Forbidden("Cannot set on_resume state of agents when the environment is not halted.")
         if action is AgentAction.pause:
-            await self._pause_agent(env, name)
+            await self._stop_agent(env, name)
         elif action is AgentAction.unpause:
-            await self._unpause_agent(env, name)
+            await self._start_agent(env, name)
         elif action is AgentAction.keep_paused_on_resume:
             await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False, endpoint=name)
         elif action is AgentAction.unpause_on_resume:
@@ -254,7 +254,7 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             raise BadRequest(f"Unknown agent action: {action.name}")
 
-    async def _pause_agent(
+    async def _stop_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         """
@@ -271,8 +271,8 @@ class AgentManager(ServerSlice, SessionListener):
                     await self._autostarted_agent_manager._ensure_scheduler(env)
                     live_session = self.tid_endpoint_to_session.get(key)
                     assert live_session
-                agent_to_pause = const.AGENT_SCHEDULER_ID if endpoint is None else endpoint
-                await live_session.get_client().set_state(agent_to_pause, enabled=False)
+                agent_to_stop = const.AGENT_SCHEDULER_ID if endpoint is None else endpoint
+                await live_session.get_client().set_state(agent_to_stop, enabled=False)
             else:
                 agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
                 endpoints_with_new_primary = []
@@ -288,7 +288,7 @@ class AgentManager(ServerSlice, SessionListener):
                     env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
                 )
 
-    async def _unpause_agent(
+    async def _start_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         async with self.session_lock:
@@ -300,8 +300,8 @@ class AgentManager(ServerSlice, SessionListener):
                     live_session = self.tid_endpoint_to_session.get(key)
                     assert live_session
                     self.tid_endpoint_to_session[key] = live_session
-                agent_to_unpause = const.AGENT_SCHEDULER_ID if endpoint is None else endpoint
-                await live_session.get_client().set_state(agent_to_unpause, enabled=True)
+                agent_to_start = const.AGENT_SCHEDULER_ID if endpoint is None else endpoint
+                await live_session.get_client().set_state(agent_to_start, enabled=True)
             else:
                 agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
                 endpoints_with_new_primary = []
