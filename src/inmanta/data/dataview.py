@@ -440,22 +440,32 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             params.update({k: value_to_string(v) for k, v in args.items() if v is not None})
             return f"{base_url}?{urllib.parse.urlencode(params, doseq=True)}"
 
-        link_with_end = make_link(
-            end=paging_boundaries.end,
-            last_id=paging_boundaries.last_id,
-        )
-        link_with_start = make_link(
-            start=paging_boundaries.start,
-            first_id=paging_boundaries.first_id,
-        )
+        if len(dtos) > 0:
+            link_with_end = make_link(
+                end=paging_boundaries.end,
+                last_id=paging_boundaries.last_id,
+            )
+            link_with_start = make_link(
+                start=paging_boundaries.start,
+                first_id=paging_boundaries.first_id,
+            )
+        else:
+            link_with_end = make_link(
+                end=paging_boundaries.start,
+                last_id=paging_boundaries.first_id,
+            )
+            link_with_start = make_link(
+                start=paging_boundaries.end,
+                first_id=paging_boundaries.last_id,
+            )
 
-        if meta.after > 0 or len(dtos) == 0:
+        if meta.after > 0:
             if self.order.get_order() == "DESC":
                 links["next"] = link_with_end
             else:
                 links["next"] = link_with_start
 
-        if meta.before > 0 or len(dtos) == 0:
+        if meta.before > 0:
             if self.order.get_order() == "DESC":
                 links["prev"] = link_with_start
             else:
@@ -470,6 +480,8 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
                 start=self.requested_page_boundaries.start,
             )
         # TODO: last links
+        # TODO h we should reuse the value but reverse the operation so for example first_id>7 -> first_id<7
+        # TODO h or maybe last_id>7
 
         return links
 
