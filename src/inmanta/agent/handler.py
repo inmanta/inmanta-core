@@ -195,6 +195,8 @@ def cache(
             return self.cache.get_or_else(
                 key=f.__name__,
                 function=bound,
+                for_version=None,
+                timeout=None,
                 evict_after_last_access=_evict_after_last_access,
                 evict_after_creation=_evict_after_creation,
                 ignore=myignore,

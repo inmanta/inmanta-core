@@ -312,6 +312,9 @@ class AgentCache:
 
         """
 
+        _evict_after_last_access: float
+        _evict_after_creation: float
+
         # Legacy `for_version` parameter is used, compute
         # evict_after_last_access and evict_after_creation
         if for_version is not None:
