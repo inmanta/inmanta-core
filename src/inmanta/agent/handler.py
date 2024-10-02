@@ -148,57 +148,13 @@ def cache(
             def bound(**kwds: object) -> object:
                 return f(self, **kwds)
 
-            _evict_after_last_access: float
-            _evict_after_creation: float
-
-            # Legacy `for_version` parameter is used, compute
-            # evict_after_last_access and evict_after_creation
-            if for_version is not None:
-                if for_version:
-                    _evict_after_creation = 0
-
-                    if evict_after_last_access > 0:
-                        _evict_after_last_access = evict_after_last_access
-                    else:
-                        _evict_after_last_access = 60
-                else:
-                    _evict_after_last_access = 0
-
-                    if evict_after_creation > 0:
-                        _evict_after_creation = evict_after_creation
-                    elif timeout and timeout > 0:
-                        _evict_after_creation = timeout
-                    else:
-                        _evict_after_creation = 5000
-
-                    if evict_after_creation > 0 and timeout and timeout > 0:
-                        LOGGER.warning(
-                            "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
-                            "for cached method %s. Cached entries will be kept in the cache for %.2fs "
-                            "after entering it.",
-                            f.__name__,
-                            _evict_after_creation,
-                        )
-            else:
-                _evict_after_last_access = evict_after_last_access
-                _evict_after_creation = evict_after_creation
-
-                # If both params are unset/negative,
-                if _evict_after_creation <= 0 and _evict_after_last_access <= 0:
-                    if timeout and timeout > 0:
-                        # Use legacy parameter timeout if it is set.
-                        _evict_after_creation = timeout
-                    else:
-                        # keep entries alive in the cache for 60s after their last usage by default.
-                        _evict_after_last_access = 60
-
             return self.cache.get_or_else(
                 key=f.__name__,
                 function=bound,
-                for_version=None,
-                timeout=None,
-                evict_after_last_access=_evict_after_last_access,
-                evict_after_creation=_evict_after_creation,
+                for_version=for_version,
+                timeout=timeout,
+                evict_after_last_access=evict_after_last_access,
+                evict_after_creation=evict_after_creation,
                 ignore=myignore,
                 cache_none=cacheNone if cacheNone is not None else cache_none,
                 call_on_delete=call_on_delete,
