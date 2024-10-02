@@ -15,7 +15,7 @@ requires = [
     "docstring-parser>=0.10,<0.17",
     "email-validator>=1,<3",
     "jinja2~=3.0",
-    "logfire~=0.46",
+    "logfire>=0.46,<2.0",
     "more-itertools>=8,<11",
     "opentelemetry-instrumentation-asyncpg~=0.46b0",
     # leave upper bound floating for fast-moving and extremely stable packaging
