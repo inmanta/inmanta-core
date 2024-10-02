@@ -3,6 +3,7 @@ import lsm
 import lsm::fsm
 import fs
 import mitogen
+import lsm::embedded_entities_tracker
 
 entity File extends lsm::ServiceEntity:
     """
@@ -42,7 +43,7 @@ binding = lsm::ServiceEntityBindingV2(
 )
 
 # We wrap the call to lsm:all() with the plugin call:
-for instance in lsm::insert_removed_embedded_entities(lsm::all(binding)):
+for instance in lsm::embedded_entities_tracker::insert_removed_embedded_entities(lsm::all(binding)):
     file = File(
         instance_id=instance["id"],
         entity_binding=binding,
