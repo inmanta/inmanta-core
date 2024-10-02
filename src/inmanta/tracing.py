@@ -62,8 +62,8 @@ def configure_logfire(service: str) -> None:
             service_name=service,
             send_to_logfire="if-token-present",
             console=False,
-            pydantic_plugin=logfire.integrations.pydantic.PydanticPlugin(record="all") if detailed_reporting else None,
         )
+        logfire.instrument_pydantic("all" if detailed_reporting else "off")
     else:
         LOGGER.info("Not setting up telemetry")
 
