@@ -275,6 +275,98 @@ def test_get_or_else(my_resource):
     assert value2 == cache.get_or_else("test", creator, resource=resource, param=value2)
 
 
+def test_get_or_else_backwards_compatibility(my_resource, time_machine):
+    """
+    Test backwards compatibility for the `get_or_else` method of the agent cache
+    with the legacy parameters `for_version` and `timeout`.
+    """
+    called = []
+
+    def creator(param, resource):
+        called.append("x")
+        return param
+
+    cache = AgentCache()
+    value = "test"
+    resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
+
+    time_machine.move_to(datetime.datetime.now().astimezone(), tick=False)
+
+    with cache:
+        # Populate cache
+
+        assert value == cache.get_or_else(
+            "test_evict_after_last_access", creator, resource=resource, param=value, evict_after_last_access=60
+        )  # cache miss
+        assert value == cache.get_or_else("test_evict_after_last_access", creator, resource=resource, param=value)  # cache hit
+        assert len(called) == 1
+        assert value == cache.get_or_else(
+            "test_evict_after_creation", creator, resource=resource, param=value, for_version=False, timeout=100
+        )  # cache miss
+        assert len(called) == 2
+        called = []
+
+        # Populate cache with legacy variants
+
+        assert value == cache.get_or_else(
+            "legacy_test_evict_after_last_access", creator, resource=resource, param=value, for_version=True
+        )  # cache miss
+        assert value == cache.get_or_else(
+            "legacy_test_evict_after_last_access", creator, resource=resource, param=value
+        )  # cache hit
+        assert len(called) == 1
+        assert value == cache.get_or_else(
+            "legacy_test_evict_after_creation", creator, resource=resource, param=value, for_version=False, timeout=100
+        )  # cache miss
+        assert len(called) == 2
+
+    time_machine.shift(datetime.timedelta(seconds=61))
+
+    with cache:
+        # Assert that the entries with evict_after_last_access semantics were removed:
+
+        called = []
+        assert value == cache.get_or_else("test_evict_after_last_access", creator, resource=resource, param=value)  # cache miss
+        assert len(called) == 1
+        assert value == cache.get_or_else("test_evict_after_creation", creator, resource=resource, param=value)  # cache hit
+        assert len(called) == 1
+
+        # Same for the legacy variant:
+
+        called = []
+        assert value == cache.get_or_else(
+            "legacy_test_evict_after_last_access", creator, resource=resource, param=value
+        )  # cache miss
+        assert len(called) == 1
+        assert value == cache.get_or_else(
+            "legacy_test_evict_after_creation", creator, resource=resource, param=value
+        )  # cache hit
+        assert len(called) == 1
+
+    time_machine.shift(datetime.timedelta(seconds=40))
+
+    with cache:
+        # Assert:
+        #   - that the entries with evict_after_creation semantics were removed:
+        #   - that the entries with evict_after_last_access semantics were refreshed by the last access:
+
+        called = []
+        assert value == cache.get_or_else("test_evict_after_last_access", creator, resource=resource, param=value)  # cache hit
+        assert len(called) == 0
+        assert value == cache.get_or_else("test_evict_after_creation", creator, resource=resource, param=value)  # cache miss
+        assert len(called) == 1
+
+        called = []
+        assert value == cache.get_or_else(
+            "legacy_test_evict_after_last_access", creator, resource=resource, param=value
+        )  # cache hit
+        assert len(called) == 0
+        assert value == cache.get_or_else(
+            "legacy_test_evict_after_creation", creator, resource=resource, param=value
+        )  # cache miss
+        assert len(called) == 1
+
+
 def test_get_or_else_none(my_resource):
     """
     Test the get_or_else cache_none parameter. This parameter controls
