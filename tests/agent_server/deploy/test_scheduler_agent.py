@@ -36,7 +36,7 @@ from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.data import ResourceIdStr
-from inmanta.deploy import state
+from inmanta.deploy import state, tasks
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.util import retry_limited
@@ -397,7 +397,7 @@ async def test_get_facts(agent: TestAgent, make_resource_minimal):
         ResourceIdStr(rid2): make_resource_minimal(rid2, {"value": "a"}, [rid1]),
     }
 
-    await agent.scheduler._new_version(5, resources, make_requires(resources))
+    await agent.scheduler._new_version(1, resources, make_requires(resources))
 
     await agent.scheduler.get_facts({"id": rid1})
 
@@ -415,33 +415,106 @@ async def test_get_facts(agent: TestAgent, make_resource_minimal):
 async def test_scheduler_priority(agent: TestAgent, environment, make_resource_minimal):
     """
     Ensure that the tasks are placed in the queue in the correct order
+    And that existing tasks in the queue are replaced if a task that
+    does the same thing with higher priority is added to the queue
     """
 
-    await agent.stop()
-
-    rid1 = "test::Resource[agent1,name=1]"
-    rid2 = "test::Resource[agent1,name=2]"
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
     resources = {
-        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[], version=5),
+        rid1: make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
     }
 
-    agent.scheduler.mock_versions[5] = resources
+    executor1: ManagedExecutor = ManagedExecutor()
+    agent.executor_manager.register_managed_executor("agent1", executor1)
 
+    # We add two different tasks and assert that they are consumed in the correct order
+    # Add a new version deploy to the queue
+    await agent.scheduler._new_version(1, resources, make_requires(resources))
+    agent.scheduler.mock_versions[1] = resources
+
+    # And then a dryrun
+    dryrun = uuid.uuid4()
+    await agent.scheduler.dryrun(dryrun, 1)
+
+    # The tasks are consumed in the priority order
+    first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
+    assert isinstance(first_task, tasks.Deploy)
+    second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
+    assert isinstance(second_task, tasks.DryRun)
+
+    # The same is true if a task with lesser priority is added first
+    # Add a fact refresh task to the queue
     await agent.scheduler.get_facts({"id": rid1})
 
-    await agent.scheduler._new_version(5, resources, make_requires(resources))
-
+    # Then add an interval deploy task to the queue
+    agent.scheduler._state.dirty.add(rid1)
     await agent.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
 
-    dryrun = uuid.uuid4()
-    await agent.scheduler.dryrun(dryrun, 5)
+    # The tasks are consumed in the priority order
+    first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
+    assert isinstance(first_task, tasks.Deploy)
+    second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
+    assert isinstance(second_task, tasks.RefreshFact)
+    # Assert that all tasks were consumed
+    queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
+    assert len(queue) == 0
 
-    await agent.trigger_update(environment, "$__scheduler", incremental_deploy=False)
+    # Add an interval deploy task to the queue
+    agent.scheduler._state.dirty.add(rid1)
+    await agent.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
+
+    # Add a dryrun to the queue (which has more priority)
+    dryrun = uuid.uuid4()
+    await agent.scheduler.dryrun(dryrun, 1)
+
+    # Assert that we have both tasks in the queue
+    queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
+    assert len(queue) == 2
+
+    # Add a user deploy
+    # It has more priority than interval deploy, so it will replace it in the queue
+    # It also has more priority than dryrun, so it will be consumed first
+
     await agent.trigger_update(environment, "$__scheduler", incremental_deploy=True)
 
-    await agent.scheduler.repair(TaskPriority.INTERVAL_REPAIR)
+    first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
+    assert isinstance(first_task, tasks.Deploy)
+    second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
+    assert isinstance(second_task, tasks.DryRun)
 
-    agent_1_queue = agent.scheduler._work.agent_queues.sorted("agent1")
-    assert len(agent_1_queue) == 7
+    # Interval deploy is still in the queue but marked as deleted
+    queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
+    assert len(queue) == 1
+    assert queue[0].deleted
 
-    await agent.start_working()
+    # Force clean queue
+    agent.scheduler._work.agent_queues._get_queue("agent1")._queue = []
+
+    # If a task to deploy a resource is added to the queue,
+    # but a task to deploy that same resource is already present with higher priority,
+    # it will be ignored and not added to the queue
+
+    # Add a dryrun to the queue
+    dryrun = uuid.uuid4()
+    await agent.scheduler.dryrun(dryrun, 1)
+
+    # Add a user deploy
+    await agent.trigger_update(environment, "$__scheduler", incremental_deploy=True)
+
+    # Try to add an interval deploy task to the queue
+    agent.scheduler._state.dirty.add(rid1)
+    await agent.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
+
+    # Assert that we still have only 2 tasks in the queue
+    queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
+    assert len(queue) == 2
+
+    # The order is unaffected, the interval deploy was essentially ignored
+    first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
+    assert isinstance(first_task, tasks.Deploy)
+    second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
+    assert isinstance(second_task, tasks.DryRun)
+
+    # All tasks were consumed
+    queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
+    assert len(queue) == 0

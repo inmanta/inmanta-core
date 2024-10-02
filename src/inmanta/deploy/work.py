@@ -392,10 +392,12 @@ class ScheduledWork:
                 # discard rather than remove because task may already be running, in which case we leave it run its course
                 # and simply add a new one
                 task: tasks.Deploy = tasks.Deploy(resource=resource)
-                task_priority: Optional[TaskPriority] = self.agent_queues.discard(task)
+                task_priority: Optional[int] = self.agent_queues.discard(task)
                 queued.remove(resource)
                 self._waiting[resource] = BlockedDeploy(
-                    task=PrioritizedTask(task=task, priority=task_priority if task_priority is not None else priority),
+                    task=PrioritizedTask(
+                        task=task, priority=TaskPriority(task_priority) if task_priority is not None else priority
+                    ),
                     # task was previously ready to execute => assume no other blockers than this one
                     blocked_on=new_blockers,
                 )

@@ -387,7 +387,9 @@ class ResourceScheduler(TaskManager):
                     if provides:
                         # Not sure about this priority. I believe this method is called when a resource has a new state
                         # and hence, new version.
-                        self._work.deploy_with_context(provides, priority=TaskPriority.NEW_VERSION_DEPLOY, deploying=self._deploying)
+                        self._work.deploy_with_context(
+                            provides, priority=TaskPriority.NEW_VERSION_DEPLOY, deploying=self._deploying
+                        )
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
