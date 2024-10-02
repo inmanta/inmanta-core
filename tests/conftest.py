@@ -759,7 +759,7 @@ def log_state_tcp_ports(request, log_file):
 
 
 @pytest.fixture(scope="function")
-async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
+async def server_config(inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
     reset_metrics()
 
     with tempfile.TemporaryDirectory() as state_dir:
@@ -794,10 +794,6 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
 
 @pytest.fixture(scope="function")
 async def server(server_pre_start) -> abc.AsyncIterator[Server]:
-    """
-    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
-    May not be required
-    """
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
@@ -829,12 +825,8 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
 )
 async def server_multi(
-    server_pre_start, event_loop, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
+    server_pre_start, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
 ):
-    """
-    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
-    May not be required
-    """
     with tempfile.TemporaryDirectory() as state_dir:
         ssl, auth, ca = request.param
 

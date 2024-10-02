@@ -189,7 +189,7 @@ async def config(inmanta_config, tmp_path):
 
 
 @pytest.fixture
-async def agent(environment, config, event_loop):
+async def agent(environment, config):
     """
     Provide a new agent, with a scheduler that uses the dummy executor
 
