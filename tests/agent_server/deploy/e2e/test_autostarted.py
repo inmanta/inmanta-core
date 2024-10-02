@@ -258,7 +258,7 @@ def get_process_state(current_pid: int) -> dict[psutil.Process, list[psutil.Proc
     return {process: process.children(recursive=True) for process in psutil.process_iter() if process.pid == current_pid}
 
 
-def check_consistent_starting_point(current_processes: list[psutil.Process]):
+def check_consistent_starting_point(current_processes: list[psutil.Process]) -> tuple[bool, str]:
     """
     Return if the starting point is what we expect: only 2 (first ones) or 3 processes should be running:
         - The actual server
@@ -282,7 +282,7 @@ def check_consistent_starting_point(current_processes: list[psutil.Process]):
             f"Actual state: {current_processes}",
         )
     else:
-        return False
+        return False, f"Unexpected case -> actual state: {current_processes}"
 
 
 @pytest.mark.parametrize(
@@ -428,9 +428,6 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     await retry_limited(lambda: all([children.is_running() for children in current_resumed_children]), 10)
 
 
-# TODO h test scheduler part apart and check that everything holds there
-
-
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_pause_agent_deploy(
     snippetcompiler, server, agent, client, clienthelper, environment, no_agent_backoff, auto_start_agent: bool
@@ -458,7 +455,10 @@ async def test_pause_agent_deploy(
     assert len(start_children) == 1
     assert len(start_children.values()) == 1
     current_children = list(start_children.values())[0]
-    assert len(current_children) == 2, "There should be only 2 processes: Pg_ctl and the Server!"
+
+    condition, message = check_consistent_starting_point(current_children)
+    assert condition, message
+
     for children in current_children:
         assert children.is_running()
 
