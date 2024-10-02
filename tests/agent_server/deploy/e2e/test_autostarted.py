@@ -255,6 +255,7 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
 async def test_halt_deploy(
     snippetcompiler,
     server,
+    agent,
     client,
     clienthelper,
     environment,
@@ -266,6 +267,8 @@ async def test_halt_deploy(
     """
     Verify that the new scheduler can actually fork
     """
+    await agent.stop()
+
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     agent_name = "agent1"
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
@@ -398,11 +401,13 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
 
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_pause_agent_deploy(
-    snippetcompiler, server, client, clienthelper, environment, no_agent_backoff, auto_start_agent: bool
+    snippetcompiler, server, agent, client, clienthelper, environment, no_agent_backoff, auto_start_agent: bool
 ):
     """
     Verify that the new scheduler can actually fork
     """
+    await agent.stop()
+
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     agent_name = "agent1"
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
