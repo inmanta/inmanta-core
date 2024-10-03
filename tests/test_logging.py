@@ -30,6 +30,15 @@ from inmanta import config
 from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter, Options
 
 
+@pytest.fixture(autouse=True)
+def cleanup_logger():
+    root_log_level = logging.root.level
+    InmantaLoggerConfig.clean_instance()
+    yield
+    # Make sure we maintain the initial root log level, so that logging in pytest works as expected.
+    logging.root.setLevel(root_log_level)
+
+
 def test_setup_instance():
     inmanta_logger = InmantaLoggerConfig.get_instance()
     handler = inmanta_logger.get_handler()
@@ -57,7 +66,7 @@ def test_setup_instance_2_times():
     assert message in str(e.value)
 
 
-def test_setup_instance_with_stream():
+def test_setup_instance_with_stream(allow_overriding_root_log_level: None):
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
     handler = inmanta_logger.get_handler()
@@ -73,7 +82,7 @@ def test_setup_instance_with_stream():
     assert log_output == expected_output
 
 
-def test_set_log_level():
+def test_set_log_level(allow_overriding_root_log_level: None):
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
     handler = inmanta_logger.get_handler()
@@ -94,7 +103,7 @@ def test_set_log_level():
     assert expected_output in log_output
 
 
-def test_set_log_formatter():
+def test_set_log_formatter(allow_overriding_root_log_level: None):
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
 
@@ -122,6 +131,7 @@ def test_set_log_formatter():
 
 def test_set_logfile_location(
     tmpdir,
+    allow_overriding_root_log_level: None,
 ):
     log_file = tmpdir.join("test.log")
     inmanta_logger = InmantaLoggerConfig.get_instance()
@@ -144,7 +154,7 @@ def test_set_logfile_location(
     "log_file, log_file_level, verbose",
     [(None, "INFO", 1), (None, "ERROR", 4), ("test.log", "WARNING", 4), ("test.log", "DEBUG", 4)],
 )
-def test_apply_options(tmpdir, log_file, log_file_level, verbose):
+def test_apply_options(tmpdir, log_file, log_file_level, verbose, allow_overriding_root_log_level: None):
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
     logger = logging.getLogger("test_logger")
@@ -182,7 +192,7 @@ def test_apply_options(tmpdir, log_file, log_file_level, verbose):
             assert error_in_output
 
 
-def test_logging_apply_options_2_times():
+def test_logging_apply_options_2_times(allow_overriding_root_log_level: None):
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
     options1 = Options(log_file=None, log_file_level="INFO", verbose="1")
@@ -194,7 +204,7 @@ def test_logging_apply_options_2_times():
     assert message in str(e.value)
 
 
-def test_logging_cleaned_after_apply_options(tmpdir):
+def test_logging_cleaned_after_apply_options(tmpdir, allow_overriding_root_log_level: None):
     # verifies that when changing the stream with apply_option, the old stream is properly cleaned up
     # and not used anymore.
     stream = StringIO()
@@ -220,7 +230,7 @@ def test_logging_cleaned_after_apply_options(tmpdir):
     assert log_output == expected_output
 
 
-def test_handling_logging_config_option(tmpdir, monkeypatch) -> None:
+def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_root_log_level: None) -> None:
     """
     Verify the behavior of the logging_config option.
     """
