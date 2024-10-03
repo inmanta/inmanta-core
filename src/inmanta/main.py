@@ -26,17 +26,15 @@ from time import sleep
 from typing import Any, Callable, Optional, Union, cast
 
 import click
+import importlib_metadata
 import texttable
-from click_plugins import with_plugins
-from pkg_resources import iter_entry_points
 
-from inmanta import protocol
+from inmanta import protocol, util
 from inmanta.config import Config, cmdline_rest_transport
 from inmanta.const import AgentAction, AgentTriggerMethod, ResourceAction
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.resources import Id
 from inmanta.types import JsonType
-from inmanta.util import parse_timestamp
 
 
 class Client:
@@ -182,7 +180,7 @@ def get_table(header: list[str], rows: list[list[str]], data_type: Optional[list
     return table.draw()
 
 
-@with_plugins(iter_entry_points("inmanta.cli_plugins"))
+@util.click_group_with_plugins(iter(importlib_metadata.entry_points(group="inmanta.cli_plugins")))
 @click.group(help="Base command")
 @click.option("--host", help="The server hostname to connect to")
 @click.option("--port", help="The server port to connect to")
@@ -668,7 +666,7 @@ def param(ctx: click.Context) -> None:
 def param_list(client: Client, environment: str) -> None:
     result = client.get_dict("list_params", arguments=dict(tid=client.to_environment_id(environment)))
     expire = int(result["expire"])
-    now = parse_timestamp(result["now"])
+    now = util.parse_timestamp(result["now"])
     when = now - datetime.timedelta(0, expire)
 
     data = []
@@ -680,7 +678,7 @@ def param_list(client: Client, environment: str) -> None:
                 p["name"],
                 p["source"],
                 p["updated"],
-                str(float(parse_timestamp(p["updated"]) < when)),
+                str(float(util.parse_timestamp(p["updated"]) < when)),
             ]
         )
 

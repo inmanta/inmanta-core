@@ -18,8 +18,8 @@
 
 import os
 
-from pkg_resources import Requirement
-
+import inmanta.util
+import packaging.utils
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 
@@ -56,11 +56,11 @@ class RequirementsTxtParser:
     """
 
     @classmethod
-    def parse(cls, filename: str) -> list[Requirement]:
+    def parse(cls, filename: str) -> list[inmanta.util.CanonicalRequirement]:
         """
         Get all the requirements in `filename` as a list of `Requirement` instances.
         """
-        return [Requirement.parse(r) for r in cls.parse_requirements_as_strs(filename)]
+        return [inmanta.util.parse_requirement(requirement=r) for r in cls.parse_requirements_as_strs(filename)]
 
     @classmethod
     def parse_requirements_as_strs(cls, filename: str) -> list[str]:
@@ -86,6 +86,7 @@ class RequirementsTxtParser:
         if not os.path.exists(filename):
             raise Exception(f"File {filename} doesn't exist")
 
+        removed_dependency = packaging.utils.canonicalize_name(remove_dep_on_pkg)
         result = ""
         line_continuation_buffer = ""
         with open(filename, encoding="utf-8") as fd:
@@ -93,14 +94,22 @@ class RequirementsTxtParser:
                 if line_continuation_buffer:
                     line_continuation_buffer += line
                     if not line.endswith("\\"):
-                        if Requirement.parse(line_continuation_buffer).key != remove_dep_on_pkg:
+                        if (
+                            inmanta.util.parse_requirement(
+                                requirement=inmanta.util.remove_comment_part_from_specifier(line_continuation_buffer)
+                            ).name
+                            != removed_dependency
+                        ):
                             result += line_continuation_buffer
                         line_continuation_buffer = ""
                 elif not line.strip() or line.strip().startswith("#"):
                     result += line
                 elif line.endswith("\\"):
                     line_continuation_buffer = line
-                elif Requirement.parse(line).key != remove_dep_on_pkg.lower():
+                elif (
+                    inmanta.util.parse_requirement(requirement=inmanta.util.remove_comment_part_from_specifier(line)).name
+                    != removed_dependency
+                ):
                     result += line
                 else:
                     # Dependency matches `remove_dep_on_pkg` => Remove line from result
