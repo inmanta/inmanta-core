@@ -479,10 +479,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
                 first_id=self.requested_page_boundaries.first_id,
                 start=self.requested_page_boundaries.start,
             )
-        # TODO: last links
-        # TODO h we should reuse the value but reverse the operation so for example first_id>7 -> first_id<7
-        # TODO h or maybe last_id>7
-
         return links
 
     def validate_limit(self, limit: Optional[int]) -> int:
