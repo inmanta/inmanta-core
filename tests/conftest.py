@@ -1887,7 +1887,9 @@ def is_caplog_handler(handler: logging.Handler) -> bool:
         ),
     )
 
+
 ALLOW_OVERRIDING_ROOT_LOG_LEVEL: bool = False
+
 
 @pytest.fixture(scope="function")
 def allow_overriding_root_log_level() -> None:
