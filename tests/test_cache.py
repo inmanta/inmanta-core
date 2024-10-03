@@ -298,6 +298,7 @@ def test_get_or_else_backwards_compatibility(my_resource, time_machine):
         assert value == cache.get_or_else(
             "test_evict_after_last_access", creator, resource=resource, param=value, evict_after_last_access=60
         )  # cache miss
+        assert len(called) == 1
         assert value == cache.get_or_else("test_evict_after_last_access", creator, resource=resource, param=value)  # cache hit
         assert len(called) == 1
         assert value == cache.get_or_else(
@@ -311,6 +312,7 @@ def test_get_or_else_backwards_compatibility(my_resource, time_machine):
         assert value == cache.get_or_else(
             "legacy_test_evict_after_last_access", creator, resource=resource, param=value, for_version=True
         )  # cache miss
+        assert len(called) == 1
         assert value == cache.get_or_else(
             "legacy_test_evict_after_last_access", creator, resource=resource, param=value
         )  # cache hit
@@ -1058,8 +1060,7 @@ async def test_cache_warning(time_machine, caplog):
 
     class CacheWarningTest(CacheMissCounter):
         @cache(for_version=False, timeout=60, evict_after_creation=20)
-        def test_warning_and_override(self):
-            """ """
+        def test_warning_and_override(self, dummy_arg: int):
             self.increment_miss_counter()
             return "x1"
 
@@ -1072,14 +1073,14 @@ async def test_cache_warning(time_machine, caplog):
 
     # The cache cleanup method is called upon entering the AgentCache context manager
     with agent_cache:
-        assert "x1" == test.test_warning_and_override()  # cache miss
+        assert "x1" == test.test_warning_and_override(dummy_arg=1)  # cache miss
         test.check_n_cache_misses(1)
 
     time_machine.shift(datetime.timedelta(seconds=21))
     test.reset_miss_counter()
 
     with agent_cache:
-        assert "x1" == test.test_warning_and_override()  # cache miss
+        assert "x1" == test.test_warning_and_override(dummy_arg=1)  # cache miss
         test.check_n_cache_misses(1)
 
     log_contains(

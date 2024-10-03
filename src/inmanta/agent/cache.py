@@ -313,7 +313,11 @@ class AgentCache:
         """
 
         def _get_retention_policy(
-            for_version: Optional[bool], timeout: Optional[int], evict_after_last_access: float, evict_after_creation: float
+            for_version: Optional[bool],
+            timeout: Optional[int],
+            evict_after_last_access: float,
+            evict_after_creation: float,
+            method_name: str,
         ) -> tuple[float, float]:
             """
             This method is a backwards compatibility layer to compute a "new-style" retention policy (i.e. that is using
@@ -332,6 +336,7 @@ class AgentCache:
                 it was last accessed.
             :param evict_after_creation: This cache item will be considered stale this number of seconds after
                 entering the cache.
+            :param method_name: Name of the cached
             """
             _evict_after_last_access: float
             _evict_after_creation: float
@@ -340,43 +345,44 @@ class AgentCache:
             # evict_after_last_access and evict_after_creation
             if for_version is not None:
                 if for_version:
-                    _evict_after_creation = 0
+                    _evict_after_creation = 0.0
                     _evict_after_last_access = evict_after_last_access if evict_after_last_access > 0 else 60
                 else:
-                    _evict_after_last_access = 0
+                    _evict_after_last_access = 0.0
                     if evict_after_creation > 0:
                         _evict_after_creation = evict_after_creation
                     elif timeout and timeout > 0:
                         _evict_after_creation = timeout
                     else:
-                        _evict_after_creation = 5000
+                        _evict_after_creation = 5000.0
 
                     if evict_after_creation > 0 and timeout and timeout > 0:
                         LOGGER.warning(
                             "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
                             "for cached method %s. Cached entries will be kept in the cache for %.2fs "
                             "after entering it.",
-                            key,
+                            method_name,
                             _evict_after_creation,
                         )
             else:
                 _evict_after_last_access = evict_after_last_access
                 _evict_after_creation = evict_after_creation
 
-                # If both params are unset/negative,
+                # If both params are negative
                 if _evict_after_creation <= 0 and _evict_after_last_access <= 0:
                     if timeout and timeout > 0:
                         # Use legacy parameter timeout if it is set.
                         _evict_after_creation = timeout
                     else:
                         # keep entries alive in the cache for 60s after their last usage by default.
-                        _evict_after_last_access = 60
+                        _evict_after_last_access = 60.0
 
             return _evict_after_last_access, _evict_after_creation
 
         acceptable = {"resource"}
         args = {k: v for k, v in kwargs.items() if k in acceptable and k not in ignore}
         others = sorted([k for k in kwargs.keys() if k not in acceptable and k not in ignore])
+        method_name = key
         for k in others:
             key = f"{k},{repr(kwargs[k])}" + key
         try:
@@ -399,6 +405,7 @@ class AgentCache:
                             timeout=timeout,
                             evict_after_last_access=evict_after_last_access,
                             evict_after_creation=evict_after_creation,
+                            method_name=method_name,
                         )
                         self.cache_value(
                             key=key,
