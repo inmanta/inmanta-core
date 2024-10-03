@@ -563,13 +563,7 @@ class InmantaLoggerConfig:
         By default, this method removes and closes all root handlers from the logging framework. If the
         root_handlers_to_remove argument is not None, only the provided root handlers will be removed and closed.
         """
-        to_remove = root_handlers_to_remove if root_handlers_to_remove is not None else logging.root.handlers
-        for handler in to_remove:
-            # File-based handlers automatically re-open after close() if log records are written to them.
-            # As such, we explicitly remove the handler from the root logger here.
-            logging.root.removeHandler(handler)
-            handler.flush()
-            handler.close()
+        logging.shutdown()
         cls._instance = None
 
     def _get_path_to_logging_config_file(self, options: Options) -> Optional[str]:
