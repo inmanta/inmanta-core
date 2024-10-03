@@ -112,8 +112,8 @@ def cache(
     # deprecated parameter kept for backwards compatibility: if set, overrides cache_none
     cacheNone: Optional[bool] = None,  # noqa: N803
     call_on_delete: Optional[Callable[[Any], None]] = None,
-    evict_after_creation: float = 0,
-    evict_after_last_access: float = 0,
+    evict_after_creation: float = 0.0,
+    evict_after_last_access: float = 0.0,
 ) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
     """
     decorator for methods in resource handlers to provide caching

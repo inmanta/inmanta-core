@@ -290,8 +290,8 @@ class AgentCache:
         for_version: Optional[bool] = None,
         # deprecated parameter, kept for backwards compatibility
         timeout: Optional[int] = None,
-        evict_after_last_access: float = 60,
-        evict_after_creation: float = 0,
+        evict_after_last_access: float = 60.0,
+        evict_after_creation: float = 0.0,
         ignore: set[str] = set(),
         cache_none: bool = True,
         call_on_delete: Optional[Callable[[Any], None]] = None,
@@ -346,7 +346,7 @@ class AgentCache:
             if for_version is not None:
                 if for_version:
                     _evict_after_creation = 0.0
-                    _evict_after_last_access = evict_after_last_access if evict_after_last_access > 0 else 60
+                    _evict_after_last_access = evict_after_last_access if evict_after_last_access > 0 else 60.0
                 else:
                     _evict_after_last_access = 0.0
                     if evict_after_creation > 0:
@@ -368,7 +368,7 @@ class AgentCache:
                 _evict_after_last_access = evict_after_last_access
                 _evict_after_creation = evict_after_creation
 
-                # If both params are negative
+                # Set default retention policy if both params are <= 0
                 if _evict_after_creation <= 0 and _evict_after_last_access <= 0:
                     if timeout and timeout > 0:
                         # Use legacy parameter timeout if it is set.
