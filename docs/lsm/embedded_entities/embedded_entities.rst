@@ -155,8 +155,8 @@ When using the simple lifecycle, this is supported out of the box by wrapping th
 
 The following sections describe 3 flavours of update flows through examples.
 
-Please refer to the <TBD> section for more information on how to track embedded entities across updates
-when using a custom lifecycle.
+Please refer to the :ref:`Tracking embedded entities when using a custom lifecycle<using_custom_lifecycle>` section
+below for more information on how to track embedded entities across updates when using a custom lifecycle.
 
 
 Update flow with implicit deletion
@@ -179,6 +179,8 @@ If an embedded entity is removed during an update, the file content will reflect
     :language: inmanta
     :caption: main.cf
 
+TODO code explanation
+
 Update flow with explicit deletion
 **********************************
 
@@ -200,6 +202,7 @@ update, we have to make sure to remove it from disk explicitly.
     :language: inmanta
     :caption: main.cf
 
+TODO code explanation
 
 Update flow with mutually explicit desired state
 ************************************************
@@ -214,6 +217,7 @@ migration from cluster A to cluster B:
 
 For these more involved update scenarios we recommend updating the lifecycle specifically for this update.
 
+.. _using_custom_lifecycle:
 
 
 Tracking embedded entities when using a custom lifecycle
@@ -223,16 +227,15 @@ To be able to track added and removed embedded entities across the update, all t
 relevant lifecycle states (i.e. all states traversed during an update) need to be
 provided with the following attributes:
 
- - previous_attr_set_on_validate
- - previous_attr_set_on_export
+* previous_attr_set_on_validate
+* previous_attr_set_on_export
 
 The domain of valid values for these attributes is [``"candidate"``, ``"active"``, ``"rollback"``, ``null``].
 
-During each step of the update, the :py:meth:`inmanta_plugins.lsm.insert_removed_embedded_entities<inmanta_plugins.lsm.insert_removed_embedded_entities>`
+During each step of the update, the ``insert_removed_embedded_entities``
 plugin will compare two sets of attributes (the "current" set and the "previous" set) to determine which embedded entities were added or removed.
-The plugin will accordingly set the following boolean attributes on the relevant embedded entities: ``_removed`` and ``_added``. The model can
-then use these values to implement custom logic.
-
+The plugin will accordingly set the following boolean attributes on the relevant embedded entities: ``_removed`` and ``_added``. These values can
+then be used in the model to implement custom logic.
 
 
 .. note::
@@ -240,27 +243,27 @@ then use these values to implement custom logic.
     parameters of the ``insert_removed_embedded_entities`` plugin.
 
 
-During a validation compile:
-    1. Current set
+1. During a validation compile:
+    * Current set
         - if the current instance is being validated:
              - The current set is the set defined by the ``validate_self`` parameter.
 
         - if another instance is being validated:
              - The current set is the set defined by the ``validate_others`` parameter.
 
-    2. Previous set
+    * Previous set
         - The previous set is the set defined by the ``previous_attr_set_on_validate`` parameter.
 
-During a non-validation compile:
-
-    1. Current set
+2. During an exporting compile:
+    * Current set
         - The current set is the active attributes set
 
-    2. Previous set
-
+    * Previous set
         - The previous set is the set defined by the ``previous_attr_set_on_export`` parameter.
 
 
+We recommend to manually go through all the states that are part of the update, think about which
+two sets should be compared at each step and set the parameters accordingly.
 
 
 .. _legacy_no_strict_modifier_enforcement:
