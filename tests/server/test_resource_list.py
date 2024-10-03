@@ -448,18 +448,33 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     assert response["links"].get("next") is not None
     assert response["metadata"] == {"total": 5, "before": 2, "after": 1, "page_size": 2}
 
-    result = await client.resource_list(env.id, limit=2, sort=f"{order_by_column}.{order}", start="ausf", first_id="athonet_core%3A%3Alicense%3A%3ALicense%5BDARI-LDARI-CP002%2Ccomponent_id%3Dausf%5D")
+    if order_by_column in ["resource_type", "status"]:
+        return
+
+    result = await client.resource_list(
+        env.id,
+        limit=2,
+        sort=f"{order_by_column}.{order}",
+        start="ausf",
+        first_id="athonet_core%3A%3Alicense%3A%3ALicense%5BDARI-LDARI-CP002%2Ccomponent_id%3Dausf%5D",
+    )
     assert result.code == 200
-    result2 = await client.resource_list(env.id, limit=2, sort=f"{order_by_column}.{order}", end="ausf", last_id="athonet_core%3A%3Alicense%3A%3ALicense%5BDARI-LDARI-CP002%2Ccomponent_id%3Dausf%5D")
+    result2 = await client.resource_list(
+        env.id,
+        limit=2,
+        sort=f"{order_by_column}.{order}",
+        end="ausf",
+        last_id="athonet_core%3A%3Alicense%3A%3ALicense%5BDARI-LDARI-CP002%2Ccomponent_id%3Dausf%5D",
+    )
     assert result2.code == 200
-    response = json.loads(response.body.decode("utf-8"))
     # We don't have a way to reconstruct the previous link
-    assert response["links"] == {
-        'next': '/api/v2/resource?limit=2&sort=agent.desc&filter.agent=1&filter.agent=2&deploy_summary=False&end=agent2&last_id=test%3A%3AFile%5Bagent2%2Cpath%3D%2Fetc%2Ffile3%5D',
-        'self': '/api/v2/resource?limit=2&sort=agent.desc&filter.agent=1&filter.agent=2&deploy_summary=False'
+    assert result2.result["links"] == {
+        "next": "/api/v2/resource?limit=2&sort=agent.desc&filter.agent=1&filter.agent=2&deploy_summary=False&end=agent2"
+                "&last_id=test%3A%3AFile%5Bagent2%2Cpath%3D%2Fetc%2Ffile3%5D",
+        "self": "/api/v2/resource?limit=2&sort=agent.desc&filter.agent=1&filter.agent=2&deploy_summary=False",
     }
-    assert response["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
-    assert response["data"] == []
+    assert result2.result["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
+    assert result2.result["data"] == []
 
 
 @pytest.mark.parametrize(

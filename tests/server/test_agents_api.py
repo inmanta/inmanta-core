@@ -225,8 +225,10 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert response.code == 200
     response = json.loads(response.body.decode("utf-8"))
     # We don't have a way to reconstruct the previous link
-    assert response["links"] == {'first': '/api/v2/agents?limit=1&sort=last_failover.asc&filter.status=paused',
-                                 'prev': '/api/v2/agents?limit=1&sort=last_failover.asc&filter.status=paused&last_id=zzzz'}
+    assert response["links"] == {
+        "first": "/api/v2/agents?limit=1&sort=last_failover.asc&filter.status=paused",
+        "prev": "/api/v2/agents?limit=1&sort=last_failover.asc&filter.status=paused&last_id=zzzz",
+    }
     assert response["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
     assert response["data"] == []
 
