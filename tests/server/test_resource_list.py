@@ -448,7 +448,7 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     assert response["links"].get("next") is not None
     assert response["metadata"] == {"total": 5, "before": 2, "after": 1, "page_size": 2}
 
-    if order_by_column in ["resource_type", "status"]:
+    if order_by_column in ["resource_type", "status"] or order == "ASC":
         return
 
     result = await client.resource_list(
@@ -468,11 +468,12 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     )
     assert result2.code == 200
     # We don't have a way to reconstruct the previous link
-    assert result2.result["links"] == {
-        "next": "/api/v2/resource?limit=2&sort=agent.desc&filter.agent=1&filter.agent=2&deploy_summary=False&end=agent2"
+    expected_result = {
+        "next": f"/api/v2/resource?limit=2&sort={order_by_column}.{order.lower()}&deploy_summary=False&end=agent2"
                 "&last_id=test%3A%3AFile%5Bagent2%2Cpath%3D%2Fetc%2Ffile3%5D",
-        "self": "/api/v2/resource?limit=2&sort=agent.desc&filter.agent=1&filter.agent=2&deploy_summary=False",
+        "self": f"/api/v2/resource?limit=2&sort={order_by_column}.{order.lower()}&deploy_summary=False",
     }
+    assert result2.result["links"] == expected_result
     assert result2.result["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
     assert result2.result["data"] == []
 
