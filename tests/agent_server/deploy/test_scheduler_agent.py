@@ -50,7 +50,7 @@ async def retry_limited_fast(
     """
     Override defaults for the retry_limited function.
 
-    This test case has many invocations of it, where very fast resolution is expected, so we increase test
+    The tests in this module have many invocations of it, where very fast resolution is expected, so we increase test
     performance by polling frequently and setting a low timeout.
     """
     await util.retry_limited(fun, timeout=timeout, interval=interval)
