@@ -24,7 +24,7 @@ from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
 from typing import Optional
 
-from inmanta import data
+from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import Resource
@@ -366,28 +366,12 @@ class ResourceScheduler(TaskManager):
         if deployment_result is DeploymentResult.NEW:
             raise ValueError("report_resource_state should not be called to register new resources")
 
-        def propagate_events(details: ResourceDetails) -> None:
-            # TODO: consider introducing "event_listener: bool" for less trigger-happy events
-            #       => introduce in iso7, make mandatory in iso8
-            if details.attributes.get("send_event", False):
-                provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
-                if provides:
-                    # do not pass deploying tasks because for event propagation we really want to start a new one,
-                    # even if the current intent is already being deployed
-                    self._work.deploy_with_context(provides, deploying=set())
-
         async with self._scheduler_lock:
             # refresh resource details for latest model state
             details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
-            if details is None:
-                # The reported resource state is for a stale resource that doesn't even exist anymore in the latest model.
-                # It has no relevance at all anymore.
-                return
-            if details.attribute_hash != attribute_hash:
+            if details is None or details.attribute_hash != attribute_hash:
                 # The reported resource state is for a stale resource and therefore no longer relevant for state updates.
-                # We do still need to send events to its listeners.
-                if deployment_result is not None:
-                    propagate_events(details)
+                # There is also no need to send out events because a newer version will have been scheduled.
                 return
             state: ResourceState = self._state.resource_state[resource]
             state.status = status
@@ -398,7 +382,20 @@ class ResourceScheduler(TaskManager):
                 self._work.finished_deploy(resource)
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
-                propagate_events(details)
+                # propagate events
+                if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
+                    provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
+                    # TODO: add changelog entry regarding receive_events
+                    event_listeners: Set[ResourceIdStr] = {
+                        dependant for dependant in provides
+                        if (dependant_details := self._state.resources.get(dependant, None)) is not None
+                        # default to True for backward compatibility, i.e. not all resources have the field
+                        if dependant_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
+                    }
+                    if event_listeners:
+                        # do not pass deploying tasks because for event propagation we really want to start a new one,
+                        # even if the current intent is already being deployed
+                        self._work.deploy_with_context(event_listeners, deploying=set())
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
