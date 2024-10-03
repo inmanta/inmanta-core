@@ -317,7 +317,7 @@ class AgentCache:
             timeout: Optional[int],
             evict_after_last_access: float,
             evict_after_creation: float,
-            method_name: str,
+            key: str,
         ) -> tuple[float, float]:
             """
             This method is a backwards compatibility layer to compute a "new-style" retention policy (i.e. that is using
@@ -336,7 +336,7 @@ class AgentCache:
                 it was last accessed.
             :param evict_after_creation: This cache item will be considered stale this number of seconds after
                 entering the cache.
-            :param method_name: Name of the cached
+            :param key: Key for this cache entry
             """
             _evict_after_last_access: float
             _evict_after_creation: float
@@ -359,9 +359,9 @@ class AgentCache:
                     if evict_after_creation > 0 and timeout and timeout > 0:
                         LOGGER.warning(
                             "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
-                            "for cached method %s. Cached entries will be kept in the cache for %.2fs "
+                            "for cache entry %s. Cached entries will be kept in the cache for %.2fs "
                             "after entering it.",
-                            method_name,
+                            key,
                             _evict_after_creation,
                         )
             else:
@@ -382,7 +382,6 @@ class AgentCache:
         acceptable = {"resource"}
         args = {k: v for k, v in kwargs.items() if k in acceptable and k not in ignore}
         others = sorted([k for k in kwargs.keys() if k not in acceptable and k not in ignore])
-        method_name = key
         for k in others:
             key = f"{k},{repr(kwargs[k])}" + key
         try:
@@ -405,7 +404,7 @@ class AgentCache:
                             timeout=timeout,
                             evict_after_last_access=evict_after_last_access,
                             evict_after_creation=evict_after_creation,
-                            method_name=method_name,
+                            key=key,
                         )
                         self.cache_value(
                             key=key,
