@@ -25,10 +25,26 @@ import uuid
 
 import pydantic
 
-# TODO: work out how reference can have secrets as well
-# TODO: can we add the resolving logic and "relations" between the pydantic classes?
-# TODO: should we introduce a distinction between normal values and secret references so that they are never sent back to the server?
-#       this can also be used for binary values for example (like in files)
+
+T = typing.TypeVar("T", bound=object|str|float|int|bool)
+""" A typevar for the type that reference can point to. The provided bound is mostly for documentation
+purposes. object is for opaque types that the compiler cannot do anything with. The other types the 
+compiler knows how to handle.
+"""
+
+class Reference(typing.Generic[T]):
+    """ A generic reference to a value.
+    """
+
+
+class ValueReference:
+    pass
+
+class AttributeReference:
+    pass
+
+
+### PoC
 
 
 class ValueReferenceModel(pydantic.BaseModel):

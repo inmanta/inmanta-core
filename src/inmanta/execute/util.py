@@ -43,7 +43,7 @@ class Unknown(AnyType):
 
 
 @stable_api
-class ValueReference(AnyType):
+class Reference(AnyType):
     """
     An instance of this class is used to indicate that this value is a reference and can only be resolved
     at execution time in agent.

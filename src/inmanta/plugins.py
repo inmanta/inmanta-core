@@ -277,7 +277,7 @@ class PluginValue:
 
         :param value: The value to validate
         """
-        if isinstance(value, (execute_util.Unknown, execute_util.ValueReference)):
+        if isinstance(value, (execute_util.Unknown, execute_util.Reference)):
             # Value is not known, it can not be validated
             return False
 
@@ -698,7 +698,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 return arg
             elif isinstance(arg, execute_util.Unknown) and self.is_accept_unknowns():
                 return arg
-            elif isinstance(arg, execute_util.ValueReference) and self.is_accept_value_references():
+            elif isinstance(arg, execute_util.Reference) and self.is_accept_value_references():
                 return arg
             else:
                 return DynamicProxy.return_value(arg)
@@ -749,7 +749,7 @@ def plugin(
     :param emits_statements: Set to true if this plugin emits new statements that the compiler should execute. This is only
                              required for complex plugins such as integrating a template engine.
     :param allow_unknown: Set to true if this plugin accepts Unknown values as valid input.
-    :param allow_value_reference: Set to true if this plugin accepts ValueReference values as valid input
+    :param allow_reference: Set to true if this plugin accepts Reference values as valid input
     """
 
     def curry_name(
