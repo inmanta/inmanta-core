@@ -204,17 +204,17 @@ def modules_repo(git_modules_dir) -> str:
     E-> H
     D-> F,G
     """
-    make_module_simple_deps(reporoot, "A", ["B", "C", "D"], project=True)
-    make_module_simple_deps(reporoot, "B")
-    c = make_module_simple_deps(reporoot, "C", ["E", "F", "E::a"], version="3.0")
-    add_file(c, "model/a.cf", "import modI", "add mod C::a", "3.2")
-    make_module_simple_deps(reporoot, "D", ["F", "G"])
-    e = make_module_simple_deps(reporoot, "E", ["H"], version="3.0")
-    add_file(e, "model/a.cf", "import modJ", "add mod E::a", "3.2")
-    make_module_simple_deps(reporoot, "F")
-    make_module_simple_deps(reporoot, "G")
-    make_module_simple_deps(reporoot, "H")
-    make_module_simple_deps(reporoot, "I")
-    make_module_simple_deps(reporoot, "J")
+    make_module_simple_deps(reporoot, "a", ["b", "c", "d"], project=True)
+    make_module_simple_deps(reporoot, "b")
+    c = make_module_simple_deps(reporoot, "c", ["e", "f", "e::a"], version="3.0")
+    add_file(c, "model/a.cf", "import modi", "add mod c::a", "3.2")
+    make_module_simple_deps(reporoot, "d", ["f", "g"])
+    e = make_module_simple_deps(reporoot, "e", ["h"], version="3.0")
+    add_file(e, "model/a.cf", "import modj", "add mod e::a", "3.2")
+    make_module_simple_deps(reporoot, "f")
+    make_module_simple_deps(reporoot, "g")
+    make_module_simple_deps(reporoot, "h")
+    make_module_simple_deps(reporoot, "i")
+    make_module_simple_deps(reporoot, "j")
 
     return reporoot
