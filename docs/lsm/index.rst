@@ -5,7 +5,7 @@ Inmanta Lifecycle Service Manager
 *********************************
 
 
-The Inmanta LSM is an active component that governs the lifeycle of services in the orchestration model. LSM extends the
+The Inmanta LSM is an active component that governs the lifecycle of services in the orchestration model. LSM extends the
 Orchestration Engine (OrE) and Resource Controller (ResC) with a service catalog, a service inventory and a lifecycle manager.
 
 .. image:: ../_static/architecture.png
@@ -63,7 +63,7 @@ Creating service entities
 =========================
 .. _intro_example:
 
-Service entities are :ref:`entities <lang-entity>` that extend ``lsm::ServiceEntity``
+Service entities are :ref:`entities <lang-entity>` that extend ``lsm::ServiceEntity``.
 We define attributes for the service entity the same way as for entities. We can also define a modifier for the attribute.
 If no modifier is defined for an attribute, it will be ``rw`` by default.
 Here is an example of an entity definition where the modifier of the ``address`` attribute is set to ``rw+``.
@@ -79,7 +79,7 @@ We also need to add a lifecycle and a name to the service. This is done by creat
     :linenos:
     :language: inmanta
     :lines: 30-36
-    :lineno-start: 25
+    :lineno-start: 30
 
 It's also possible to define a service identity for a service. For more information, see :ref:`service_identity`.
 
@@ -158,7 +158,7 @@ source state, a target state and an error state. The following events can trigge
 
 - the creation of the service instance: The state of the new service instance is set to the start state defined in the state machine. Set attributes provided with the API call are stored in the candidate_attributes set of the instance.
 - ``auto``: This transfer is automatically performed when the lifecycle arrives in the source state. Auto transfers can be disabled by adding a configuration option.
-- ``api set state`` call: When a set state API call is performed with matching source and target states
+- ``api_set_state`` call: When a set state API call is performed with matching source and target states
 - ``on_update``: Transfers marked as on_update are executed when a PATCH is performed on a service instance. The update attributes are stored based on the target_operation or error_operation attribute.
 - ``on_delete``: Transfers marked as on_delete are executed when a DELETE is performed on a service instance.
 - resource based: This transfer is triggered when the orchestrator finishes deploying the resources that this service instance consists off.
@@ -219,7 +219,7 @@ Glossary
         entity defines the attributes of a :term:`service instance` and the lifecycle state machine.
 
     service instance
-        The lifecycle manager manages the lifeycle of service instance.
+        The lifecycle manager manages the lifecycle of service instance.
 
 Dict Path Library
 -----------------

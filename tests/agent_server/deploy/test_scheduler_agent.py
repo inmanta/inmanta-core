@@ -119,6 +119,11 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
 
     def __init__(self):
         self.executors = {}
+        self._managed_executors: list[ManagedExecutor] = []
+
+    def register_managed_executor(self, agent_name: str, executor: ManagedExecutor) -> None:
+        self.executors[agent_name] = executor
+        self._managed_executors.append(executor)
 
     def reset_executor_counters(self) -> None:
         for ex in self.executors.values():
