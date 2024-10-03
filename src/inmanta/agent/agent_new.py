@@ -316,6 +316,7 @@ class Agent(SessionEndpoint):
 
         return dir_map
 
+    # TODO h missing change if agent is paused and then resumed
     async def resume_agent(self, name: str) -> Apireturn:
         """
         Resume the scheduler / a particular agent. Depending on the provided name, one or the other will be impacted by this
@@ -333,8 +334,6 @@ class Agent(SessionEndpoint):
             except LookupError:
                 return 404, "No such agent"
 
-        # We don't need to restart it, through the executor manager, because either the executor is still there or
-        # it will be recreated when needed
         return 200, f"{name} has been resumed"
 
     async def stop_agent(self, name: str) -> Apireturn:

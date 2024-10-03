@@ -557,9 +557,9 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
-    assert summary["by_state"]["available"] == 0
-    assert summary["by_state"]["deploying"] == 1
-    assert summary["by_state"]["deployed"] == 2
+    assert summary["by_state"]["available"] == 0, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["deploying"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
     assert len(resumed_children) == 1
     assert len(resumed_children.values()) == 1
