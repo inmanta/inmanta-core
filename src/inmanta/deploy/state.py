@@ -37,6 +37,21 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
     def provides_view(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
         return self.reverse_mapping()
 
+    def get_all_provides_transitively(self, resource: ResourceIdStr) -> set[ResourceIdStr]:
+        """
+        This method returns all the provides (transitively) of the given resource. The returned
+        set also includes the resource that is passed as a parameter to this method.
+        """
+        provides_mapping = self.provides_view()
+        result = set()
+        work = {resource}
+        while work:
+            current_resources = work.pop()
+            if current_resources != resource:
+                result.add(current_resources)
+            provides = provides_mapping.get(current_resources, set())
+            work.update(provides)
+        return result
 
 @dataclass(frozen=True)
 class ResourceDetails:
@@ -65,10 +80,12 @@ class ResourceStatus(StrEnum):
     HAS_UPDATE: Resource's operational state does not match latest desired state, as far as we know. Either the resource
         has never been (successfully) deployed, or was deployed for a different desired state or a compliance check revealed a
         diff.
+    UNDEFINED: The resource status is undefined, because it has an unknown attribute.
     """
 
     UP_TO_DATE = enum.auto()
     HAS_UPDATE = enum.auto()
+    UNDEFINED = enum.auto()
 
 
 class DeploymentResult(StrEnum):
@@ -85,6 +102,23 @@ class DeploymentResult(StrEnum):
     DEPLOYED = enum.auto()
     FAILED = enum.auto()
 
+class BlockedStatus(StrEnum):
+    """
+    YES: The resource will retain its blocked status within this model version. For example: A resource that has unknowns
+         or depends on a resource with unknowns.
+    TRANSIENT: The resource is blocked but the blocked status may get resolved with the model version.
+               For example: The dependency of the resource failed to deploy.
+    NO: The resource is not blocked
+    """
+    YES = enum.auto()
+    TRANSIENT = enum.auto()
+    NO = enum.auto()
+
+    def is_blocked(self) -> bool:
+        """
+        Return True iff the resource is currently blocked.
+        """
+        return self is not BlockedStatus.NO
 
 @dataclass
 class ResourceState:
@@ -96,6 +130,7 @@ class ResourceState:
     #   https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
     status: ResourceStatus
     deployment_result: DeploymentResult
+    blocked: BlockedStatus
 
 
 @dataclass(kw_only=True)
@@ -103,7 +138,8 @@ class ModelState:
     """
     The state of the model, meaning both resource intent and resource state.
 
-    Invariant: all resources in the current model, and only those, exist in the resources and resource_state mappings.
+    Invariant: all resources in the current model, and only those, exist in the resources (also undeployable resources)
+               and resource_state mappings.
     """
 
     version: int
@@ -130,6 +166,61 @@ class ModelState:
         self.resource_state.clear()
         self.types_per_agent.clear()
 
+    def block_resource(self, resource: ResourceIdStr, details: ResourceDetails, transient: bool) -> None:
+        """
+        Mark the given resource as blocked, i.e. it's not deployable.
+
+        :param transient: True iff the given resource is blocked transitively. It's blocked because one of its dependencies
+                          is blocked.
+        """
+        self.resources[resource] = details
+        blocked_status = BlockedStatus.TRANSIENT if transient else BlockedStatus.YES
+        if resource in self.resource_state:
+            if not transient:
+                self.resource_state[resource].status = ResourceStatus.UNDEFINED
+            self.resource_state[resource].blocked = blocked_status
+        else:
+            resource_status = ResourceStatus.UNDEFINED if not transient else ResourceStatus.HAS_UPDATE
+            self.resource_state[resource] = ResourceState(
+                status=resource_status, deployment_result=DeploymentResult.NEW, blocked=blocked_status
+            )
+            self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
+        self.dirty.discard(resource)
+
+    def block_provides(self, resources: set[ResourceIdStr]) -> set[ResourceIdStr]:
+        """
+        Marks the provides of the given resources as blocked.
+
+        Must be called under the scheduler lock. This method assumes that all the resources of the model version
+        are populated in the resources dictionary.
+
+        :return: The set of dependent resources that were marked as blocked (transitively).
+        """
+        result = set()
+        for resource in resources:
+            for dependent_resource in self.requires.get_all_provides_transitively(resource):
+                self.block_resource(dependent_resource, self.resources[dependent_resource], transient=True)
+                result.add(dependent_resource)
+        return result
+
+    def unblock_resource(self, resource: ResourceIdStr) -> None:
+        """
+        Mark the given resource no longer as undefined and its provides (transitively) if none of their requires is blocked
+        anymore.
+
+        Must be called under the scheduler lock. This method assumes that all the resources of the model version
+        are populated in the resources dictionary.
+        """
+        for res in {resource} | self.requires.get_all_provides_transitively(resource):
+            requires: Set[ResourceIdStr] = self.requires.get(res, set())
+            is_blocked = any(self.resource_state[r].blocked.is_blocked() for r in requires)
+            if not is_blocked:
+                self.resource_state[res].blocked = BlockedStatus.NO
+                if self.resource_state[res].status is ResourceStatus.UNDEFINED:
+                    self.resource_state[res].status = ResourceStatus.HAS_UPDATE
+                if self.resource_state[res].status is ResourceStatus.HAS_UPDATE:
+                    self.dirty.add(res)
+
     def update_desired_state(
         self,
         resource: ResourceIdStr,
@@ -141,9 +232,10 @@ class ModelState:
         self.resources[resource] = details
         if resource in self.resource_state:
             self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
+            self.resource_state[resource].blocked = BlockedStatus.NO
         else:
             self.resource_state[resource] = ResourceState(
-                status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW
+                status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW, blocked=BlockedStatus.NO
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.add(resource)

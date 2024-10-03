@@ -24,13 +24,13 @@ from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
 from typing import Optional
 
-from inmanta import data
+from inmanta import data, const
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import ConfigurationModel
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import work
-from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
+from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus, BlockedStatus
 from inmanta.deploy.tasks import DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask
 from inmanta.protocol import Client
@@ -261,23 +261,33 @@ class ResourceScheduler(TaskManager):
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
     ) -> None:
         async with self._intent_lock:
-            deployable_resources: Mapping[ResourceIdStr, ResourceDetails] = {
-                r: d for r, d in resources.items() if d.is_undeployable()
-            }
             # Inspect new state and compare it with the old one before acquiring scheduler the lock.
             # This is safe because we only read intent-related state here, for which we've already acquired the lock
-            deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - deployable_resources
+            deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
             for resource in deleted_resources:
                 self._work.delete_resource(resource)
 
             new_desired_state: set[ResourceIdStr] = set()
+            # Only contains the direct undeployable resources, not the transitive ones.
+            blocked_resources: set[ResourceIdStr] = set()
+            # Resources that were undeployable in a previous model version, but got unblocked. Not the transitive ones.
+            unblocked_resources: set[ResourceIdStr] = set()
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
-            for resource, details in deployable_resources:
-                if (
-                    resource not in self._state.resources
-                    or details.attribute_hash != self._state.resources[resource].attribute_hash
-                ):
+            for resource, details in resources.items():
+                if details.status is const.ResourceState.undefined:
+                    blocked_resources.add(resource)
+                    self._work.delete_resource(resource)
+                elif resource in self._state.resources:
+                    # It's a resource we know.
+                    if self._state.resource_state[resource].status is ResourceStatus.UNDEFINED:
+                        # The resource has been undeployable in previous versions, but not anymore.
+                        unblocked_resources.add(resource)
+                    elif details.attribute_hash != self._state.resources[resource].attribute_hash:
+                        # The desired state has changed.
+                        new_desired_state.add(resource)
+                else:
+                    # It's a resource we don't know yet.
                     new_desired_state.add(resource)
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
@@ -298,12 +308,22 @@ class ResourceScheduler(TaskManager):
             # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
             async with self._scheduler_lock:
                 self._state.version = version
+                for resource in blocked_resources:
+                    self._state.block_resource(resource, details, transient=False)
                 for resource in new_desired_state:
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
+
+                transitive_undeployable_resources: set[ResourceIdStr] = self._state.block_provides(
+                    resources=blocked_resources
+                )
+                for resource in unblocked_resources:
+                    self._state.unblock_resource(resource)
                 # Calculate in-progress deploys that have gone stale and update internal state accordingly
-                new_stale: Set[ResourceIdStr] = self._deploying.intersection(new_desired_state.union(deleted_resources))
+                new_stale: Set[ResourceIdStr] = self._deploying.intersection(
+                    new_desired_state | deleted_resources | blocked_resources
+                )
                 self._deploying.difference_update(new_stale)
                 self._deploying_stale.update(new_stale)
                 # ensure deploy for ALL dirty resources, not just the new ones
@@ -317,7 +337,7 @@ class ResourceScheduler(TaskManager):
                     self._state.drop(resource)
             # Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added
             # again by a deploy trigger (because we dropped them outside the lock).
-            for resource in deleted_resources:
+            for resource in deleted_resources | blocked_resources | transitive_undeployable_resources:
                 self._work.delete_resource(resource)
 
     def _start_for_agent(self, agent: str) -> None:

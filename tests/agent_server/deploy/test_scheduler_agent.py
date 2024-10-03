@@ -37,6 +37,7 @@ from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.data import ResourceIdStr
 from inmanta.deploy import state
+from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.util import retry_limited
 
@@ -196,7 +197,12 @@ async def agent(environment, config, event_loop):
 
 @pytest.fixture
 def make_resource_minimal(environment):
-    def make_resource_minimal(rid: ResourceIdStr, values: dict[str, object], requires: list[str]) -> state.ResourceDetails:
+    def make_resource_minimal(
+        rid: ResourceIdStr,
+        values: dict[str, object],
+        requires: list[str],
+        status: const.ResourceState = const.ResourceState.available,
+    ) -> state.ResourceDetails:
         """Produce a resource that is valid to the scheduler"""
         attributes = dict(values)
         attributes["requires"] = requires
@@ -211,10 +217,18 @@ def make_resource_minimal(environment):
         attribute_hash = m.hexdigest()
 
         return state.ResourceDetails(
-            resource_id=rid, attributes=attributes, attribute_hash=attribute_hash, status=const.ResourceState.available
+            resource_id=rid, attributes=attributes, attribute_hash=attribute_hash, status=status
         )
 
     return make_resource_minimal
+
+
+async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:
+    agent_queue = scheduler._work.agent_queues._agent_queues.get(agent_name)
+    if not agent_queue:
+        # Agent queue doesn't exist -> Tasks have not been queued yet
+        return False
+    return agent_queue._unfinished_tasks == 0
 
 
 async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
@@ -230,14 +244,7 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
     }
 
     await agent.scheduler._new_version(5, resources, make_requires(resources))
-
-    async def done():
-        agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent1")
-        if not agent_1_queue:
-            return False
-        return agent_1_queue._unfinished_tasks == 0
-
-    await retry_limited(done, 5)
+    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
 
     assert agent.executor_manager.executors["agent1"].execute_count == 2
 
@@ -282,13 +289,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     #   - ...
     #       => separate ticket!
 
-    def done():
-        agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent2")
-        if not agent_1_queue:
-            return False
-        return agent_1_queue._unfinished_tasks == 0
-
-    await retry_limited(done, 5)
+    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent2")
 
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 1
@@ -373,15 +374,7 @@ async def test_dryrun(agent: TestAgent, make_resource_minimal, monkeypatch):
 
     dryrun = uuid.uuid4()
     await agent.scheduler.dryrun(dryrun, 5)
-
-    async def done():
-        agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent1")
-        if not agent_1_queue:
-            return False
-        print(agent_1_queue._unfinished_tasks)
-        return agent_1_queue._unfinished_tasks == 0
-
-    await retry_limited(done, 5)
+    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
 
     assert agent.executor_manager.executors["agent1"].dry_run_count == 2
 
@@ -402,12 +395,117 @@ async def test_get_facts(agent: TestAgent, make_resource_minimal):
 
     await agent.scheduler.get_facts({"id": rid1})
 
-    async def done():
-        agent_1_queue = agent.scheduler._work.agent_queues._agent_queues.get("agent1")
-        if not agent_1_queue:
-            return False
-        return agent_1_queue._unfinished_tasks == 0
-
-    await retry_limited(done, 5)
+    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
 
     assert agent.executor_manager.executors["agent1"].facts_count == 1
+
+async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
+    """
+    Test whether unknowns are handled correctly by the scheduler.
+    """
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent1,name=2]")
+    rid3 = ResourceIdStr("test::Resource[agent1,name=3]")
+    rid4 = ResourceIdStr("test::Resource[agent1,name=4]")
+    rid5 = ResourceIdStr("test::Resource[agent1,name=5]")
+    rid6 = ResourceIdStr("test::Resource[agent1,name=6]")
+    rid7 = ResourceIdStr("test::Resource[agent1,name=7]")
+
+    def assert_resource_state(
+        resource: ResourceIdStr,
+        status: state.ResourceStatus,
+        deployment_result: state.DeploymentResult,
+        blocked_status: state.BlockedStatus,
+    ) -> None:
+        assert agent.scheduler._state.resource_state[resource].status is status
+        assert agent.scheduler._state.resource_state[resource].deployment_result is deployment_result
+        assert agent.scheduler._state.resource_state[resource].blocked is blocked_status
+
+    # TODO: Check types per agent
+
+    # rid4 is undefined due to an unknown
+    resources = {
+        ResourceIdStr(rid1): make_resource_minimal(
+            rid=rid1, values={"value": "a"}, requires=[rid2, rid3, rid4], status=const.ResourceState.skipped_for_undefined
+        ),
+        ResourceIdStr(rid2): make_resource_minimal(rid=rid2, values={"value": "a"}, requires=[rid5]),
+        ResourceIdStr(rid3): make_resource_minimal(rid=rid3, values={"value": "a"}, requires=[rid5, rid6]),
+        ResourceIdStr(rid4): make_resource_minimal(
+            rid=rid4, values={"value": "a"}, requires=[], status=const.ResourceState.undefined
+        ),
+        ResourceIdStr(rid5): make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid6): make_resource_minimal(rid=rid6, values={"value": "a"}, requires=[rid7]),
+        ResourceIdStr(rid7): make_resource_minimal(rid=rid7, values={"value": "a"}, requires=[]),
+    }
+    await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
+    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    assert len(agent.scheduler._state.resources) == 7
+    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
+
+
+    # rid1: transitively blocked on rid5 and rid6
+    # rid2: transitively blocked on rid5
+    # rid3: transitively blocked on rid5 and rid6
+    # rid4: deployed
+    # rid5: blocked because it has an unknown attribute
+    # rid6: blocked because it has an unknown attribute
+    # rid7: deployed
+    assert_resource_state(
+        rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT
+    )
+    assert_resource_state(
+        rid2, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT
+    )
+    assert_resource_state(
+        rid3, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT
+    )
+    assert_resource_state(
+        rid4, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
+    )
+    assert_resource_state(
+        rid5, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES
+    )
+    assert_resource_state(
+        rid6, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES
+    )
+    assert_resource_state(
+        rid7, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
+    )
+
+    # rid5 no longer has an unknown attribute
+    del resources[rid5]
+    resources[ResourceIdStr(rid5)] = make_resource_minimal(
+        rid=rid5, values={"value": "a"}, requires=[], status=const.ResourceState.available
+    )
+    await agent.scheduler._new_version(version=2, resources=resources, requires=make_requires(resources))
+    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    assert len(agent.scheduler._state.resources) == 7
+
+    # rid1: transitively blocked on rid6
+    # rid2: deployed
+    # rid3: transitively blocked on rid6
+    # rid4: deployed
+    # rid5: deployed
+    # rid6: blocked because it has an unknown attribute
+    # rid7: deployed
+    assert_resource_state(
+        rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT
+    )
+    assert_resource_state(
+        rid2, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
+    )
+    assert_resource_state(
+        rid3, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT
+    )
+    assert_resource_state(
+        rid4, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
+    )
+    assert_resource_state(
+        rid5, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
+    )
+    assert_resource_state(
+        rid6, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES
+    )
+    assert_resource_state(
+        rid7, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
+    )
