@@ -20,6 +20,7 @@ import logging.config
 import warnings
 from re import Pattern
 
+import pkg_resources
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
@@ -28,6 +29,7 @@ from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
+from packaging.requirements import Requirement
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -89,20 +91,19 @@ import time
 import traceback
 import uuid
 import venv
+import weakref
 from collections import abc
 from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
 from typing import Callable, Dict, Optional, Union
 
 import asyncpg
-import pkg_resources
 import psutil
 import py
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
@@ -1890,20 +1891,43 @@ def is_caplog_handler(handler: logging.Handler) -> bool:
 @pytest.fixture(scope="function", autouse=True)
 async def dont_remove_caplog_handlers(request, monkeypatch):
     """
-    Caplog captures log messages by attaching handlers to the root logger. This fixture makes sure the
-    inmanta.logging.FullLoggingConfig.apply_config() method doesn't remove any handlers that were added by the caplog fixture.
+    Caplog captures log messages by attaching handlers to the root logger. Applying a logging config with
+    `inmanta_logging.FullLoggingConfig.apply_config()` removes any existing logging configuration.
+    As such, this fixture puts a wrapper around the `apply_config()` method to make sure that:
+
+     * The pytest handlers are not removed/closed after the execution of the apply_config() method.
+     * The configured root log level is not altered by the call to apply_config().
     """
     original_apply_config = inmanta_logging.FullLoggingConfig.apply_config
 
-    def patched_apply_config(self) -> None:
-        caplog_handlers = [h for h in logging.root.handlers if is_caplog_handler(h)]
-        original_apply_config(self)
-        # Re-add caplog handlers that were removed by the call to apply_config()
-        for current_handler in caplog_handlers:
-            if current_handler not in logging.root.handlers:
-                logging.root.addHandler(current_handler)
+    def apply_config_wrapper(self) -> None:
+        # Make sure the root log level is not altered.
+        root_log_level: int = logging.root.level
+        # Save the caplog root handlers so that we can restore them after.
+        caplog_root_handler: list[logging.Handler] = [h for h in logging.root.handlers if is_caplog_handler(h)]
+        for current_handler in caplog_root_handler:
+            logging.root.removeHandler(current_handler)
+        # When the `apply_config()` method is called, the `logging._handlerList` is used to find all the handlers
+        # that should be closed. We remove the handlers from that list to prevent the handlers from being closed.
+        #
+        # This `logging._handlerList` is used to tear down the handlers in the reverse order with respect to the setup order.
+        # As such, this method should not alter the order. We assume the caplog handlers are entirely independent
+        # from any other handler. Like that the order only matters within the set of caplog handlers.
+        re_add_to_handler_list: list[weakref.ReferenceType] = [
+            weak_ref for weak_ref in logging._handlerList if is_caplog_handler(weak_ref())
+        ]
+        for weak_ref in re_add_to_handler_list:
+            logging._handlerList.remove(weak_ref)
 
-    monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "apply_config", patched_apply_config)
+        original_apply_config(self)
+
+        for weak_ref in re_add_to_handler_list:
+            logging._handlerList.append(weak_ref)
+        for current_handler in caplog_root_handler:
+            logging.root.addHandler(current_handler)
+        logging.root.setLevel(root_log_level)
+
+    monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "apply_config", apply_config_wrapper)
 
 
 @pytest.fixture(scope="session")
@@ -1921,8 +1945,11 @@ def index_with_pkgs_containing_optional_deps() -> str:
             path=os.path.join(tmpdirname, "pkg"),
             publish_index=pip_index,
             optional_dependencies={
-                "optional-a": [Requirement.parse("dep-a")],
-                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
+                "optional-a": [inmanta.util.parse_requirement(requirement="dep-a")],
+                "optional-b": [
+                    inmanta.util.parse_requirement(requirement="dep-b"),
+                    inmanta.util.parse_requirement(requirement="dep-c"),
+                ],
             },
         )
         for pkg_name in ["dep-a", "dep-b", "dep-c"]:

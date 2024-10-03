@@ -29,14 +29,14 @@ import pathlib
 import shutil
 import typing
 import uuid
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, cast
 
-import pkg_resources
-
 import inmanta.types
 import inmanta.util
+import packaging.requirements
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
@@ -76,8 +76,8 @@ class ResourceDetails:
     requires: Sequence[Id]
     attributes: dict[str, object]
 
-    def __init__(self, id: ResourceIdStr, version: int, attributes: dict[str, object]) -> None:
-        self.attributes = attributes
+    def __init__(self, id: ResourceIdStr, version: int, attributes: Mapping[str, object]) -> None:
+        self.attributes = dict(attributes)
         self.id = Id.parse_id(id).copy(version=version)
         self.rid = self.id.resource_str()
         self.rvid = self.id.resource_version_str()
@@ -162,6 +162,8 @@ class ExecutorBlueprint(EnvBlueprint):
         requirements and making sure they all share the same pip config.
         """
 
+        if not code:
+            raise ValueError("from_specs expects at least one resource install spec")
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
         pip_configs = [cd.blueprint.pip_config for cd in code]
@@ -297,7 +299,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
-                requirements=list(pkg_resources.parse_requirements(req)),
+                requirements=[packaging.requirements.Requirement(requirement_string=e) for e in req],
                 config=blueprint.pip_config,
             )
 
