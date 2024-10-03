@@ -415,7 +415,7 @@ async def test_get_facts(agent: TestAgent, make_resource_minimal):
 async def test_scheduler_priority(agent: TestAgent, environment, make_resource_minimal):
     """
     Ensure that the tasks are placed in the queue in the correct order
-    And that existing tasks in the queue are replaced if a task that
+    and that existing tasks in the queue are replaced if a task that
     does the same thing with higher priority is added to the queue
     """
 

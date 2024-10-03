@@ -147,7 +147,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         """
         return set(self._tasks_by_resource.get(resource, {}).keys())
 
-    def remove(self, task: tasks.Task) -> int:
+    def remove(self, task: tasks.Task) -> TaskPriority:
         """
         Removes the given task from its associated agent queue. Raises KeyError if it is not in the queue.
         Returns the priority at which the deleted task was queued.
@@ -160,7 +160,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
             del self._tasks_by_resource[task.resource]
         return queue_item.task.priority
 
-    def discard(self, task: tasks.Task) -> Optional[int]:
+    def discard(self, task: tasks.Task) -> Optional[TaskPriority]:
         """
         Removes the given task from its associated agent queue if it is present.
         Returns the priority at which the deleted task was queued, if it was at all.
@@ -392,12 +392,10 @@ class ScheduledWork:
                 # discard rather than remove because task may already be running, in which case we leave it run its course
                 # and simply add a new one
                 task: tasks.Deploy = tasks.Deploy(resource=resource)
-                task_priority: Optional[int] = self.agent_queues.discard(task)
+                task_priority: Optional[TaskPriority] = self.agent_queues.discard(task)
                 queued.remove(resource)
                 self._waiting[resource] = BlockedDeploy(
-                    task=PrioritizedTask(
-                        task=task, priority=TaskPriority(task_priority) if task_priority is not None else priority
-                    ),
+                    task=PrioritizedTask(task=task, priority=task_priority if task_priority is not None else priority),
                     # task was previously ready to execute => assume no other blockers than this one
                     blocked_on=new_blockers,
                 )
