@@ -137,7 +137,7 @@ class Agent(SessionEndpoint):
             await self.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
 
         async def interval_repair() -> None:
-            await self.scheduler.deploy(TaskPriority.INTERVAL_REPAIR)
+            await self.scheduler.repair(TaskPriority.INTERVAL_REPAIR)
 
         periodic_schedule("deploy", interval_deploy, self._deploy_interval, self._deploy_splay_value)
         periodic_schedule("repair", interval_repair, self._repair_interval, self._repair_splay_value)
