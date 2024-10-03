@@ -150,13 +150,28 @@ Depending on what the embedded entities are modeling, you might want to keep tra
 were added or removed during an update, in order to apply custom logic to them. This section describes how to track
 embedded entities during the update flow of a service.
 
-When using the simple lifecycle, this is supported out of the box by wrapping the call to ``lsm::all()`` with the
-:py:meth:`inmanta_plugins.lsm.insert_removed_embedded_entities<inmanta_plugins.lsm.insert_removed_embedded_entities>` plugin.
+When using the "simple" lifecycle, this is supported out of the box by wrapping the call to ``lsm::all()`` with the
+``insert_removed_embedded_entities`` plugin.
+
+During each step of the update, the ``insert_removed_embedded_entities``
+plugin will compare two sets of attributes (the "current" set and the "previous" set) to determine which embedded entities were added or removed.
+The plugin will accordingly set the following boolean attributes on the relevant embedded entities: ``_removed`` and ``_added``. These values can
+then be used in the model to implement custom logic.
+
+.. note::
+    The "simple" lifecycle defines out-of-the-box which pair of sets should be compared at each step of the update.
+    Please refer to the :ref:`Tracking embedded entities when using a custom lifecycle<using_custom_lifecycle>` section
+    below for more information on how to define which pairs should be compared when using a custom lifecycle.
+
+.. note::
+    To set a different naming scheme for these tracking attributes, use the ``removed_attribute`` and
+    ``added_attribute`` parameters of the ``insert_removed_embedded_entities`` plugin.
+
+
+
 
 The following sections describe 3 flavours of update flows through examples.
 
-Please refer to the :ref:`Tracking embedded entities when using a custom lifecycle<using_custom_lifecycle>` section
-below for more information on how to track embedded entities across updates when using a custom lifecycle.
 
 
 Update flow with implicit deletion
@@ -179,7 +194,6 @@ If an embedded entity is removed during an update, the file content will reflect
     :language: inmanta
     :caption: main.cf
 
-TODO code explanation
 
 Update flow with explicit deletion
 **********************************
@@ -202,7 +216,6 @@ update, we have to make sure to remove it from disk explicitly.
     :language: inmanta
     :caption: main.cf
 
-TODO code explanation
 
 Update flow with mutually explicit desired state
 ************************************************
@@ -232,15 +245,6 @@ provided with the following attributes:
 
 The domain of valid values for these attributes is [``"candidate"``, ``"active"``, ``"rollback"``, ``null``].
 
-During each step of the update, the ``insert_removed_embedded_entities``
-plugin will compare two sets of attributes (the "current" set and the "previous" set) to determine which embedded entities were added or removed.
-The plugin will accordingly set the following boolean attributes on the relevant embedded entities: ``_removed`` and ``_added``. These values can
-then be used in the model to implement custom logic.
-
-
-.. note::
-    To set a different naming scheme for these attributes, use the ``removed_attribute`` and ``added_attribute``
-    parameters of the ``insert_removed_embedded_entities`` plugin.
 
 
 1. During a validation compile:
