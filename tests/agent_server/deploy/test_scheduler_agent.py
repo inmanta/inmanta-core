@@ -710,9 +710,6 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
 
-    # TODO: test for scheduler state -> deployment result, resource status, dirty, ...?
-
-
 async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal):
     """
     Ensure that events are propagated when a deploy finishes
@@ -752,7 +749,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         }
         return {
             ResourceIdStr(rid): make_resource_minimal(
-                rid, values={"value": value, "send_event": send_event, FAIL_DEPLOY: fail}, requires=requires.get(rid, [])
+                rid, values={"value": value, const.RESOURCE_ATTRIBUTE_SEND_EVENTS: send_event, FAIL_DEPLOY: fail}, requires=requires.get(rid, [])
             )
             for rid, value, send_event, fail
             in [
@@ -976,7 +973,111 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
 
-    # TODO: test receive_events
+async def test_receive_events(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure that event propagation respects the receive_events attribute
+    """
+
+    rid_send = "test::Resource[root,name=send]"
+    rid_nosend = "test::Resource[root,name=nosend]"
+    rid_receive = "test::Resource[listen,name=receive]"
+    rid_noreceive = "test::Resource[deaf,name=noreceive]"
+    rid_defaultreceive = "test::Resource[listen,name=defaultreceive]"
+
+    def make_resources(
+        *,
+        version: int,
+        send_value: int,
+        nosend_value: int,
+        receive_value: int,
+        noreceive_value: int,
+        defaultreceive_value: int,
+    ) -> dict[ResourceIdStr, state.ResourceDetails]:
+        """
+        Returns five resources with a single attribute, whose value is set by the value parameters.
+
+        receive, noreceive and defaultreceive all require both send and nosend,
+        but only send sets send_event=True and only receive sets receive_events=True
+        """
+        return {
+            ResourceIdStr(rid): make_resource_minimal(
+                rid,
+                values={
+                    "value": value,
+                    const.RESOURCE_ATTRIBUTE_SEND_EVENTS: send_event,
+                    **(
+                        {
+                            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: receive_event,
+                        }
+                        if receive_event is not None
+                        else {}
+                    )
+                },
+                requires=requires
+            )
+            for rid, value, send_event, receive_event, requires
+            in [
+                (rid_send, send_value, True, True, []),
+                (rid_nosend, nosend_value, False, True, []),
+                (rid_receive, receive_value, True, True, [rid_send, rid_nosend]),
+                (rid_noreceive, noreceive_value, True, False, [rid_send, rid_nosend]),
+                (rid_defaultreceive, noreceive_value, True, None, [rid_send, rid_nosend]),
+            ]
+        }
+
+    # first release
+    resources = make_resources(
+        version=1, send_value=0, nosend_value=0, receive_value=0, noreceive_value=0, defaultreceive_value=0
+    )
+    await agent.scheduler._new_version(1, resources, make_requires(resources))
+
+    def done():
+        listen_queue = agent.scheduler._work.agent_queues._agent_queues.get("listen", None)
+        deaf_queue = agent.scheduler._work.agent_queues._agent_queues.get("deaf", None)
+        return all(
+            queue is not None and queue._unfinished_tasks == 0
+            for queue in (listen_queue, deaf_queue)
+        )
+
+    await retry_limited_fast(done)
+    assert agent.executor_manager.executors["root"].execute_count == 2
+    assert agent.executor_manager.executors["listen"].execute_count == 2
+    assert agent.executor_manager.executors["deaf"].execute_count == 1
+    assert len(agent.scheduler._work._waiting) == 0
+    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+
+    # reset counters
+    agent.executor_manager.reset_executor_counters()
+    # release change for send only
+    resources = make_resources(
+        version=2, send_value=1, nosend_value=0, receive_value=0, noreceive_value=0, defaultreceive_value=0
+    )
+    await agent.scheduler._new_version(2, resources, make_requires(resources))
+    # verify that listeners got events and noreceive did not
+    await retry_limited_fast(lambda: agent.executor_manager.executors["listen"].execute_count == 2)
+    assert agent.executor_manager.executors["root"].execute_count == 1
+    assert agent.executor_manager.executors["listen"].execute_count == 2
+    assert agent.executor_manager.executors["deaf"].execute_count == 0
+    assert len(agent.scheduler._work._waiting) == 0
+    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+
+    # reset counters
+    agent.executor_manager.reset_executor_counters()
+    # release change for nosend only
+    resources = make_resources(
+        version=3, send_value=1, nosend_value=1, receive_value=0, noreceive_value=0, defaultreceive_value=0
+    )
+    await agent.scheduler._new_version(3, resources, make_requires(resources))
+    # verify that no events were produced at all
+    await retry_limited_fast(lambda: agent.executor_manager.executors["root"].execute_count == 1)
+    assert agent.executor_manager.executors["root"].execute_count == 1
+    assert agent.executor_manager.executors["listen"].execute_count == 0
+    assert agent.executor_manager.executors["deaf"].execute_count == 0
+    assert len(agent.scheduler._work._waiting) == 0
+    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
 
 async def test_removal(agent: TestAgent, make_resource_minimal):
