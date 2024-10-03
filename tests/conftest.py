@@ -20,6 +20,7 @@ import logging.config
 import warnings
 from re import Pattern
 
+import pkg_resources
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
@@ -28,6 +29,7 @@ from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
+from packaging.requirements import Requirement
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -96,14 +98,12 @@ from configparser import ConfigParser
 from typing import Callable, Dict, Optional, Union
 
 import asyncpg
-import pkg_resources
 import psutil
 import py
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
@@ -1936,8 +1936,11 @@ def index_with_pkgs_containing_optional_deps() -> str:
             path=os.path.join(tmpdirname, "pkg"),
             publish_index=pip_index,
             optional_dependencies={
-                "optional-a": [Requirement.parse("dep-a")],
-                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
+                "optional-a": [inmanta.util.parse_requirement(requirement="dep-a")],
+                "optional-b": [
+                    inmanta.util.parse_requirement(requirement="dep-b"),
+                    inmanta.util.parse_requirement(requirement="dep-c"),
+                ],
             },
         )
         for pkg_name in ["dep-a", "dep-b", "dep-c"]:

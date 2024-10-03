@@ -16,12 +16,12 @@
     Contact: code@inmanta.com
 """
 
+import importlib.metadata
 import logging
 import os
 from collections import defaultdict
 from typing import Any, Generic, Optional, TypeVar
 
-import pkg_resources
 import yaml
 
 from inmanta import data
@@ -147,8 +147,8 @@ class FeatureManager:
         packages = ["inmanta-oss", "inmanta", "inmanta-core"]
         for package in packages:
             try:
-                return pkg_resources.get_distribution(package).version
-            except pkg_resources.DistributionNotFound:
+                return importlib.metadata.version(package)
+            except importlib.metadata.PackageNotFoundError:
                 pass
 
         LOGGER.warning("Couldn't determine product version. Make sure inmanta is properly installed.")
