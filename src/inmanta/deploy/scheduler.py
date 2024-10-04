@@ -24,7 +24,7 @@ from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
 from typing import Optional
 
-from inmanta import data
+from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import ConfigurationModel
@@ -138,11 +138,7 @@ class ResourceScheduler(TaskManager):
         # tasks that have been picked up while this set contains only those tasks for which we've already committed. For each
         # deploy task, there is a (typically) short window of time where it's considered in progress by the agent queue, but
         # it has not yet started on the actual deploy, i.e. it will still see updates to the resource intent.
-        self._deploying: set[ResourceIdStr] = set()
-        # Set of resources for which a concrete stale deploy is in progress, i.e. we've committed for a given intent and
-        # that intent has gone stale since
-        # TODO: is this still useful?
-        self._deploying_stale: set[ResourceIdStr] = set()
+        self._deploying_latest: set[ResourceIdStr] = set()
 
         self.environment = environment
         self.client = client
@@ -174,7 +170,7 @@ class ResourceScheduler(TaskManager):
         Trigger a deploy
         """
         async with self._scheduler_lock:
-            self._work.deploy_with_context(self._state.dirty, deploying=self._deploying)
+            self._work.deploy_with_context(self._state.dirty, deploying=self._deploying_latest)
 
     async def repair(self) -> None:
         """
@@ -182,7 +178,7 @@ class ResourceScheduler(TaskManager):
         """
         async with self._scheduler_lock:
             self._state.dirty.update(self._state.resources.keys())
-            self._work.deploy_with_context(self._state.dirty, deploying=self._deploying)
+            self._work.deploy_with_context(self._state.dirty, deploying=self._deploying_latest)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         resources = await self._build_resource_mappings_from_db(version)
@@ -298,14 +294,12 @@ class ResourceScheduler(TaskManager):
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
-                # Calculate in-progress deploys that have gone stale and update internal state accordingly
-                new_stale: Set[ResourceIdStr] = self._deploying.intersection(new_desired_state.union(deleted_resources))
-                self._deploying.difference_update(new_stale)
-                self._deploying_stale.update(new_stale)
+                # Update set of in-progress non-stale deploys by trimming resources with new state
+                self._deploying_latest.difference_update(new_desired_state, deleted_resources)
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
                     self._state.dirty,
-                    deploying=self._deploying,
+                    deploying=self._deploying_latest,
                     added_requires=added_requires,
                     dropped_requires=dropped_requires,
                 )
@@ -349,7 +343,7 @@ class ResourceScheduler(TaskManager):
             else:
                 if for_deploy:
                     # still under lock => can safely add to non-stale in-progress set
-                    self._deploying.add(resource)
+                    self._deploying_latest.add(resource)
                 return result
 
     async def report_resource_state(
@@ -362,29 +356,37 @@ class ResourceScheduler(TaskManager):
     ) -> None:
         if deployment_result is DeploymentResult.NEW:
             raise ValueError("report_resource_state should not be called to register new resources")
+
         async with self._scheduler_lock:
             # refresh resource details for latest model state
             details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
             if details is None or details.attribute_hash != attribute_hash:
-                # The reported resource state is for a stale resource and therefore no longer relevant.
-                if deployment_result is not None:
-                    # if this was a deploy, update internal deploying state
-                    self._deploying_stale.remove(resource)
+                # The reported resource state is for a stale resource and therefore no longer relevant for state updates.
+                # There is also no need to send out events because a newer version will have been scheduled.
                 return
             state: ResourceState = self._state.resource_state[resource]
             state.status = status
             if deployment_result is not None:
-                self._deploying.remove(resource)
+                # first update state, then send out events
+                self._deploying_latest.remove(resource)
                 state.deployment_result = deployment_result
                 self._work.finished_deploy(resource)
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
-                # TODO: test
                 # propagate events
-                if details.attributes.get("send_event", False):
+                if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
                     provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
-                    if provides:
-                        self._work.deploy_with_context(provides, deploying=self._deploying)
+                    event_listeners: Set[ResourceIdStr] = {
+                        dependant
+                        for dependant in provides
+                        if (dependant_details := self._state.resources.get(dependant, None)) is not None
+                        # default to True for backward compatibility, i.e. not all resources have the field
+                        if dependant_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
+                    }
+                    if event_listeners:
+                        # do not pass deploying tasks because for event propagation we really want to start a new one,
+                        # even if the current intent is already being deployed
+                        self._work.deploy_with_context(event_listeners, deploying=set())
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
