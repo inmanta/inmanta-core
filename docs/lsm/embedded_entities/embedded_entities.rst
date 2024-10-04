@@ -147,10 +147,36 @@ Tracking embedded entities across updates
 
 
 Depending on what the embedded entities are modeling, you might want to keep track of which embedded entities
-were added or removed during an update. This section describes how to track embedded entities during the update flow of
-a service. When using the simple lifecycle, this is supported out of the box by wrapping the call to ``lsm::all()`` with the :py:meth:`inmanta_plugins.lsm.insert_removed_embedded_entities<inmanta_plugins.lsm.insert_removed_embedded_entities>` plugin.
+were added or removed during an update, in order to apply custom logic to them. This section describes how to track
+embedded entities during the update flow of a service.
+
+When using the "simple" lifecycle, this is supported out of the box by passing ``include_purged_embedded_entities=true``
+to the ``lsm::all()`` plugin call.
+
+.. note::
+    This feature requires ``strict_modifier_enforcement=true`` to be able to correctly identify which
+    embedded entities are added or removed. Make sure this is set for all the relevant bindings.
+
+
+During each step of the update, two sets of attributes (the "current" set and the "previous" set) will be compared to
+determine which embedded entities were added or removed. The plugin will accordingly set the following boolean
+attributes on the relevant embedded entities: ``_removed`` and ``_added``. These values can
+then be used in the model to implement custom logic.
+
+.. note::
+    The "simple" lifecycle defines out-of-the-box which pair of sets should be compared at each step of the update.
+    Please refer to the :ref:`Tracking embedded entities when using a custom lifecycle<using_custom_lifecycle>` section
+    below for more information on how to define which pairs should be compared when using a custom lifecycle.
+
+.. note::
+    To set a different naming scheme for these tracking attributes, use the ``removed_attribute`` and
+    ``added_attribute`` parameters of the ``lsm::all()`` plugin.
+
+
+
 
 The following sections describe 3 flavours of update flows through examples.
+
 
 
 Update flow with implicit deletion
@@ -172,6 +198,7 @@ If an embedded entity is removed during an update, the file content will reflect
     :linenos:
     :language: inmanta
     :caption: main.cf
+
 
 Update flow with explicit deletion
 **********************************
@@ -207,6 +234,113 @@ migration from cluster A to cluster B:
 
 
 For these more involved update scenarios we recommend updating the lifecycle specifically for this update.
+
+.. _using_custom_lifecycle:
+
+
+Tracking embedded entities when using a custom lifecycle
+********************************************************
+
+To track updates, lsm needs to know which attribute set is considered the 'previous' state and which is the 'current' state.
+This depends on the lifecycle and which direction we are moving: are we updating or rolling back.
+
+It also depends on if an instance is being validated or not. When doing a compile where the instance is in a validation state, if the instance is not being validated, it pretends to be in the state it was in prior to the update i.e. it pretends its current attributes are the ones it had before the update.
+If the instance is being validated, it pretends to be in the post-update state i.e. it pretends its current attributes are the ones it will have after the update.
+
+The ``lsm::all()`` plugin derives this from the following attributes of the lifecycle states on the update path:
+
+* previous_attr_set_on_validate
+* previous_attr_set_on_export
+
+The domain of valid values for these attributes is [``"candidate"``, ``"active"``, ``"rollback"``, ``null``].
+
+
+The following logic is used to determine which is the current and which is the previous attribute set
+
+================================= ================================== ===================
+instance is being validated         previous                            current
+================================= ================================== ===================
+instance is being validated        ``previous_attr_set_on_validate``   ``validate_self``
+instance is not being validated   ``previous_attr_set_on_export``     active_attributes
+================================= ================================== ===================
+
+
+
+When building a custom lifecycle, to be able to use the tracking plugin, these fields have to be set correctly.
+To do so, the lifecycle has to be analyzed. The remainder of this chapter describes a method to perform this analysis by starting from the main states, and working towards the validation states.
+We will apply this to the ``lsm::fsm::simple`` lifecycle.
+
+1. First step is to have clear view of the lifecycle. This can be done by plotting a graph of it. This can be done by adding ``lsm::render_dot(lsm::fsm::simple)`` to a model and compiling it. This will create a file called ``fsm.svg`` that contains the lifecycle.
+2. Second step is to make a table for each state involved in the update, including the state just before the start of the update and the one after it. Ignore ``_failed`` states, as their config will be identical to the associated success state. For each validating transfer, add the source state a second time.
+
+====================== ============ ==================== ===================== ========= =========================
+  state                 validating   current attributes   previous attributes   is like   operation since is like
+====================== ============ ==================== ===================== ========= =========================
+  up
+  update_start
+  update_start          yes
+  update_rejected
+  update_acknowledged
+  update_inprogress
+  rollback
+====================== ============ ==================== ===================== ========= =========================
+
+3. Fill in states before the update and states where we are actually deploying the update. The ``current attributes`` will always be ``active`` and ``previous attributes`` depends on the direction we are moving in. For the ``up`` state, we are not updating, so there is no ``previous attributes``. For updates, ``previous attributes`` is always ``rollback`` (the old active set has been promoted to the ``rollback`` set). For rollback scenarios, the ``previous attributes`` are always ``candidate``.
+
+====================== ============ ==================== ===================== ========= =========================
+  state                 validating   current attributes   previous attributes   is like   operation since is like
+====================== ============ ==================== ===================== ========= =========================
+  up                                 active               --
+  update_start
+  update_start          yes
+  update_rejected
+  update_acknowledged
+  update_inprogress                  active               rollback
+  rollback                           active               candidate
+====================== ============ ==================== ===================== ========= =========================
+
+
+4. For each state that remains, indicate which other state it pretends to be like: the state prior to the update or the state after the update. Also add all operations performed between the state and the "pretended" state.
+
+====================== ============ ==================== ===================== =================== =========================
+  state                 validating   current attributes   previous attributes   is like             operation since is like
+====================== ============ ==================== ===================== =================== =========================
+  up                                 active               --                    --                  --
+  update_start                                                                  up                  --
+  update_start          yes                                                     update_inprogress   promote/backwards
+  update_rejected                                                               up                  --
+  update_acknowledged                                                           up                  --
+  update_inprogress                  active               rollback              --                  --
+  rollback                           active               candidate             --                  --
+====================== ============ ==================== ===================== =================== =========================
+
+5. Copy over the state of the ``is like`` column and apply the operations.
+
+====================== ============ ==================== ===================== =================== =========================
+  state                 validating   current attributes   previous attributes   is like             operation since is like
+====================== ============ ==================== ===================== =================== =========================
+  up                                 active               --                    --                  --
+  update_start                       active               --                    up                  --
+  update_start          yes          candidate            active                update_inprogress   promote/backwards
+  update_rejected                    active               --                    up                  --
+  update_acknowledged                active               --                    up                  --
+  update_inprogress                  active               rollback              --                  --
+  rollback                           active               candidate             --                  --
+====================== ============ ==================== ===================== =================== =========================
+
+
+6. Finally, translate to the state variables as follows:
+
+   1. For all non-validating states, double check that ``current_attributes==active``
+   2. For all non-validating states, set ``previous_attr_set_on_export`` to the value of ``previous attributes``
+   3. For all validating states, double check that ``current_attributes==state.validate_self``
+   4. For all validating states, set ``previous_attr_set_on_validate`` to the value of ``previous attributes``
+   5. Perform the same operations on the associated ``_failed`` states
+
+If any of the checks above failed, either you made a mistake or the state tracking plugin can't be used for this feature and you will have to build one yourself.
+
+
+
 
 .. _legacy_no_strict_modifier_enforcement:
 
