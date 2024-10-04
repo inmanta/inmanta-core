@@ -508,3 +508,31 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     assert_resource_state(rid5, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
     assert_resource_state(rid6, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
     assert_resource_state(rid7, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+
+    # rid8 and rid9 are both undefined
+    rid8 = ResourceIdStr("test::Resource[agent1,name=8]")
+    rid9 = ResourceIdStr("test::Resource[agent1,name=9]")
+    resources = {
+        rid8: make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[], status=const.ResourceState.undefined),
+        rid9: make_resource_minimal(rid=rid9, values={"value": "a"}, requires=[rid8], status=const.ResourceState.undefined),
+    }
+    await agent.scheduler._new_version(version=4, resources=resources, requires=make_requires(resources))
+    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    assert len(agent.scheduler._state.resources) == 2
+    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
+
+    assert_resource_state(rid8, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES)
+    assert_resource_state(rid9, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES)
+
+    # rid8 is no longer undefined
+    resources = {
+        rid8: make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[], status=const.ResourceState.available),
+        rid9: make_resource_minimal(rid=rid9, values={"value": "a"}, requires=[rid8], status=const.ResourceState.undefined),
+    }
+    await agent.scheduler._new_version(version=5, resources=resources, requires=make_requires(resources))
+    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    assert len(agent.scheduler._state.resources) == 2
+    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
+
+    assert_resource_state(rid8, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+    assert_resource_state(rid9, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES)

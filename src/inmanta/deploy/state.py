@@ -23,6 +23,7 @@ from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
+from queue import SimpleQueue
 
 from inmanta import const
 from inmanta.data.model import ResourceIdStr, ResourceType
@@ -37,21 +38,26 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
     def provides_view(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
         return self.reverse_mapping()
 
-    def get_all_provides_transitively(self, resource: ResourceIdStr) -> set[ResourceIdStr]:
+    def get_all_provides_transitively(self, resource: ResourceIdStr | set[ResourceIdStr]) -> list[ResourceIdStr]:
         """
         This method returns all the provides (transitively) of the given resource. The returned
         set also includes the resource that is passed as a parameter to this method.
         """
+        input_set = {resource} if isinstance(resource, str) else set(resource)
+        work = SimpleQueue()
+        for elem in input_set:
+            work.put_nowait(elem)
         provides_mapping = self.provides_view()
-        result = set()
-        work = {resource}
-        while work:
-            current_resources = work.pop()
-            if current_resources != resource:
-                result.add(current_resources)
-            provides = provides_mapping.get(current_resources, set())
-            work.update(provides)
-        return result
+        result = {}
+        while not work.empty():
+            current_resource = work.get()
+            result[current_resource] = None
+            provides = provides_mapping.get(current_resource, set())
+            for elem in provides:
+                work.put_nowait(elem)
+        for elem in input_set:
+            result.pop(elem, None)
+        return list(result.keys())
 
 
 @dataclass(frozen=True)
@@ -182,7 +188,8 @@ class ModelState:
         if resource in self.resource_state:
             if not transient:
                 self.resource_state[resource].status = ResourceStatus.UNDEFINED
-            self.resource_state[resource].blocked = blocked_status
+            if self.resource_state[resource].blocked is not BlockedStatus.YES:
+                self.resource_state[resource].blocked = blocked_status
         else:
             resource_status = ResourceStatus.UNDEFINED if not transient else ResourceStatus.HAS_UPDATE
             self.resource_state[resource] = ResourceState(
@@ -201,10 +208,9 @@ class ModelState:
         :return: The set of dependent resources that were marked as blocked (transitively).
         """
         result = set()
-        for resource in resources:
-            for dependent_resource in self.requires.get_all_provides_transitively(resource):
-                self.block_resource(dependent_resource, self.resources[dependent_resource], transient=True)
-                result.add(dependent_resource)
+        for dependent_resource in self.requires.get_all_provides_transitively(resources):
+            self.block_resource(dependent_resource, self.resources[dependent_resource], transient=True)
+            result.add(dependent_resource)
         return result
 
     def unblock_resource(self, resource: ResourceIdStr) -> None:
@@ -215,15 +221,21 @@ class ModelState:
         Must be called under the scheduler lock. This method assumes that all the resources of the model version
         are populated in the resources dictionary.
         """
-        for res in {resource} | self.requires.get_all_provides_transitively(resource):
-            requires: Set[ResourceIdStr] = self.requires.get(res, set())
-            is_blocked = any(self.resource_state[r].blocked.is_blocked() for r in requires)
+
+        def _unblock(resource: ResourceIdStr) -> None:
+            self.resource_state[resource].blocked = BlockedStatus.NO
+            if self.resource_state[resource].status is ResourceStatus.UNDEFINED:
+                self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
+            if self.resource_state[resource].status is ResourceStatus.HAS_UPDATE:
+                self.dirty.add(resource)
+
+        _unblock(resource)
+        for res in self.requires.get_all_provides_transitively(resource):
+            is_blocked = self.resource_state[res].status is ResourceStatus.UNDEFINED or any(
+                self.resource_state[r].blocked.is_blocked() for r in self.requires.get(res, set())
+            )
             if not is_blocked:
-                self.resource_state[res].blocked = BlockedStatus.NO
-                if self.resource_state[res].status is ResourceStatus.UNDEFINED:
-                    self.resource_state[res].status = ResourceStatus.HAS_UPDATE
-                if self.resource_state[res].status is ResourceStatus.HAS_UPDATE:
-                    self.dirty.add(res)
+                _unblock(res)
 
     def update_desired_state(
         self,
