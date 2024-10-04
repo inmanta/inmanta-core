@@ -286,8 +286,12 @@ class AgentCache:
         self,
         key: str,
         function: Callable[..., Any],
-        evict_after_last_access: float = 60,
-        evict_after_creation: float = 0,
+        # deprecated parameter, kept for backwards compatibility
+        for_version: Optional[bool] = None,
+        # deprecated parameter, kept for backwards compatibility
+        timeout: Optional[int] = None,
+        evict_after_last_access: float = 60.0,
+        evict_after_creation: float = 0.0,
         ignore: set[str] = set(),
         cache_none: bool = True,
         call_on_delete: Optional[Callable[[Any], None]] = None,
@@ -307,6 +311,64 @@ class AgentCache:
             entering the cache.
 
         """
+
+        def _get_retention_policy(
+            for_version: Optional[bool],
+            timeout: Optional[int],
+            evict_after_last_access: float,
+            evict_after_creation: float,
+        ) -> tuple[float, float]:
+            """
+            This method is a backwards compatibility layer to compute a "new-style" retention policy (i.e. that is using
+            evict_after_last_access and/or evict_after_creation semantics) from the parameters of the `get_or_else` method.
+
+            :param for_version: Compatibility rules for this deprecated parameter:
+                If passed and True, entries will expire <evict_after_last_access>s after their last access (60s default)
+                If passed and False, entries will expire a certain number of seconds after entering the cache. This time
+                is either <evict_after_creation>, <timeout> or a default of 5000s, whichever is set, inspected in this order.
+            :param timeout: Compatibility rules for this deprecated parameter:
+                If `for_version=False` and the new-style parameter `evict_after_creation` is not set, this parameter
+                controls the expiry time (in seconds) of entries after entering the cache.
+                If `for_version` is not set, this parameter is an alias for the new-style parameter `evict_after_creation`.
+                (If both are set, the new-style parameter `evict_after_creation` has precedence)
+            :param evict_after_last_access: This cache item will be considered stale this number of seconds after
+                it was last accessed.
+            :param evict_after_creation: This cache item will be considered stale this number of seconds after
+                entering the cache.
+            """
+            _evict_after_last_access: float
+            _evict_after_creation: float
+
+            # Legacy `for_version` parameter is used, compute
+            # evict_after_last_access and evict_after_creation
+            if for_version is not None:
+                if for_version:
+                    _evict_after_creation = 0.0
+                    _evict_after_last_access = evict_after_last_access if evict_after_last_access > 0 else 60.0
+                else:
+                    _evict_after_last_access = 0.0
+                    if evict_after_creation > 0:
+                        _evict_after_creation = evict_after_creation
+                    elif timeout and timeout > 0:
+                        _evict_after_creation = timeout
+                    else:
+                        _evict_after_creation = 5000.0
+
+            else:
+                _evict_after_last_access = evict_after_last_access
+                _evict_after_creation = evict_after_creation
+
+                # Set default retention policy if both params are <= 0
+                if _evict_after_creation <= 0 and _evict_after_last_access <= 0:
+                    if timeout and timeout > 0:
+                        # Use legacy parameter timeout if it is set.
+                        _evict_after_creation = timeout
+                    else:
+                        # keep entries alive in the cache for 60s after their last usage by default.
+                        _evict_after_last_access = 60.0
+
+            return _evict_after_last_access, _evict_after_creation
+
         acceptable = {"resource"}
         args = {k: v for k, v in kwargs.items() if k in acceptable and k not in ignore}
         others = sorted([k for k in kwargs.keys() if k not in acceptable and k not in ignore])
@@ -327,12 +389,18 @@ class AgentCache:
                 except KeyError:
                     value = function(**kwargs)
                     if cache_none or value is not None:
+                        _evict_after_last_access, _evict_after_creation = _get_retention_policy(
+                            for_version=for_version,
+                            timeout=timeout,
+                            evict_after_last_access=evict_after_last_access,
+                            evict_after_creation=evict_after_creation,
+                        )
                         self.cache_value(
                             key=key,
                             value=value,
                             call_on_delete=call_on_delete,
-                            evict_after_last_access=evict_after_last_access,
-                            evict_after_creation=evict_after_creation,
+                            evict_after_last_access=_evict_after_last_access,
+                            evict_after_creation=_evict_after_creation,
                             **args,
                         )
             with self.addLock:
