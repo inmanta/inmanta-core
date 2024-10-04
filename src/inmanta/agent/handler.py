@@ -141,6 +141,16 @@ def cache(
         myignore = set(ignore)
         sig = inspect.signature(f)
         myargs = list(sig.parameters.keys())[1:]  # Starts at 1 because 0 is self.
+        if evict_after_creation > 0 and timeout and timeout > 0:
+            LOGGER.warning(
+                "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
+                "for cached method %s. The `timeout` parameter will be ignored and cached entries will "
+                "be kept in the cache for %.2fs after entering it. The `timeout` parameter should no"
+                "longer be used. Please refer to the handler documentation "
+                "for more information about setting a retention policy.",
+                f.__name__,
+                evict_after_creation,
+            )
 
         def wrapper(self: HandlerAPI[TResource], *args: object, **kwds: object) -> object:
             kwds.update(dict(zip(myargs, args)))

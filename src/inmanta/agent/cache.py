@@ -356,14 +356,6 @@ class AgentCache:
                     else:
                         _evict_after_creation = 5000.0
 
-                    if evict_after_creation > 0 and timeout and timeout > 0:
-                        LOGGER.warning(
-                            "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
-                            "for cache entry %s. Cached entries will be kept in the cache for %.2fs "
-                            "after entering it.",
-                            key,
-                            _evict_after_creation,
-                        )
             else:
                 _evict_after_last_access = evict_after_last_access
                 _evict_after_creation = evict_after_creation

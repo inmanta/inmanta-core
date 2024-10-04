@@ -1064,6 +1064,17 @@ async def test_cache_warning(time_machine, caplog):
             self.increment_miss_counter()
             return "x1"
 
+    log_contains(
+        caplog,
+        "inmanta.agent.handler",
+        logging.WARNING,
+        "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
+        "for cached method test_warning_and_override. The `timeout` parameter will be ignored and cached entries will "
+        "be kept in the cache for 20.00s after entering it. The `timeout` parameter should no"
+        "longer be used. Please refer to the handler documentation "
+        "for more information about setting a retention policy.",
+    )
+
     agent_cache = AgentCache()
     test = CacheWarningTest(agent_cache)
 
@@ -1082,12 +1093,3 @@ async def test_cache_warning(time_machine, caplog):
     with agent_cache:
         assert "x1" == test.test_warning_and_override(dummy_arg=1)  # cache miss
         test.check_n_cache_misses(1)
-
-    log_contains(
-        caplog,
-        "inmanta.agent.cache",
-        logging.WARNING,
-        "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
-        "for cache entry dummy_arg,1test_warning_and_override. Cached entries will be kept in the cache for 20.00s "
-        "after entering it.",
-    )
