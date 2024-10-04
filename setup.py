@@ -15,11 +15,11 @@ requires = [
     "docstring-parser>=0.10,<0.17",
     "email-validator>=1,<3",
     "jinja2~=3.0",
-    "logfire~=0.46",
+    "logfire>=0.46,<2.0",
     "more-itertools>=8,<11",
     "opentelemetry-instrumentation-asyncpg~=0.46b0",
-    # leave upper bound floating for fast-moving and extremely stable packaging
-    "packaging>=21.3",
+    # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
+    "packaging>=21.3,<24.2",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
@@ -29,7 +29,7 @@ requires = [
     "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
-    "setuptools<71",
+    "setuptools",
     "texttable~=1.0",
     "tornado~=6.0",
     # lower bound because of ilevkivskyi/typing_inspect#100
