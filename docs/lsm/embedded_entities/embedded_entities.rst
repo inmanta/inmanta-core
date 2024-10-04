@@ -150,12 +150,12 @@ Depending on what the embedded entities are modeling, you might want to keep tra
 were added or removed during an update, in order to apply custom logic to them. This section describes how to track
 embedded entities during the update flow of a service.
 
-When using the "simple" lifecycle, this is supported out of the box by wrapping the call to ``lsm::all()`` with the
-``insert_removed_embedded_entities`` plugin.
+When using the "simple" lifecycle, this is supported out of the box by passing ``include_purged_embedded_entities=true``
+to the ``lsm::all()`` plugin call.
 
-During each step of the update, the ``insert_removed_embedded_entities``
-plugin will compare two sets of attributes (the "current" set and the "previous" set) to determine which embedded entities were added or removed.
-The plugin will accordingly set the following boolean attributes on the relevant embedded entities: ``_removed`` and ``_added``. These values can
+During each step of the update, two sets of attributes (the "current" set and the "previous" set) will be compared to
+determine which embedded entities were added or removed. The plugin will accordingly set the following boolean
+attributes on the relevant embedded entities: ``_removed`` and ``_added``. These values can
 then be used in the model to implement custom logic.
 
 .. note::
@@ -165,7 +165,7 @@ then be used in the model to implement custom logic.
 
 .. note::
     To set a different naming scheme for these tracking attributes, use the ``removed_attribute`` and
-    ``added_attribute`` parameters of the ``insert_removed_embedded_entities`` plugin.
+    ``added_attribute`` parameters of the ``lsm::all()`` plugin.
 
 
 
