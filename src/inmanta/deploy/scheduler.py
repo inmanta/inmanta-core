@@ -24,13 +24,13 @@ from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
 from typing import Optional
 
-from inmanta import data, const
+from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import ConfigurationModel
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import work
-from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus, BlockedStatus
+from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask
 from inmanta.protocol import Client
@@ -315,9 +315,7 @@ class ResourceScheduler(TaskManager):
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
 
-                transitive_undeployable_resources: set[ResourceIdStr] = self._state.block_provides(
-                    resources=blocked_resources
-                )
+                transitive_undeployable_resources: set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 for resource in unblocked_resources:
                     self._state.unblock_resource(resource)
                 # Calculate in-progress deploys that have gone stale and update internal state accordingly

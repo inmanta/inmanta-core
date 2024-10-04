@@ -53,6 +53,7 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
             work.update(provides)
         return result
 
+
 @dataclass(frozen=True)
 class ResourceDetails:
     resource_id: ResourceIdStr
@@ -102,6 +103,7 @@ class DeploymentResult(StrEnum):
     DEPLOYED = enum.auto()
     FAILED = enum.auto()
 
+
 class BlockedStatus(StrEnum):
     """
     YES: The resource will retain its blocked status within this model version. For example: A resource that has unknowns
@@ -110,6 +112,7 @@ class BlockedStatus(StrEnum):
                For example: The dependency of the resource failed to deploy.
     NO: The resource is not blocked
     """
+
     YES = enum.auto()
     TRANSIENT = enum.auto()
     NO = enum.auto()
@@ -119,6 +122,7 @@ class BlockedStatus(StrEnum):
         Return True iff the resource is currently blocked.
         """
         return self is not BlockedStatus.NO
+
 
 @dataclass
 class ResourceState:

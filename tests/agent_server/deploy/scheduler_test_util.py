@@ -16,8 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import hashlib
-import json
 import uuid
 from typing import Collection, Mapping, Set
 
@@ -29,15 +27,13 @@ from inmanta.data import ResourceIdStr
 from inmanta.data.model import LEGACY_PIP_DEFAULT, ResourceType
 from inmanta.deploy.state import ResourceDetails
 from inmanta.protocol import Client
-from inmanta.protocol.common import custom_json_encoder
-from inmanta.resources import Id
-from inmanta.types import JsonType
 from utils import retry_limited
 
 
 def make_requires(resources: Mapping[ResourceIdStr, ResourceDetails]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
     """Convert resources from the scheduler input format to its requires format"""
     return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
+
 
 dummyblueprint = ExecutorBlueprint(
     pip_config=LEGACY_PIP_DEFAULT,

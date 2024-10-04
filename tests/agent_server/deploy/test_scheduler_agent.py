@@ -216,9 +216,7 @@ def make_resource_minimal(environment):
         m.update(character.encode("utf-8"))
         attribute_hash = m.hexdigest()
 
-        return state.ResourceDetails(
-            resource_id=rid, attributes=attributes, attribute_hash=attribute_hash, status=status
-        )
+        return state.ResourceDetails(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash, status=status)
 
     return make_resource_minimal
 
@@ -399,6 +397,7 @@ async def test_get_facts(agent: TestAgent, make_resource_minimal):
 
     assert agent.executor_manager.executors["agent1"].facts_count == 1
 
+
 async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     """
     Test whether unknowns are handled correctly by the scheduler.
@@ -445,27 +444,13 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5: deployed
     # rid6: deployed
     # rid7: deployed
-    assert_resource_state(
-        rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT
-    )
-    assert_resource_state(
-        rid2, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
-    )
-    assert_resource_state(
-        rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
-    )
-    assert_resource_state(
-        rid4, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES
-    )
-    assert_resource_state(
-        rid5, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
-    )
-    assert_resource_state(
-        rid6, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
-    )
-    assert_resource_state(
-        rid7, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
-    )
+    assert_resource_state(rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT)
+    assert_resource_state(rid2, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+    assert_resource_state(rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+    assert_resource_state(rid4, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES)
+    assert_resource_state(rid5, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+    assert_resource_state(rid6, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+    assert_resource_state(rid7, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
 
     # rid4 becomes deployable
     # rid5 and rid6 are undefined
@@ -492,27 +477,13 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5: blocked because it has an unknown attribute
     # rid6: blocked because it has an unknown attribute
     # rid7: deployed
-    assert_resource_state(
-        rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT
-    )
-    assert_resource_state(
-        rid2, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.TRANSIENT
-    )
-    assert_resource_state(
-        rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.TRANSIENT
-    )
-    assert_resource_state(
-        rid4, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
-    )
-    assert_resource_state(
-        rid5, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES
-    )
-    assert_resource_state(
-        rid6, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES
-    )
-    assert_resource_state(
-        rid7, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
-    )
+    assert_resource_state(rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT)
+    assert_resource_state(rid2, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.TRANSIENT)
+    assert_resource_state(rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.TRANSIENT)
+    assert_resource_state(rid4, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+    assert_resource_state(rid5, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
+    assert_resource_state(rid6, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
+    assert_resource_state(rid7, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
 
     # rid5 no longer has an unknown attribute
     resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[], status=const.ResourceState.available)
@@ -530,24 +501,10 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5: deployed
     # rid6: blocked because it has an unknown attribute
     # rid7: deployed
-    assert_resource_state(
-        rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT
-    )
-    assert_resource_state(
-        rid2, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
-    )
-    assert_resource_state(
-        rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.TRANSIENT
-    )
-    assert_resource_state(
-        rid4, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
-    )
-    assert_resource_state(
-        rid5, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
-    )
-    assert_resource_state(
-        rid6, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES
-    )
-    assert_resource_state(
-        rid7, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO
-    )
+    assert_resource_state(rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT)
+    assert_resource_state(rid2, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+    assert_resource_state(rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.TRANSIENT)
+    assert_resource_state(rid4, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+    assert_resource_state(rid5, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+    assert_resource_state(rid6, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
+    assert_resource_state(rid7, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
