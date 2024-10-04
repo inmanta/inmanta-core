@@ -263,10 +263,10 @@ instance is not being validated   ``previous_attr_set_on_export``     active_att
 
 When building a custom lifecycle, to be able to use the tracking plugin, these fields have to be set correctly. 
 To do so, the lifecycle has to be analyzed. The remainder of this chapter describes a method to perform this analysis by starting from the main states, and working towards the validation states. 
-We will aplly this to the ``lsm::fsm::simple`` lifecycle.
+We will apply this to the ``lsm::fsm::simple`` lifecycle.
 
 1. First step is to have clear view of the lifecycle. This can be done by plotting a graph of it. This can be done by adding ``lsm::render_dot(lsm::fsm::simple)`` to a model and compiling it. This will create a file called ``fsm.svg`` that contains the lifecycle.
-2. Second step is to make a table for each state involved in the update, including the state just before the start of the update and the one after it. Ignore ``_failed`` states, as their config will be identical to the associated success state. For each validating transfer, add the start state a second time. 
+2. Second step is to make a table for each state involved in the update, including the state just before the start of the update and the one after it. Ignore ``_failed`` states, as their config will be identical to the associated success state. For each validating transfer, add the source state a second time. 
 
 ====================== ============ ==================== ===================== ========= ========================= 
   state                 validating   current attributes   previous attributes   is like   operation since is like  
@@ -314,8 +314,8 @@ We will aplly this to the ``lsm::fsm::simple`` lifecycle.
 ====================== ============ ==================== ===================== =================== ========================= 
   state                 validating   current attributes   previous attributes   is like             operation since is like  
 ====================== ============ ==================== ===================== =================== ========================= 
-  up                                 active               -                     -                   -                        
-  update_start                       active               -                     up                  -                        
+  up                                 active               --                    --                  --                       
+  update_start                       active               --                    up                  --                       
   update_start          yes          candidate            active                update_inprogress   promote/backwards        
   update_rejected                    active               --                    up                  --                       
   update_acknowledged                active               --                    up                  --                       
@@ -331,6 +331,8 @@ We will aplly this to the ``lsm::fsm::simple`` lifecycle.
    3. For all validating states, double check that ``current_attributes==state.validate_self``
    4. For all validating states, set ``previous_attr_set_on_validate`` to the value of ``previous attributes``
    5. Perform the same operations on the associated ``_failed`` states
+
+If any of the checks above failed, either you made a mistake or the state tracking plugin can't be used for this feature and you will have to build one yourself. 
 
 
 
