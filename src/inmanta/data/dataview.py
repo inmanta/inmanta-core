@@ -26,7 +26,6 @@ from typing import Generic, Mapping, Optional, TypeVar, Union, cast
 from uuid import UUID
 
 from asyncpg import Record
-from coverage.debug import filter_text
 
 import inmanta.data
 from inmanta import data
