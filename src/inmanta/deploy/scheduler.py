@@ -376,9 +376,9 @@ class ResourceScheduler(TaskManager):
                 # propagate events
                 if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
                     provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
-                    # TODO: add changelog entry regarding receive_events
                     event_listeners: Set[ResourceIdStr] = {
-                        dependant for dependant in provides
+                        dependant
+                        for dependant in provides
                         if (dependant_details := self._state.resources.get(dependant, None)) is not None
                         # default to True for backward compatibility, i.e. not all resources have the field
                         if dependant_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
