@@ -1,0 +1,5 @@
+description: >
+  Make the cache `get_or_else` method backwards compatible with
+  regards to the `for_version` and `timeout` parameters.
+change-type: patch
+destination-branches: [master]

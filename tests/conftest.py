@@ -20,6 +20,7 @@ import logging.config
 import warnings
 from re import Pattern
 
+import pkg_resources
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
@@ -28,6 +29,7 @@ from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
+from packaging.requirements import Requirement
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -96,14 +98,12 @@ from configparser import ConfigParser
 from typing import Callable, Dict, Optional, Union
 
 import asyncpg
-import pkg_resources
 import psutil
 import py
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
@@ -556,7 +556,7 @@ def reset_all_objects():
     V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
     auth.AuthJWTConfig.reset()
-    InmantaLoggerConfig.clean_instance(root_handlers_to_remove=[h for h in logging.root.handlers if not is_caplog_handler(h)])
+    InmantaLoggerConfig.clean_instance()
     AsyncHTTPClient.configure(None)
 
 
@@ -760,7 +760,7 @@ def log_state_tcp_ports(request, log_file):
 
 
 @pytest.fixture(scope="function")
-async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
+async def server_config(inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
     reset_metrics()
 
     with tempfile.TemporaryDirectory() as state_dir:
@@ -795,10 +795,6 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
 
 @pytest.fixture(scope="function")
 async def server(server_pre_start) -> abc.AsyncIterator[Server]:
-    """
-    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
-    May not be required
-    """
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
@@ -830,12 +826,8 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
 )
 async def server_multi(
-    server_pre_start, event_loop, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
+    server_pre_start, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
 ):
-    """
-    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
-    May not be required
-    """
     with tempfile.TemporaryDirectory() as state_dir:
         ssl, auth, ca = request.param
 
@@ -1888,6 +1880,23 @@ def is_caplog_handler(handler: logging.Handler) -> bool:
     )
 
 
+ALLOW_OVERRIDING_ROOT_LOG_LEVEL: bool = False
+
+
+@pytest.fixture(scope="function")
+def allow_overriding_root_log_level() -> None:
+    """
+    Fixture that allows a test case to indicate that the root log level, specified in a call to
+    `inmanta_logging.FullLoggingConfig.apply_config()`, should be taken into account. By default,
+    it's ignored to make sure that pytest logging works correctly. This fixture is mainly intended
+    for the test cases that test the logging framework itself.
+    """
+    global ALLOW_OVERRIDING_ROOT_LOG_LEVEL
+    ALLOW_OVERRIDING_ROOT_LOG_LEVEL = True
+    yield
+    ALLOW_OVERRIDING_ROOT_LOG_LEVEL = False
+
+
 @pytest.fixture(scope="function", autouse=True)
 async def dont_remove_caplog_handlers(request, monkeypatch):
     """
@@ -1925,7 +1934,8 @@ async def dont_remove_caplog_handlers(request, monkeypatch):
             logging._handlerList.append(weak_ref)
         for current_handler in caplog_root_handler:
             logging.root.addHandler(current_handler)
-        logging.root.setLevel(root_log_level)
+        if not ALLOW_OVERRIDING_ROOT_LOG_LEVEL:
+            logging.root.setLevel(root_log_level)
 
     monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "apply_config", apply_config_wrapper)
 
@@ -1945,8 +1955,11 @@ def index_with_pkgs_containing_optional_deps() -> str:
             path=os.path.join(tmpdirname, "pkg"),
             publish_index=pip_index,
             optional_dependencies={
-                "optional-a": [Requirement.parse("dep-a")],
-                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
+                "optional-a": [inmanta.util.parse_requirement(requirement="dep-a")],
+                "optional-b": [
+                    inmanta.util.parse_requirement(requirement="dep-b"),
+                    inmanta.util.parse_requirement(requirement="dep-c"),
+                ],
             },
         )
         for pkg_name in ["dep-a", "dep-b", "dep-c"]:
