@@ -242,7 +242,7 @@ This depends on the lifecycle and which direction we are moving: are we updating
 It also depends on if an instance are being validated or not. When doing a compile when the instance is in a validtion state, if the instance is not being validated, it pretends to be before the update.
 If the instance is being validated, it pretends to be in or after the update. 
 
-The lsm:all plugin derives this from the attributes:
+The `lsm::all()` plugin derives this from the attributes:
 
 * previous_attr_set_on_validate
 * previous_attr_set_on_export
