@@ -21,6 +21,7 @@ import json
 import logging
 import time
 import typing
+import urllib.parse
 import uuid
 from datetime import datetime
 from operator import itemgetter
@@ -448,34 +449,42 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     assert response["links"].get("next") is not None
     assert response["metadata"] == {"total": 5, "before": 2, "after": 1, "page_size": 2}
 
-    if order_by_column in ["resource_type", "status"] or order == "ASC":
-        return
 
-    result = await client.resource_list(
+async def test_none_resources_paging(server, client, env_with_resources):
+    """Test querying resources with paging, using different sorting parameters."""
+    env = env_with_resources
+    order_by_column = "agent"
+    order = "DESC"
+
+    no_result = await client.resource_list(
         env.id,
         limit=2,
         sort=f"{order_by_column}.{order}",
         start="ausf",
         first_id="athonet_core%3A%3Alicense%3A%3ALicense%5BDARI-LDARI-CP002%2Ccomponent_id%3Dausf%5D",
     )
-    assert result.code == 200
-    result2 = await client.resource_list(
-        env.id,
-        limit=2,
-        sort=f"{order_by_column}.{order}",
-        end="ausf",
-        last_id="athonet_core%3A%3Alicense%3A%3ALicense%5BDARI-LDARI-CP002%2Ccomponent_id%3Dausf%5D",
-    )
-    assert result2.code == 200
+    assert no_result.code == 200
+    assert len(no_result.result["data"]) == 0
+    assert no_result.result["links"] == {
+        "next": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&end=ausf&last_id=athonet_core%253A%253Alicense"
+        "%253A%253ALicense%255BDARI-LDARI-CP002%252Ccomponent_id%253Dausf%255D"
+    }
+    assert no_result.result["metadata"] == {"after": 6, "before": 0, "page_size": 2, "total": 6}
+
+    # If we try to fetch resources on the linked page, it should return something
+    query_parameters = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(no_result.result["links"]["next"]).query))
+
+    actual_result = await client.resource_list(env.id, **query_parameters)
+    assert actual_result.code == 200
     # We don't have a way to reconstruct the previous link
     expected_result = {
-        "next": f"/api/v2/resource?limit=2&sort={order_by_column}.{order.lower()}&deploy_summary=False&end=agent2"
-                "&last_id=test%3A%3AFile%5Bagent2%2Cpath%3D%2Fetc%2Ffile3%5D",
-        "self": f"/api/v2/resource?limit=2&sort={order_by_column}.{order.lower()}&deploy_summary=False",
+        "next": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&end=agent2&last_id=test%3A%3AFile%5Bagent2%2"
+        "Cpath%3D%2Ftmp%2Ffile4%5D",
+        "self": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False",
     }
-    assert result2.result["links"] == expected_result
-    assert result2.result["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
-    assert result2.result["data"] == []
+    assert actual_result.result["links"] == expected_result
+    assert actual_result.result["metadata"] == {"after": 4, "before": 0, "page_size": 2, "total": 6}
+    assert len(actual_result.result["data"]) == 2
 
 
 @pytest.mark.parametrize(
