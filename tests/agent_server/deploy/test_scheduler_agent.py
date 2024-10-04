@@ -39,7 +39,9 @@ from inmanta.config import Config
 from inmanta.data import ResourceIdStr
 from inmanta.deploy import state, tasks
 from inmanta.deploy.scheduler import ResourceScheduler
+from inmanta.deploy.state import BlockedStatus
 from inmanta.protocol.common import custom_json_encoder
+from inmanta.util import retry_limited
 
 FAIL_DEPLOY: str = "fail_deploy"
 
@@ -609,6 +611,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         status=state.ResourceStatus.UP_TO_DATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
+        blocked=BlockedStatus.NO,
     )
     assert rid1 not in agent.scheduler._state.dirty
     # set up initial state: release two changes for r1 -> the second makes the first stale
@@ -622,6 +625,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         status=state.ResourceStatus.HAS_UPDATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
+        blocked=BlockedStatus.NO,
     )
     assert rid1 in agent.scheduler._state.dirty
 
@@ -633,6 +637,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         status=state.ResourceStatus.HAS_UPDATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
+        blocked=BlockedStatus.NO,
     )
     assert rid1 in agent.scheduler._state.dirty
     # verify that r2 is still blocked on r1
@@ -658,6 +663,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         status=state.ResourceStatus.UP_TO_DATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
+        blocked=BlockedStatus.NO,
     )
     assert rid1 not in agent.scheduler._state.dirty
 
