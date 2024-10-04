@@ -18,6 +18,7 @@
 
 import asyncio
 import logging
+import multiprocessing
 import os
 import time
 import uuid
@@ -249,6 +250,20 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     await resource_action_consistency_check()
 
 
+@pytest.fixture
+def ensure_resource_tracker_is_started():
+    """
+    In POSIX, when you spawn a process, a resource tracker is also created so by doing this, we can assert some facts
+    such as the number of processes, ...
+    """
+    context = multiprocessing.get_context("spawn")
+    process = context.Process(target=print, args=(None,))
+    process.start()
+    process.join()
+    assert process.exitcode == 0
+    process.close()
+
+
 def get_process_state(current_pid: int) -> dict[psutil.Process, list[psutil.Process]]:
     """
     Retrieves the current list of processes running under this process
@@ -268,21 +283,43 @@ def check_consistent_starting_point(current_processes: list[psutil.Process]) -> 
     :param current_processes: Running processes
     :return: Is the starting state consistent
     """
-    if len(current_processes) == 2:
-        return True, f"There should be only 2 processes: Pg_ctl and the Server! Actual state: {current_processes}"
-    elif len(current_processes) == 3:
-        fork_servers = []
-        for e in current_processes:
-            if e.name() == "inmanta: multiprocessing fork server":
-                fork_servers.append(e)
+    inmanta_fork_server = []
+    postgres_processes = []
+    python_processes = []
+    other_processes = []
 
-        return (
-            len(fork_servers) == 1,
-            "There should be only 3 processes: Pg_ctl, the Server and the Multiprocessing Fork server! "
-            f"Actual state: {current_processes}",
-        )
-    else:
-        return False, f"Unexpected case -> actual state: {current_processes}"
+    for process in current_processes:
+        match process.name():
+            case "inmanta: multiprocessing fork server":
+                inmanta_fork_server.append(process)
+            case "python":
+                python_processes.append(process)
+            case "pg_ctl":
+                postgres_processes.append(process)
+            case _:
+                other_processes.append(process)
+
+    match len(current_processes):
+        case 2:
+            return (
+                len(postgres_processes) == 1 and len(python_processes) == 1,
+                f"There should be only 2 processes: Pg_ctl and the Server! Actual state: {current_processes}",
+            )
+        case 3:
+            return (
+                len(postgres_processes) == 1 and len(python_processes) == 1 and len(inmanta_fork_server) == 1,
+                "There should be only 3 processes: Pg_ctl, the Server and the Multiprocessing Fork server! "
+                f"Actual state: {current_processes}",
+            )
+        case 4:
+            return (
+                len(postgres_processes) == 1 and len(python_processes) == 2 and len(inmanta_fork_server) == 1,
+                "There should be only 4 processes: Pg_ctl, the Server, the Inmanta Fork server and the Python Resource tracker "
+                "process! "
+                f"Actual state: {current_processes}",
+            )
+        case _:
+            return False, f"Unexpected case -> actual state: {current_processes}"
 
 
 @pytest.mark.parametrize(
@@ -296,6 +333,7 @@ async def test_halt_deploy(
     clienthelper,
     environment,
     no_agent_backoff,
+    ensure_resource_tracker_is_started,
     auto_start_agent: bool,
     should_time_out: bool,
     time_to_sleep: int,
