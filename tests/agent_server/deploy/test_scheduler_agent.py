@@ -245,6 +245,9 @@ def make_resource_minimal(environment):
 
 
 async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:
+    """
+    Return True iff the given agent has finished executing all its tasks.
+    """
     agent_queue = scheduler._work.agent_queues._agent_queues.get(agent_name)
     if not agent_queue:
         # Agent queue doesn't exist -> Tasks have not been queued yet

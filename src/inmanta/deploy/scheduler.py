@@ -297,6 +297,10 @@ class ResourceScheduler(TaskManager):
                 # => regularly pass control to the event loop to not block scheduler operation during update prep
                 await asyncio.sleep(0)
 
+            assert len(new_desired_state | blocked_resources | unblocked_resources) == len(new_desired_state) + len(
+                blocked_resources
+            ) + len(unblocked_resources)
+
             # in the current implementation everything below the lock is synchronous, so it's not technically required. It is
             # however kept for two reasons:
             # 1. pass context once more to event loop before starting on the sync path
@@ -310,11 +314,13 @@ class ResourceScheduler(TaskManager):
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
-                transitive_undeployable_resources: set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
+                transitively_blocked_resources: set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 for resource in unblocked_resources:
                     self._state.unblock_resource(resource)
                 # Update set of in-progress non-stale deploys by trimming resources with new state
-                self._deploying_latest.difference_update(new_desired_state, deleted_resources, blocked_resources)
+                self._deploying_latest.difference_update(
+                    new_desired_state, deleted_resources, blocked_resources, transitively_blocked_resources
+                )
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
                     self._state.dirty,
@@ -326,7 +332,7 @@ class ResourceScheduler(TaskManager):
                     self._state.drop(resource)
             # Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added
             # again by a deploy trigger (because we dropped them outside the lock).
-            for resource in deleted_resources | blocked_resources | transitive_undeployable_resources:
+            for resource in deleted_resources | blocked_resources | transitively_blocked_resources:
                 self._work.delete_resource(resource)
 
     def _start_for_agent(self, agent: str) -> None:

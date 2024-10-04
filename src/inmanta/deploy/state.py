@@ -40,14 +40,14 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
 
     def get_all_provides_transitively(self, resource: ResourceIdStr | set[ResourceIdStr]) -> list[ResourceIdStr]:
         """
-        This method returns all the provides (transitively) of the given resource. The returned
-        set also includes the resource that is passed as a parameter to this method.
+        This method returns all the provides (transitively) of the given resource.
         """
         input_set = {resource} if isinstance(resource, str) else set(resource)
         work = SimpleQueue()
         for elem in input_set:
             work.put_nowait(elem)
         provides_mapping = self.provides_view()
+        # Use a dict here to not lost the order of the elements.
         result = {}
         while not work.empty():
             current_resource = work.get()
@@ -215,8 +215,8 @@ class ModelState:
 
     def unblock_resource(self, resource: ResourceIdStr) -> None:
         """
-        Mark the given resource no longer as undefined and its provides (transitively) if none of their requires is blocked
-        anymore.
+        Mark the given resource no longer as blocked. Also mark the provides of the given resource as unblocked (transitively)
+        if they become unblocked because of this.
 
         Must be called under the scheduler lock. This method assumes that all the resources of the model version
         are populated in the resources dictionary.
