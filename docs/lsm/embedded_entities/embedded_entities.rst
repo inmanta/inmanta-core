@@ -242,7 +242,7 @@ This depends on the lifecycle and which direction we are moving: are we updating
 It also depends on if an instance are being validated or not. When doing a compile when the instance is in a validtion state, if the instance is not being validated, it pretends to be before the update.
 If the instance is being validated, it pretends to be in or after the update. 
 
-The `lsm::all()` plugin derives this from the attributes:
+The ``lsm::all()`` plugin derives this from the attributes:
 
 * previous_attr_set_on_validate
 * previous_attr_set_on_export
@@ -263,10 +263,10 @@ instance is not being validated   ``previous_attr_set_on_export``     active_att
 
 When building a custom lifecycle, to be able to use the tracking plugin, these fields have to be set correctly. 
 To do so, the lifecycle has to be analyzed. The remainder of this chapter describes a method to perform this analysis by starting from the main states, and working towards the validation states. 
-We will aplly this to the `lsm::fsm::simple`
+We will aplly this to the ``lsm::fsm::simple``
 
-1. First step is to have clear view of the lifecycle. This can be done by plotting a graph of it. This can be done by adding `lsm::render_dot(lsm::fsm::simple)` to a model and compiling it. This will create a file called `fsm.svg` that contains the lifecycle.
-2. Second step is to make a table for each state involved in the update, including the state just before the start of the update and the one after it. Ignore `_failed` states, as their config will be identical to the associated success state. For each validating transfer, add the start state a second time. 
+1. First step is to have clear view of the lifecycle. This can be done by plotting a graph of it. This can be done by adding ``lsm::render_dot(lsm::fsm::simple)`` to a model and compiling it. This will create a file called ``fsm.svg`` that contains the lifecycle.
+2. Second step is to make a table for each state involved in the update, including the state just before the start of the update and the one after it. Ignore ``_failed`` states, as their config will be identical to the associated success state. For each validating transfer, add the start state a second time. 
 
 ====================== ============ ==================== ===================== ========= ========================= 
   state                 validating   current attributes   previous attributes   is like   operation since is like  
@@ -280,7 +280,7 @@ We will aplly this to the `lsm::fsm::simple`
   rollback                                                                                                         
 ====================== ============ ==================== ===================== ========= ========================= 
 
-3. Fill in states before the update and where we are actually performing the update or rollback. The `current`` attribute will always be `active` and `previous` depends on the direction we are moving in. For the `up` state, we are no updating, so there is no `previous`. For updates `previous` is always `rollback` (the old active state has been promoted to the `rollback` set) for a rollback scenarios, the `previous` attributes are always `candidate`.
+3. Fill in states before the update and where we are actually performing the update or rollback. The ``current`` attribute will always be ``active`` and ``previous`` depends on the direction we are moving in. For the ``up`` state, we are no updating, so there is no ``previous``. For updates ``previous`` is always ``rollback`` (the old active state has been promoted to the ``rollback`` set) for a rollback scenarios, the ``previous`` attributes are always ``candidate``.
 
 ====================== ============ ==================== ===================== ========= ========================= 
   state                 validating   current attributes   previous attributes   is like   operation since is like  
@@ -326,11 +326,11 @@ We will aplly this to the `lsm::fsm::simple`
 
 6. Finally, translate to the state variables as follows:
 
-   1. on all non-validating state, current attributes should be `active`
-   2. on all non-validating state, set `previous_attr_set_on_export` to the value of `previous attributes`
-   3. on all validating states `current_attributes==state.validate_self` 
-   4. on all validating states, `previous_attr_set_on_validate` to the value of `previous attributes`
-   5. the same on the associated `_failed` states
+   1. on all non-validating state, current attributes should be ``active``
+   2. on all non-validating state, set ``previous_attr_set_on_export`` to the value of ``previous attributes``
+   3. on all validating states ``current_attributes==state.validate_self``
+   4. on all validating states, ``previous_attr_set_on_validate`` to the value of ``previous attributes``
+   5. the same on the associated ``_failed`` states
 
 
 
