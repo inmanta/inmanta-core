@@ -360,3 +360,8 @@ INMANTA_VENV_STATUS_FILENAME = ".inmanta_venv_status"
 
 # ID to represent the new scheduler as an agent
 AGENT_SCHEDULER_ID = "$__scheduler"
+
+
+# resource attributes for event propagation
+RESOURCE_ATTRIBUTE_SEND_EVENTS = "send_event"
+RESOURCE_ATTRIBUTE_RECEIVE_EVENTS = "receive_events"
