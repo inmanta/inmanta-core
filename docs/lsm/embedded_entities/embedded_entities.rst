@@ -82,7 +82,7 @@ of the relationship to the embedding entity starts with an underscore as require
 Attribute modifiers on a relationship
 #####################################
 
-Attribute modifiers can also be specified on relational attributes. The ``==`` part of the relationship definition can be
+Attribute modifiers can also be specified on relational attributes. The ``--`` part of the relationship definition can be
 replaced with either ``lsm::__r__``, ``lsm::__rw__`` or ``lsm::__rwplus__``. These attribute modifiers have the following
 semantics when set on a relationship:
 
@@ -94,7 +94,7 @@ semantics when set on a relationship:
   the attributes of the embedded entity.
 * **__rwplus__**: After service instantiation, embedded entities can be added or removed from the relationship.
 
-When the relationship definition contains a ``==`` instead of one of the above-mentioned keywords, the default attribute
+When the relationship definition contains a ``--`` instead of one of the above-mentioned keywords, the default attribute
 modifier ``__rw__`` is applied on the relationship. The code snippet below gives an example on the usage of attribute
 modifiers on relationships:
 
