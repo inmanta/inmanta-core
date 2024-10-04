@@ -43,12 +43,12 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
         This method returns all the provides (transitively) of the given resource.
         """
         input_set = {resource} if isinstance(resource, str) else set(resource)
-        work = SimpleQueue()
+        work: SimpleQueue[ResourceIdStr] = SimpleQueue()
         for elem in input_set:
             work.put_nowait(elem)
         provides_mapping = self.provides_view()
         # Use a dict here to not lost the order of the elements.
-        result = {}
+        result: dict[ResourceIdStr, None] = {}
         while not work.empty():
             current_resource = work.get()
             result[current_resource] = None
