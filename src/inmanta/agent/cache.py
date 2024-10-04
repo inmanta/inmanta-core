@@ -317,7 +317,6 @@ class AgentCache:
             timeout: Optional[int],
             evict_after_last_access: float,
             evict_after_creation: float,
-            key: str,
         ) -> tuple[float, float]:
             """
             This method is a backwards compatibility layer to compute a "new-style" retention policy (i.e. that is using
@@ -336,7 +335,6 @@ class AgentCache:
                 it was last accessed.
             :param evict_after_creation: This cache item will be considered stale this number of seconds after
                 entering the cache.
-            :param key: Key for this cache entry
             """
             _evict_after_last_access: float
             _evict_after_creation: float
@@ -396,7 +394,6 @@ class AgentCache:
                             timeout=timeout,
                             evict_after_last_access=evict_after_last_access,
                             evict_after_creation=evict_after_creation,
-                            key=key,
                         )
                         self.cache_value(
                             key=key,
