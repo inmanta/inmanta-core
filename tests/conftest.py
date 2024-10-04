@@ -20,6 +20,7 @@ import logging.config
 import warnings
 from re import Pattern
 
+import pkg_resources
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
@@ -28,6 +29,7 @@ from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
+from packaging.requirements import Requirement
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -89,20 +91,19 @@ import time
 import traceback
 import uuid
 import venv
+import weakref
 from collections import abc
 from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
 from typing import Callable, Dict, Optional, Union
 
 import asyncpg
-import pkg_resources
 import psutil
 import py
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
@@ -555,7 +556,7 @@ def reset_all_objects():
     V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
     auth.AuthJWTConfig.reset()
-    InmantaLoggerConfig.clean_instance(root_handlers_to_remove=[h for h in logging.root.handlers if not is_caplog_handler(h)])
+    InmantaLoggerConfig.clean_instance()
     AsyncHTTPClient.configure(None)
 
 
@@ -1887,23 +1888,64 @@ def is_caplog_handler(handler: logging.Handler) -> bool:
     )
 
 
+ALLOW_OVERRIDING_ROOT_LOG_LEVEL: bool = False
+
+
+@pytest.fixture(scope="function")
+def allow_overriding_root_log_level() -> None:
+    """
+    Fixture that allows a test case to indicate that the root log level, specified in a call to
+    `inmanta_logging.FullLoggingConfig.apply_config()`, should be taken into account. By default,
+    it's ignored to make sure that pytest logging works correctly. This fixture is mainly intended
+    for the test cases that test the logging framework itself.
+    """
+    global ALLOW_OVERRIDING_ROOT_LOG_LEVEL
+    ALLOW_OVERRIDING_ROOT_LOG_LEVEL = True
+    yield
+    ALLOW_OVERRIDING_ROOT_LOG_LEVEL = False
+
+
 @pytest.fixture(scope="function", autouse=True)
 async def dont_remove_caplog_handlers(request, monkeypatch):
     """
-    Caplog captures log messages by attaching handlers to the root logger. This fixture makes sure the
-    inmanta.logging.FullLoggingConfig.apply_config() method doesn't remove any handlers that were added by the caplog fixture.
+    Caplog captures log messages by attaching handlers to the root logger. Applying a logging config with
+    `inmanta_logging.FullLoggingConfig.apply_config()` removes any existing logging configuration.
+    As such, this fixture puts a wrapper around the `apply_config()` method to make sure that:
+
+     * The pytest handlers are not removed/closed after the execution of the apply_config() method.
+     * The configured root log level is not altered by the call to apply_config().
     """
     original_apply_config = inmanta_logging.FullLoggingConfig.apply_config
 
-    def patched_apply_config(self) -> None:
-        caplog_handlers = [h for h in logging.root.handlers if is_caplog_handler(h)]
-        original_apply_config(self)
-        # Re-add caplog handlers that were removed by the call to apply_config()
-        for current_handler in caplog_handlers:
-            if current_handler not in logging.root.handlers:
-                logging.root.addHandler(current_handler)
+    def apply_config_wrapper(self) -> None:
+        # Make sure the root log level is not altered.
+        root_log_level: int = logging.root.level
+        # Save the caplog root handlers so that we can restore them after.
+        caplog_root_handler: list[logging.Handler] = [h for h in logging.root.handlers if is_caplog_handler(h)]
+        for current_handler in caplog_root_handler:
+            logging.root.removeHandler(current_handler)
+        # When the `apply_config()` method is called, the `logging._handlerList` is used to find all the handlers
+        # that should be closed. We remove the handlers from that list to prevent the handlers from being closed.
+        #
+        # This `logging._handlerList` is used to tear down the handlers in the reverse order with respect to the setup order.
+        # As such, this method should not alter the order. We assume the caplog handlers are entirely independent
+        # from any other handler. Like that the order only matters within the set of caplog handlers.
+        re_add_to_handler_list: list[weakref.ReferenceType] = [
+            weak_ref for weak_ref in logging._handlerList if is_caplog_handler(weak_ref())
+        ]
+        for weak_ref in re_add_to_handler_list:
+            logging._handlerList.remove(weak_ref)
 
-    monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "apply_config", patched_apply_config)
+        original_apply_config(self)
+
+        for weak_ref in re_add_to_handler_list:
+            logging._handlerList.append(weak_ref)
+        for current_handler in caplog_root_handler:
+            logging.root.addHandler(current_handler)
+        if not ALLOW_OVERRIDING_ROOT_LOG_LEVEL:
+            logging.root.setLevel(root_log_level)
+
+    monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "apply_config", apply_config_wrapper)
 
 
 @pytest.fixture(scope="session")
@@ -1921,8 +1963,11 @@ def index_with_pkgs_containing_optional_deps() -> str:
             path=os.path.join(tmpdirname, "pkg"),
             publish_index=pip_index,
             optional_dependencies={
-                "optional-a": [Requirement.parse("dep-a")],
-                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
+                "optional-a": [inmanta.util.parse_requirement(requirement="dep-a")],
+                "optional-b": [
+                    inmanta.util.parse_requirement(requirement="dep-b"),
+                    inmanta.util.parse_requirement(requirement="dep-c"),
+                ],
             },
         )
         for pkg_name in ["dep-a", "dep-b", "dep-c"]:
