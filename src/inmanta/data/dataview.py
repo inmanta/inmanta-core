@@ -26,6 +26,7 @@ from typing import Generic, Mapping, Optional, TypeVar, Union, cast
 from uuid import UUID
 
 from asyncpg import Record
+from coverage.debug import filter_text
 
 import inmanta.data
 from inmanta import data
@@ -292,14 +293,9 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         try:
             dtos, paging_boundaries_in = await self.get_data()
             paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
-            found_result: bool
-            if paging_boundaries_in:
-                found_result = True
-                paging_boundaries = paging_boundaries_in
-            else:
-                # nothing found now, use the current page boundaries to determine if something exists before us
-                found_result = False
-                paging_boundaries = self.requested_page_boundaries
+            found_result: bool = True if paging_boundaries_in else False
+            # If nothing is found now, use the requested page boundaries to determine if something exists before us
+            paging_boundaries = paging_boundaries_in if paging_boundaries_in else self.requested_page_boundaries
 
             metadata = await self._get_page_count(paging_boundaries, found_result)
             links = await self.prepare_paging_links(dtos, paging_boundaries, metadata)
@@ -365,28 +361,24 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
                 page_size=self.limit,
             )
 
-        def construct_filter(filter_name: str, filter_condition: str, drop_if_paging_order: PagingOrder) -> str:
+        def construct_filter(filter_name: str, filter_condition: str, drop_condition: PagingOrder) -> str:
             """
             Construct filter to count the number of items that are before / after the current page.
-            If the filter condition is empty, nothing will be returned except if the current order is the same as the one
-            contained in `drop_if_paging_order`. The motivation behind this, is if that no result is returned
+            The filtering might be dropped if no dtos are found and iff the order provided in drop_condition is the one used
+            in the current page.
 
             :param filter_name: The name of the variable to store the result of the select
             :param filter_condition: The condition to use in the filtering
-            :param drop_if_paging_order: If the filtering needs to be ignored
             """
-            if found_result:
-                return f", COUNT(*) filter ({filter_condition}) as {filter_name}" if filter_condition else ""
+            if not filter_condition or (not found_result and order == drop_condition):
+                return f", COUNT(*) as {filter_name}"
             else:
-                if drop_if_paging_order != order:
-                    return f", COUNT(*) filter ({filter_condition}) as {filter_name}" if filter_condition else ""
-                else:
-                    return f", COUNT(*) as {filter_name}"
+                return f", COUNT(*) filter ({filter_condition}) as {filter_name}"
 
         select_clause = (
             "SELECT COUNT(*) as count_total"
-            + (construct_filter("count_before", before_filter, PagingOrder.ASC))
-            + (construct_filter("count_after", after_filter, PagingOrder.DESC))
+            + (construct_filter(filter_name="count_before", filter_condition=before_filter, drop_condition=PagingOrder.ASC))
+            + (construct_filter(filter_name="count_after", filter_condition=after_filter, drop_condition=PagingOrder.DESC))
         )
 
         query_builder = query_builder.select(select_clause)
@@ -441,6 +433,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             return f"{base_url}?{urllib.parse.urlencode(params, doseq=True)}"
 
         if len(dtos) > 0:
+            # If we have found something, then we can rely on the information on the paging boundaries
             link_with_end = make_link(
                 end=paging_boundaries.end,
                 last_id=paging_boundaries.last_id,
@@ -450,6 +443,8 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
                 first_id=paging_boundaries.first_id,
             )
         else:
+            # Otherwise, We might be too far or not far enough to get actual results and we need to return a link that will
+            # actually return some results. Therefore, we cannot keep the current paging boundaries.
             link_with_end = make_link(
                 end=paging_boundaries.start,
                 last_id=paging_boundaries.first_id,

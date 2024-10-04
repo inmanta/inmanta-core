@@ -1,0 +1,6 @@
+description: "Fixed pagination when on a page too far or not far enough from actual results"
+issue-nr: 7898
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches: [master, iso7]
