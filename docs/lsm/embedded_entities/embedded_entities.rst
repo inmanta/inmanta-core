@@ -153,6 +153,11 @@ embedded entities during the update flow of a service.
 When using the "simple" lifecycle, this is supported out of the box by passing ``include_purged_embedded_entities=true``
 to the ``lsm::all()`` plugin call.
 
+.. note::
+    This feature requires ``strict_modifier_enforcement=true`` to be able to correctly identify which
+    embedded entities are added or removed. Make sure this is set for all the relevant bindings.
+
+
 During each step of the update, two sets of attributes (the "current" set and the "previous" set) will be compared to
 determine which embedded entities were added or removed. The plugin will accordingly set the following boolean
 attributes on the relevant embedded entities: ``_removed`` and ``_added``. These values can
