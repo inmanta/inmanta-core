@@ -1069,8 +1069,8 @@ async def test_cache_warning(time_machine, caplog):
         "inmanta.agent.handler",
         logging.WARNING,
         "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
-        "for cached method test_warning_and_override. The `timeout` parameter will be ignored and cached entries will "
-        "be kept in the cache for 20.00s after entering it. The `timeout` parameter should no"
+        "for cached method test_cache.test_warning_and_override. The `timeout` parameter will be ignored and cached entries "
+        "will be kept in the cache for 20.00s after entering it. The `timeout` parameter should no"
         "longer be used. Please refer to the handler documentation "
         "for more information about setting a retention policy.",
     )
