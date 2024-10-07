@@ -363,7 +363,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         def construct_filter(filter_name: str, filter_condition: str, drop_condition: PagingOrder) -> str:
             """
             Construct filter to count the number of items that are before / after the current page.
-            The filtering might be dropped if no dtos are found and iff the order provided in drop_condition is the one used
+            The filtering might be dropped if no result is found and iff the order provided in drop_condition is the one used
             in the current page.
 
             :param filter_name: The name of the variable to store the result of the select
