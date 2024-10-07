@@ -1252,10 +1252,8 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     assert_resource_state(rid9, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES)
 
     # rid8 is no longer undefined
-    resources = {
-        rid8: make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[], status=const.ResourceState.available),
-        rid9: make_resource_minimal(rid=rid9, values={"value": "a"}, requires=[rid8], status=const.ResourceState.undefined),
-    }
+    resources[rid8] = make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[], status=const.ResourceState.available)
+
     await agent.scheduler._new_version(version=5, resources=resources, requires=make_requires(resources))
     await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 2
