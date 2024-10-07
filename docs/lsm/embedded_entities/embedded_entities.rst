@@ -271,7 +271,7 @@ To do so, the lifecycle has to be analyzed. The remainder of this chapter descri
 We will apply this to the ``lsm::fsm::simple`` lifecycle.
 
 1. First step is to have clear view of the lifecycle. This can be done by plotting a graph of it. This can be done by adding ``lsm::render_dot(lsm::fsm::simple)`` to a model and compiling it. This will create a file called ``fsm.svg`` that contains the lifecycle.
-For reference, here's a sub-graph of the ``lsm::fsm::simple`` lifecycle to follow along the example.
+For reference, here's a simplified representation (it doesn't contain the failure states) of the 'update' part of the ``lsm::fsm::simple`` lifecycle, to follow along the example.
 
 
 .. image:: fsm_simple_subset.svg
