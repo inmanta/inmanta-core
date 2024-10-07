@@ -297,6 +297,7 @@ class ResourceScheduler(TaskManager):
                 # => regularly pass control to the event loop to not block scheduler operation during update prep
                 await asyncio.sleep(0)
 
+            # A resource should not be present in more than one of these resource sets
             assert len(new_desired_state | blocked_resources | unblocked_resources) == len(new_desired_state) + len(
                 blocked_resources
             ) + len(unblocked_resources)
