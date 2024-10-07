@@ -387,7 +387,9 @@ class ResourceScheduler(TaskManager):
                     if event_listeners:
                         # do not pass deploying tasks because for event propagation we really want to start a new one,
                         # even if the current intent is already being deployed
-                        self._work.deploy_with_context(event_listeners, priority=TaskPriority.NEW_VERSION_DEPLOY deploying=set())
+                        self._work.deploy_with_context(
+                            event_listeners, priority=TaskPriority.NEW_VERSION_DEPLOY, deploying=set()
+                        )
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
