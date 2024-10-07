@@ -252,10 +252,10 @@ class Agent(SessionEndpoint):
         assert agent == AGENT_SCHEDULER_ID
         if incremental_deploy:
             LOGGER.info("Agent %s got a trigger to run deploy in environment %s", agent, env)
-            await self.scheduler.deploy(TaskPriority.USER_DEPLOY)
+            await self.scheduler.deploy()
         else:
             LOGGER.info("Agent %s got a trigger to run repair in environment %s", agent, env)
-            await self.scheduler.repair(TaskPriority.USER_REPAIR)
+            await self.scheduler.repair()
         return 200
 
     @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
