@@ -309,7 +309,6 @@ class ScheduledWork:
         self,
         resources: Set[ResourceIdStr],
         *,
-        # TODO: update docstring + consider in_progress_deploys for name?
         priority: TaskPriority,
         deploying: Optional[Set[ResourceIdStr]] = None,
         added_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
@@ -323,6 +322,9 @@ class ScheduledWork:
         :param resources: Set of resources that should be deployed. Adds a deploy task to the scheduled work for each
             of these, unless it is already scheduled.
         :param priority: The priority of this deploy.
+        :param deploying: Set of resources for which a non-stale deploy is in progress, i.e. the scheduler does not need to
+            take action to deploy the latest intent for any of these resources because that deploy is already in progress
+            (it will still ensure they are scheduled if they have gotten new dependencies).
         :param stale_deploys: Set of resources for which a stale deploy is in progress, i.e. a deploy for an outdated resource
             intent.
         :param added_requires: Requires edges that were added since the previous state update, if any.
