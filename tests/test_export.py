@@ -25,7 +25,7 @@ from typing import Optional
 import pytest
 
 import inmanta.resources
-from inmanta import config, const
+from inmanta import config, const, module
 from inmanta.ast import CompilerException, ExternalException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
@@ -62,6 +62,7 @@ def test_attribute_mapping_export(snippetcompiler):
         exp::Test(name="c", agent="x", send_event=true, receive_events=false)
         """,
         autostd=True,
+        project_requires=[module.InmantaModuleRequirement.parse("std>=6.1")],
     )
 
     _version, json_value = snippetcompiler.do_export()
