@@ -280,9 +280,6 @@ For reference, here's a sub-graph of the ``lsm::fsm::simple`` lifecycle to follo
 
 2. Second step is to make a table for each state involved in the update, including the state just before the start of the update and the one after it. Ignore ``_failed`` states, as their config will be identical to the associated success state. For each validating transfer, add the source state a second time.
 
-
-
-
 ====================== ============ ==================== ===================== ========= =========================
   state                 validating   current attributes   previous attributes   is like   operation since is like
 ====================== ============ ==================== ===================== ========= =========================
@@ -367,8 +364,6 @@ state.
   update_inprogress                  active               rollback              --                  --
   rollback                           active               candidate             --                  --
 ====================== ============ ==================== ===================== =================== =========================
-
-
 
 
 6. Finally, translate to the state variables as follows:
