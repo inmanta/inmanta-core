@@ -169,20 +169,20 @@ class ResourceScheduler(TaskManager):
         self._work.agent_queues.send_shutdown()
         await asyncio.gather(*self._workers.values())
 
-    async def deploy(self, priority: TaskPriority) -> None:
+    async def deploy(self, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
         """
         Trigger a deploy
         """
         async with self._scheduler_lock:
-            self._work.deploy_with_context(self._state.dirty, priority, deploying=self._deploying_stale)
+            self._work.deploy_with_context(self._state.dirty, priority=priority, deploying=self._deploying_stale)
 
-    async def repair(self, priority: TaskPriority) -> None:
+    async def repair(self, priority: TaskPriority = TaskPriority.USER_REPAIR) -> None:
         """
         Trigger a repair, i.e. mark all resources as dirty, then trigger a deploy.
         """
         async with self._scheduler_lock:
             self._state.dirty.update(self._state.resources.keys())
-            self._work.deploy_with_context(self._state.dirty, priority, deploying=self._deploying_stale)
+            self._work.deploy_with_context(self._state.dirty, priority=priority, deploying=self._deploying_stale)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         resources = await self._build_resource_mappings_from_db(version)
@@ -305,7 +305,7 @@ class ResourceScheduler(TaskManager):
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
                     self._state.dirty,
-                    TaskPriority.NEW_VERSION_DEPLOY,
+                    priority=TaskPriority.NEW_VERSION_DEPLOY,
                     deploying=self._deploying,
                     added_requires=added_requires,
                     dropped_requires=dropped_requires,

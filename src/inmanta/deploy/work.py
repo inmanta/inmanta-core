@@ -36,6 +36,7 @@ T = TypeVar("T", bound=tasks.Task, covariant=True)
 
 
 class TaskPriority(IntEnum):
+    # These priorities can be freely updated, we only care about the relative order
     TERMINATED = -1
     USER_DEPLOY = 0
     NEW_VERSION_DEPLOY = 1
@@ -307,9 +308,9 @@ class ScheduledWork:
     def deploy_with_context(
         self,
         resources: Set[ResourceIdStr],
-        priority: TaskPriority,
         *,
         # TODO: update docstring + consider in_progress_deploys for name?
+        priority: TaskPriority,
         deploying: Optional[Set[ResourceIdStr]] = None,
         added_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
         dropped_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
@@ -395,7 +396,10 @@ class ScheduledWork:
                 task_priority: Optional[TaskPriority] = self.agent_queues.discard(task)
                 queued.remove(resource)
                 self._waiting[resource] = BlockedDeploy(
-                    task=PrioritizedTask(task=task, priority=task_priority if task_priority is not None else priority),
+                    task=PrioritizedTask(
+                        task=task,
+                        priority=task_priority if task_priority is not None and task_priority <= priority else priority,
+                    ),
                     # task was previously ready to execute => assume no other blockers than this one
                     blocked_on=new_blockers,
                 )
@@ -411,6 +415,7 @@ class ScheduledWork:
                 # scheduled. If it has, update the priority. If any of its dependencies are to be
                 # scheduled as well, they will follow the provides relation to ensure this deploy waits its turn.
                 if prioritized_task.task in self.agent_queues:
+                    # simply add it again, the queue will make sure only the highest priority is kept
                     self.agent_queues.queue_put_nowait(prioritized_task)
                 if resource in self._waiting:
                     if self._waiting[resource].task.priority > priority:

@@ -17,6 +17,7 @@
 """
 
 import datetime
+import functools
 import logging
 import os
 import random
@@ -133,14 +134,18 @@ class Agent(SessionEndpoint):
                 return True
             return False
 
-        async def interval_deploy() -> None:
-            await self.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
-
-        async def interval_repair() -> None:
-            await self.scheduler.repair(TaskPriority.INTERVAL_REPAIR)
-
-        periodic_schedule("deploy", interval_deploy, self._deploy_interval, self._deploy_splay_value)
-        periodic_schedule("repair", interval_repair, self._repair_interval, self._repair_splay_value)
+        periodic_schedule(
+            "deploy",
+            functools.partial(self.scheduler.deploy, TaskPriority.INTERVAL_DEPLOY).func,
+            self._deploy_interval,
+            self._deploy_splay_value,
+        )
+        periodic_schedule(
+            "repair",
+            functools.partial(self.scheduler.repair, TaskPriority.INTERVAL_REPAIR).func,
+            self._repair_interval,
+            self._repair_splay_value,
+        )
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self._sched.add_action(action, schedule)
