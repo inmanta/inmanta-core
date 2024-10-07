@@ -41,8 +41,7 @@ binding = lsm::ServiceEntityBindingV2(
     service_entity_name="file",
 )
 
-# We wrap the call to lsm:all() with the plugin call:
-for instance in lsm::insert_removed_embedded_entities(lsm::all(binding)):
+for instance in lsm::all(binding, include_purged_embedded_entities=true):
     file = File(
         instance_id=instance["id"],
         entity_binding=binding,
