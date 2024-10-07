@@ -273,7 +273,7 @@ def get_process_state(current_pid: int) -> dict[psutil.Process, list[psutil.Proc
     return {process: process.children(recursive=True) for process in psutil.process_iter() if process.pid == current_pid}
 
 
-def check_consistent_starting_point(current_processes: list[psutil.Process]) -> tuple[bool, str]:
+def check_consistent_starting_point(current_processes: list[psutil.Process]) -> tuple[bool, str, dict]:
     """
     Return if the starting point is what we expect: only 2 (first ones) or 3 processes should be running:
         - The actual server
@@ -291,25 +291,35 @@ def check_consistent_starting_point(current_processes: list[psutil.Process]) -> 
     for process in current_processes:
         match process.name():
             case "inmanta: multiprocessing fork server":
-                inmanta_fork_server.append(process)
+                inmanta_fork_server.append(process.pid)
             case "python":
-                python_processes.append(process)
+                python_processes.append(process.pid)
             case "pg_ctl":
-                postgres_processes.append(process)
+                postgres_processes.append(process.pid)
             case _:
-                other_processes.append(process)
+                other_processes.append(process.pid)
+
+    current_state = {
+        "inmanta fork server": inmanta_fork_server,
+        "python": python_processes,
+        "pg_ctl": postgres_processes,
+        "other": other_processes,
+    }
 
     match len(current_processes):
         case 2:
             return (
                 len(postgres_processes) == 1 and len(python_processes) == 1,
                 f"There should be only 2 processes: Pg_ctl and the Server! Actual state: {current_processes}",
+                current_state,
             )
         case 3:
             return (
-                len(postgres_processes) == 1 and len(python_processes) == 1 and len(inmanta_fork_server) == 1,
+                (len(postgres_processes) == 1 and len(python_processes) == 1 and len(inmanta_fork_server) == 1)
+                or (len(postgres_processes) == 1 and len(python_processes) == 2),
                 "There should be only 3 processes: Pg_ctl, the Server and the Multiprocessing Fork server! "
                 f"Actual state: {current_processes}",
+                current_state,
             )
         case 4:
             return (
@@ -317,9 +327,10 @@ def check_consistent_starting_point(current_processes: list[psutil.Process]) -> 
                 "There should be only 4 processes: Pg_ctl, the Server, the Inmanta Fork server and the Python Resource tracker "
                 "process! "
                 f"Actual state: {current_processes}",
+                current_state,
             )
         case _:
-            return False, f"Unexpected case -> actual state: {current_processes}"
+            return False, f"Unexpected case -> actual state: {current_processes}", current_state
 
 
 @pytest.mark.parametrize(
@@ -356,10 +367,12 @@ async def test_halt_deploy(
     assert len(start_children.values()) == 1
     current_children = list(start_children.values())[0]
 
-    condition, message = check_consistent_starting_point(current_children)
+    condition, message, children_mapping = check_consistent_starting_point(current_children)
     assert condition, message
     for children in current_children:
         assert children.is_running()
+
+    pre_existent_children = {e.pid for e in current_children}
 
     snippetcompiler.setup_for_snippet(
         f"""
@@ -385,9 +398,12 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     assert len(children_after_deployment) == 1
     assert len(children_after_deployment.values()) == 1
     current_children_after_deployment: list[psutil.Process] = list(children_after_deployment.values())[0]
+    # The scheduler and the new executor should at least be there. Depending on if the inmanta fork server was already running,
+    # we might have another process
+    expected_additional_children_after_deployment = 2 if len(children_mapping["inmanta fork server"]) == 1 else 3
     assert (
-        len(current_children_after_deployment) == 5
-    ), "There should be only 5 processes: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
+        len(current_children_after_deployment) == len(pre_existent_children) + expected_additional_children_after_deployment
+    ), "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
     for children in current_children_after_deployment:
         assert children.is_running()
 
@@ -419,29 +435,21 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     current_halted_children = list(halted_children.values())[0]
 
     def wait_for_terminated_status():
-        if len(current_halted_children) == 4:
-            # The process has already disappeared
-            return True
-        elif len(current_halted_children) == 5:
-            # Or the process is still there but with a `Terminated` status
-            terminated_process = []
-            for process in current_halted_children:
-                try:
-                    if process.status() == "terminated":
-                        terminated_process.append(process)
-                except psutil.NoSuchProcess:
-                    terminated_process.append(None)
+        terminated_process = []
+        for process in current_children_after_deployment:
+            try:
+                if process.status() == "terminated":
+                    terminated_process.append(process)
+            except psutil.NoSuchProcess:
+                terminated_process.append(None)
 
-            # Only one process should end up in terminated
-            return len(terminated_process) == 1
-        else:
-            # Unhandled case
-            return False
+        # Only one process should end up in terminated
+        return len(terminated_process) == 1
 
     await retry_limited(wait_for_terminated_status, 2)
 
-    assert len(current_halted_children) == 4, (
-        "There should be only 4 processes: Pg_ctl, the Server, the Scheduler and  the fork server. "
+    assert len(current_halted_children) == len(current_children_after_deployment) - 1, (
+        "These processes should be present: Pg_ctl, the Server, the Scheduler and the fork server. "
         "The agent created by the scheduler should have been killed!"
     )
     for children in current_halted_children:
@@ -457,11 +465,11 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     assert len(resumed_children.values()) == 1
     current_resumed_children = list(resumed_children.values())[0]
 
-    await retry_limited(lambda: len(current_resumed_children) == 5, 10)
+    await retry_limited(lambda: len(current_resumed_children) == len(current_children_after_deployment), 10)
 
-    assert (
-        len(current_resumed_children) == 5
-    ), "There should be only 5 processes: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
+    assert len(current_resumed_children) == len(
+        current_children_after_deployment
+    ), "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
 
     await retry_limited(lambda: all([children.is_running() for children in current_resumed_children]), 10)
 
@@ -494,11 +502,12 @@ async def test_pause_agent_deploy(
     assert len(start_children.values()) == 1
     current_children = list(start_children.values())[0]
 
-    condition, message = check_consistent_starting_point(current_children)
+    condition, message, children_mapping = check_consistent_starting_point(current_children)
     assert condition, message
-
     for children in current_children:
         assert children.is_running()
+
+    pre_existent_children = {e.pid for e in current_children}
 
     snippetcompiler.setup_for_snippet(
         """
@@ -525,9 +534,12 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert len(children_after_deployment) == 1
     assert len(children_after_deployment.values()) == 1
     current_children_after_deployment: list[psutil.Process] = list(children_after_deployment.values())[0]
+    # The scheduler and the new executor should at least be there. Depending on if the inmanta fork server was already running,
+    # we might have another process
+    expected_additional_children_after_deployment = 2 if len(children_mapping["inmanta fork server"]) == 1 else 3
     assert (
-        len(current_children_after_deployment) == 5
-    ), "There should be only 5 processes: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
+        len(current_children_after_deployment) == len(pre_existent_children) + expected_additional_children_after_deployment
+    ), "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
     for children in current_children_after_deployment:
         assert children.is_running()
 
@@ -549,8 +561,6 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
 
-    halted_children = get_process_state()
-
     await asyncio.sleep(15)
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
@@ -558,33 +568,28 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert summary["by_state"]["available"] == 2
     assert summary["by_state"]["deployed"] == 1
 
-    assert len(halted_children) == 1
-    assert len(halted_children.values()) == 1
-    current_halted_children = list(halted_children.values())[0]
-
     await asyncio.sleep(const.EXECUTOR_GRACE_HARD)
 
     def wait_for_terminated_status():
-        if len(current_halted_children) == 4:
-            # The process has already disappeared
-            return True
-        elif len(current_halted_children) == 5:
-            # Or the process is still there but with a `Terminated` status
-            terminated_process = []
-            for process in current_halted_children:
-                try:
-                    if process.status() == "terminated":
-                        terminated_process.append(process)
-                except psutil.NoSuchProcess:
-                    terminated_process.append(None)
+        # The process is still there but should be with a `Terminated` status
+        terminated_process = []
+        for process in current_children_after_deployment:
+            try:
+                if process.status() == "terminated":
+                    terminated_process.append(process)
+            except psutil.NoSuchProcess:
+                terminated_process.append(None)
 
-            # Only one process should end up in terminated
-            return len(terminated_process) == 1
-        else:
-            # Unhandled case
-            return False
+        # Only one process should end up in terminated
+        return len(terminated_process) == 1
 
     await retry_limited(wait_for_terminated_status, 2)
+
+    halted_children = get_process_state()
+    assert len(halted_children) == 1
+    assert len(halted_children.values()) == 1
+    current_halted_children = list(halted_children.values())[0]
+    assert len(current_halted_children) == len(current_children_after_deployment) - 1
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.unpause.value)
     assert result.code == 200
@@ -601,7 +606,12 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
 
     assert len(resumed_children) == 1
     assert len(resumed_children.values()) == 1
-    current_resumed_children = list(resumed_children.values())[0]
+    current_resumed_children: list[psutil.Process] = list(resumed_children.values())[0]
 
-    await retry_limited(lambda: len(current_resumed_children) == 5, 10)
-    await retry_limited(lambda: all([children.is_running() for children in current_resumed_children]), 10)
+    # The scheduler and the new executor should at least be there. Depending on if the inmanta fork server was already running,
+    # we might have another process
+    assert (
+        len(current_resumed_children) == len(pre_existent_children) + expected_additional_children_after_deployment
+    ), "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
+    for children in current_resumed_children:
+        assert children.is_running()
