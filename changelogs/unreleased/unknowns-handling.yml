@@ -1,0 +1,4 @@
+---
+description: Make sure that the scheduler handles undefined resources correctly.
+change-type: minor
+destination-branches: [master]
