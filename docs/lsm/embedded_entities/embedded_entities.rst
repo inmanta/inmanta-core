@@ -271,14 +271,16 @@ To do so, the lifecycle has to be analyzed. The remainder of this chapter descri
 We will apply this to the ``lsm::fsm::simple`` lifecycle.
 
 1. First step is to have clear view of the lifecycle. This can be done by plotting a graph of it. This can be done by adding ``lsm::render_dot(lsm::fsm::simple)`` to a model and compiling it. This will create a file called ``fsm.svg`` that contains the lifecycle.
-2. Second step is to make a table for each state involved in the update, including the state just before the start of the update and the one after it. Ignore ``_failed`` states, as their config will be identical to the associated success state. For each validating transfer, add the source state a second time.
-
 For reference, here's a sub-graph of the ``lsm::fsm::simple`` lifecycle to follow along the example.
 
 
-.. image:: _static/fsm_simple_subset.svg
+.. image:: fsm_simple_subset.svg
    :width: 90%
    :alt: Simple lifecycle update subgraph
+
+2. Second step is to make a table for each state involved in the update, including the state just before the start of the update and the one after it. Ignore ``_failed`` states, as their config will be identical to the associated success state. For each validating transfer, add the source state a second time.
+
+
 
 
 ====================== ============ ==================== ===================== ========= =========================
