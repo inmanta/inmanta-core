@@ -19,6 +19,7 @@
 import json
 import logging
 import os
+from collections.abc import Mapping
 from typing import Optional
 
 import pytest
@@ -48,7 +49,57 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
     assert actual_assignment == assignment
 
 
+def test_attribute_mapping_export(snippetcompiler):
+    """
+    Verify Python-defined attribute mapping between model resource and exported resource.
+    """
+    snippetcompiler.setup_for_snippet(
+        """\
+        import exp
+
+        exp::Test(name="a", agent="x")
+        exp::Test(name="b", agent="x", send_event=false, receive_events=true)
+        exp::Test(name="c", agent="x", send_event=true, receive_events=false)
+        """,
+        autostd=True,
+    )
+
+    _version, json_value = snippetcompiler.do_export()
+
+    assert len(json_value) == 3
+    resources: Mapping[str, Mapping[str, object]] = {
+        resource.name: {
+            # base resource mapping
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: getattr(resource, const.RESOURCE_ATTRIBUTE_SEND_EVENTS),
+            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: getattr(resource, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS),
+            # custom mapping
+            "mapped": resource.mapped,
+        }
+        for resource in json_value.values()
+    }
+    assert resources == {
+        "a": {
+            "mapped": "mapped_value_a",
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False,
+            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True,
+        },
+        "b": {
+            "mapped": "mapped_value_b",
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False,
+            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True,
+        },
+        "c": {
+            "mapped": "mapped_value_c",
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: True,
+            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: False,
+        },
+    }
+
+
 def test_id_mapping_export(snippetcompiler):
+    """
+    Verify id mapping for a virtual id value, i.e. not a field of the resource.
+    """
     snippetcompiler.setup_for_snippet(
         """import exp
 
@@ -61,6 +112,7 @@ def test_id_mapping_export(snippetcompiler):
 
     assert len(json_value) == 1
     resource = list(json_value.values())[0]
+    assert not hasattr(resource, resource.id.attribute)
     assert resource.id.attribute_value == "test_value_a"
 
 

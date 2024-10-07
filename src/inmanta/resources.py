@@ -23,7 +23,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
 
 import inmanta.util
-from inmanta import plugins
+from inmanta import const, plugins
 from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, util
@@ -191,7 +191,7 @@ class Resource(metaclass=ResourceMeta):
     static methods in the class with the name "get_$fieldname".
     """
 
-    fields: Sequence[str] = ("send_event",)
+    fields: Sequence[str] = (const.RESOURCE_ATTRIBUTE_SEND_EVENTS, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS)
     send_event: bool  # Deprecated field
     model: "proxy.DynamicProxy"
     map: dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
@@ -202,6 +202,14 @@ class Resource(metaclass=ResourceMeta):
             return obj.send_event
         except Exception:
             return False
+
+    @staticmethod
+    def get_receive_events(_exporter: "export.Exporter", obj: "Resource") -> bool:
+        try:
+            return obj.receive_events
+        except Exception:
+            # default to True for backward compatibility (all resources used to receive events)
+            return True
 
     @classmethod
     def convert_requires(
