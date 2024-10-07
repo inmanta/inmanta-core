@@ -150,7 +150,7 @@ Depending on what the embedded entities are modeling, you might want to keep tra
 were added or removed during an update, in order to apply custom logic to them. This section describes how to track
 embedded entities during the update flow of a service.
 
-When using the "simple" lifecycle, this is supported out of the box by passing ``include_purged_embedded_entities=true``
+When using the 'simple' lifecycle, this is supported out of the box by passing ``include_purged_embedded_entities=true``
 to the ``lsm::all()`` plugin call.
 
 .. note::
@@ -158,13 +158,13 @@ to the ``lsm::all()`` plugin call.
     embedded entities are added or removed. Make sure this is set for all the relevant bindings.
 
 
-During each step of the update, two sets of attributes (the "current" set and the "previous" set) will be compared to
+During each step of the update, two sets of attributes (the 'current' set and the 'previous' set) will be compared to
 determine which embedded entities were added or removed. The plugin will accordingly set the following boolean
 attributes on the relevant embedded entities: ``_removed`` and ``_added``. These values can
 then be used in the model to implement custom logic.
 
 .. note::
-    The "simple" lifecycle defines out-of-the-box which pair of sets should be compared at each step of the update.
+    The 'simple' lifecycle defines out-of-the-box which pair of sets should be compared at each step of the update.
     Please refer to the :ref:`Tracking embedded entities when using a custom lifecycle<using_custom_lifecycle>` section
     below for more information on how to define which pairs should be compared when using a custom lifecycle.
 
@@ -252,17 +252,17 @@ The ``lsm::all()`` plugin derives this from the following attributes of the life
 * previous_attr_set_on_validate
 * previous_attr_set_on_export
 
-The domain of valid values for these attributes is [``"candidate"``, ``"active"``, ``"rollback"``, ``null``].
+The domain of valid values for these attributes is [``'candidate'``, ``'active'``, ``'rollback'``, ``null``].
 
 
 The following logic is used to determine which is the current and which is the previous attribute set
 
-================================= ================================== ===================
+================================= ================================== ========================
 instance is being validated         previous                            current
-================================= ================================== ===================
+================================= ================================== ========================
 instance is being validated        ``previous_attr_set_on_validate``   ``validate_self``
-instance is not being validated   ``previous_attr_set_on_export``     active_attributes
-================================= ================================== ===================
+instance is not being validated   ``previous_attr_set_on_export``     'active' attribute set
+================================= ================================== ========================
 
 
 
@@ -271,6 +271,13 @@ To do so, the lifecycle has to be analyzed. The remainder of this chapter descri
 We will apply this to the ``lsm::fsm::simple`` lifecycle.
 
 1. First step is to have clear view of the lifecycle. This can be done by plotting a graph of it. This can be done by adding ``lsm::render_dot(lsm::fsm::simple)`` to a model and compiling it. This will create a file called ``fsm.svg`` that contains the lifecycle.
+For reference, here's a simplified representation (it doesn't contain the failure states) of the 'update' part of the ``lsm::fsm::simple`` lifecycle, to follow along the example.
+
+
+.. image:: fsm_simple_subset.svg
+   :width: 90%
+   :alt: Simple lifecycle update subgraph
+
 2. Second step is to make a table for each state involved in the update, including the state just before the start of the update and the one after it. Ignore ``_failed`` states, as their config will be identical to the associated success state. For each validating transfer, add the source state a second time.
 
 ====================== ============ ==================== ===================== ========= =========================
@@ -300,7 +307,18 @@ We will apply this to the ``lsm::fsm::simple`` lifecycle.
 ====================== ============ ==================== ===================== ========= =========================
 
 
-4. For each state that remains, indicate which other state it pretends to be like: the state prior to the update or the state after the update. Also add all operations performed between the state and the "pretended" state.
+4. For each state that remains, indicate which other state it pretends to be like: the state prior to the update or the state after the update.
+Also add any operation ('promote' or 'rollback') performed between the state and the 'pretended' state, and its direction ('forwards' or 'backwards').
+
+- If the pretend state is chronologically before the current state, the operation will be applied in the 'forwards' direction.
+- If the pretend state is chronologically after the current state, the operation will be applied in the 'backwards' direction.
+
+
+e.g. for the ``validating`` ``update_start`` state: its ``is like`` state, ``update_inprogress`` comes after it chronologically
+and a 'promote' operation will happen. Following the above rules, we will apply a 'promote' operation in the 'backwards'
+direction to find the ``current attributes`` and the ``previous attributes`` of this state given those of the ``update_inprogress``
+state.
+
 
 ====================== ============ ==================== ===================== =================== =========================
   state                 validating   current attributes   previous attributes   is like             operation since is like
@@ -314,7 +332,26 @@ We will apply this to the ``lsm::fsm::simple`` lifecycle.
   rollback                           active               candidate             --                  --
 ====================== ============ ==================== ===================== =================== =========================
 
-5. Copy over the state of the ``is like`` column and apply the operations.
+5. Copy over the state of the ``is like`` column and apply the operations. e.g. for the ``validating`` ``update_start`` state:
+
+   1. Copy attributes from the state in the ``is like`` column (``update_inprogress``)
+
+
+      ====================== ============ ==================== =====================
+        state                 validating   current attributes   previous attributes
+      ====================== ============ ==================== =====================
+        update_start          yes          active               rollback
+      ====================== ============ ==================== =====================
+
+
+   2. Apply the operation: the 'forwards' 'promote' operation shifts the ``active`` set to ``rollback`` and the ``candidate`` set to ``active``, but here we apply it in reverse, i.e. the ``active`` set becomes ``candidate`` and the ``rollback`` set becomes ``active``:
+
+      ====================== ============ ==================== =====================
+        state                 validating   current attributes   previous attributes
+      ====================== ============ ==================== =====================
+        update_start          yes          candidate             active
+      ====================== ============ ==================== =====================
+
 
 ====================== ============ ==================== ===================== =================== =========================
   state                 validating   current attributes   previous attributes   is like             operation since is like
