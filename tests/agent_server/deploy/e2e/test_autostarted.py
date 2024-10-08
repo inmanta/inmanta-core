@@ -269,6 +269,7 @@ async def ensure_old_executor_are_stopped(current_pid: int):
     In POSIX, when you spawn a process, a resource tracker is also created so by doing this, we can assert some facts
     such as the number of processes, ...
     """
+
     def wait_for_old_executor():
         terminated_process = []
         executor_process = []
@@ -492,7 +493,7 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
 
     await client.resume_environment(environment)
 
-    await asyncio.sleep(10)
+    await asyncio.sleep(5)
 
     resumed_children = get_process_state(current_pid)
 
@@ -549,9 +550,9 @@ async def test_pause_agent_deploy(
         """
 import minimalv2waitingmodule
 
-a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=15)
-b = minimalv2waitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=15)
-c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=15)
+a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=5)
+b = minimalv2waitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
+c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
 """,
         autostd=True,
     )
@@ -597,7 +598,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
 
-    await asyncio.sleep(15)
+    await asyncio.sleep(5)
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
