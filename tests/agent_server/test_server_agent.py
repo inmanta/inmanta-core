@@ -151,6 +151,7 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
             "value": "value1",
             "id": "test::Resource[agent2,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -159,6 +160,7 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
             "value": execute.util.Unknown(source=None),
             "id": "test::Resource[agent2,key=key2],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -167,6 +169,7 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
             "value": execute.util.Unknown(source=None),
             "id": "test::Resource[agent2,key=key4],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Resource[agent2,key=key1],v=%d" % version, "test::Resource[agent2,key=key2],v=%d" % version],
             "purged": False,
         },
@@ -175,6 +178,7 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
             "value": "val",
             "id": "test::Resource[agent2,key=key5],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Resource[agent2,key=key4],v=%d" % version],
             "purged": False,
         },
@@ -277,6 +281,7 @@ async def test_server_restart(
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
         },
         {
@@ -286,6 +291,7 @@ async def test_server_restart(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key3",
@@ -294,6 +300,7 @@ async def test_server_restart(
             "requires": [],
             "purged": True,
             "send_event": False,
+            "receive_events": False,
         },
     ]
 
@@ -364,6 +371,7 @@ async def test_spontaneous_deploy(
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "purged": False,
                 "send_event": False,
+                "receive_events": False,
                 "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
             },
             {
@@ -373,6 +381,7 @@ async def test_spontaneous_deploy(
                 "requires": [],
                 "purged": False,
                 "send_event": False,
+                "receive_events": False,
             },
             {
                 "key": "key3",
@@ -381,6 +390,7 @@ async def test_spontaneous_deploy(
                 "requires": [],
                 "purged": True,
                 "send_event": False,
+                "receive_events": False,
             },
         ]
 
@@ -451,6 +461,7 @@ async def test_spontaneous_repair(
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
         },
         {
@@ -460,6 +471,7 @@ async def test_spontaneous_repair(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key3",
@@ -468,6 +480,7 @@ async def test_spontaneous_repair(
             "requires": [],
             "purged": True,
             "send_event": False,
+            "receive_events": False,
         },
     ]
 
@@ -559,6 +572,7 @@ async def test_failing_deploy_no_handler(
             "id": "test::Noprov[agent1,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": [],
         }
     ]
@@ -620,6 +634,7 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
             "id": "test::Wait[agent1,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": [],
         },
         {
@@ -628,6 +643,7 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
             "id": "test::Wait[agent1,key=key2],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Wait[agent1,key=key1],v=%d" % version],
         },
         {
@@ -636,6 +652,7 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
             "id": "test::Wait[agent2,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": [],
         },
         {
@@ -644,6 +661,7 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
             "id": "test::Wait[agent2,key=key2],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Wait[agent2,key=key1],v=%d" % version],
         },
     ]
@@ -751,6 +769,7 @@ async def test_server_agent_api(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key2",
@@ -759,6 +778,7 @@ async def test_server_agent_api(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
     ]
 
@@ -854,7 +874,17 @@ async def test_unknown_parameters(
     resource_id_wov = "test::Resource[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": resource_id,
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        }
+    ]
 
     unknowns = [{"resource": resource_id_wov, "parameter": "length", "source": "fact"}]
 
@@ -917,6 +947,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key2",
@@ -925,6 +956,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
             "requires": ["test::Fail[agent1,key=key],v=%d" % version],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key3",
@@ -933,6 +965,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
             "requires": ["test::Fail[agent1,key=key],v=%d" % version],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key4",
@@ -941,6 +974,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
             "requires": ["test::Resource[agent1,key=key3],v=%d" % version],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key5",
@@ -949,6 +983,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
             "requires": ["test::Resource[agent1,key=key4],v=%d" % version, "test::Fail[agent1,key=key],v=%d" % version],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
     ]
 
@@ -1018,6 +1053,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
                         "requires": ["test::Resource[%s,key=key3],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
+                        "receive_events": False,
                     },
                     {
                         "key": "key2",
@@ -1026,6 +1062,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
                         "requires": ["test::Wait[%s,key=key],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
+                        "receive_events": False,
                     },
                     {
                         "key": "key3",
@@ -1034,6 +1071,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
                         "requires": [],
                         "purged": False,
                         "send_event": False,
+                        "receive_events": False,
                     },
                     {
                         "key": "key4",
@@ -1042,6 +1080,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
                         "requires": ["test::Resource[%s,key=key3],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
+                        "receive_events": False,
                     },
                     {
                         "key": "key5",
@@ -1053,6 +1092,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
                         ],
                         "purged": False,
                         "send_event": False,
+                        "receive_events": False,
                     },
                 ]
             )
@@ -1150,6 +1190,7 @@ async def test_cross_agent_deps(
             "id": "test::Resource[agent 1,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Wait[agent 1,key=key2],v=%d" % version, "test::Resource[agent2,key=key3],v=%d" % version],
         },
         {
@@ -1159,6 +1200,7 @@ async def test_cross_agent_deps(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key3",
@@ -1167,6 +1209,7 @@ async def test_cross_agent_deps(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key4",
@@ -1175,6 +1218,7 @@ async def test_cross_agent_deps(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
     ]
 
@@ -1249,6 +1293,7 @@ async def test_auto_deploy(
                 "value": "value1",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
             },
@@ -1257,6 +1302,7 @@ async def test_auto_deploy(
                 "value": value_resource_two,
                 "id": "test::Resource[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "requires": [],
                 "purged": False,
             },
@@ -1265,6 +1311,7 @@ async def test_auto_deploy(
                 "value": None,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "requires": [],
                 "purged": True,
             },
@@ -1330,6 +1377,7 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
             "value": "value1",
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
         },
@@ -1338,6 +1386,7 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
             "value": "value2",
             "id": "test::Resource[agent1,key=key2],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -1428,6 +1477,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
             "value": "value1",
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -1436,6 +1486,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
             "value": "value1",
             "id": "test::Resource[agent2,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -1594,6 +1645,7 @@ async def test_autostart_mapping_update_uri(
                 "value": f"value{version}",
                 "id": f"test::Resource[{agent_name},key=key1],v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -1655,6 +1707,7 @@ async def test_autostart_clear_environment(server, client, resource_container, e
                 "value": "value1",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             }
@@ -1719,6 +1772,7 @@ async def test_autostart_clear_environment(server, client, resource_container, e
                 "value": "value1",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             }
@@ -1772,6 +1826,7 @@ async def test_autostart_clear_agent_venv_on_delete(
                 "value": "value1",
                 "id": f"test::Resource[agent1,key=key1],v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             }
@@ -1830,6 +1885,7 @@ async def setup_environment_with_agent(client, project_name):
             "value": "value1",
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         }
@@ -1924,6 +1980,7 @@ class ResourceProvider:
             "value": "value1",
             "id": "test::Resource[%s,key=%s],v=%d" % (agent, key, version),
             "send_event": True,
+            "receive_events": False,
             "purged": False,
             "requires": requires,
         }
@@ -2018,6 +2075,7 @@ async def test_deploy_and_events(
             "value": "value1",
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": True,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -2089,6 +2147,7 @@ async def test_reload(
             "value": "value1",
             "id": "test::Resource[agent1,key=key2],v=%d" % version,
             "send_event": True,
+            "receive_events": False,
             "purged": False,
             "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
         },
@@ -2151,6 +2210,7 @@ async def test_s_repair_postponed_due_to_running_deploy(
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2159,6 +2219,7 @@ async def test_s_repair_postponed_due_to_running_deploy(
                 "value": "value2",
                 "id": "test::Wait[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -2167,6 +2228,7 @@ async def test_s_repair_postponed_due_to_running_deploy(
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
             },
@@ -2230,6 +2292,7 @@ async def test_s_repair_interrupted_by_deploy_request(
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2238,6 +2301,7 @@ async def test_s_repair_interrupted_by_deploy_request(
                 "value": "value2",
                 "id": "test::Wait[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -2246,6 +2310,7 @@ async def test_s_repair_interrupted_by_deploy_request(
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
             },
@@ -2360,6 +2425,7 @@ async def test_s_repair_during_repair(resource_container, agent, client, clienth
             "value": "value2",
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -2368,6 +2434,7 @@ async def test_s_repair_during_repair(resource_container, agent, client, clienth
             "value": "value2",
             "id": "test::Wait[agent1,key=key2],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
         },
@@ -2376,6 +2443,7 @@ async def test_s_repair_during_repair(resource_container, agent, client, clienth
             "value": "value2",
             "id": "test::Resource[agent1,key=key3],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
         },
@@ -2442,6 +2510,7 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2450,6 +2519,7 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
                 "value": "value2",
                 "id": "test::Wait[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -2458,6 +2528,7 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
             },
@@ -2526,6 +2597,7 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2534,6 +2606,7 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
                 "value": "value2",
                 "id": "test::Wait[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -2542,6 +2615,7 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
             },
@@ -2609,6 +2683,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2617,6 +2692,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
                 "value": "value2",
                 "id": "test::Wait[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -2625,6 +2701,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
             },
@@ -2767,6 +2844,7 @@ async def test_s_periodic_Vs_full(
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2775,6 +2853,7 @@ async def test_s_periodic_Vs_full(
                 "value": "value2",
                 "id": "test::Wait[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -2783,6 +2862,7 @@ async def test_s_periodic_Vs_full(
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
             },
@@ -2845,7 +2925,7 @@ async def test_bad_post_get_facts(
     resource_id_wov = "test::BadPost[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False, "receive_events": False}]
 
     await clienthelper.put_version_simple(resources, version)
 
@@ -2895,7 +2975,7 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
     resource_id_wov = "test::Wait[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False, "receive_events": False}]
 
     await clienthelper.put_version_simple(resources, version)
 
@@ -2944,6 +3024,7 @@ async def test_push_incremental_deploy(
                 "value": "value1",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2952,6 +3033,7 @@ async def test_push_incremental_deploy(
                 "value": value_second_resource,
                 "id": "test::Resource[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "requires": [],
                 "purged": False,
             },
@@ -3041,6 +3123,7 @@ async def test_push_full_deploy(
                 "value": "value1",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -3049,6 +3132,7 @@ async def test_push_full_deploy(
                 "value": value_second_resource,
                 "id": "test::Resource[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "requires": [],
                 "purged": False,
             },
@@ -3118,6 +3202,7 @@ async def test_agent_run_sync(resource_container, environment, server, client, c
                 "autostart": "true",
                 "id": "test::AgentConfig[agent1,agentname=agent2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
                 "purge_on_delete": False,
@@ -3152,6 +3237,7 @@ async def test_format_token_in_logline(server, agent, client, environment, resou
         "value": "Test value %T",
         "id": "test::Resource[agent1,key=key1],v=%d" % version,
         "send_event": False,
+        "receive_events": False,
         "purged": False,
         "requires": [],
     }
@@ -3202,6 +3288,7 @@ async def test_1016_cache_invalidation(
             "value": "Test value %s" % value,
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         }
@@ -3267,6 +3354,7 @@ async def test_agent_lockout(resource_container, environment, server, client, cl
         "value": "Test value %T",
         "id": "test::Resource[agent1,key=key1],v=%d" % version,
         "send_event": False,
+        "receive_events": False,
         "purged": False,
         "requires": [],
     }
@@ -3316,7 +3404,7 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     resource_id_wov = "test::Resource[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False, "receive_events": False}]
 
     await clienthelper.put_version_simple(resources, version)
 
@@ -3381,6 +3469,7 @@ async def test_issue_1662(resource_container, server, client, clienthelper, envi
             "autostart": "true",
             "id": resource_id,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
             "purge_on_delete": False,
@@ -3450,6 +3539,7 @@ async def test_agent_stop_deploying_when_paused(
                 "value": "value1",
                 "id": f"test::Resource[{agent_name},key=key1],v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -3458,6 +3548,7 @@ async def test_agent_stop_deploying_when_paused(
                 "value": "value2",
                 "id": f"test::Wait[{agent_name},key=key2],v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [f"test::Resource[{agent_name},key=key1],v={version}"],
             },
@@ -3466,6 +3557,7 @@ async def test_agent_stop_deploying_when_paused(
                 "value": "value3",
                 "id": f"test::Resource[{agent_name},key=key3],v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [f"test::Wait[{agent_name},key=key2],v={version}"],
             },
@@ -3524,6 +3616,7 @@ async def test_agentinstance_stops_deploying_when_stopped(
             "value": "value1",
             "id": f"test::Resource[agent1,key=key1],v={version}",
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -3532,6 +3625,7 @@ async def test_agentinstance_stops_deploying_when_stopped(
             "value": "value2",
             "id": f"test::Wait[agent1,key=key2],v={version}",
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [f"test::Resource[agent1,key=key1],v={version}"],
         },
@@ -3540,6 +3634,7 @@ async def test_agentinstance_stops_deploying_when_stopped(
             "value": "value3",
             "id": f"test::Wait[agent1,key=key3],v={version}",
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [f"test::Wait[agent1,key=key2],v={version}"],
         },
@@ -3589,6 +3684,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
                 "metadata": param.metadata,
                 "id": f"{param.resource_id},v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "purge_on_delete": False,
                 "requires": [],
@@ -3699,6 +3795,7 @@ async def test_set_non_expiring_fact_in_handler_6560(
                 "metadata": param.metadata,
                 "id": f"{param.resource_id},v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "purge_on_delete": False,
                 "requires": [],
@@ -3800,6 +3897,7 @@ async def test_deploy_handler_method(server, client, environment, agent, clienth
                 "set_state_to_deployed": set_state_to_deployed_in_handler,
                 "id": rvid,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -3899,6 +3997,7 @@ async def test_logging_failure_when_creating_venv(
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -3907,6 +4006,7 @@ async def test_logging_failure_when_creating_venv(
                 "value": "value2",
                 "id": "test::AgentConfig[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -3915,6 +4015,7 @@ async def test_logging_failure_when_creating_venv(
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::AgentConfig[agent1,key=key2],v=%d" % version],
             },
