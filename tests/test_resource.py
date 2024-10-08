@@ -40,7 +40,7 @@ class Resource(Base):
 
 
 def test_field_merge():
-    assert len(Resource.fields) == 5
+    assert len(Resource.fields) == 6
 
 
 def test_fields_type():
