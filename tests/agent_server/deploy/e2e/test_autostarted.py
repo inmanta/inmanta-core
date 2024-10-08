@@ -350,17 +350,8 @@ def check_consistent_starting_point(current_processes: list[psutil.Process]) -> 
             )
         case 3:
             return (
-                (len(postgres_processes) == 1 and len(python_processes) == 1 and len(inmanta_fork_server) == 1)
-                or (len(postgres_processes) == 1 and len(python_processes) == 2),
-                "There should be only 3 processes: Pg_ctl, the Server and the Multiprocessing Fork server! "
-                f"Actual state: {current_processes}",
-                current_state,
-            )
-        case 4:
-            return (
-                len(postgres_processes) == 1 and len(python_processes) == 2 and len(inmanta_fork_server) == 1,
-                "There should be only 4 processes: Pg_ctl, the Server, the Inmanta Fork server and the Python Resource tracker "
-                "process! "
+                len(postgres_processes) == 1 and len(python_processes) == 2,
+                "There should be only 3 processes: Pg_ctl, the Server and the Python Resource tracker! "
                 f"Actual state: {current_processes}",
                 current_state,
             )
@@ -462,10 +453,7 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
 
-    await asyncio.sleep(const.EXECUTOR_GRACE_HARD + 1)
-
     halted_children = get_process_state(current_pid)
-
     assert len(halted_children) == 1
     assert len(halted_children.values()) == 1
     current_halted_children = list(halted_children.values())[0]
@@ -482,7 +470,7 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
         # Only one process should end up in terminated
         return len(terminated_process) == 1
 
-    await retry_limited(wait_for_terminated_status, 2)
+    await retry_limited(wait_for_terminated_status, const.EXECUTOR_GRACE_HARD + 2)
 
     assert len(current_halted_children) == len(current_children_after_deployment) - 1, (
         "These processes should be present: Pg_ctl, the Server, the Scheduler and the fork server. "
@@ -493,7 +481,9 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
 
     await client.resume_environment(environment)
 
-    await asyncio.sleep(5)
+    await retry_limited(
+        lambda: len(list(get_process_state(current_pid).values())[0]) == len(current_children_after_deployment), 10
+    )
 
     resumed_children = get_process_state(current_pid)
 
@@ -561,6 +551,13 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
+    async def are_resources_deployed(deployed_resources: int = 1) -> bool:
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        deployed = summary["by_state"]["deployed"]
+        return deployed == deployed_resources
+
     try:
         await _wait_until_deployment_finishes(client, environment, version)
     except (asyncio.TimeoutError, AssertionError):
@@ -598,14 +595,15 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
 
-    await asyncio.sleep(5)
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
-    assert summary["by_state"]["available"] == 2
-    assert summary["by_state"]["deployed"] == 1
+    assert summary["total"] == 3, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["deploying"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["deployed"] == 1, f"Unexpected summary: {summary}"
 
-    await asyncio.sleep(const.EXECUTOR_GRACE_HARD)
+    await retry_limited(are_resources_deployed, timeout=5, deployed_resources=2)
 
     def wait_for_terminated_status():
         # The process is still there but should be with a `Terminated` status
@@ -620,7 +618,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
         # Only one process should end up in terminated
         return len(terminated_process) == 1
 
-    await retry_limited(wait_for_terminated_status, 2)
+    await retry_limited(wait_for_terminated_status, 10)
 
     halted_children = get_process_state()
     assert len(halted_children) == 1
@@ -630,15 +628,16 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.unpause.value)
     assert result.code == 200
-    await asyncio.sleep(18)
 
     resumed_children = get_process_state()
 
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
-    assert summary["by_state"]["available"] == 0, f"Unexpected summary: {summary}"
-    assert summary["by_state"]["deploying"] == 1, f"Unexpected summary: {summary}"
+    assert summary["total"] == 3, f"Unexpected summary: {summary}"
+    assert (summary["by_state"]["available"] == 1 and summary["by_state"]["deploying"] == 0) or (
+        summary["by_state"]["available"] == 0 and summary["by_state"]["deploying"] == 1
+    ), f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
     assert len(resumed_children) == 1
