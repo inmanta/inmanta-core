@@ -354,6 +354,11 @@ class Resource(metaclass=ResourceMeta):
         if cls_resource is None:
             raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
 
+        # backward compatibility for resources that were exported and stored in serialized form before the
+        # receive_events field was introduced
+        if const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS not in obj_map:
+            obj_map = {**obj_map, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True}
+
         obj = cls_resource(obj_id)
         obj.populate(obj_map, force_fields)
 
