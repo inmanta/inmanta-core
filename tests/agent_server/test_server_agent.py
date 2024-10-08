@@ -2925,7 +2925,17 @@ async def test_bad_post_get_facts(
     resource_id_wov = "test::BadPost[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False, "receive_events": False}]
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": resource_id,
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        }
+    ]
 
     await clienthelper.put_version_simple(resources, version)
 
@@ -2975,7 +2985,17 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
     resource_id_wov = "test::Wait[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False, "receive_events": False}]
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": resource_id,
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        }
+    ]
 
     await clienthelper.put_version_simple(resources, version)
 
@@ -3404,7 +3424,17 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     resource_id_wov = "test::Resource[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False, "receive_events": False}]
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": resource_id,
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        }
+    ]
 
     await clienthelper.put_version_simple(resources, version)
 
