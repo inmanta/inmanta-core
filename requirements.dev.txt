@@ -1,4 +1,4 @@
-inmanta-dev-dependencies[pytest,async,core]==2.136.0
+inmanta-dev-dependencies[pytest,async,core]==2.137.0
 bumpversion==0.6.0
 openapi_spec_validator==0.7.1
 pip2pi==0.8.2
@@ -11,7 +11,7 @@ time-machine==2.15.0
 
 # documentation
 furo==2024.8.6
-inmanta-sphinx==2.1.0
+inmanta-sphinx==2.1.1
 myst-parser==4.0.0
 sphinx==8.0.2
 sphinxcontrib-contentui==0.2.5
