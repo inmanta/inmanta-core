@@ -36,11 +36,12 @@ from dataclasses import dataclass
 from functools import reduce
 from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
+from importlib.metadata import Distribution, distribution, distributions
 from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import Callable, NamedTuple, Optional, Tuple, TypeVar
+from typing import Callable, List, NamedTuple, Optional, Tuple, TypeVar
 
 import pkg_resources
 
@@ -53,7 +54,7 @@ from inmanta.ast import CompilerException
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
-from inmanta.util import strtobool
+from inmanta.util import parse_requirement, strtobool
 
 LOGGER = logging.getLogger(__name__)
 LOGGER_PIP = logging.getLogger("inmanta.pip")  # Use this logger to log pip commands or data related to pip commands.
@@ -188,56 +189,54 @@ class PythonWorkingSet:
             return True
         installed_packages: dict[str, packaging.version.Version] = cls.get_packages_in_working_set()
 
-        def _are_installed_recursive(
-            reqs: Sequence[inmanta.util.CanonicalRequirement],
-            seen_requirements: Sequence[inmanta.util.CanonicalRequirement],
-            contained_in_extra: Optional[str] = None,
-        ) -> bool:
-            """
-            Recursively check the given reqs are installed in this working set
-
-            :param reqs: The requirements that should be checked.
-            :param seen_requirements: An accumulator that contains all the requirements that were check in
-                                      previous iterators. It prevents infinite loops when the dependency
-                                      graph contains circular dependencies.
-            :param contained_in_extra: The name of the extra that trigger a new recursive call. On the first
-                                       iteration of this method this value is None.
-            """
-            for r in reqs:
-                if r in seen_requirements:
-                    continue
-                # Requirements created by the `Distribution.requires()` method have the extra, the Requirement was created
-                # from,
-                # set as a marker. The line below makes sure that the "extra" marker matches. The marker is not set by
-                # `Distribution.requires()` when the package is installed in editable mode, but setting it always doesn't make
-                # the marker evaluation fail.
-                environment_marker_evaluation = {"extra": contained_in_extra} if contained_in_extra else None
-                if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
-                    # The marker of the requirement doesn't apply on this environment
-                    continue
-                if r.name not in installed_packages or not r.specifier.contains(installed_packages[r.name], prereleases=True):
-                    return False
-                if r.extras:
-                    for extra in r.extras:
-                        distribution: Optional[pkg_resources.Distribution] = pkg_resources.working_set.find(
-                            pkg_resources.Requirement.parse(r.name)
-                        )
-                        if distribution is None:
-                            return False
-
-                        pkgs_required_by_extra: set[inmanta.util.CanonicalRequirement] = set(
-                            [inmanta.util.parse_requirement(str(e)) for e in distribution.requires(extras=(extra,))]
-                        ) - set([inmanta.util.parse_requirement(str(e)) for e in distribution.requires(extras=())])
-                        if not _are_installed_recursive(
-                            reqs=list(pkgs_required_by_extra),
-                            seen_requirements=list(seen_requirements) + list(reqs),
-                            contained_in_extra=extra,
-                        ):
-                            return False
-            return True
+        # All thing to do, requirement + extra if added via extra
+        worklist: list[Tuple[inmanta.util.CanonicalRequirement, Optional[str]]] = []
+        seen_requirements: set[inmanta.util.CanonicalRequirement] = set()
 
         reqs_as_requirements: Sequence[inmanta.util.CanonicalRequirement] = cls._get_as_requirements_type(requirements)
-        return _are_installed_recursive(reqs_as_requirements, seen_requirements=[])
+        for r in reqs_as_requirements:
+            worklist.append((r, None))
+
+        while worklist:
+            r, contained_in_extra = worklist.pop()
+
+            if r in seen_requirements:
+                continue
+            seen_requirements.add(r)
+
+            # Requirements created by the `Distribution.requires()` method have the extra, the Requirement was created
+            # from,
+            # set as a marker. The line below makes sure that the "extra" marker matches. The marker is not set by
+            # `Distribution.requires()` when the package is installed in editable mode, but setting it always doesn't make
+            # the marker evaluation fail.
+            environment_marker_evaluation = {"extra": contained_in_extra} if contained_in_extra else None
+            if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
+                # The marker of the requirement doesn't apply on this environment
+                continue
+
+            if r.name not in installed_packages or not r.specifier.contains(installed_packages[r.name], prereleases=True):
+                return False
+
+            if r.extras:
+                # if we have extr'as these may not have been installed!
+                # We have to recurse for them!
+                for extra in r.extras:
+                    found_distribution: Optional[Distribution] = distribution(r.name)
+                    if found_distribution is None:
+                        return False
+
+                    environment_marker_evaluation = {"extra": extra}
+                    all_requires: list[inmanta.util.CanonicalRequirement] = [
+                        inmanta.util.parse_requirement(requirement) for requirement in (found_distribution.requires or [])
+                    ]
+                    pkgs_required_by_extra: list[inmanta.util.CanonicalRequirement] = [
+                        requirement
+                        for requirement in all_requires
+                        if requirement.marker and requirement.marker.evaluate(environment_marker_evaluation)
+                    ]
+                    for req in pkgs_required_by_extra:
+                        worklist.append((req, extra))
+        return True
 
     @classmethod
     def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> dict[str, packaging.version.Version]:
@@ -248,14 +247,14 @@ class PythonWorkingSet:
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
         return {
-            packaging.utils.canonicalize_name(dist_info.key): packaging.version.Version(dist_info.version)
-            for dist_info in pkg_resources.working_set
-            if not inmanta_modules_only or dist_info.key.startswith(const.MODULE_PKG_NAME_PREFIX)
+            packaging.utils.canonicalize_name(dist_info.name): packaging.version.Version(dist_info.version)
+            for dist_info in distributions()
+            if not inmanta_modules_only or dist_info.name.startswith(const.MODULE_PKG_NAME_PREFIX)
         }
 
     @classmethod
     def rebuild_working_set(cls) -> None:
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+        raise Exception("OLD!")
 
     @classmethod
     def get_dependency_tree(cls, dists: abc.Iterable[str]) -> abc.Set[str]:
@@ -268,9 +267,7 @@ class PythonWorkingSet:
         :param dists: The keys for the distributions to get the dependency tree for.
         """
         # create dict for O(1) lookup
-        installed_distributions: abc.Mapping[str, pkg_resources.Distribution] = {
-            dist_info.key: dist_info for dist_info in pkg_resources.working_set
-        }
+        installed_distributions: abc.Mapping[str, Distribution] = {dist_info.name: dist_info for dist_info in distributions()}
 
         def _get_tree_recursive(dists: abc.Iterable[str], acc: abc.Set[str] = frozenset()) -> abc.Set[str]:
             """
@@ -287,10 +284,7 @@ class PythonWorkingSet:
 
             # recurse on direct dependencies
             return _get_tree_recursive(
-                (
-                    packaging.utils.canonicalize_name(requirement.key)
-                    for requirement in installed_distributions[dist].requires()
-                ),
+                (parse_requirement(requirement).name for requirement in (installed_distributions[dist].requires or [])),
                 acc=acc | {dist},
             )
 
@@ -812,6 +806,7 @@ import sys
         :param only_editable: List only packages installed in editable mode.
         :return: A dict with package names as keys and versions as values
         """
+        # TODO!!!
         cmd = PipCommandBuilder.compose_list_command(self.python_path, format=PipListFormat.json, only_editable=only_editable)
         output = CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
         return {r["name"]: packaging.version.Version(r["version"]) for r in json.loads(output)}
@@ -1155,6 +1150,9 @@ class ActiveEnv(PythonEnvironment):
         in that order.
         """
 
+        # FIXME Canicalize or not????
+        # FIXME: weird overall algo structure
+
         class OwnedRequirement(NamedTuple):
             requirement: inmanta.util.CanonicalRequirement
             owner: Optional[str] = None
@@ -1164,9 +1162,9 @@ class ActiveEnv(PythonEnvironment):
 
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(inmanta.util.parse_requirement(requirement=str(requirement)), dist_info.key)
-            for dist_info in pkg_resources.working_set
-            for requirement in dist_info.requires()
+            OwnedRequirement(inmanta.util.parse_requirement(requirement=str(requirement)), dist_info.name)
+            for dist_info in distributions()
+            for requirement in (dist_info.requires or [])
         )
 
         inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
@@ -1183,7 +1181,7 @@ class ActiveEnv(PythonEnvironment):
                 (
                     []
                     if strict_scope is None
-                    else (dist_info.key for dist_info in pkg_resources.working_set if strict_scope.fullmatch(dist_info.key))
+                    else (dist_info.name for dist_info in distributions() if strict_scope.fullmatch(dist_info.name))
                 ),
                 (requirement.requirement.name for requirement in inmanta_constraints),
                 (requirement.requirement.name for requirement in extra_constraints),
@@ -1342,7 +1340,6 @@ class ActiveEnv(PythonEnvironment):
                            are executed in a subprocess.
                     """
                     importlib.reload(mod)
-        PythonWorkingSet.rebuild_working_set()
 
 
 process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)
