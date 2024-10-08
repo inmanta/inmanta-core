@@ -459,10 +459,13 @@ class PagingBoundaries:
     Represents the lower and upper bounds that should be used for the next and previous pages
     when listing domain entities.
 
-    :param start: largest value of the page for the primary sort column.
-    :param end: smallest value of the page for the primary sort column.
-    :param first_id: largest value of the page for the secondary sort column, if there is one.
-    :param last_id: smallest value of the page for the secondary sort column, if there is one.
+    The largest / smallest value of the current page represents respectively the min / max boundary value (exclusive) for the
+    neighbouring pages. Which represents next and which prev depends on sorting order (ASC or DESC).
+
+    :param start: largest value of current page for the primary sort column.
+    :param end: smallest value of current page for the primary sort column.
+    :param first_id: largest value of current page for the secondary sort column, if there is one.
+    :param last_id: smallest value of current page for the secondary sort column, if there is one.
     """
 
     def __init__(

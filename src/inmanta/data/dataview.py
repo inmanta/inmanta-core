@@ -96,7 +96,23 @@ T_DTO = TypeVar("T_DTO", bound=BaseModel)
 
 
 class RequestedPagingBoundaries:
-    """Represents the lower and upper bounds that the user requested for the paging boundaries, if any."""
+    """
+    Represents the lower and upper bounds that the user requested for the paging boundaries, if any.
+
+    Boundary values represent max and min values, regardless of sorting direction (ASC or DESC), i.e.
+    - ASC sorting based on next links: (>) start,first_id
+    - ASC sorting based on prev links: (<) end,last_id
+    - DESC sorting based on next links: (<) end,last_id
+    - DESC sorting based on prev links: (>) start,first_id
+
+    So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "lowest" and
+    "highest".
+
+    :param start: min boundary value (exclusive) for the requested page for the primary sort column.
+    :param end: max boundary value (exclusive) for the requested page for the primary sort column.
+    :param first_id: min boundary value (exclusive) for requested the page for the secondary sort column, if there is one.
+    :param last_id: max boundary value (exclusive) for requested the page for the secondary sort column, if there is one.
+    """
 
     def __init__(
         self,
@@ -138,6 +154,23 @@ class RequestedPagingBoundaries:
 
     def has_end(self) -> bool:
         return (self.end is not None) or (self.last_id is not None)
+
+    def get_empty_page_boundaries(self) -> PagingBoundaries:
+        # TODO: off by one if boundary actually exists?
+        # TODO: clarify docstring
+        """
+        Return the virtual paging boundaries that corresponds to the boundaries of an empty page response for this request.
+
+        Concretely, this means swapping start and end, because the semantics of PagingBoundaries are opposite those of this
+        class: PagingBoundaries represents "current page" while this class represents "requested page";
+        max of current page = min of requested page and vice versa.
+        """
+        return PagingBoundaries(
+            start=self.end,
+            first_id=self.last_id,
+            end=self.start,
+            last_id=self.first_id,
+        )
 
 
 class PagingMetadata:
@@ -199,7 +232,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         return {}
 
-    async def get_data(self) -> tuple[Sequence[T_DTO], Optional[PagingBoundaries]]:
+    async def get_data(self) -> tuple[Sequence[T_DTO], PagingBoundaries]:
         query_builder = self.get_base_query()
 
         # In this method, we use `data.Resource`
@@ -218,9 +251,11 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         records = await data.Resource.select_query(sql_query, values, no_obj=True)
         dtos = self.construct_dtos(records)
 
-        paging_boundaries = None
-        if dtos:
-            paging_boundaries = self.order.get_paging_boundaries(dict(records[0]), dict(records[-1]))
+        paging_boundaries = (
+            self.order.get_paging_boundaries(dict(records[0]), dict(records[-1]))
+            if dtos
+            else self.requested_page_boundaries.get_empty_page_boundaries()
+        )
         return dtos, paging_boundaries
 
     @abc.abstractmethod
@@ -290,14 +325,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         :return: Complete API ReturnValueWithMeta ready to go out
         """
         try:
-            dtos, paging_boundaries_in = await self.get_data()
-            paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
-            if paging_boundaries_in:
-                paging_boundaries = paging_boundaries_in
-            else:
-                # nothing found now, use the current page boundaries to determine if something exists before us
-                paging_boundaries = self.requested_page_boundaries
-
+            dtos, paging_boundaries = await self.get_data()
             metadata = await self._get_page_count(paging_boundaries)
             links = await self.prepare_paging_links(dtos, paging_boundaries, metadata)
             return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata.to_dict())
