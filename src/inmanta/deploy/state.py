@@ -41,6 +41,8 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
     def get_all_provides_transitively(self, resource: ResourceIdStr | set[ResourceIdStr]) -> list[ResourceIdStr]:
         """
         This method returns all the provides (transitively) of the given resource.
+
+        :param resource: The resource or set of resources for which the provides have to be resolved transitively.
         """
         input_set = {resource} if isinstance(resource, str) else set(resource)
         work: SimpleQueue[ResourceIdStr] = SimpleQueue()
@@ -70,6 +72,9 @@ class ResourceDetails:
     id: Id = dataclasses.field(init=False, compare=False, hash=False)
 
     def is_undeployable(self) -> bool:
+        """
+        Return True iff the resource is in a state where it cannot be deployed (e.g. undefined).
+        """
         return self.status in const.UNDEPLOYABLE_STATES
 
     def __post_init__(self) -> None:
@@ -180,6 +185,8 @@ class ModelState:
         """
         Mark the given resource as blocked, i.e. it's not deployable.
 
+        :param resource: The resource that should be blocked.
+        :param details: The details of the resource that should be blocked.
         :param transient: True iff the given resource is blocked transitively. It's blocked because one of its dependencies
                           is blocked.
         """
@@ -205,6 +212,7 @@ class ModelState:
         Must be called under the scheduler lock. This method assumes that all the resources of the model version
         are populated in the resources dictionary.
 
+        :param resources: The set of resources for which the provides have to be blocked.
         :return: The set of dependent resources that were marked as blocked (transitively).
         """
         result = set()
@@ -220,6 +228,9 @@ class ModelState:
 
         Must be called under the scheduler lock. This method assumes that all the resources of the model version
         are populated in the resources dictionary.
+
+        :param resource: The resource that has to be unblocked and potentially any of its provides as a consequence of
+                         `resource` being unblocked.
         """
 
         def _unblock(resource: ResourceIdStr) -> None:

@@ -247,6 +247,9 @@ def make_resource_minimal(environment):
 async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:
     """
     Return True iff the given agent has finished executing all its tasks.
+
+    :param scheduler: The resource scheduler that hands out work to the agent for which the done status has to be checked.
+    :param agent_name: The name of the agent for which the done status has to be checked.
     """
     agent_queue = scheduler._work.agent_queues._agent_queues.get(agent_name)
     if not agent_queue:
@@ -1143,6 +1146,15 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         deployment_result: state.DeploymentResult,
         blocked_status: state.BlockedStatus,
     ) -> None:
+        """
+        Assert that the given resource has the given ResourceStatus, DeploymentResult and BlockedStatus.
+        If not, this method raises an AssertionError.
+
+        :param resource: The resource of which the above-mentioned parameters have to be asserted.
+        :param status: The ResourceStatus to assert.
+        :param deployment_result: The DeploymentResult to assert.
+        :param blocked_status: The BlockedStatus to assert.
+        """
         assert agent.scheduler._state.resource_state[resource].status is status
         assert agent.scheduler._state.resource_state[resource].deployment_result is deployment_result
         assert agent.scheduler._state.resource_state[resource].blocked is blocked_status
