@@ -292,11 +292,13 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         try:
             dtos, paging_boundaries_in = await self.get_data()
             paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
-            found_result: bool = True if paging_boundaries_in else False
-            # If nothing is found now, use the requested page boundaries to determine if something exists before us
-            paging_boundaries = paging_boundaries_in if paging_boundaries_in else self.requested_page_boundaries
+            if paging_boundaries_in:
+                paging_boundaries = paging_boundaries_in
+            else:
+                # nothing found now, use the current page boundaries to determine if something exists before us
+                paging_boundaries = self.requested_page_boundaries
 
-            metadata = await self._get_page_count(paging_boundaries, found_result)
+            metadata = await self._get_page_count(paging_boundaries)
             links = await self.prepare_paging_links(dtos, paging_boundaries, metadata)
             return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata.to_dict())
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
@@ -304,17 +306,12 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
     # Paging helpers
 
-    async def _get_page_count(
-        self, bounds: Union[PagingBoundaries, RequestedPagingBoundaries], found_result: bool
-    ) -> PagingMetadata:
+    async def _get_page_count(self, bounds: Union[PagingBoundaries, RequestedPagingBoundaries]) -> PagingMetadata:
         """
         Construct the page counts,
 
         either from the PagingBoundaries if we have a valid page,
         or from the RequestedPagingBoundaries if we got an empty page
-
-        :param bounds:
-        :param found_result: Have we found any result
         """
         query_builder = self.get_base_query_for_page_count()
 
@@ -360,24 +357,10 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
                 page_size=self.limit,
             )
 
-        def construct_filter(filter_name: str, filter_condition: str, drop_condition: PagingOrder) -> str:
-            """
-            Construct filter to count the number of items that are before / after the current page.
-            The filtering might be dropped if no dtos are found and iff the order provided in drop_condition is the one used
-            in the current page.
-
-            :param filter_name: The name of the variable to store the result of the select
-            :param filter_condition: The condition to use in the filtering
-            """
-            if not filter_condition or (not found_result and order == drop_condition):
-                return f", COUNT(*) as {filter_name}"
-            else:
-                return f", COUNT(*) filter ({filter_condition}) as {filter_name}"
-
         select_clause = (
             "SELECT COUNT(*) as count_total"
-            + (construct_filter(filter_name="count_before", filter_condition=before_filter, drop_condition=PagingOrder.ASC))
-            + (construct_filter(filter_name="count_after", filter_condition=after_filter, drop_condition=PagingOrder.DESC))
+            + (f", COUNT(*) filter ({before_filter}) as count_before" if before_filter else "")
+            + (f", COUNT(*) filter ({after_filter}) as count_after " if after_filter else "")
         )
 
         query_builder = query_builder.select(select_clause)
@@ -387,7 +370,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         result = cast(list[Record], result)
         if not result:
             raise InvalidQueryParameter("Could not determine page bounds")
-
         return PagingMetadata(
             total=cast(int, result[0]["count_total"]),
             before=cast(int, result[0].get("count_before", 0)),
@@ -417,22 +399,21 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         url_query_params.update(self.get_extra_url_parameters())
 
-        base_url = self.get_base_url()
+        if dtos:
+            base_url = self.get_base_url()
 
-        def value_to_string(value: Union[str, int, UUID, datetime]) -> str:
-            if isinstance(value, datetime):
-                # Accross API boundaries, all naive datetime instances are assumed UTC.
-                # Returns ISO timestamp.
-                return datetime_iso_format(value, tz_aware=opt.server_tz_aware_timestamps.get())
-            return str(value)
+            def value_to_string(value: Union[str, int, UUID, datetime]) -> str:
+                if isinstance(value, datetime):
+                    # Accross API boundaries, all naive datetime instances are assumed UTC.
+                    # Returns ISO timestamp.
+                    return datetime_iso_format(value, tz_aware=opt.server_tz_aware_timestamps.get())
+                return str(value)
 
-        def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:
-            params = url_query_params.copy()
-            params.update({k: value_to_string(v) for k, v in args.items() if v is not None})
-            return f"{base_url}?{urllib.parse.urlencode(params, doseq=True)}"
+            def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:
+                params = url_query_params.copy()
+                params.update({k: value_to_string(v) for k, v in args.items() if v is not None})
+                return f"{base_url}?{urllib.parse.urlencode(params, doseq=True)}"
 
-        if len(dtos) > 0:
-            # If we have found something, then we can rely on the information on the paging boundaries
             link_with_end = make_link(
                 end=paging_boundaries.end,
                 last_id=paging_boundaries.last_id,
@@ -441,38 +422,29 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
                 start=paging_boundaries.start,
                 first_id=paging_boundaries.first_id,
             )
-        else:
-            # Otherwise, We might be too far or not far enough to get actual results and we need to return a link that will
-            # actually return some results. Therefore, we cannot keep the current paging boundaries.
-            link_with_end = make_link(
-                end=paging_boundaries.start,
-                last_id=paging_boundaries.first_id,
-            )
-            link_with_start = make_link(
-                start=paging_boundaries.end,
-                first_id=paging_boundaries.last_id,
-            )
 
-        if meta.after > 0:
-            if self.order.get_order() == "DESC":
-                links["next"] = link_with_end
-            else:
-                links["next"] = link_with_start
+            has_next = meta.after > 0
+            if has_next:
+                if self.order.get_order() == "DESC":
+                    links["next"] = link_with_end
+                else:
+                    links["next"] = link_with_start
 
-        if meta.before > 0:
-            if self.order.get_order() == "DESC":
-                links["prev"] = link_with_start
-            else:
-                links["prev"] = link_with_end
-            # First page
-            links["first"] = make_link()
+            has_prev = meta.before > 0
+            if has_prev:
+                if self.order.get_order() == "DESC":
+                    links["prev"] = link_with_start
+                else:
+                    links["prev"] = link_with_end
+                # First page
+                links["first"] = make_link()
 
-        # Same page
-        if dtos:
+            # Same page
             links["self"] = make_link(
                 first_id=self.requested_page_boundaries.first_id,
                 start=self.requested_page_boundaries.start,
             )
+            # TODO: last links
         return links
 
     def validate_limit(self, limit: Optional[int]) -> int:
