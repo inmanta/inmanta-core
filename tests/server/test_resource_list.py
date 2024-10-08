@@ -461,13 +461,13 @@ async def test_none_resources_paging(server, client, env_with_resources):
         limit=2,
         sort=f"{order_by_column}.{order}",
         start="ausf",
-        first_id="athonet_core%3A%3Alicense%3A%3ALicense%5BDARI-LDARI-CP002%2Ccomponent_id%3Dausf%5D",
+        first_id="anet_co%3A%3Aresource%3A%3AResource%5BINMANTA-INMANTA-INMT%2Cresource_id%3Dinmt%5D",
     )
     assert no_result.code == 200
     assert len(no_result.result["data"]) == 0
     assert no_result.result["links"] == {
-        "next": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&end=ausf&last_id=athonet_core%253A%253Alicense"
-        "%253A%253ALicense%255BDARI-LDARI-CP002%252Ccomponent_id%253Dausf%255D"
+        "next": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&end=ausf&last_id=anet_co%253A%253Aresource"
+        "%253A%253AResource%255BINMANTA-INMANTA-INMT%252Cresource_id%253Dinmt%255D"
     }
     assert no_result.result["metadata"] == {"after": 6, "before": 0, "page_size": 2, "total": 6}
 
