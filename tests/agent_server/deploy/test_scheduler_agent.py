@@ -602,6 +602,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         status=state.ResourceStatus.UP_TO_DATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
+        agent_status=state.AgentStatus.STARTED,
     )
     assert rid1 not in agent.scheduler._state.dirty
     # set up initial state: release two changes for r1 -> the second makes the first stale
@@ -615,6 +616,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         status=state.ResourceStatus.HAS_UPDATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
+        agent_status=state.AgentStatus.STARTED,
     )
     assert rid1 in agent.scheduler._state.dirty
 
@@ -626,6 +628,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         status=state.ResourceStatus.HAS_UPDATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
+        agent_status=state.AgentStatus.STARTED,
     )
     assert rid1 in agent.scheduler._state.dirty
     # verify that r2 is still blocked on r1
@@ -651,6 +654,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         status=state.ResourceStatus.UP_TO_DATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
+        agent_status=state.AgentStatus.STARTED,
     )
     assert rid1 not in agent.scheduler._state.dirty
 

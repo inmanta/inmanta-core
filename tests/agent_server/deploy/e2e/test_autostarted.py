@@ -264,6 +264,40 @@ def ensure_resource_tracker_is_started():
     process.close()
 
 
+async def ensure_old_executor_are_stopped(current_pid: int):
+    """
+    In POSIX, when you spawn a process, a resource tracker is also created so by doing this, we can assert some facts
+    such as the number of processes, ...
+    """
+    def wait_for_old_executor():
+        terminated_process = []
+        executor_process = []
+        fork_server_process = []
+        for process in get_process_state(current_pid):
+            if process.name() == "inmanta: multiprocessing fork server":
+                fork_server_process.append(process)
+                process.kill()
+            if "inmanta: executor process" in process.name():
+                executor_process.append(process)
+                try:
+                    if process.status() == "terminated":
+                        terminated_process.append(process)
+                except psutil.NoSuchProcess:
+                    terminated_process.append(None)
+
+        for fork_server in fork_server_process:
+            try:
+                if fork_server.status() == "terminated":
+                    terminated_process.append(fork_server)
+            except psutil.NoSuchProcess:
+                terminated_process.append(None)
+
+        # Only one process should end up in terminated
+        return len(terminated_process) == len(executor_process) + len(fork_server_process)
+
+    await retry_limited(wait_for_old_executor, 10)
+
+
 def get_process_state(current_pid: int) -> dict[psutil.Process, list[psutil.Process]]:
     """
     Retrieves the current list of processes running under this process
@@ -352,7 +386,9 @@ async def test_halt_deploy(
     """
     Verify that the new scheduler can actually fork
     """
+    current_pid = os.getpid()
     await agent.stop()
+    await ensure_old_executor_are_stopped(current_pid)
 
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     agent_name = "agent1"
@@ -360,7 +396,6 @@ async def test_halt_deploy(
     await env.set(data.AUTOSTART_ON_START, True)
 
     config.Config.set("config", "environment", environment)
-    current_pid = os.getpid()
 
     start_children = get_process_state(current_pid)
     assert len(start_children) == 1
@@ -481,7 +516,9 @@ async def test_pause_agent_deploy(
     """
     Verify that the new scheduler can actually fork
     """
+    current_pid = os.getpid()
     await agent.stop()
+    await ensure_old_executor_are_stopped(current_pid)
 
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     agent_name = "agent1"
@@ -489,7 +526,6 @@ async def test_pause_agent_deploy(
     await env.set(data.AUTOSTART_ON_START, True)
 
     config.Config.set("config", "environment", environment)
-    current_pid = os.getpid()
 
     def get_process_state() -> dict[psutil.Process, list[psutil.Process]]:
         """

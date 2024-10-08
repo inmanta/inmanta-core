@@ -103,7 +103,7 @@ class ResourceState:
     #   https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
     status: ResourceStatus
     deployment_result: DeploymentResult
-    agent_stauts: AgentStatus
+    agent_status: AgentStatus
 
 
 @dataclass(kw_only=True)
@@ -155,7 +155,7 @@ class ModelState:
             self.resource_state[resource] = ResourceState(
                 status=ResourceStatus.HAS_UPDATE,
                 deployment_result=DeploymentResult.NEW,
-                agent_stauts=AgentStatus.STARTED,
+                agent_status=AgentStatus.STARTED,
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.add(resource)
