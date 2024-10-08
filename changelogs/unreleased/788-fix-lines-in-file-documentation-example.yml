@@ -1,0 +1,3 @@
+description: "Update `example_lines_in_file.cf` documentation example for embedded entities addition and removal tracking"
+change-type: patch
+destination-branches: [master, iso7]
