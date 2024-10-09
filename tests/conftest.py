@@ -114,7 +114,6 @@ import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
 import inmanta.user_setup
-import logfire
 from inmanta import config, const, data, env, loader, protocol, resources
 from inmanta.agent import config as agent_cfg
 from inmanta.agent import handler
@@ -1983,13 +1982,3 @@ def disable_version_and_agent_cleanup_job():
     orchestrationservice.PERFORM_CLEANUP = False
     yield
     orchestrationservice.PERFORM_CLEANUP = old_perform_cleanup
-
-
-@pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
-def configure_logfire():
-    """Configure logfire to ensure all the instrumentation works correctly and does not provide warnings. This does not
-    setup tracing for tests"""
-    logfire.configure(
-        send_to_logfire=False,
-        console=False,
-    )
