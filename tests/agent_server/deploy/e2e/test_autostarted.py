@@ -294,13 +294,14 @@ def retrieve_mapping_process(current_processes: list[psutil.Process]) -> dict[st
 
 
 @pytest.fixture
-async def ensure_consistent_starting_point(agent) -> int:
+async def ensure_consistent_starting_point(agent, ensure_resource_tracker_is_started) -> int:
     """
     In POSIX, when you spawn a process, a resource tracker is also created so by doing this, we can assert some facts
     such as the number of processes, ...
     """
 
     def is_consistent_state(current_processes: list[psutil.Process], process_mapping: dict[str, list[psutil.Process]]) -> bool:
+        logger.warning(f"IS CONSISTENT STATE: {current_processes}")
         match len(current_processes):
             case 2:
                 return len(process_mapping["pg_ctl"]) == 1 and len(process_mapping["python"]) == 1
@@ -309,7 +310,7 @@ async def ensure_consistent_starting_point(agent) -> int:
             case _:
                 return False
 
-    def wait_for_consistent_state():
+    async def wait_for_consistent_state():
         pre_start_children = get_process_state(current_pid)
         assert len(pre_start_children) == 1
         assert len(pre_start_children.values()) == 1
@@ -323,7 +324,7 @@ async def ensure_consistent_starting_point(agent) -> int:
 
     current_pid = os.getpid()
     await agent.stop()
-    await retry_limited(wait_for_consistent_state, timeout=10)
+    await retry_limited(wait_for_consistent_state, timeout=10, interval=1)
     return current_pid
 
 
@@ -347,7 +348,6 @@ async def test_halt_deploy(
     clienthelper,
     environment,
     no_agent_backoff,
-    ensure_resource_tracker_is_started,
     auto_start_agent: bool,
     should_time_out: bool,
     time_to_sleep: int,
