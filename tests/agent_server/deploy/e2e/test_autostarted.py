@@ -306,7 +306,19 @@ async def ensure_consistent_starting_point(agent, ensure_resource_tracker_is_sta
             case 2:
                 return len(process_mapping["pg_ctl"]) == 1 and len(process_mapping["python"]) == 1
             case 3:
-                return len(process_mapping["pg_ctl"]) == 1 and len(process_mapping["python"]) == 2
+                return (
+                    len(process_mapping["pg_ctl"]) == 1
+                    and len(process_mapping["python"]) == 2
+                    or len(process_mapping["pg_ctl"]) == 1
+                    and len(process_mapping["python"]) == 1
+                    and len(process_mapping["inmanta fork server"]) == 1
+                )
+            case 4:
+                return (
+                    len(process_mapping["pg_ctl"]) == 1
+                    and len(process_mapping["python"]) == 2
+                    and len(process_mapping["inmanta fork server"]) == 1
+                )
             case _:
                 return False
 
@@ -317,14 +329,11 @@ async def ensure_consistent_starting_point(agent, ensure_resource_tracker_is_sta
         old_children = list(pre_start_children.values())[0]
         mapping_process = retrieve_mapping_process(old_children)
 
-        for process in mapping_process["inmanta fork server"]:
-            process.kill()
-
         return is_consistent_state(current_processes=old_children, process_mapping=mapping_process)
 
     current_pid = os.getpid()
     await agent.stop()
-    await retry_limited(wait_for_consistent_state, timeout=10, interval=1)
+    await retry_limited(wait_for_consistent_state, timeout=10)
     return current_pid
 
 
@@ -397,8 +406,7 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     assert len(children_after_deployment) == 1
     assert len(children_after_deployment.values()) == 1
     current_children_after_deployment: list[psutil.Process] = list(children_after_deployment.values())[0]
-    # The scheduler and the new executor should at least be there. Depending on if the inmanta fork server was already running,
-    # we might have another process
+    # The scheduler, the fork server and the new executor should be there
     expected_additional_children_after_deployment = 3
     assert (
         len(current_children_after_deployment) == len(pre_existent_children) + expected_additional_children_after_deployment
@@ -536,8 +544,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert len(children_after_deployment) == 1
     assert len(children_after_deployment.values()) == 1
     current_children_after_deployment: list[psutil.Process] = list(children_after_deployment.values())[0]
-    # The scheduler and the new executor should at least be there. Depending on if the inmanta fork server was already running,
-    # we might have another process
+    # The scheduler, the fork server and the new executor should be there
     expected_additional_children_after_deployment = 3
     assert (
         len(current_children_after_deployment) == len(pre_existent_children) + expected_additional_children_after_deployment
