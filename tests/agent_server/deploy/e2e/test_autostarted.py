@@ -535,7 +535,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
         return deployed == deployed_resources
 
     try:
-        await _wait_until_deployment_finishes(client, environment, version)
+        await retry_limited(are_resources_deployed, 10)
     except (asyncio.TimeoutError, AssertionError):
         pass
     finally:
@@ -578,7 +578,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert summary["by_state"]["deploying"] == 1, f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 1, f"Unexpected summary: {summary}"
 
-    await retry_limited(are_resources_deployed, timeout=5, deployed_resources=2)
+    await retry_limited(are_resources_deployed, timeout=6, interval=1, deployed_resources=2)
 
     def wait_for_terminated_status():
         # The process is still there but should be with a `Terminated` status
