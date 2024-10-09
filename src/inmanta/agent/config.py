@@ -46,7 +46,7 @@ use_autostart_agent_map = Option(
     "config",
     "use_autostart_agent_map",
     False,
-    """If this option is set to true, the agent-map of this agent will be set the the autostart_agent_map configured on the
+    """If this option is set to true, the agent-map of this agent will be set to the autostart_agent_map configured on the
     server. The agent_map will be kept up-to-date automatically.""",
     is_bool,
 )
@@ -162,6 +162,17 @@ agent_get_resource_backoff: Option[float] = Option(
     is_float,
 )
 
+executor_venv_retention_time: Option[int] = Option(
+    "agent",
+    "executor-venv-retention-time",
+    3600,
+    "This is the number of seconds to wait before unused Python virtual environments of an executor are removed from "
+    "the inmanta server. Setting this option too low may result in a high load on the Inmanta server. Setting it too high"
+    " may result in increased disk usage.",
+    # We know that the .inmanta venv status file is touched every minute, so `60` seconds is the lowest default we can use
+    is_lower_bounded_int(60),
+)
+
 
 class AgentExecutorMode(str, enum.Enum):
     threaded = "threaded"
@@ -197,6 +208,14 @@ agent_executor_retention_time = Option[int](
     "executor-retention-time",
     60,
     "Amount of time (in seconds) to wait before cleaning up inactive executors.",
+    is_time,
+)
+
+agent_cache_cleanup_tick_rate = Option[int](
+    "agent",
+    "cache-cleanup-tick-rate",
+    1,
+    "The rate (in seconds) at which the agent will periodically attempt to remove stale entries from the cache when idle.",
     is_time,
 )
 

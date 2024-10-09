@@ -18,6 +18,7 @@
 
 import asyncio
 import dataclasses
+import json
 import logging
 import os
 import time
@@ -26,7 +27,7 @@ from collections.abc import Mapping
 from functools import partial
 from itertools import groupby
 from logging import DEBUG
-from typing import Any, Optional
+from typing import Any, Collection, Coroutine, Optional
 from uuid import UUID
 
 import psutil
@@ -37,7 +38,9 @@ import utils
 from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent, wait_for_n_deployed_resources
 from inmanta import agent, config, const, data, execute
 from inmanta.agent import config as agent_config
+from inmanta.agent import executor
 from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deploy_response_matrix
+from inmanta.agent.executor import ResourceInstallSpec
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
@@ -45,9 +48,11 @@ from inmanta.data import (
     AUTOSTART_AGENT_DEPLOY_INTERVAL,
     AUTOSTART_AGENT_REPAIR_INTERVAL,
     ENVIRONMENT_AGENT_TRIGGER_METHOD,
+    PipConfig,
     Setting,
     convert_boolean,
 )
+from inmanta.protocol import Client
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -56,6 +61,7 @@ from inmanta.server import (
     SLICE_SESSION_MANAGER,
 )
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.protocol import Server
 from inmanta.server.services.environmentservice import EnvironmentService
 from inmanta.util import get_compiler_version
 from utils import (
@@ -145,6 +151,7 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
             "value": "value1",
             "id": "test::Resource[agent2,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -153,6 +160,7 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
             "value": execute.util.Unknown(source=None),
             "id": "test::Resource[agent2,key=key2],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -161,6 +169,7 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
             "value": execute.util.Unknown(source=None),
             "id": "test::Resource[agent2,key=key4],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Resource[agent2,key=key1],v=%d" % version, "test::Resource[agent2,key=key2],v=%d" % version],
             "purged": False,
         },
@@ -169,6 +178,7 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
             "value": "val",
             "id": "test::Resource[agent2,key=key5],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Resource[agent2,key=key4],v=%d" % version],
             "purged": False,
         },
@@ -271,6 +281,7 @@ async def test_server_restart(
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
         },
         {
@@ -280,6 +291,7 @@ async def test_server_restart(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key3",
@@ -288,6 +300,7 @@ async def test_server_restart(
             "requires": [],
             "purged": True,
             "send_event": False,
+            "receive_events": False,
         },
     ]
 
@@ -358,6 +371,7 @@ async def test_spontaneous_deploy(
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "purged": False,
                 "send_event": False,
+                "receive_events": False,
                 "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
             },
             {
@@ -367,6 +381,7 @@ async def test_spontaneous_deploy(
                 "requires": [],
                 "purged": False,
                 "send_event": False,
+                "receive_events": False,
             },
             {
                 "key": "key3",
@@ -375,6 +390,7 @@ async def test_spontaneous_deploy(
                 "requires": [],
                 "purged": True,
                 "send_event": False,
+                "receive_events": False,
             },
         ]
 
@@ -445,6 +461,7 @@ async def test_spontaneous_repair(
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
         },
         {
@@ -454,6 +471,7 @@ async def test_spontaneous_repair(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key3",
@@ -462,6 +480,7 @@ async def test_spontaneous_repair(
             "requires": [],
             "purged": True,
             "send_event": False,
+            "receive_events": False,
         },
     ]
 
@@ -553,6 +572,7 @@ async def test_failing_deploy_no_handler(
             "id": "test::Noprov[agent1,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": [],
         }
     ]
@@ -614,6 +634,7 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
             "id": "test::Wait[agent1,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": [],
         },
         {
@@ -622,6 +643,7 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
             "id": "test::Wait[agent1,key=key2],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Wait[agent1,key=key1],v=%d" % version],
         },
         {
@@ -630,6 +652,7 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
             "id": "test::Wait[agent2,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": [],
         },
         {
@@ -638,6 +661,7 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
             "id": "test::Wait[agent2,key=key2],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Wait[agent2,key=key1],v=%d" % version],
         },
     ]
@@ -745,6 +769,7 @@ async def test_server_agent_api(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key2",
@@ -753,6 +778,7 @@ async def test_server_agent_api(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
     ]
 
@@ -848,7 +874,17 @@ async def test_unknown_parameters(
     resource_id_wov = "test::Resource[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": resource_id,
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        }
+    ]
 
     unknowns = [{"resource": resource_id_wov, "parameter": "length", "source": "fact"}]
 
@@ -911,6 +947,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key2",
@@ -919,6 +956,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
             "requires": ["test::Fail[agent1,key=key],v=%d" % version],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key3",
@@ -927,6 +965,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
             "requires": ["test::Fail[agent1,key=key],v=%d" % version],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key4",
@@ -935,6 +974,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
             "requires": ["test::Resource[agent1,key=key3],v=%d" % version],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key5",
@@ -943,6 +983,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
             "requires": ["test::Resource[agent1,key=key4],v=%d" % version, "test::Fail[agent1,key=key],v=%d" % version],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
     ]
 
@@ -1012,6 +1053,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
                         "requires": ["test::Resource[%s,key=key3],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
+                        "receive_events": False,
                     },
                     {
                         "key": "key2",
@@ -1020,6 +1062,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
                         "requires": ["test::Wait[%s,key=key],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
+                        "receive_events": False,
                     },
                     {
                         "key": "key3",
@@ -1028,6 +1071,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
                         "requires": [],
                         "purged": False,
                         "send_event": False,
+                        "receive_events": False,
                     },
                     {
                         "key": "key4",
@@ -1036,6 +1080,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
                         "requires": ["test::Resource[%s,key=key3],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
+                        "receive_events": False,
                     },
                     {
                         "key": "key5",
@@ -1047,6 +1092,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
                         ],
                         "purged": False,
                         "send_event": False,
+                        "receive_events": False,
                     },
                 ]
             )
@@ -1144,6 +1190,7 @@ async def test_cross_agent_deps(
             "id": "test::Resource[agent 1,key=key1],v=%d" % version,
             "purged": False,
             "send_event": False,
+            "receive_events": False,
             "requires": ["test::Wait[agent 1,key=key2],v=%d" % version, "test::Resource[agent2,key=key3],v=%d" % version],
         },
         {
@@ -1153,6 +1200,7 @@ async def test_cross_agent_deps(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key3",
@@ -1161,6 +1209,7 @@ async def test_cross_agent_deps(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
         {
             "key": "key4",
@@ -1169,6 +1218,7 @@ async def test_cross_agent_deps(
             "requires": [],
             "purged": False,
             "send_event": False,
+            "receive_events": False,
         },
     ]
 
@@ -1243,6 +1293,7 @@ async def test_auto_deploy(
                 "value": "value1",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
             },
@@ -1251,6 +1302,7 @@ async def test_auto_deploy(
                 "value": value_resource_two,
                 "id": "test::Resource[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "requires": [],
                 "purged": False,
             },
@@ -1259,6 +1311,7 @@ async def test_auto_deploy(
                 "value": None,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "requires": [],
                 "purged": True,
             },
@@ -1324,6 +1377,7 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
             "value": "value1",
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
         },
@@ -1332,6 +1386,7 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
             "value": "value2",
             "id": "test::Resource[agent1,key=key2],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -1422,6 +1477,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
             "value": "value1",
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -1430,6 +1486,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
             "value": "value1",
             "id": "test::Resource[agent2,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -1588,6 +1645,7 @@ async def test_autostart_mapping_update_uri(
                 "value": f"value{version}",
                 "id": f"test::Resource[{agent_name},key=key1],v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -1649,6 +1707,7 @@ async def test_autostart_clear_environment(server, client, resource_container, e
                 "value": "value1",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             }
@@ -1713,6 +1772,7 @@ async def test_autostart_clear_environment(server, client, resource_container, e
                 "value": "value1",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             }
@@ -1766,6 +1826,7 @@ async def test_autostart_clear_agent_venv_on_delete(
                 "value": "value1",
                 "id": f"test::Resource[agent1,key=key1],v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             }
@@ -1783,11 +1844,11 @@ async def test_autostart_clear_agent_venv_on_delete(
 
     assert os.path.exists(venv_dir_agent1)
 
+    result = await client.delete_environment(environment)
+    assert result.code == 200
+
     if delete_project:
         result = await client.delete_project(project_default)
-        assert result.code == 200
-    else:
-        result = await client.delete_environment(environment)
         assert result.code == 200
 
     assert not os.path.exists(venv_dir_agent1)
@@ -1824,6 +1885,7 @@ async def setup_environment_with_agent(client, project_name):
             "value": "value1",
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         }
@@ -1883,24 +1945,6 @@ async def test_stop_autostarted_agents_on_environment_removal(server, client, re
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=0)
 
 
-async def test_stop_autostarted_agents_on_project_removal(server, client, resource_container, no_agent_backoff):
-    current_process = psutil.Process()
-    inmanta_agent_child_processes: list[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
-    resource_container.Provider.reset()
-    (project1_id, env1_id) = await setup_environment_with_agent(client, "proj1")
-    await setup_environment_with_agent(client, "proj2")
-
-    # Two autostarted agents should be running (one in proj1 and one in proj2).
-    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=2)
-
-    result = await client.delete_project(id=project1_id)
-    assert result.code == 200, result.result
-
-    # The autostarted agent of proj1 should be terminated when its project is deleted
-    # The autostarted agent of proj2 keep running
-    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
-
-
 async def test_export_duplicate(resource_container, snippetcompiler):
     """
     The exported should provide a compilation error when a resource is defined twice in a model
@@ -1911,7 +1955,8 @@ async def test_export_duplicate(resource_container, snippetcompiler):
 
         test::Resource(key="test", value="foo")
         test::Resource(key="test", value="bar")
-    """
+    """,
+        autostd=True,
     )
 
     with pytest.raises(CompilerException) as exc:
@@ -1935,6 +1980,7 @@ class ResourceProvider:
             "value": "value1",
             "id": "test::Resource[%s,key=%s],v=%d" % (agent, key, version),
             "send_event": True,
+            "receive_events": False,
             "purged": False,
             "requires": requires,
         }
@@ -2029,6 +2075,7 @@ async def test_deploy_and_events(
             "value": "value1",
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": True,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -2100,6 +2147,7 @@ async def test_reload(
             "value": "value1",
             "id": "test::Resource[agent1,key=key2],v=%d" % version,
             "send_event": True,
+            "receive_events": False,
             "purged": False,
             "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
         },
@@ -2162,6 +2210,7 @@ async def test_s_repair_postponed_due_to_running_deploy(
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2170,6 +2219,7 @@ async def test_s_repair_postponed_due_to_running_deploy(
                 "value": "value2",
                 "id": "test::Wait[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -2178,6 +2228,7 @@ async def test_s_repair_postponed_due_to_running_deploy(
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
             },
@@ -2241,6 +2292,7 @@ async def test_s_repair_interrupted_by_deploy_request(
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2249,6 +2301,7 @@ async def test_s_repair_interrupted_by_deploy_request(
                 "value": "value2",
                 "id": "test::Wait[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -2257,6 +2310,7 @@ async def test_s_repair_interrupted_by_deploy_request(
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
             },
@@ -2371,6 +2425,7 @@ async def test_s_repair_during_repair(resource_container, agent, client, clienth
             "value": "value2",
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -2379,6 +2434,7 @@ async def test_s_repair_during_repair(resource_container, agent, client, clienth
             "value": "value2",
             "id": "test::Wait[agent1,key=key2],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
         },
@@ -2387,6 +2443,7 @@ async def test_s_repair_during_repair(resource_container, agent, client, clienth
             "value": "value2",
             "id": "test::Resource[agent1,key=key3],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
         },
@@ -2453,6 +2510,7 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2461,6 +2519,7 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
                 "value": "value2",
                 "id": "test::Wait[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -2469,6 +2528,7 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
             },
@@ -2537,6 +2597,7 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2545,6 +2606,7 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
                 "value": "value2",
                 "id": "test::Wait[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -2553,6 +2615,7 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
             },
@@ -2572,10 +2635,6 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
     while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
         await asyncio.sleep(0.1)
 
-    # cache has 1 version in flight
-    executor_instance = agent.executor_manager.executors["agent1"]
-    assert len(executor_instance._cache.counterforVersion) == 1
-
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
@@ -2584,10 +2643,6 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
     )
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
-
-    # cache has no versions in flight
-    # for issue #1883
-    assert not executor_instance._cache.counterforVersion
 
     # Incremental deploy
     #   * All resources are deployed successfully:
@@ -2628,6 +2683,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2636,6 +2692,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
                 "value": "value2",
                 "id": "test::Wait[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -2644,6 +2701,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
             },
@@ -2786,6 +2844,7 @@ async def test_s_periodic_Vs_full(
                 "value": "value2",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2794,6 +2853,7 @@ async def test_s_periodic_Vs_full(
                 "value": "value2",
                 "id": "test::Wait[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
             },
@@ -2802,6 +2862,7 @@ async def test_s_periodic_Vs_full(
                 "value": value_resource_three,
                 "id": "test::Resource[agent1,key=key3],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
             },
@@ -2821,10 +2882,6 @@ async def test_s_periodic_Vs_full(
     while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
         await asyncio.sleep(0.1)
 
-    # cache has 1 version in flight
-    executor_instance = agent.executor_manager.executors["agent1"]
-    assert len(executor_instance._cache.counterforVersion) == 1
-
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, push=False)
@@ -2836,8 +2893,6 @@ async def test_s_periodic_Vs_full(
     await resource_container.wait_for_done_with_waiters(client, environment, versions[action.wait_for])
     # cache has no versions in flight
     # for issue #1883
-
-    assert not executor_instance._cache.counterforVersion
 
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, action.msg)
 
@@ -2870,7 +2925,17 @@ async def test_bad_post_get_facts(
     resource_id_wov = "test::BadPost[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": resource_id,
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        }
+    ]
 
     await clienthelper.put_version_simple(resources, version)
 
@@ -2920,7 +2985,17 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
     resource_id_wov = "test::Wait[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": resource_id,
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        }
+    ]
 
     await clienthelper.put_version_simple(resources, version)
 
@@ -2969,6 +3044,7 @@ async def test_push_incremental_deploy(
                 "value": "value1",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -2977,6 +3053,7 @@ async def test_push_incremental_deploy(
                 "value": value_second_resource,
                 "id": "test::Resource[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "requires": [],
                 "purged": False,
             },
@@ -3066,6 +3143,7 @@ async def test_push_full_deploy(
                 "value": "value1",
                 "id": "test::Resource[agent1,key=key1],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -3074,6 +3152,7 @@ async def test_push_full_deploy(
                 "value": value_second_resource,
                 "id": "test::Resource[agent1,key=key2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "requires": [],
                 "purged": False,
             },
@@ -3143,6 +3222,7 @@ async def test_agent_run_sync(resource_container, environment, server, client, c
                 "autostart": "true",
                 "id": "test::AgentConfig[agent1,agentname=agent2],v=%d" % version,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
                 "purge_on_delete": False,
@@ -3177,6 +3257,7 @@ async def test_format_token_in_logline(server, agent, client, environment, resou
         "value": "Test value %T",
         "id": "test::Resource[agent1,key=key1],v=%d" % version,
         "send_event": False,
+        "receive_events": False,
         "purged": False,
         "requires": [],
     }
@@ -3227,6 +3308,7 @@ async def test_1016_cache_invalidation(
             "value": "Test value %s" % value,
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         }
@@ -3292,6 +3374,7 @@ async def test_agent_lockout(resource_container, environment, server, client, cl
         "value": "Test value %T",
         "id": "test::Resource[agent1,key=key1],v=%d" % version,
         "send_event": False,
+        "receive_events": False,
         "purged": False,
         "requires": [],
     }
@@ -3341,7 +3424,17 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     resource_id_wov = "test::Resource[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
 
-    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": resource_id,
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        }
+    ]
 
     await clienthelper.put_version_simple(resources, version)
 
@@ -3354,13 +3447,20 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     result = response.result
     assert result["resource"]["status"] == "unavailable"
 
+    logging.getLogger(__name__).warning("Found results: %s", json.dumps(result["logs"], indent=1))
+
+    def is_log_line(log_line):
+        return (
+            log_line["action"] == "deploy"
+            and log_line["status"] == "unavailable"
+            and ("failed to load handler code " in log_line["messages"][-1]["msg"])
+        )
+
     # Expected logs:
     #   [0] Deploy action: Failed to load handler code or install handler code
     #   [1] Pull action
     #   [2] Store action
-    assert result["logs"][0]["action"] == "deploy"
-    assert result["logs"][0]["status"] == "unavailable"
-    assert "Failed to load handler code " in result["logs"][0]["messages"][0]["msg"]
+    assert any((is_log_line(line) for line in result["logs"]))
 
 
 async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, async_finalizer):
@@ -3399,6 +3499,7 @@ async def test_issue_1662(resource_container, server, client, clienthelper, envi
             "autostart": "true",
             "id": resource_id,
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
             "purge_on_delete": False,
@@ -3468,6 +3569,7 @@ async def test_agent_stop_deploying_when_paused(
                 "value": "value1",
                 "id": f"test::Resource[{agent_name},key=key1],v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -3476,6 +3578,7 @@ async def test_agent_stop_deploying_when_paused(
                 "value": "value2",
                 "id": f"test::Wait[{agent_name},key=key2],v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [f"test::Resource[{agent_name},key=key1],v={version}"],
             },
@@ -3484,6 +3587,7 @@ async def test_agent_stop_deploying_when_paused(
                 "value": "value3",
                 "id": f"test::Resource[{agent_name},key=key3],v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [f"test::Wait[{agent_name},key=key2],v={version}"],
             },
@@ -3542,6 +3646,7 @@ async def test_agentinstance_stops_deploying_when_stopped(
             "value": "value1",
             "id": f"test::Resource[agent1,key=key1],v={version}",
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [],
         },
@@ -3550,6 +3655,7 @@ async def test_agentinstance_stops_deploying_when_stopped(
             "value": "value2",
             "id": f"test::Wait[agent1,key=key2],v={version}",
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [f"test::Resource[agent1,key=key1],v={version}"],
         },
@@ -3558,6 +3664,7 @@ async def test_agentinstance_stops_deploying_when_stopped(
             "value": "value3",
             "id": f"test::Wait[agent1,key=key3],v={version}",
             "send_event": False,
+            "receive_events": False,
             "purged": False,
             "requires": [f"test::Wait[agent1,key=key2],v={version}"],
         },
@@ -3607,6 +3714,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
                 "metadata": param.metadata,
                 "id": f"{param.resource_id},v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "purge_on_delete": False,
                 "requires": [],
@@ -3717,6 +3825,7 @@ async def test_set_non_expiring_fact_in_handler_6560(
                 "metadata": param.metadata,
                 "id": f"{param.resource_id},v={version}",
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "purge_on_delete": False,
                 "requires": [],
@@ -3818,6 +3927,7 @@ async def test_deploy_handler_method(server, client, environment, agent, clienth
                 "set_state_to_deployed": set_state_to_deployed_in_handler,
                 "id": rvid,
                 "send_event": False,
+                "receive_events": False,
                 "purged": False,
                 "requires": [],
             },
@@ -3887,3 +3997,229 @@ def test_deploy_response_matrix_invariants():
     for condition, reaction in deploy_response_matrix.items():
         if (reaction in [DeployRequestAction.interrupt, DeployRequestAction.terminate]) and condition[0][0] and condition[0][1]:
             assert not condition[1][1], "Invariant violation, regression on #6202"
+
+
+async def test_logging_failure_when_creating_venv(
+    resource_container,
+    agent: Agent,
+    client: Client,
+    clienthelper: ClientHelper,
+    environment: uuid.UUID,
+    no_agent_backoff: None,
+    caplog,
+    monkeypatch,
+):
+    """
+    Test goal: make sure that failed resources are correctly logged by the `resource_action` logger.
+    """
+
+    caplog.set_level(logging.INFO)
+    resource_container.Provider.reset()
+    agent_name = "agent1"
+    myagent_instance = agent._instances[agent_name]
+
+    resource_container.Provider.set("agent1", "key1", "value1")
+
+    def get_resources(version, value_resource_three):
+        return [
+            {
+                "key": "key1",
+                "value": "value2",
+                "id": "test::Resource[agent1,key=key1],v=%d" % version,
+                "send_event": False,
+                "receive_events": False,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key2",
+                "value": "value2",
+                "id": "test::AgentConfig[agent1,key=key2],v=%d" % version,
+                "send_event": False,
+                "receive_events": False,
+                "purged": False,
+                "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
+            },
+            {
+                "key": "key3",
+                "value": value_resource_three,
+                "id": "test::Resource[agent1,key=key3],v=%d" % version,
+                "send_event": False,
+                "receive_events": False,
+                "purged": False,
+                "requires": ["test::AgentConfig[agent1,key=key2],v=%d" % version],
+            },
+        ]
+
+    version1 = await clienthelper.get_version()
+
+    # Initial deploy
+    await _deploy_resources(client, environment, get_resources(version1, "value2"), version1, push=False)
+
+    async def ensure_code(code: Collection[ResourceInstallSpec]) -> executor.FailedResources:
+        raise RuntimeError(f"Failed to install handler `test` version={version1}")
+
+    monkeypatch.setattr(myagent_instance.executor_manager, "ensure_code", ensure_code)
+
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Deploy 1", is_full_deploy=False, is_periodic=False)
+    )
+
+    monkeypatch.undo()
+
+    expected_error_message_without_tb = (
+        "multiple resources: All resources of type `test::Resource` failed to load handler code or "
+        "install handler code dependencies: `Could not set up executor for agent1: Failed to"
+        " install handler `test` version=1`"
+    )
+
+    idx1 = log_index(
+        caplog,
+        f"resource_action_logger.{environment}",
+        logging.ERROR,
+        expected_error_message_without_tb,
+    )
+    actual_error_message = caplog.record_tuples[idx1][2]
+    expected_location = """, in ensure_code
+    raise RuntimeError(f"Failed to install handler `test` version={version1}")"""
+    assert expected_location in actual_error_message
+
+    # Logs should not appear twice
+    with pytest.raises(AssertionError):
+        log_index(
+            caplog,
+            f"resource_action_logger.{environment}",
+            logging.ERROR,
+            expected_error_message_without_tb,
+            idx1 + 1,
+        )
+
+    def retrieve_relevant_logs(result) -> str:
+        global_logs = result.result["logs"]
+        assert len(global_logs) > 1
+        relevant_logs = [e for e in global_logs if e["action"] == "deploy"]
+        assert len(relevant_logs) == 1
+        return "".join([log["msg"] for log in relevant_logs[0]["messages"]])
+
+    # Now let's check that everything is in the DB as well
+    # Given that everything is linked together, we can only fetch one resource and see what's present in the DB
+    result = await client.get_resource(
+        tid=environment,
+        id="test::Resource[agent1,key=key3],v=%d" % version1,
+        logs=True,
+    )
+
+    # Possible error messages that should be in the DB
+    expected_error_messages = expected_error_message_without_tb.replace("multiple resources: ", "")
+
+    relevant_logs = retrieve_relevant_logs(result)
+    assert expected_error_messages in relevant_logs
+    assert expected_location in relevant_logs
+    # Make sure we don't find the same record multiple times in the resource logs
+    assert relevant_logs.count(expected_error_messages) == 1
+
+
+async def test_agent_code_loading_with_failure(
+    caplog,
+    server: Server,
+    agent_factory: Coroutine[Any, Any, Agent],
+    client: Client,
+    environment: uuid.UUID,
+    monkeypatch,
+    clienthelper: ClientHelper,
+) -> None:
+    """
+    Test goal: make sure that failed resources are correctly returned by `get_code` and `ensure_code` methods.
+    The failed resources should have the right exception contained in the returned object.
+    """
+
+    caplog.set_level(DEBUG)
+
+    sources = {}
+
+    async def get_version() -> int:
+        version = await clienthelper.get_version()
+        res = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=[],
+            pip_config=PipConfig(),
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
+        return version
+
+    version_1 = await get_version()
+
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test": sources})
+    assert res.code == 200
+
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test2": sources})
+    assert res.code == 200
+
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test3": sources})
+    assert res.code == 200
+
+    old_value_config = config.Config.get("agent", "executor-mode")
+    config.Config.set("agent", "executor-mode", "threaded")
+
+    agent: Agent = await agent_factory(
+        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
+    )
+
+    resource_install_specs_1: list[ResourceInstallSpec]
+    resource_install_specs_2: list[ResourceInstallSpec]
+
+    # We want to test
+    nonexistent_version = -1
+    resource_install_specs_1, invalid_resources_1 = await agent.get_code(
+        environment=environment, version=nonexistent_version, resource_types=["test::Test", "test::Test2", "test::Test3"]
+    )
+    assert len(invalid_resources_1.keys()) == 3
+    for resource_type, exception in invalid_resources_1.items():
+        assert (
+            "Failed to get source code for " + resource_type + " version=-1, result={'message': 'Request or "
+            "referenced resource does not exist: The version of the code does not exist. "
+            + resource_type
+            + ", "
+            + str(nonexistent_version)
+            + "'}"
+        ) == str(exception)
+
+    await agent.executor_manager.ensure_code(
+        code=resource_install_specs_1,
+    )
+
+    resource_install_specs_2, _ = await agent.get_code(
+        environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"]
+    )
+
+    async def _install(blueprint: executor.ExecutorBlueprint) -> None:
+        raise Exception("MKPTCH: Unable to load code when agent is started with code loading disabled.")
+
+    monkeypatch.setattr(agent.executor_manager, "_install", _install)
+
+    failed_to_load = await agent.executor_manager.ensure_code(
+        code=resource_install_specs_2,
+    )
+    assert len(failed_to_load) == 2
+    for handler, exception in failed_to_load.items():
+        assert str(exception) == (
+            f"Failed to install handler {handler} version=1: "
+            f"MKPTCH: Unable to load code when agent is started with code loading disabled."
+        )
+
+    monkeypatch.undo()
+
+    idx1 = log_index(
+        caplog,
+        "inmanta.agent.code_manager",
+        logging.ERROR,
+        "Failed to get source code for test::Test2 version=-1",
+    )
+
+    log_index(caplog, "inmanta.agent.agent", logging.ERROR, "Failed to install handler test::Test version=1", idx1)
+
+    log_index(caplog, "inmanta.agent.agent", logging.ERROR, "Failed to install handler test::Test2 version=1", idx1)
+
+    config.Config.set("agent", "executor-mode", old_value_config)

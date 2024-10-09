@@ -54,7 +54,7 @@ from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
 
 import inmanta.compiler as compiler
-from inmanta import const, module, moduletool, protocol, util
+from inmanta import const, module, moduletool, protocol, tracing, util
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -64,6 +64,7 @@ from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env
 from inmanta.logging import InmantaLoggerConfig, LoggerMode, LoggerModeManager, _is_on_tty
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.services.databaseservice import server_db_connect
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
@@ -92,6 +93,7 @@ def start_server(options: argparse.Namespace) -> None:
     if options.db_wait_time is not None:
         Config.set("database", "wait_time", str(options.db_wait_time))
 
+    tracing.configure_logfire("server")
     util.ensure_event_loop()
 
     ibl = InmantaBootloader()
@@ -131,6 +133,7 @@ def start_agent(options: argparse.Namespace) -> None:
     if max_clients:
         AsyncHTTPClient.configure(None, max_clients=max_clients)
 
+    tracing.configure_logfire("agent")
     util.ensure_event_loop()
     a = agent.Agent()
 
@@ -138,6 +141,36 @@ def start_agent(options: argparse.Namespace) -> None:
     IOLoop.current().add_callback(a.start)
     IOLoop.current().start()
     LOGGER.info("Agent Shutdown complete")
+
+
+@command("scheduler", help_msg="Start the resource scheduler")
+def start_scheduler(options: argparse.Namespace) -> None:
+    """
+    Start the new agent with the Resource Scheduler
+    """
+    from inmanta.agent import agent_new
+
+    # The call to configure() should be done as soon as possible.
+    # If an AsyncHTTPClient is started before this call, the max_client
+    # will not be taken into account.
+    max_clients: Optional[int] = Config.get(section="agent_rest_transport", name="max_clients")
+
+    if max_clients:
+        AsyncHTTPClient.configure(None, max_clients=max_clients)
+
+    tracing.configure_logfire("agent_rs")
+
+    util.ensure_event_loop()
+    a = agent_new.Agent()
+
+    async def start() -> None:
+        await server_db_connect()
+        await a.start()
+
+    setup_signal_handlers(a.stop)
+    IOLoop.current().add_callback(start)
+    IOLoop.current().start()
+    LOGGER.info("Agent with Resource scheduler Shutdown complete")
 
 
 class ExperimentalFeatureFlags:
@@ -284,22 +317,23 @@ def compile_project(options: argparse.Namespace) -> None:
         )
         module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
-        summary_reporter = CompileSummaryReporter()
-        if options.profile:
-            import cProfile
-            import pstats
+        with tracing.span("compile"):
+            summary_reporter = CompileSummaryReporter()
+            if options.profile:
+                import cProfile
+                import pstats
 
-            with summary_reporter.compiler_exception.capture():
-                cProfile.runctx("do_compile()", globals(), {}, "run.profile")
-            p = pstats.Stats("run.profile")
-            p.strip_dirs().sort_stats("time").print_stats(20)
-        else:
-            t1 = time.time()
-            with summary_reporter.compiler_exception.capture():
-                do_compile()
-            LOGGER.debug("The entire compile command took %0.03f seconds", time.time() - t1)
+                with summary_reporter.compiler_exception.capture():
+                    cProfile.runctx("do_compile()", globals(), {}, "run.profile")
+                p = pstats.Stats("run.profile")
+                p.strip_dirs().sort_stats("time").print_stats(20)
+            else:
+                t1 = time.time()
+                with summary_reporter.compiler_exception.capture():
+                    do_compile()
+                LOGGER.debug("The entire compile command took %0.03f seconds", time.time() - t1)
 
-        summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
+            summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
 
 
 @command("list-commands", help_msg="Print out an overview of all commands", add_verbose_flag=False)
@@ -349,9 +383,9 @@ def deploy_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
 def deploy(options: argparse.Namespace) -> None:
     module.Project.get(options.main_file)
-    from inmanta import deploy as deploy_module
+    from inmanta import deploy_project
 
-    run = deploy_module.Deploy(options)
+    run = deploy_project.Deploy(options)
     try:
         if not run.setup():
             raise Exception("Failed to setup an embedded Inmanta orchestrator.")
@@ -513,6 +547,8 @@ def export(options: argparse.Namespace) -> None:
         if options.feature_compiler_cache is False:
             Config.set("compiler", "cache", "false")
 
+        tracing.configure_logfire("compiler")
+
         # try to parse the metadata as json. If a normal string, create json for it.
         if options.metadata is not None and len(options.metadata) > 0:
             try:
@@ -538,42 +574,43 @@ def export(options: argparse.Namespace) -> None:
 
         from inmanta.export import Exporter  # noqa: H307
 
-        summary_reporter = CompileSummaryReporter()
+        with tracing.span("compiler"):
+            summary_reporter = CompileSummaryReporter()
 
-        types: Optional[dict[str, inmanta_type.Type]]
-        scopes: Optional[Namespace]
+            types: Optional[dict[str, inmanta_type.Type]]
+            scopes: Optional[Namespace]
 
-        t1 = time.time()
-        with summary_reporter.compiler_exception.capture():
-            try:
-                (types, scopes) = do_compile()
-            except Exception:
-                types, scopes = (None, None)
-                raise
+            t1 = time.time()
+            with summary_reporter.compiler_exception.capture():
+                try:
+                    (types, scopes) = do_compile()
+                except Exception:
+                    types, scopes = (None, None)
+                    raise
 
     with logger_mode_manager.run_in_logger_mode(LoggerMode.EXPORTER):
         # Even if the compile failed we might have collected additional data such as unknowns. So
         # continue the export
+        with tracing.span("exporter"):
+            export = Exporter(options)
+            with summary_reporter.exporter_exception.capture():
+                results = export.run(
+                    types,
+                    scopes,
+                    metadata=metadata,
+                    model_export=options.model_export,
+                    export_plugin=options.export_plugin,
+                    partial_compile=options.partial_compile,
+                    resource_sets_to_remove=list(resource_sets_to_remove),
+                )
 
-        export = Exporter(options)
-        with summary_reporter.exporter_exception.capture():
-            results = export.run(
-                types,
-                scopes,
-                metadata=metadata,
-                model_export=options.model_export,
-                export_plugin=options.export_plugin,
-                partial_compile=options.partial_compile,
-                resource_sets_to_remove=list(resource_sets_to_remove),
-            )
-
-        if not summary_reporter.is_failure() and options.deploy:
-            version = results[0]
-            conn = protocol.SyncClient("compiler")
-            LOGGER.info("Triggering deploy for version %d" % version)
-            tid = cfg_env.get()
-            agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.full_deploy)
-            conn.release_version(tid, version, True, agent_trigger_method)
+            if not summary_reporter.is_failure() and options.deploy:
+                version = results[0]
+                conn = protocol.SyncClient("compiler")
+                LOGGER.info("Triggering deploy for version %d" % version)
+                tid = cfg_env.get()
+                agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.full_deploy)
+                conn.release_version(tid, version, True, agent_trigger_method)
 
         LOGGER.debug("The entire export command took %0.03f seconds", time.time() - t1)
         summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
@@ -835,6 +872,7 @@ def app() -> None:
     Run the compiler
     """
     log_config = InmantaLoggerConfig.get_instance()
+    logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
 
     # do an initial load of known config files to build the libdir path
     Config.load_config()
@@ -884,21 +922,23 @@ def app() -> None:
             if helpmsg is not None:
                 print(helpmsg)
 
-    try:
-        options.func(options)
-    except ShowUsageException as e:
-        print(e.args[0], file=sys.stderr)
-        parser.print_usage()
-    except CLIException as e:
-        report(e)
-        sys.exit(e.exitcode)
-    except Exception as e:
-        report(e)
-        sys.exit(1)
-    except KeyboardInterrupt as e:
-        report(e)
-        sys.exit(1)
-    sys.exit(0)
+    # if a traceparent is provided, restore the context
+    with tracing.attach_context({const.TRACEPARENT: os.environ[const.TRACEPARENT]} if const.TRACEPARENT in os.environ else {}):
+        try:
+            options.func(options)
+        except ShowUsageException as e:
+            print(e.args[0], file=sys.stderr)
+            parser.print_usage()
+        except CLIException as e:
+            report(e)
+            sys.exit(e.exitcode)
+        except Exception as e:
+            report(e)
+            sys.exit(1)
+        except KeyboardInterrupt as e:
+            report(e)
+            sys.exit(1)
+        sys.exit(0)
 
 
 if __name__ == "__main__":

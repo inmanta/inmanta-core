@@ -31,7 +31,7 @@ from urllib import parse
 import pydantic
 
 from inmanta import config as inmanta_config
-from inmanta import types, util
+from inmanta import const, tracing, types, util
 from inmanta.protocol import common, exceptions
 from inmanta.util import TaskHandler
 
@@ -143,10 +143,6 @@ class Endpoint(TaskHandler[None]):
 
     node_name = property(get_node_name)
 
-    async def stop(self) -> None:
-        """Stop this endpoint"""
-        await super().stop()
-
 
 class SessionEndpoint(Endpoint, CallTarget):
     """
@@ -167,6 +163,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         self.running: bool = True
         self.server_timeout = timeout
         self.reconnect_delay = reconnect_delay
+        self.dispatch_delay = 0.01  # keep at least 10 ms between dispatches
         self.add_call_target(self)
 
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
@@ -251,6 +248,10 @@ class SessionEndpoint(Endpoint, CallTarget):
 
                             for method_call in method_calls:
                                 self.add_background_task(self.dispatch_method(transport, method_call))
+                    # Always wait a bit between calls
+                    # reduces chance of missed agent map updates: https://github.com/inmanta/inmanta-core/issues/7831
+                    # encourage call batching
+                    await asyncio.sleep(self.dispatch_delay)
                 else:
                     LOGGER.warning(
                         "Heartbeat failed with status %d and message: %s, going to sleep for %d s",
@@ -294,7 +295,10 @@ class SessionEndpoint(Endpoint, CallTarget):
 
         body.update(kwargs)
 
-        response: common.Response = await transport._execute_call(config, body, method_call.headers)
+        with tracing.attach_context(
+            {const.TRACEPARENT: method_call.headers[const.TRACEPARENT]} if const.TRACEPARENT in method_call.headers else {}
+        ):
+            response: common.Response = await transport._execute_call(config, body, method_call.headers)
 
         if response.status_code == 500:
             msg = ""

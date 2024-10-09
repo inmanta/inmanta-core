@@ -1,0 +1,3 @@
+description: No longer make the server work as a child reaper
+change-type: patch
+destination-branches: [master]

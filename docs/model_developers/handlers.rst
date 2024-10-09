@@ -50,6 +50,7 @@ entity it is serializing.
 
     from inmanta.resources import resource, Resource
 
+
     @resource("std::File", agent="host.name", id_attribute="path")
     class File(Resource):
         fields = ("path", "owner", "hash", "group", "permissions", "purged", "reload")
@@ -63,6 +64,7 @@ entity it is serializing.
         @staticmethod
         def get_permissions(_, obj):
             return int(x.mode)
+
 
 
 Classes decorated with :func:`@resource<inmanta.resources.resource>` do not have to inherit directly from
@@ -132,14 +134,18 @@ method during resource deployment (in ``read_resource`` and/or ``create_resource
 
     @provider("openstack::FloatingIP", name="openstack")
     class FloatingIPHandler(OpenStackHandler):
-        def read_resource(self, ctx: handler.HandlerContext, resource: FloatingIP) -> None:
-            ...
+        def read_resource(
+            self, ctx: handler.HandlerContext, resource: FloatingIP
+        ) -> None: ...
 
-        def create_resource(self, ctx: handler.HandlerContext, resource: FloatingIP) -> None:
+        def create_resource(
+            self, ctx: handler.HandlerContext, resource: FloatingIP
+        ) -> None:
             ...
             # Setting fact manually
             for key, value in ...:
                 ctx.set_fact(fact_id=key, value=value, expires=True)
+
 
 
 By default, facts expire when they have not been refreshed or updated for a certain time, controlled by the
@@ -171,6 +177,7 @@ handler's :meth:`~inmanta.agent.handler.CRUDHandler.facts` method. e.g.:
             fip = self._neutron.list_floatingips(port_id=port_id)["floatingips"]
             if len(fip) > 0:
                 ctx.set_fact("ip_address", fip[0]["floating_ip_address"])
+
 
 
 .. warning::
@@ -226,45 +233,58 @@ Caching
 The agent maintains a cache, that is kept over handler invocations. It can, for example, be used to
 cache a connection, so that multiple resources on the same device can share a connection.
 
-The cache can be invalidated either based on a timeout or on version. A timeout based cache is kept
-for a specific time. A version based cache is used for all resource in a specific version.
-The cache will be dropped when the deployment for this version is ready.
+
 
 The cache can be used through the :py:func:`@cache<inmanta.agent.handler.cache>` decorator. Any
 method annotated with this annotation will be cached, similar to the way
 `lru_cache <https://docs.python.org/3/library/functools.html#functools.lru_cache>`_ works. The arguments to
 the method will form the cache key, the return value will be cached. When the method is called a
 second time with the same arguments, it will not be executed again, but the cached result is
-returned instead. To exclude specific arguments from the cache key, use the `ignore` parameter.
+returned instead. To exclude specific arguments from the cache key, use the ``ignore`` parameter.
+
+Cache entries will be dropped from the cache when they become stale. Use the following parameters to set the retention policy:
+  * ``evict_after_creation``: mark entries as stale after this amount of time (in seconds) has elapsed since they entered the cache.
+  * ``evict_after_last_access``: mark entries as stale after this amount of time (in seconds) has elapsed since they were last accessed (60 by default).
+
+
+.. note::
+
+    If both ``evict_after_creation=True`` and ``evict_after_last_access=True`` are set,
+    the entry will become stale when the shortest of the two timers is up.
 
 
 For example, to cache the connection to a specific device for 120 seconds:
 
 .. code-block:: python
 
-    @cache(timeout=120, ignore=["ctx"])
+    @cache(ignore=["ctx"], evict_after_creation=120)
     def get_client_connection(self, ctx, device_id):
-       # ...
-       return connection
+        # ...
+        return connection
 
-To do the same, but additionally also expire the cache when the next version is deployed, the method must have a parameter called `version`.
-`for_version` is True by default, so when a version parameter is present, the cache is version bound by default.
 
-.. code-block:: python
-
-    @cache(timeout=120, ignore=["ctx"], for_version=True)
-    def get_client_connection(self, ctx, device_id, version):
-       # ...
-       return connection
-
-To also ensure the connection is properly closed, an `on_delete` function can be attached. This
-function is called when the cache is expired. It gets the cached item as argument.
-
+Setting ``evict_after_last_access=60`` (or omitting the parameter) will evict
+the connection from the cache 60s after it was last read from the cache.
 
 .. code-block:: python
 
-    @cache(timeout=120, ignore=["ctx"], for_version=True,
-       call_on_delete=lambda connection:connection.close())
+    @cache(ignore=["ctx"])
     def get_client_connection(self, ctx, device_id, version):
-       # ...
-       return connection
+        # ...
+        return connection
+
+To also ensure the connection is properly closed, an ``on_delete`` function can be passed
+via the ``call_on_delete`` parameter. This function is called when the cache entry is removed
+from the cache. It gets the cached item as argument.
+
+
+.. code-block:: python
+
+    @cache(
+        ignore=["ctx"],
+        evict_after_last_access=60,
+        call_on_delete=lambda connection: connection.close(),
+    )
+    def get_client_connection(self, ctx, device_id, version):
+        # ...
+        return connection

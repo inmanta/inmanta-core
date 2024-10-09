@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 import uuid
 from typing import Optional, cast
@@ -26,7 +25,7 @@ import asyncpg
 from inmanta import data
 from inmanta.data import model
 from inmanta.protocol import handle, methods, methods_v2
-from inmanta.protocol.exceptions import NotFound, ServerError
+from inmanta.protocol.exceptions import Conflict, NotFound, ServerError
 from inmanta.server import (
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
@@ -110,8 +109,11 @@ class ProjectService(protocol.ServerSlice):
             raise NotFound("The project with given id does not exist.")
 
         environments = await data.Environment.get_list(project=project.id)
-        for env in environments:
-            await asyncio.gather(self.autostarted_agent_manager.stop_agents(env, delete_venv=True), env.delete_cascade())
+        if len(environments) > 0:
+            raise Conflict(
+                f"Cannot remove the project `{project_id}` because it still contains some environments: "
+                f"{','.join([str((env.name, str(env.id))) for env in environments])}"
+            )
 
         await project.delete()
 

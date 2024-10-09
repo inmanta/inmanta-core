@@ -46,11 +46,9 @@ from asyncpg import Connection
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
 
-import inmanta.const as const
 import inmanta.db.versions
-import inmanta.resources as resources
-import inmanta.util as util
 from crontab import CronTab
+from inmanta import const, resources, util
 from inmanta.const import DATETIME_MIN_UTC, DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
@@ -5906,7 +5904,7 @@ class ConfigurationModel(BaseDocument):
             "last_deployed_attribute_hash",
             "last_non_deploying_status",
         ]
-        projection_a_attributes: list[typing.LiteralString] = ["requires", "send_event"]
+        projection_a_attributes: list[typing.LiteralString] = ["requires", const.RESOURCE_ATTRIBUTE_SEND_EVENTS]
         projection: list[typing.LiteralString] = ["resource_id", "status", "attribute_hash"]
 
         # get resources for agent
@@ -5936,7 +5934,11 @@ class ConfigurationModel(BaseDocument):
                 req_res = id_to_resource[req]
                 assert req_res is not None  # todo
                 last_produced_events = req_res["last_produced_events"]
-                if last_produced_events is not None and last_produced_events > last_success and req_res["send_event"]:
+                if (
+                    last_produced_events is not None
+                    and last_produced_events > last_success
+                    and req_res[const.RESOURCE_ATTRIBUTE_SEND_EVENTS]
+                ):
                     in_increment = True
                     break
 
@@ -6024,7 +6026,7 @@ class ConfigurationModel(BaseDocument):
         for res in resources:
             for req in res["requires"]:
                 original_provides[req].append(res["resource_id"])
-            if res["send_event"]:
+            if res[const.RESOURCE_ATTRIBUTE_SEND_EVENTS]:
                 send_events.append(res["resource_id"])
 
         # recursively include stuff potentially receiving events from nodes in the increment
@@ -6391,18 +6393,24 @@ class DiscoveredResource(BaseDocument):
     """
     :param environment: the environment of the resource
     :param discovered_resource_id: The id of the resource
+    :param discovery_resource_id: The id of the discovery resource responsible for discovering this resource
     :param values: The values associated with the discovered_resource
     """
 
     environment: uuid.UUID
     discovered_at: datetime.datetime
     discovered_resource_id: m.ResourceIdStr
+    discovery_resource_id: Optional[m.ResourceIdStr]
     values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")
 
     def to_dto(self) -> m.DiscoveredResource:
-        return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values)
+        return m.DiscoveredResource(
+            discovered_resource_id=self.discovered_resource_id,
+            values=self.values,
+            discovery_resource_id=self.discovery_resource_id,
+        )
 
 
 class File(BaseDocument):

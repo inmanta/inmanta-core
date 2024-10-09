@@ -10,16 +10,16 @@ requires = [
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
-    "cryptography>=36,<43",
+    "cryptography>=36,<44",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.17",
     "email-validator>=1,<3",
-    "execnet>=1,<2",
-    "importlib_metadata>=4,<9",
     "jinja2~=3.0",
+    "logfire>=0.46,<2.0",
     "more-itertools>=8,<11",
-    # leave upper bound floating for fast-moving and extremely stable packaging
-    "packaging>=21.3",
+    "opentelemetry-instrumentation-asyncpg~=0.46b0",
+    # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
+    "packaging>=21.3,<24.2",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
@@ -47,7 +47,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "13.0.1"
+version = "14.0.0"
 
 setup(
     version=version,

@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import importlib.metadata
 import logging
 import re
 import socket
@@ -27,10 +28,10 @@ from collections.abc import Sequence
 from datetime import timedelta
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
-import importlib_metadata
 from tornado import gen, queues, routing, web
 
 import inmanta.protocol.endpoints
+from inmanta import tracing
 from inmanta.data.model import ExtensionStatus
 from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods
 from inmanta.protocol.exceptions import ShutdownInProgress
@@ -82,19 +83,21 @@ class ReturnClient(Client):
     async def _call(
         self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
     ) -> common.Result:
-        call_spec = method_properties.build_call(args, kwargs)
-        expect_reply = method_properties.reply
-        try:
-            if method_properties.timeout:
-                return_value = await self.session.put_call(
-                    call_spec, timeout=method_properties.timeout, expect_reply=expect_reply
-                )
-            else:
-                return_value = await self.session.put_call(call_spec, expect_reply=expect_reply)
-        except asyncio.CancelledError:
-            return common.Result(code=500, result={"message": "Call timed out"})
+        with tracing.span(f"return_rpc.{method_properties.function.__name__}"):
+            call_spec = method_properties.build_call(args, kwargs)
+            call_spec.headers.update(tracing.get_context())
+            expect_reply = method_properties.reply
+            try:
+                if method_properties.timeout:
+                    return_value = await self.session.put_call(
+                        call_spec, timeout=method_properties.timeout, expect_reply=expect_reply
+                    )
+                else:
+                    return_value = await self.session.put_call(call_spec, expect_reply=expect_reply)
+            except asyncio.CancelledError:
+                return common.Result(code=500, result={"message": "Call timed out"})
 
-        return common.Result(code=return_value["code"], result=return_value["result"])
+            return common.Result(code=return_value["code"], result=return_value["result"])
 
 
 # Server Side
@@ -377,9 +380,9 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | No
         # workaround for #2586
         package_name = "inmanta-core" if source_package_name == "inmanta" else source_package_name
         try:
-            distribution = importlib_metadata.distribution(package_name)
+            distribution = importlib.metadata.distribution(package_name)
             return ExtensionStatus(name=ext_name, package=ext_name, version=distribution.version)
-        except importlib_metadata.PackageNotFoundError:
+        except importlib.metadata.PackageNotFoundError:
             LOGGER.info(
                 "Package %s of slice %s is not packaged in a distribution. Unable to determine its extension.",
                 package_name,
