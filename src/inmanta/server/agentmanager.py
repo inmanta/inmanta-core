@@ -216,6 +216,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Resumes after halting. Unpauses all agents that had been paused by halting.
         """
+        # With the scheduler we don't need to do anything as the scheduler agent will be restarted by the agent manager
         if not opt.server_use_resource_scheduler.get():
             to_unpause: list[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
             await asyncio.gather(*[self._start_agent(env, agent, connection=connection) for agent in to_unpause])

@@ -28,6 +28,7 @@ import psutil
 import pytest
 
 from inmanta import config, const, data
+from inmanta.agent import Agent
 from inmanta.config import Config
 from inmanta.const import AgentAction
 from inmanta.util import get_compiler_version
@@ -251,7 +252,7 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
 
 
 @pytest.fixture
-def ensure_resource_tracker_is_started():
+def ensure_resource_tracker_is_started() -> None:
     """
     In POSIX, when you spawn a process, a resource tracker is also created so by doing this, we can assert some facts
     such as the number of processes, ...
@@ -265,6 +266,11 @@ def ensure_resource_tracker_is_started():
 
 
 def retrieve_mapping_process(current_processes: list[psutil.Process]) -> dict[str, list[psutil.Process]]:
+    """
+    Create a mapping of the current snapshot of processes that have been started by Pytest
+
+    :param current_processes: Current processes
+    """
     inmanta_fork_server = []
     inmanta_executor = []
     postgres_processes = []
@@ -293,15 +299,45 @@ def retrieve_mapping_process(current_processes: list[psutil.Process]) -> dict[st
     }
 
 
-@pytest.fixture
-async def ensure_consistent_starting_point(agent, ensure_resource_tracker_is_started) -> int:
+def wait_for_terminated_status(current_children: list[psutil.Process], expected_terminated_process: int = 1) -> bool:
     """
-    In POSIX, when you spawn a process, a resource tracker is also created so by doing this, we can assert some facts
-    such as the number of processes, ...
+    Check that the number of terminated processes matches the expected ones
+
+    :param current_children: Current processes
+    :param expected_terminated_process: How many processes should be "terminated"
+    """
+    terminated_process = []
+    for process in current_children:
+        try:
+            if process.status() == "terminated":
+                terminated_process.append(process)
+        except psutil.NoSuchProcess:
+            terminated_process.append(None)
+
+    return len(terminated_process) == expected_terminated_process
+
+
+@pytest.fixture
+async def ensure_consistent_starting_point(agent: Agent, ensure_resource_tracker_is_started: None) -> int:
+    """
+    Make sure that every test that uses this fixture will begin in a consistent, i.e.:
+        - 2 processes: a postgres server and one inmanta server
+        - 3 processes:
+            - a postgres server, one inmanta server and the resource tracker
+            - a postgres server, one inmanta server and one inmanta fork server
+        - 4 processes: a postgres server, one inmanta server, one inmanta fork server and the resource tracker
+
+    :param agent: The agent fixture (that we want to stop before running the test)
+    :param ensure_resource_tracker_is_started: The fixture that creates a Resource Tracker process
     """
 
     def is_consistent_state(current_processes: list[psutil.Process], process_mapping: dict[str, list[psutil.Process]]) -> bool:
-        logger.warning(f"IS CONSISTENT STATE: {current_processes}")
+        """
+        Returns True if we are in one of the above situation, False otherwise
+
+        :param current_processes: Current processes
+        :param process_mapping: Current mapping of processes
+        """
         match len(current_processes):
             case 2:
                 return len(process_mapping["pg_ctl"]) == 1 and len(process_mapping["python"]) == 1
@@ -322,7 +358,10 @@ async def ensure_consistent_starting_point(agent, ensure_resource_tracker_is_sta
             case _:
                 return False
 
-    async def wait_for_consistent_state():
+    async def wait_for_consistent_state() -> bool:
+        """
+        Wait for a consistent state
+        """
         pre_start_children = get_process_state(current_pid)
         assert len(pre_start_children) == 1
         assert len(pre_start_children.values()) == 1
@@ -362,7 +401,7 @@ async def test_halt_deploy(
     time_to_sleep: int,
 ):
     """
-    Verify that the new scheduler can actually fork
+    Verify that the new scheduler can actually halt an ongoing deployment and can resume it when the user requests it
     """
     current_pid = ensure_consistent_starting_point
 
@@ -438,19 +477,9 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     assert len(halted_children.values()) == 1
     current_halted_children = list(halted_children.values())[0]
 
-    def wait_for_terminated_status():
-        terminated_process = []
-        for process in current_children_after_deployment:
-            try:
-                if process.status() == "terminated":
-                    terminated_process.append(process)
-            except psutil.NoSuchProcess:
-                terminated_process.append(None)
-
-        # Only one process should end up in terminated
-        return len(terminated_process) == 1
-
-    await retry_limited(wait_for_terminated_status, const.EXECUTOR_GRACE_HARD + 2)
+    await retry_limited(
+        wait_for_terminated_status, timeout=const.EXECUTOR_GRACE_HARD + 2, current_children=current_children_after_deployment
+    )
 
     assert len(current_halted_children) == len(current_children_after_deployment) - 1, (
         "These processes should be present: Pg_ctl, the Server, the Scheduler and the fork server. "
@@ -492,7 +521,9 @@ async def test_pause_agent_deploy(
     auto_start_agent: bool,
 ):
     """
-    Verify that the new scheduler can actually fork
+    Verify that the new scheduler can pause running agent:
+        - It will make sure that the agent finishes its current task before being stopped
+        - And take the remaining tasks when this agent is resumed
     """
     current_pid = ensure_consistent_starting_point
 
@@ -579,21 +610,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert summary["by_state"]["deployed"] == 1, f"Unexpected summary: {summary}"
 
     await retry_limited(are_resources_deployed, timeout=6, interval=1, deployed_resources=2)
-
-    def wait_for_terminated_status():
-        # The process is still there but should be with a `Terminated` status
-        terminated_process = []
-        for process in current_children_after_deployment:
-            try:
-                if process.status() == "terminated":
-                    terminated_process.append(process)
-            except psutil.NoSuchProcess:
-                terminated_process.append(None)
-
-        # Only one process should end up in terminated
-        return len(terminated_process) == 1
-
-    await retry_limited(wait_for_terminated_status, 10)
+    await retry_limited(wait_for_terminated_status, timeout=10, current_children=current_children_after_deployment)
 
     halted_children = get_process_state(current_pid)
     assert len(halted_children) == 1
