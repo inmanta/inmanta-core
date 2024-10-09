@@ -30,7 +30,8 @@ def test_issue_121_non_matching_index(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
         a=std::Host[name="test"]
-        """
+        """,
+        autostd=True,
     )
 
     try:
@@ -72,13 +73,22 @@ def test_issue_140_index_error(snippetcompiler):
     try:
         snippetcompiler.setup_for_snippet(
             """
+        entity A:
+            string name
+        end
+
+        A.host [1] -- std::Host
+
+        index A(host, name)
+
         h = std::Host(name="test", os=std::linux)
-        test = std::Service[host=h, path="test"]"""
+        test = A[host=h, path="test"]""",
+            autostd=True,
         )
         compiler.do_compile()
         raise AssertionError("Should get exception")
     except NotFoundException as e:
-        assert re.match(".*No index defined on std::Service for this lookup:.*", str(e))
+        assert re.match(".*No index defined on __config__::A for this lookup:.*", str(e))
 
 
 @pytest.mark.parametrize("explicit", [True, False])
@@ -141,10 +151,25 @@ index Test1(x,y)
 def test_index_on_subtype(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-        host = std::Host(name="a",os=std::linux)
-        a=std::DefaultDirectory(host=host,path="/etc")
-        b=std::DefaultDirectory(host=host,path="/etc")
-    """
+        entity A:
+            string path
+        end
+
+        A.host [1] -- std::Host.ases [0:]
+
+        index A(host, path)
+
+        entity B extends A:
+        end
+
+        implement A using std::none
+        implement B using parents
+
+        host = std::Host(name="ahost",os=std::linux)
+        a=B(host=host,path="/etc")
+        b=B(host=host,path="/etc")
+    """,
+        autostd=True,
     )
 
     (_, scopes) = compiler.do_compile()
@@ -176,17 +201,20 @@ diamond = """
 entity A:
     string at = "a"
 end
-implement A using std::none
+implement A using none
 
 entity B:
     string at = "a"
 end
-implement B using std::none
+implement B using none
 
 
 entity C extends A,B:
 end
-implement C using std::none
+implement C using none
+
+implementation none for std::Entity:
+end
 """
 
 
@@ -337,9 +365,12 @@ end
 
 index Test(a, b)
 
-implement Test using std::none
+implement Test using none
 
 Test(b="b")
+
+implementation none for std::Entity:
+end
 """
     )
     compiler.do_compile()
@@ -441,10 +472,13 @@ implementation tiers for Site:
 end
 
 implement Site using tiers
-implement Tier using std::none
-implement SubTier using std::none
+implement Tier using none
+implement SubTier using none
 
 Site()
+
+implementation none for std::Entity:
+end
     """,
         """Could not set attribute `tier` on instance `__config__::Site (instantiated at {dir}/main.cf:28)` (reported in self.tier = Construct(Tier) ({dir}/main.cf:20))
 caused by:
@@ -461,12 +495,15 @@ end
 
 index Test(a)
 
-implement Test using std::none
+implement Test using none
 
 b = Test(a="b")
 a = Test(a="a")
 
 ar = Test[a="a"]
+
+implementation none for std::Entity:
+end
         """
     )
     (_, scopes) = compiler.do_compile()
@@ -485,12 +522,15 @@ end
 
 index Test(a)
 
-implement Test using std::none
+implement Test using none
 
 b = Test(a="b")
 a = Test(a="a")
 
 ar = Test[a="a", a="b"]
+
+implementation none for std::Entity:
+end
         """,
         "Attribute a provided twice in index lookup (reported in Test[[('a', 'a'), ('a', 'b')]] ({dir}/main.cf:13))",
     )
@@ -522,9 +562,12 @@ end
 
 index Test_A(name)
 
-implement Test_A using std::none
+implement Test_A using none
 
 Test_A({'id=1' if not use_wrapped_kwargs else '**{"id": 1}'})
+
+implementation none for std::Entity:
+end
     """
 
     snippetcompiler.setup_for_error_re(
@@ -550,7 +593,7 @@ entity A:
     int other_id
 end
 
-implement A using std::none
+implement A using none
 
 index A(id)
 index A(left, right)
@@ -560,6 +603,9 @@ A(id=1, left="L", right="R", other_id=1)
 A(id=2, left="LL", right="RR", other_id=2)
 A(id=3, left="LLL", right="RRR", other_id=3)
 A(id=1, left="LL", right="RR", other_id=3)
+
+implementation none for std::Entity:
+end
 """
     )
     with pytest.raises(IndexCollisionException) as e:
@@ -609,10 +655,12 @@ def test_index_on_nullable(snippetcompiler) -> None:
         end
         index D(l)
 
-        implement A using std::none
-        implement B using std::none
-        implement C using std::none
-        implement D using std::none
+        implement A using none
+        implement B using none
+        implement C using none
+        implement D using none
+        implementation none for std::Entity:
+        end
 
         assert = true
 
@@ -682,8 +730,8 @@ entity B:
 end
 index B(x)
 
-implement A using std::none
-implement B using std::none
+implement A using none
+implement B using none
 
 assert = true
 
@@ -699,6 +747,9 @@ assert = (b_null != b_one)
 assert = (b_null == B[x=null])
 assert = (b_one == B[x=1.0])
 assert = (b_one == B[x=1])
+
+implementation none for std::Entity:
+end
         """,
     )
     compiler.do_compile()

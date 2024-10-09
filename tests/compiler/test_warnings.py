@@ -148,7 +148,9 @@ implementation i for A:
     x = 1
 end
 
-implement A using std::none
+implement A using none
+implementation none for A:
+end
         """
     )
     message: str = "Variable `x` shadowed: originally declared at {dir}/main.cf:%d, shadowed at {dir}/main.cf:%d"
@@ -169,7 +171,8 @@ i = 0
 
 for i in std::sequence(10):
 end
-        """
+        """,
+        autostd=True,
     )
     message: str = "Variable `i` shadowed: originally declared at {dir}/main.cf:%d, shadowed at {dir}/main.cf:%d"
     message = message.format(dir=snippetcompiler.project_dir)

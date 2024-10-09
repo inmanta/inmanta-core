@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-setuptools from 71.1.0.20240724 to 71.1.0.20240726
+destination-branches:
+- iso7
+sections: {}

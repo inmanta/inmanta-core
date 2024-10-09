@@ -218,7 +218,8 @@ def test_unknown_equals(snippetcompiler) -> None:
             assert = std::is_unknown(tests::unknown() != false)
             assert = std::is_unknown(tests::unknown() != tests::unknown())
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -245,7 +246,8 @@ def test_unknown_boolean_operators(snippetcompiler) -> None:
             assert = true or tests::unknown()
             assert = not (false and tests::unknown())
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -269,6 +271,7 @@ def test_unknown_in(snippetcompiler) -> None:
             assert = 1 in [1, 2, tests::unknown()]
             assert = 3 in [tests::unknown(), 2, 3]
             """
-        )
+        ),
+        autostd=True,
     )
     compiler.do_compile()

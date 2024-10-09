@@ -35,7 +35,7 @@ from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, ResourceIdStr
+from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, LinkedDiscoveredResource, ResourceIdStr
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
@@ -977,7 +977,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
           conventional resource type expected to be deployed on a network, but rather a way to express
           the intent to discover resources of the second type TDiscovered already present on the network.
         - TDiscovered denotes the handler's Unmanaged Resource type. This is the type of the resources that have been
-          discovered and reported to the server. Objects of this type must a pydantic object.
+          discovered and reported to the server. Objects of this type must be pydantic objects.
     """
 
     def check_facts(self, ctx: HandlerContext, resource: TDiscovery) -> dict[str, object]:
@@ -1009,12 +1009,17 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                 discovered_resources: abc.Sequence[DiscoveredResource],
             ) -> typing.Awaitable[Result]:
                 return self.get_client().discovered_resource_create_batch(
-                    tid=self._agent.environment, discovered_resources=discovered_resources
+                    tid=self._agent.environment,
+                    discovered_resources=discovered_resources,
                 )
 
             discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
-            discovered_resources: abc.Sequence[DiscoveredResource] = [
-                DiscoveredResource(discovered_resource_id=resource_id, values=values.model_dump())
+            discovered_resources: abc.Sequence[LinkedDiscoveredResource] = [
+                LinkedDiscoveredResource(
+                    discovered_resource_id=resource_id,
+                    values=values.model_dump(),
+                    discovery_resource_id=resource.id.resource_str(),
+                )
                 for resource_id, values in discovered_resources_raw.items()
             ]
             result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))

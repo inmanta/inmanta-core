@@ -36,7 +36,7 @@ import inmanta.config
 from inmanta import const, data
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
-from inmanta.const import AgentAction, AgentStatus
+from inmanta.const import UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, InvalidSort, model
 from inmanta.data.model import ResourceIdStr
 from inmanta.protocol import encode_token, handle, methods, methods_v2
@@ -851,6 +851,13 @@ class AgentManager(ServerSlice, SessionListener):
 
             if res is None:
                 return 404, {"message": "The resource has no recent version."}
+
+            if res.status in UNDEPLOYABLE_NAMES:
+                LOGGER.debug(
+                    "Ignore fact request for %s, resource is in an undeployable state.",
+                    resource_id,
+                )
+                return 503, {"message": "The resource is in an undeployable state."}
 
             rid: Id = Id.parse_id(res.resource_version_id)
             version: int = rid.version

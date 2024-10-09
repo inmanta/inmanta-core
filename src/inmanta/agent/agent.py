@@ -25,6 +25,8 @@ import logging
 import os
 import random
 import time
+import traceback
+import typing
 import uuid
 from asyncio import Lock
 from collections import defaultdict
@@ -33,8 +35,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Dict, Optional, Union, cast
 
-import pkg_resources
-
+import inmanta.util
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
@@ -43,7 +44,14 @@ from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import (
+    LEGACY_PIP_DEFAULT,
+    AttributeStateChange,
+    PipConfig,
+    ResourceIdStr,
+    ResourceType,
+    ResourceVersionIdStr,
+)
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
@@ -60,6 +68,8 @@ from inmanta.util import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+FailedResources: typing.TypeAlias = dict[ResourceType, Exception]
 
 
 class ResourceActionResult:
@@ -885,7 +895,6 @@ class AgentInstance:
                 undeployable, resources = await self.load_resources(
                     version, const.ResourceAction.dryrun, response.result["resources"]
                 )
-
                 self._cache.open_version(version)
                 for resource in resources:
                     ctx = handler.HandlerContext(resource, True)
@@ -899,7 +908,10 @@ class AgentInstance:
                             resource_id=resource_id,
                             status=undeployable[resource_id],
                         )
-                        await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_id, changes={})
+                        changes = {"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}}
+                        await self.get_client().dryrun_update(
+                            tid=self._env_id, id=dry_run_id, resource=resource_id, changes=changes
+                        )
                         continue
 
                     try:
@@ -1040,51 +1052,75 @@ class AgentInstance:
         is marked as failed
         """
         started = datetime.datetime.now().astimezone()
-        failed_resource_types = await self.process.ensure_code(
-            self._env_id, version, [res["resource_type"] for res in resources]
-        )
+        invalid_resources = await self.process.ensure_code(self._env_id, version, [res["resource_type"] for res in resources])
         loaded_resources: list[Resource] = []
-        failed_resources: list[ResourceVersionIdStr] = []
+        # {resource_type -> (set{resource_ids}, LogLine)}
+        failed_resources: dict[str, tuple[set[str], data.LogLine]] = dict()
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
+        def add_failed_entry(current_res_type: ResourceType, log_message: str, **kwargs):
+            if current_res_type not in failed_resources:
+                failed_resources[current_res_type] = (
+                    {res_id},
+                    data.LogLine.log(
+                        logging.ERROR,
+                        log_message,
+                        **kwargs,
+                    ),
+                )
+            else:
+                failed_resources[current_res_type][0].add(res_id)
+
         for res in resources:
+            res["attributes"]["id"] = res["id"]
+            res_id = res["id"]
+            res_type = res["resource_type"]
+
             try:
-                res["attributes"]["id"] = res["id"]
-                if res["resource_type"] not in failed_resource_types:
+                if res_type not in invalid_resources:
                     resource: Resource = Resource.deserialize(res["attributes"])
                     loaded_resources.append(resource)
 
                     state = const.ResourceState[res["status"]]
                     if state in const.UNDEPLOYABLE_STATES:
-                        undeployable[res["id"]] = state
+                        undeployable[res_id] = state
                 else:
-                    failed_resources.append(res["id"])
+                    add_failed_entry(
+                        res_type,
+                        "All resources of type `%(res_type)s` failed to load handler code or install handler code "
+                        "dependencies: `%(error)s`\n%(traceback)s",
+                        res_type=res_type,
+                        error=str(invalid_resources[res_type]),
+                        traceback="".join(traceback.format_tb(invalid_resources[res_type].__traceback__)),
+                    )
                     undeployable[res["id"]] = const.ResourceState.unavailable
                     resource = Resource.deserialize(res["attributes"], use_generic=True)
                     loaded_resources.append(resource)
 
-            except Exception:
-                LOGGER.exception("Failed to load resource %s", res["id"])
-                failed_resources.append(res["id"])
+            except Exception as e:
+                LOGGER.exception("Failed to load resource %s", res_id)
+                add_failed_entry(
+                    res_type,
+                    "Failed to load resource %(resource)s: %(exception)s",
+                    resource=res_id,
+                    exception=str(e),
+                )
                 undeployable[res["id"]] = const.ResourceState.unavailable
                 resource = Resource.deserialize(res["attributes"], use_generic=True)
                 loaded_resources.append(resource)
 
         if len(failed_resources) > 0:
-            log = data.LogLine.log(
-                logging.ERROR,
-                "Failed to load handler code or install handler code dependencies. Check the agent log for details.",
-            )
-            await self.get_client().resource_action_update(
-                tid=self._env_id,
-                resource_ids=failed_resources,
-                action_id=uuid.uuid4(),
-                action=action,
-                started=started,
-                finished=datetime.datetime.now().astimezone(),
-                messages=[log],
-                status=const.ResourceState.unavailable,
-            )
+            for resource_type, (failed_resource_ids, log_line) in failed_resources.items():
+                await self.get_client().resource_action_update(
+                    tid=self._env_id,
+                    resource_ids=list(failed_resource_ids),
+                    action_id=uuid.uuid4(),
+                    action=action,
+                    started=started,
+                    finished=datetime.datetime.now().astimezone(),
+                    messages=[log_line],
+                    status=const.ResourceState.unavailable,
+                )
         return undeployable, loaded_resources
 
 
@@ -1344,12 +1380,14 @@ class Agent(SessionEndpoint):
         for agent_instance in self._instances.values():
             agent_instance.pause("Connection to server lost")
 
-    async def ensure_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> set[str]:
+    async def ensure_code(
+        self, environment: uuid.UUID, version: int, resource_types: Sequence[ResourceType]
+    ) -> FailedResources:
         """
         Ensure that the code for the given environment and version is loaded.
         Return a list of all the ``resource_types`` that it failed to load.
         """
-        failed_to_load: set[str] = set()
+        failed_to_load: FailedResources = {}
         if self._loader is None:
             return failed_to_load
 
@@ -1394,15 +1432,20 @@ class Agent(SessionEndpoint):
                         # Update the ``_last_loaded`` cache to indicate that the given resource type's code
                         # was loaded successfully at the specified version.
                         self._last_loaded[rt] = version
-                    except Exception:
+                    except Exception as e:
                         LOGGER.exception("Failed to install handler %s version=%d", rt, version)
-                        failed_to_load.add(rt)
+                        failed_to_load[rt] = Exception(f"Failed to install handler {rt} version={version}: {e}").with_traceback(
+                            e.__traceback__
+                        )
                 else:
                     LOGGER.error(
                         "Failed to get source code for %s version=%d\n%s",
                         rt,
                         version,
                         result.result,
+                    )
+                    failed_to_load[rt] = Exception(
+                        f"Failed to get source code for {rt} version={version}, result={result.get_result()}"
                     )
 
         return failed_to_load
@@ -1416,7 +1459,7 @@ class Agent(SessionEndpoint):
             await loop.run_in_executor(
                 self.thread_pool,
                 self._env.install_for_config,
-                list(pkg_resources.parse_requirements(requirements)),
+                inmanta.util.parse_requirements(requirements),
                 pip_config,
             )
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, sources)

@@ -20,11 +20,12 @@ import os
 
 import py.path
 import pytest
-from pkg_resources import Requirement
 
+import inmanta.util
+from inmanta import env
 from inmanta.config import Config
 from inmanta.data.model import PipConfig
-from inmanta.env import LocalPackagePath, process_env
+from inmanta.env import LocalPackagePath
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2Source
 from inmanta.moduletool import ProjectTool
 from inmanta.parser import ParserException
@@ -108,7 +109,7 @@ def test_module_update_with_v2_module(
 
     def assert_version_installed(module_name: str, version: str) -> None:
         package_name = ModuleV2Source.get_package_name_for(module_name)
-        installed_packages: dict[str, Version] = process_env.get_installed_packages()
+        installed_packages: dict[str, Version] = env.process_env.get_installed_packages()
         assert package_name in installed_packages
         assert str(installed_packages[package_name]) == version
 
@@ -126,7 +127,9 @@ def test_module_update_with_v2_module(
                 new_version=Version(current_version),
                 new_name=module_name,
                 new_requirements=(
-                    [InmantaModuleRequirement(Requirement.parse("module2<3.0.0"))] if module_name == "module1" else None
+                    [InmantaModuleRequirement(inmanta.util.parse_requirement(requirement="module2<3.0.0"))]
+                    if module_name == "module1"
+                    else None
                 ),
                 install=False,
                 publish_index=pip_index,
@@ -141,7 +144,7 @@ def test_module_update_with_v2_module(
         # Add a dependency on module2, without setting an explicit version constraint. Later version of module1
         # do set a version constraint on the dependency on module2. This way it is verified whether the module update
         # command takes into account the version constraints set in a new version of a module.
-        new_requirements=[InmantaModuleRequirement(Requirement.parse("module2"))],
+        new_requirements=[InmantaModuleRequirement(inmanta.util.parse_requirement(requirement="module2"))],
         install=False,
         publish_index=pip_index,
         new_content_init_cf="entity" if corrupt_module else None,  # Introduce syntax error in the module
@@ -238,7 +241,11 @@ def test_module_update_dependencies(
     create_python_package("a", Version("1.0.0"), str(tmpdir.join("a-1.0.0")), publish_index=index)
     for v in ("1.0.0", "1.0.1", "2.0.0"):
         create_python_package(
-            "b", Version(v), str(tmpdir.join(f"b-{v}")), requirements=[Requirement.parse("c")], publish_index=index
+            "b",
+            Version(v),
+            str(tmpdir.join(f"b-{v}")),
+            requirements=[inmanta.util.parse_requirement(requirement="c")],
+            publish_index=index,
         )
     for v in ("1.0.0", "2.0.0"):
         create_python_package("c", Version(v), str(tmpdir.join(f"c-{v}")), publish_index=index)
@@ -252,8 +259,8 @@ def test_module_update_dependencies(
     )
 
     # install b-1.0.0 and c-1.0.0
-    process_env.install_for_config(
-        [Requirement.parse(req) for req in ("b==1.0.0", "c==1.0.0")],
+    env.process_env.install_for_config(
+        [inmanta.util.parse_requirement(requirement=req) for req in ("b==1.0.0", "c==1.0.0")],
         config=PipConfig(
             index_url=index.url,
             use_system_config=False,
@@ -265,7 +272,7 @@ def test_module_update_dependencies(
         source_dir=os.path.join(modules_dir, "minimalv1module"),
         dest_dir=str(tmpdir.join("modules", "my_mod")),
         new_name="my_mod",
-        new_requirements=[Requirement.parse(req) for req in ("a", "b~=1.0.0")],
+        new_requirements=inmanta.util.parse_requirements(["a", "b~=1.0.0"]),
     )
 
     # run `inmanta project update` without running install first
@@ -276,7 +283,7 @@ def test_module_update_dependencies(
     #   - direct dependency a has been installed
     #   - direct dependency b has been updated but not past the allowed constraint
     #   - transitive dependency c has been updated
-    assert process_env.are_installed(("a==1.0.0", "b==1.0.1", "c==2.0.0"))
+    assert env.process_env.are_installed(("a==1.0.0", "b==1.0.1", "c==2.0.0"))
 
 
 def test_module_update_syntax_error_in_project(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:

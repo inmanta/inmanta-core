@@ -38,18 +38,18 @@ from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import IO, TYPE_CHECKING, Any, Optional
+from typing import IO, Any, Literal, Optional
 
 import click
 import more_itertools
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
-from pkg_resources import Requirement
 
 import build
 import inmanta
 import inmanta.warnings
+import packaging.requirements
 import toml
 from build.env import DefaultIsolatedEnv
 from inmanta import const, env
@@ -77,11 +77,6 @@ from inmanta.module import (
 )
 from inmanta.stable_api import stable_api
 from packaging.version import Version
-
-if TYPE_CHECKING:
-    from packaging.requirements import InvalidRequirement
-else:
-    from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
 LOGGER = logging.getLogger(__name__)
 
@@ -477,7 +472,7 @@ compatible with the dependencies specified by the updated modules.
         def do_update(specs: Mapping[str, Sequence[InmantaModuleRequirement]], modules: list[str]) -> None:
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
-            v2_python_specs: list[Requirement] = [
+            v2_python_specs: list[inmanta.util.CanonicalRequirement] = [
                 module_spec.get_python_package_requirement()
                 for module, module_specs in specs.items()
                 for module_spec in module_specs
@@ -489,7 +484,7 @@ compatible with the dependencies specified by the updated modules.
                 # Because for pip not every valid -r is a valid -c
                 current_requires = my_project.get_strict_python_requirements_as_list()
                 env.process_env.install_for_config(
-                    v2_python_specs + [Requirement.parse(r) for r in current_requires],
+                    v2_python_specs + inmanta.util.parse_requirements(current_requires),
                     my_project.metadata.pip,
                     upgrade=True,
                 )
@@ -809,7 +804,7 @@ When a development release is done using the \--dev option, this command:
             raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
         try:
             module_requirement = InmantaModuleRequirement.parse(module_req)
-        except InvalidRequirement:
+        except packaging.requirements.InvalidRequirement:
             raise CLIException(f"'{module_req}' is not a valid requirement", exitcode=1)
         if not override and module_like.has_module_requirement(module_requirement.key):
             raise CLIException(
@@ -1007,7 +1002,7 @@ version: 0.0.1dev0"""
                 matches = version == reqv
                 editable = True
             else:
-                reqv = ",".join(req.version_spec_str() for req in specs[name] if req.specs) or "*"
+                reqv = ",".join(str(req.specifier) for req in specs[name] if len(req.specifier) > 0) or "*"
                 matches = all(version in req for req in specs[name])
                 editable = mod.is_editable()
 
@@ -1750,14 +1745,25 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         Copy all files that have to be packaged into the Python package of the module
         """
         python_pkg_dir: str = os.path.join(build_path, "inmanta_plugins", self._module.name)
-        model_dir: str = os.path.join(python_pkg_dir, "model")
-        if os.path.exists(model_dir):
-            raise ModuleBuildFailedError(
-                msg="There is already a model directory in %s. "
-                "The `inmanta_plugins.%s.model` package is reserved for bundling the inmanta model files. "
-                "Please use a different name for this Python package."
-                % (os.path.join(self._module.path, "inmanta_plugins", self._module.name), self._module.name)
-            )
+        dir_path_bundling_description_mapping = {
+            ("model", "the inmanta model files"),
+            ("files", "inmanta files for managed machines"),
+            ("templates", "inmanta templates that will be used to generate configuration files"),
+        }
+        for problematic_dir, bundling_description in dir_path_bundling_description_mapping:
+            if os.path.exists(os.path.join(python_pkg_dir, problematic_dir)):
+                raise ModuleBuildFailedError(
+                    msg="There is already a `%s` directory in %s. "
+                    "The `inmanta_plugins.%s.%s` package is reserved for bundling %s. "
+                    "Please use a different name for this Python package."
+                    % (
+                        problematic_dir,
+                        os.path.join(self._module.path, "inmanta_plugins", self._module.name),
+                        self._module.name,
+                        problematic_dir,
+                        bundling_description,
+                    )
+                )
 
         for dir_name in ["model", "files", "templates"]:
             fq_dir_name = os.path.join(build_path, dir_name)
@@ -1784,7 +1790,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         """
         try:
             with self._get_isolated_env_builder() as env:
-                distribution = "wheel"
+                distribution: Literal["wheel"] = "wheel"
                 builder = build.ProjectBuilder(source_dir=build_path, python_executable=env.python_executable)
                 env.install(builder.build_system_requires)
                 env.install(builder.get_requires_for_build(distribution=distribution))
@@ -1942,7 +1948,7 @@ graft inmanta_plugins/{self._module.name}/templates
 
         # add requirements
         module_requirements: list[InmantaModuleRequirement] = [
-            req for req in self._module.get_all_requires() if req.project_name != self._module.name
+            req for req in self._module.get_all_requires() if req.name != self._module.name
         ]
         python_requirements: list[str] = self._module.get_strict_python_requirements_as_list()
         if module_requirements or python_requirements:
