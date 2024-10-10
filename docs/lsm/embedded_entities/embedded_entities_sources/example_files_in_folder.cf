@@ -1,0 +1,82 @@
+import std::testing
+import lsm
+import lsm::fsm
+import fs
+import mitogen
+
+entity Folder extends lsm::ServiceEntity:
+    """
+        Top-level service representing a folder on a file system.
+
+        :attr path: Unique path to this folder
+    """
+    string path
+end
+
+index Folder(path)
+Folder.files [0:] lsm::__rwplus__ File._folder [1]
+
+entity File extends lsm::EmbeddedEntity:
+    """
+        Embedded entity representing a file in a folder.
+
+        :attr name: name of this line
+        :attr content: Content of this file
+
+    """
+    string name = ""
+    string content
+    lsm::attribute_modifier content__modifier="rw+"
+
+    # These private attributes keep track of added/removed
+    # embedded entities across updates
+    bool _added = false
+    bool _removed = false
+end
+
+index File(_folder, name)
+
+binding = lsm::ServiceEntityBindingV2(
+    service_entity="__config__::Folder",
+    lifecycle=lsm::fsm::simple,
+    service_entity_name="folder",
+)
+
+for instance in lsm::all(binding, include_purged_embedded_entities=true):
+    folder = Folder(
+        instance_id=instance["id"],
+        entity_binding=binding,
+        path=instance["attributes"]["path"],
+    )
+    for file in instance["attributes"]["files"]:
+        folder.files += File(**file)
+    end
+end
+
+implementation folder for Folder:
+    self.resources += std::testing::NullResource(name=self.path)
+end
+
+mitogen_local = mitogen::Local()
+
+implementation file for File:
+    self._folder.resources += fs::File(
+        path=self._folder.path+"/"+self.name,
+        host=std::Host(
+            via=mitogen_local, name="internal", os=std::linux,
+        ),
+        mode=777,
+        owner="inmanta",
+        group="inmanta",
+        content = self.content,
+        # By keeping track of embedded entities removed during an update
+        # we can purge the underlying resources accordingly.
+        # Alternatively, if the parent folder is removed, we want to
+        # purge all embedded entities.
+        purged=self._removed or self._folder.purge_resources,
+    )
+end
+
+implement File using parents
+implement File using file
+implement Folder using parents, folder

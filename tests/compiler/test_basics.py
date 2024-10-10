@@ -17,14 +17,18 @@
 """
 
 import os
+import pathlib
 import warnings
 from typing import Optional
 
+import py
 import pytest
 
-from inmanta import compiler, const
+from inmanta import compiler, const, module
 from inmanta.ast import DoubleSetException, RuntimeException
+from inmanta.module import InstallMode
 from inmanta.plugins import PluginDeprecationWarning
+from packaging import version
 from utils import module_from_template, v1_module_from_template
 
 
@@ -102,11 +106,14 @@ end
 
 
 implement TestC using parents
-implement TestC using std::none, parents
-implement TestC using std::none
+implement TestC using none, parents
+implement TestC using none
 implement Test using test
 
 a = TestC()
+
+implementation none for std::Entity:
+end
 """
     )
     (_, scopes) = compiler.do_compile()
@@ -430,6 +437,7 @@ std::print(hi_world)
             "The ** operator can only be applied to dictionaries (reported in "
             "std::replace(hello_world,**dct) ({dir}/main.cf:4))"
         ),
+        autostd=True,
     )
 
 
@@ -669,6 +677,7 @@ implement Test using test
 Test()
 """,
         r"variable n not found (reported in Format('This is test {{{{n}}}}') ({dir}/main.cf:5))",
+        ministd=True,
     )
 
 
@@ -705,6 +714,7 @@ implement B using b
 A(x=B())
 """,
         r"variable u not found (reported in std::print(u) ({dir}/main.cf:11))",
+        ministd=True,
     )
 
 
@@ -731,3 +741,55 @@ def test_implementation_import_missing_error(snippetcompiler) -> None:
     assert "could not find type tests::length in namespace __config__" in exception.value.msg
     assert exception.value.location.lnr == 6
     assert exception.value.location.start_char == 20
+
+
+@pytest.mark.slowtest
+def test_moduletool_failing(
+    capsys,
+    tmpdir: py.path.local,
+    local_module_package_index: str,
+    snippetcompiler_clean,
+    modules_v2_dir: str,
+) -> None:
+    """
+    Verify code is not loaded when python files are stored in `files`, `model` and `template` folders of a V2 module.
+    """
+    # set up venv
+    snippetcompiler_clean.setup_for_snippet("", autostd=False)
+
+    module_template_path: pathlib.Path = pathlib.Path(modules_v2_dir) / "failingminimalv2module"
+    module_from_template(
+        str(module_template_path),
+        str(tmpdir.join("custom_mod_one")),
+        new_name="custom_mod_one",
+        new_version=version.Version("1.0.0"),
+        install=True,
+        editable=False,
+    )
+
+    for problematic_folder in ["files", "model", "templates"]:
+        (module_template_path / problematic_folder).mkdir(exist_ok=True)
+        new_file = module_template_path / problematic_folder / "afile.py"
+        new_file.write_text("raise RuntimeError('This file should not be loaded')")
+
+        # set up project with a v2 module
+        snippetcompiler_clean.setup_for_snippet(
+            """
+    import std
+    import custom_mod_one
+            """.strip(),
+            python_package_sources=[local_module_package_index],
+            project_requires=[
+                module.InmantaModuleRequirement.parse("std"),
+                module.InmantaModuleRequirement.parse("custom_mod_one"),
+            ],
+            python_requires=[],
+            install_mode=InstallMode.release,
+            install_project=True,
+            autostd=False,
+        )
+
+        compiler.do_compile()
+
+        # We remove the problematic file to be sure to test the other problematic directories
+        new_file.unlink()

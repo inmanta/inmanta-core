@@ -209,6 +209,8 @@ class IPCServer(IPCFrameProtocol, abc.ABC, typing.Generic[ServerContext]):
             return_value = await frame.method.call(self.get_context())
             if frame.id is not None:
                 self.send_frame(IPCReplyFrame(frame.id, return_value, is_exception=False))
+        except ConnectionLost:
+            self.logger.debug("Connection lost", exc_info=True)
         except Exception as e:
             self.logger.debug("Exception on rpc call", exc_info=True)
             if frame.id is not None:
@@ -288,11 +290,15 @@ class FinalizingIPCClient(IPCClient[ServerContext]):
     def __init__(self, name: str):
         super().__init__(name)
         self.finalizers: list[typing.Callable[[], typing.Coroutine[typing.Any, typing.Any, None]]] = []
+        # Collection to avoid task getting garbage collected
+        self.finalizer_anti_gc: set[asyncio.Task[None]] = set()
 
     def connection_lost(self, exc: Exception | None) -> None:
         super().connection_lost(exc)
         for fin in self.finalizers:
-            asyncio.get_running_loop().create_task(fin())
+            task = asyncio.get_running_loop().create_task(fin())
+            self.finalizer_anti_gc.add(task)
+            task.add_done_callback(self.finalizer_anti_gc.discard)
 
 
 class LogReceiver(IPCFrameProtocol):
@@ -332,10 +338,15 @@ class LogShipper(logging.Handler):
     def _send_frame(self, record: IPCLogRecord) -> None:
         try:
             self.protocol.send_frame(record)
+        except ConnectionLost:
+            # Stop exception here
+            # Log in own logger to prevent loops
+            self.logger.debug("Could not send log line, connection lost %s", record.msg, exc_info=True)
+            return
         except Exception:
             # Stop exception here
             # Log in own logger to prevent loops
-            self.logger.info("Could not send log line", exc_info=True)
+            self.logger.info("Could not send log line %s", record.msg, exc_info=True)
             return
 
     def emit(self, record: logging.LogRecord) -> None:

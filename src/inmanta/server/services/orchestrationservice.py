@@ -29,7 +29,7 @@ import asyncpg.exceptions
 import pydantic
 
 import inmanta.util
-from inmanta import const, data
+from inmanta import const, data, tracing
 from inmanta.const import ResourceState
 from inmanta.data import (
     APILIMIT,
@@ -61,11 +61,11 @@ from inmanta.server import (
     SLICE_ORCHESTRATION,
     SLICE_RESOURCE,
     SLICE_TRANSPORT,
+    agentmanager,
 )
 from inmanta.server import config as opt
 from inmanta.server import diff, protocol
-from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
-from inmanta.server.services.resourceservice import ResourceService
+from inmanta.server.services import resourceservice
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple
 
@@ -378,9 +378,9 @@ class PartialUpdateMerger:
 class OrchestrationService(protocol.ServerSlice):
     """Resource Manager service"""
 
-    agentmanager_service: "AgentManager"
-    autostarted_agent_manager: AutostartedAgentManager
-    resource_service: ResourceService
+    agentmanager_service: "agentmanager.AgentManager"
+    autostarted_agent_manager: "agentmanager.AutostartedAgentManager"
+    resource_service: "resourceservice.ResourceService"
 
     def __init__(self) -> None:
         super().__init__(SLICE_ORCHESTRATION)
@@ -393,9 +393,11 @@ class OrchestrationService(protocol.ServerSlice):
 
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
-        self.agentmanager_service = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
-        self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
-        self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
+        self.agentmanager_service = cast("agentmanager.AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
+        self.autostarted_agent_manager = cast(
+            agentmanager.AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+        )
+        self.resource_service = cast("resourceservice.ResourceService", server.get_slice(SLICE_RESOURCE))
 
     async def start(self) -> None:
         if PERFORM_CLEANUP:
@@ -782,41 +784,47 @@ class OrchestrationService(protocol.ServerSlice):
             except asyncpg.exceptions.UniqueViolationError:
                 raise ServerError("The given version is already defined. Versions should be unique.")
 
-            all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
-            if is_partial_update:
-                # Make mypy happy
-                assert partial_base_version is not None
-                # This dict maps a resource id to its resource set for unchanged resource sets.
-                rids_unchanged_resource_sets: dict[ResourceIdStr, str] = (
-                    await data.Resource.copy_resources_from_unchanged_resource_set(
-                        environment=env.id,
-                        source_version=partial_base_version,
-                        destination_version=version,
-                        updated_resource_sets=updated_resource_sets,
-                        deleted_resource_sets=deleted_resource_sets_as_set,
-                        connection=connection,
+            with tracing.span("put_version.partial"):
+                all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
+                if is_partial_update:
+                    # Make mypy happy
+                    assert partial_base_version is not None
+                    # This dict maps a resource id to its resource set for unchanged resource sets.
+                    rids_unchanged_resource_sets: dict[ResourceIdStr, str] = (
+                        await data.Resource.copy_resources_from_unchanged_resource_set(
+                            environment=env.id,
+                            source_version=partial_base_version,
+                            destination_version=version,
+                            updated_resource_sets=updated_resource_sets,
+                            deleted_resource_sets=deleted_resource_sets_as_set,
+                            connection=connection,
+                        )
                     )
-                )
-                resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
-                if resources_that_moved_resource_sets:
-                    msg = (
-                        "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
-                        "a full compile is necessary for this process:\n"
-                    )
-                    msg += "\n".join(
-                        f"    {rid} moved from {rids_unchanged_resource_sets[rid]} to {resource_sets[rid]}"
-                        for rid in resources_that_moved_resource_sets
-                    )
+                    resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
+                    if resources_that_moved_resource_sets:
+                        msg = (
+                            "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
+                            "a full compile is necessary for this process:\n"
+                        )
+                        msg += "\n".join(
+                            f"    {rid} moved from {rids_unchanged_resource_sets[rid]} to {resource_sets[rid]}"
+                            for rid in resources_that_moved_resource_sets
+                        )
 
-                    raise BadRequest(msg)
-                all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
+                        raise BadRequest(msg)
+                    all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
 
-            await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
-            await cm.recalculate_total(connection=connection)
+                await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
+                await cm.recalculate_total(connection=connection)
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
-            all_agents: abc.Set[str] = {res.agent for res in rid_to_resource.values()}
+            all_agents: abc.Set[str]
+            if opt.server_use_resource_scheduler.get():
+                all_agents = {const.AGENT_SCHEDULER_ID}
+            else:
+                all_agents = {res.agent for res in rid_to_resource.values()}
+
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
@@ -1190,7 +1198,24 @@ class OrchestrationService(protocol.ServerSlice):
                 await model.mark_done(connection=connection)
                 return 200, {"model": model}
 
-            if push:
+            is_using_new_scheduler = opt.server_use_resource_scheduler.get()
+            # New code relying on the ResourceScheduler
+            if is_using_new_scheduler:
+                if connection.is_in_transaction():
+                    raise RuntimeError(
+                        "The release of a new version cannot be in a transaction! "
+                        "The agent would not see the data that as committed"
+                    )
+                await self.autostarted_agent_manager._ensure_scheduler(env)
+                agent = const.AGENT_SCHEDULER_ID
+
+                client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+                if client is not None:
+                    self.add_background_task(client.trigger_read_version(env.id))
+                else:
+                    LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)
+            # Old code
+            elif push:
                 # We can't be in a transaction here, or the agent will not see the data that as committed
                 # This assert prevents anyone from wrapping this method in a transaction by accident
                 assert not connection.is_in_transaction()
@@ -1200,6 +1225,7 @@ class OrchestrationService(protocol.ServerSlice):
                     agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
                 await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
 
+                assert agents is not None
                 for agent in agents:
                     client = self.agentmanager_service.get_agent_client(env.id, agent)
                     if client is not None:
@@ -1245,11 +1271,15 @@ class OrchestrationService(protocol.ServerSlice):
         if not allagents:
             return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
 
+        is_using_new_scheduler = opt.server_use_resource_scheduler.get()
+        if is_using_new_scheduler:
+            await self.autostarted_agent_manager._ensure_scheduler(env)
+            allagents = [const.AGENT_SCHEDULER_ID]
+        else:
+            await self.autostarted_agent_manager._ensure_agents(env, allagents)
+
         present = set()
         absent = set()
-
-        await self.autostarted_agent_manager._ensure_agents(env, allagents)
-
         for agent in allagents:
             client = self.agentmanager_service.get_agent_client(env.id, agent)
             if client is not None:

@@ -19,7 +19,6 @@
 import argparse
 import base64
 import logging
-import os
 import time
 import uuid
 from collections.abc import Sequence
@@ -36,7 +35,6 @@ from inmanta.const import ResourceState
 from inmanta.data.model import PipConfig, ResourceVersionIdStr
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance
-from inmanta.execute.util import Unknown
 from inmanta.module import Project
 from inmanta.protocol import Result
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
@@ -439,7 +437,7 @@ class Exporter:
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
-        elif (not self.failed or len(self._resources) > 0 or len(unknown_parameters) > 0) and not no_commit:
+        elif (not self.failed or len(self._resources) > 0) and not no_commit:
             self._version = self.commit_resources(
                 self._version,
                 resources,
@@ -695,29 +693,3 @@ class export:  # noqa: N801
         """
         Exporter.add(self.name, self.types, function)
         return function
-
-
-@export("dump", "std::File", "std::Service", "std::Package")
-def export_dumpfiles(exporter: Exporter, types: ProxiedType) -> None:
-    prefix = "dump"
-
-    if not os.path.exists(prefix):
-        os.mkdir(prefix)
-
-    for file in types["std::File"]:
-        path = os.path.join(prefix, file.host.name + file.path.replace("/", "+"))  # type: ignore
-        with open(path, "w+", encoding="utf-8") as fd:
-            if isinstance(file.content, Unknown):  # type: ignore
-                fd.write("UNKNOWN -> error")
-            else:
-                fd.write(file.content)  # type: ignore
-
-    path = os.path.join(prefix, "services")
-    with open(path, "w+", encoding="utf-8") as fd:
-        for svc in types["std::Service"]:
-            fd.write(f"{svc.host.name} -> {svc.name}\n")  # type: ignore
-
-    path = os.path.join(prefix, "packages")
-    with open(path, "w+", encoding="utf-8") as fd:
-        for pkg in types["std::Package"]:
-            fd.write(f"{pkg.host.name} -> {pkg.name}\n")  # type: ignore

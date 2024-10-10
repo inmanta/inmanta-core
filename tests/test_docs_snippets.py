@@ -92,7 +92,7 @@ async def test_docs_snippet_partial_compile(
         """.strip()
         )
         full_model: str = "\n".join((base, handlers_addition))
-        snippetcompiler.setup_for_snippet(full_model, add_to_module_path=[str(tmpdir)])
+        snippetcompiler.setup_for_snippet(full_model, add_to_module_path=[str(tmpdir)], autostd=True)
 
     async def get_hosts_by_network(version: int) -> abc.Mapping[int, abc.Set[int]]:
         resources: abc.Sequence[data.Resource] = await data.Resource.get_resources_for_version(env_id, version)
@@ -170,7 +170,7 @@ async def test_docs_snippets_unmanaged_resources_basic(
         my_module::InterfaceDiscovery(host=host)
         """
     )
-    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True)
+    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True, autostd=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 
     await _wait_until_deployment_finishes(client, environment, version=1)
