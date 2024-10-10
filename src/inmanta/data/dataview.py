@@ -99,11 +99,16 @@ class RequestedPagingBoundaries:
     """
     Represents the lower and upper bounds that the user requested for the paging boundaries, if any.
 
-    Boundary values represent max and min values, regardless of sorting direction (ASC or DESC), i.e.
-    - ASC sorting based on next links: (>) start,first_id
-    - ASC sorting based on prev links: (<) end,last_id
-    - DESC sorting based on next links: (<) end,last_id
-    - DESC sorting based on prev links: (>) start,first_id
+    Boundary values represent min and max values, regardless of sorting direction (ASC or DESC), i.e.
+                  |        prev             |                current page                    |    next
+     -------------|-------------------------|------------------------------------------------|----------------------
+     ASC sorting  | [  ...  ] (99 c)        | [ (100 d) ( 100 e) ... (10 000 r) (10 000 s) ] | (10 001 t) [ ...   ]
+                  |            end = 99     |     start = 100          end = 10 000          |     start = 10 001
+                  |            last_id = c  |     first_id = d         last_id = s           |     last_id = t
+                  |
+     DESC sorting | [  ...  ] (9 999 s)     | [ (10 000 t) (10 000 r) ... (100 d) ( 100 c) ] |  (99 b) [ ...   ]
+                  |          start = 9 999  |         end = 10000          start = 100       |     end = 99
+                  |          first_id = s   |         last_id = t          first_id = c      |     last_id = b
 
     So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "lowest" and
     "highest".
@@ -162,6 +167,9 @@ class RequestedPagingBoundaries:
         Concretely, this means swapping start and end, because the semantics of PagingBoundaries are opposite those of this
         class: PagingBoundaries represents "current page" while this class represents "requested page";
         max of current page = min of requested page and vice versa.
+
+        Known-issue: This method contains a potential off-by-one error here because both classes are exclusive of the boundary
+        values. Issue: https://github.com/inmanta/inmanta-core/issues/7898#issuecomment-2404322678
         """
         return PagingBoundaries(
             start=self.end,

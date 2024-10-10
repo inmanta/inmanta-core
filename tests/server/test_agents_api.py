@@ -216,21 +216,21 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
 
     assert result.result["metadata"] == {"total": 7, "before": 0, "after": 0, "page_size": 100}
 
-    fake_id_url = f"{base_url}/api/v2/agents?limit=1&sort=last_failover.asc&filter.status=paused&first_id=zzzz"
-    request = HTTPRequest(
-        url=fake_id_url,
-        headers={"X-Inmanta-tid": str(environment)},
+    # verify that paging beyond the last page returns correct counts and links
+    result = await client.get_agents(
+        environment,
+        limit=1,
+        first_id="zzzz",
+        sort="last_failover.asc",
+        filter={"status": ["paused"]},
     )
-    response = await http_client.fetch(request, raise_error=False)
-    assert response.code == 200
-    response = json.loads(response.body.decode("utf-8"))
-    # We don't have a way to reconstruct the previous link
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
     assert response["links"] == {
         "first": "/api/v2/agents?limit=1&sort=last_failover.asc&filter.status=paused",
         "prev": "/api/v2/agents?limit=1&sort=last_failover.asc&filter.status=paused&last_id=zzzz",
     }
     assert response["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
-    assert response["data"] == []
 
 
 async def test_sorting_validation(client, environment: str, env_with_agents: None) -> None:

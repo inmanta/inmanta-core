@@ -463,10 +463,15 @@ class PagingBoundaries:
     neighbouring pages. Which represents next and which prev depends on sorting order (ASC or DESC).
 
     Boundary values represent max and min values, regardless of sorting direction (ASC or DESC), i.e.
-    - ASC sorting based on next links: (>) end,last_id
-    - ASC sorting based on prev links: (<) start,first_id
-    - DESC sorting based on next links: (<) start,first_id
-    - DESC sorting based on prev links: (>) end,last_id
+                  |        prev             |                current page                    |    next
+     -------------|-------------------------|------------------------------------------------|----------------------
+     ASC sorting  | [  ...  ] (99 c)        | [ (100 d) ( 100 e) ... (10 000 r) (10 000 s) ] | (10 001 t) [ ...   ]
+                  |            start = 99   |     end = 100            start = 10 000        |     end = 10 001
+                  |            first_id = c |    last_id = d          first_id = s           |     last_id = t
+                  |
+     DESC sorting | [  ...  ] (9 999 s)     | [ (10 000 t) (10 000 r) ... (100 d) ( 100 c) ] |  (99 b) [ ...   ]
+                  |            end = 9 999  |          start = 10000          end = 100      |     start = 99
+                  |            last_id = s  |          first_id = t           last_id = c    |     first_id = b
 
     So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "highest"
     and "lowest".
