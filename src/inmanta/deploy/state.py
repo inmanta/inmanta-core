@@ -71,12 +71,6 @@ class ResourceDetails:
 
     id: Id = dataclasses.field(init=False, compare=False, hash=False)
 
-    def is_undeployable(self) -> bool:
-        """
-        Return True iff the resource is in a state where it cannot be deployed (e.g. undefined).
-        """
-        return self.status in const.UNDEPLOYABLE_STATES
-
     def __post_init__(self) -> None:
         # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
         object.__setattr__(self, "id", Id.parse_id(self.resource_id))
