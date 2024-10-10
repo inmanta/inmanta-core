@@ -178,6 +178,8 @@ src/inmanta/util/__init__.py:0: error: Argument "key" to "sorted" has incompatib
 src/inmanta/util/__init__.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/util/__init__.py:0: error: Incompatible return value type (got "bool | Awaitable[bool]", expected "bool")  [return-value]
 src/inmanta/resources.py:0: error: Function is missing a type annotation  [no-untyped-def]
+src/inmanta/resources.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
+src/inmanta/resources.py:0: error: "Resource" has no attribute "receive_events"; maybe "get_receive_events"?  [attr-defined]
 src/inmanta/resources.py:0: error: Returning Any from function declared to return "str"  [no-any-return]
 src/inmanta/resources.py:0: error: Incompatible return value type (got "Unknown", expected "str")  [return-value]
 src/inmanta/resources.py:0: error: Incompatible return value type (got "Resource", expected "T")  [return-value]
