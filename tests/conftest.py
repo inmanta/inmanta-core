@@ -1062,6 +1062,9 @@ class ReentrantVirtualEnv(VirtualEnv):
             self._using_venv = False
             swap_process_env(self.previous_venv)
 
+    def fake_use(self) -> None:
+        self._using_venv = True
+
     def use_virtual_env(self) -> None:
         """
         Activate the virtual environment.
@@ -1099,6 +1102,7 @@ class SnippetCompilationTest(KeepOnFail):
         self.repo: str = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
         self.venv = ReentrantVirtualEnv(env_path=self.env, re_check=re_check_venv)
+        self.re_check_venv = re_check_venv
         config.Config.load_config()
         self.keep_shared = False
         self.project = None
@@ -1203,12 +1207,14 @@ class SnippetCompilationTest(KeepOnFail):
         )
         Project.set(self.project)
 
-        if autostd or install_project or install_v2_modules:
+        if autostd or install_project or install_v2_modules or self.re_check_venv:
             # Don't bother loading the venv if we don't need to
             self.project.use_virtual_env()
             self._install_v2_modules(install_v2_modules)
             if install_project:
                 self.project.install_modules()
+        else:
+            self.venv.fake_use()
         return self.project
 
     def _install_v2_modules(self, install_v2_modules: Optional[list[LocalPackagePath]] = None) -> None:
@@ -1460,7 +1466,7 @@ def snippetcompiler(
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler_clean(modules_dir: str, clean_reset) -> Iterator[SnippetCompilationTest]:
+def snippetcompiler_clean(modules_dir: str, clean_reset, deactive_venv) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
     """
