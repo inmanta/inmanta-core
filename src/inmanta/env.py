@@ -1161,10 +1161,14 @@ class ActiveEnv(PythonEnvironment):
                 return self.owner is None or self.owner in owners
 
         # all requirements of all packages installed in this environment
+        # assume no extras
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(inmanta.util.parse_requirement(requirement=str(requirement)), dist_info.name)
+            OwnedRequirement(parsed, dist_info.name)
             for dist_info in distributions()
-            for requirement in (dist_info.requires or [])
+            for parsed in (
+                inmanta.util.parse_requirement(requirement=str(requirement)) for requirement in (dist_info.requires or [])
+            )
+            if parsed.marker is None or parsed.marker.evaluate()
         )
 
         inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
