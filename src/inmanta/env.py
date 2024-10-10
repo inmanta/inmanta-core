@@ -43,8 +43,6 @@ from subprocess import CalledProcessError
 from textwrap import indent
 from typing import Callable, List, NamedTuple, Optional, Tuple, TypeVar
 
-import pkg_resources
-
 import inmanta.util
 import packaging.requirements
 import packaging.utils
@@ -806,10 +804,7 @@ import sys
         :param only_editable: List only packages installed in editable mode.
         :return: A dict with package names as keys and versions as values
         """
-        # TODO!!!
-        cmd = PipCommandBuilder.compose_list_command(self.python_path, format=PipListFormat.json, only_editable=only_editable)
-        output = CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
-        return {r["name"]: packaging.version.Version(r["version"]) for r in json.loads(output)}
+        return {dist_info.name: packaging.version.Version(dist_info.version) for dist_info in distributions()}
 
     def install_for_config(
         self,
@@ -1490,7 +1485,6 @@ class VenvSnapshot:
     old_os_venv: Optional[str]
     old_process_env_path: str
     old_process_env: ActiveEnv
-    old_working_set: pkg_resources.WorkingSet
 
     def restore(self) -> None:
         os.environ["PATH"] = self.old_os_path
@@ -1503,7 +1497,6 @@ class VenvSnapshot:
         sys.path_hooks.extend(self.old_path_hooks)
         # Clear cache for sys.path_hooks
         sys.path_importer_cache.clear()
-        pkg_resources.working_set = self.old_working_set
         # Restore PYTHONPATH
         if self.old_pythonpath is not None:
             os.environ["PYTHONPATH"] = self.old_pythonpath
@@ -1535,6 +1528,5 @@ def store_venv() -> VenvSnapshot:
         old_os_venv=os.environ.get("VIRTUAL_ENV", None),
         old_process_env=process_env,
         old_process_env_path=process_env.env_path,
-        old_working_set=pkg_resources.working_set,
     )
     return self

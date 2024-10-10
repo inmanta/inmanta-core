@@ -20,7 +20,6 @@ import logging.config
 import warnings
 from re import Pattern
 
-import pkg_resources
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
@@ -519,7 +518,7 @@ def reset_metrics():
 
 
 @pytest.fixture(scope="function")
-async def clean_reset(create_db, clean_db, deactive_venv):
+async def clean_reset(create_db, clean_db):
     reset_all_objects()
     config.Config._reset()
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
@@ -1052,7 +1051,7 @@ class ReentrantVirtualEnv(VirtualEnv):
             setting re_check makes it check every time
         """
         super().__init__(env_path)
-        self.working_set = None
+        self.first = True
         self.was_checked = False
         self.re_check = re_check
         # The venv we replaced when getting activated
@@ -1061,7 +1060,6 @@ class ReentrantVirtualEnv(VirtualEnv):
     def deactivate(self):
         if self._using_venv:
             self._using_venv = False
-            self.working_set = pkg_resources.working_set
             swap_process_env(self.previous_venv)
 
     def use_virtual_env(self) -> None:
@@ -1072,16 +1070,13 @@ class ReentrantVirtualEnv(VirtualEnv):
             # We are in use, just ignore double activation
             return
 
-        if not self.working_set:
+        if self.first:
             # First run
-            self.previous_venv = env.process_env
-            super().use_virtual_env()
-        else:
-            # Later run
-            self._activate_that()
-            self.previous_venv = swap_process_env(self)
-            pkg_resources.working_set = self.working_set
-            self._using_venv = True
+            self.init_env()
+
+        self._using_venv = True
+        self.previous_venv = swap_process_env(self)
+        self._activate_that()
 
     def check(
         self,
@@ -1207,10 +1202,13 @@ class SnippetCompilationTest(KeepOnFail):
             self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
         )
         Project.set(self.project)
-        self.project.use_virtual_env()
-        self._install_v2_modules(install_v2_modules)
-        if install_project:
-            self.project.install_modules()
+
+        if autostd or install_project or install_v2_modules:
+            # Don't bother loading the venv if we don't need to
+            self.project.use_virtual_env()
+            self._install_v2_modules(install_v2_modules)
+            if install_project:
+                self.project.install_modules()
         return self.project
 
     def _install_v2_modules(self, install_v2_modules: Optional[list[LocalPackagePath]] = None) -> None:
