@@ -27,23 +27,23 @@ LOGGER = logging.getLogger("inmanta")
 
 # We need this early to make @instrument work
 enabled = os.getenv("LOGFIRE_TOKEN", None) is not None
-if enabled:
+try:
     import logfire
     import logfire._internal.config
     import logfire.integrations
     import logfire.integrations.pydantic
-    from logfire import LevelName, LogfireSpan
+    from logfire import LevelName
     from logfire._internal.main import NoopSpan
     from logfire.propagate import ContextCarrier
 
     # Make sure we don't get warnings when it is off
     logfire._internal.config.GLOBAL_CONFIG.ignore_no_config = True
-else:
+except ModuleNotFoundError:
     # Retaken from Logfire 1.0.1 to make sure tests pass even if logfire is not installed
     LevelName = Literal["trace", "debug", "info", "notice", "warn", "warning", "error", "fatal"]
     """Level names for records."""
 
-    class NoopSpan:
+    class NoopSpan("logfire.LogfireSpan"):
         """Implements the same methods as `LogfireSpan` but does nothing.
 
         Used in place of `LogfireSpan` and `FastLogfireSpan` when an exception occurs during span creation.
@@ -92,6 +92,8 @@ else:
 
     LogfireSpan = NoopSpan
     ContextCarrier = Mapping[str, Any]
+    enabled = False
+
 
 
 def configure_logfire(service: str) -> None:
