@@ -18,7 +18,9 @@
 
 import logging.config
 import warnings
+from re import Pattern
 
+import pkg_resources
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
@@ -27,6 +29,7 @@ from inmanta import logging as inmanta_logging
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
+from packaging.requirements import Requirement
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -88,20 +91,19 @@ import time
 import traceback
 import uuid
 import venv
+import weakref
 from collections import abc
 from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
 from typing import Callable, Dict, Optional, Union
 
 import asyncpg
-import pkg_resources
 import psutil
 import py
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
@@ -119,7 +121,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import CommandRunner, LocalPackagePath, VirtualEnv, mock_process_env
+from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, swap_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -501,43 +503,12 @@ def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[Optional[str
 
 @pytest.fixture(scope="function")
 def deactive_venv():
-    old_os_path = os.environ.get("PATH", "")
-    old_prefix = sys.prefix
-    old_path = list(sys.path)
-    old_meta_path = sys.meta_path.copy()
-    old_path_hooks = sys.path_hooks.copy()
-    old_pythonpath = os.environ.get("PYTHONPATH", None)
-    old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
-    old_process_env: str = env.process_env.python_path
-    old_working_set = pkg_resources.working_set
+    snapshot = env.store_venv()
     old_available_extensions = (
         dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
     )
-
     yield
-
-    os.environ["PATH"] = old_os_path
-    sys.prefix = old_prefix
-    sys.path = old_path
-    # reset sys.meta_path because it might contain finders for editable installs, make sure to keep the same object
-    sys.meta_path.clear()
-    sys.meta_path.extend(old_meta_path)
-    sys.path_hooks.clear()
-    sys.path_hooks.extend(old_path_hooks)
-    # Clear cache for sys.path_hooks
-    sys.path_importer_cache.clear()
-    pkg_resources.working_set = old_working_set
-    # Restore PYTHONPATH
-    if old_pythonpath is not None:
-        os.environ["PYTHONPATH"] = old_pythonpath
-    elif "PYTHONPATH" in os.environ:
-        del os.environ["PYTHONPATH"]
-    # Restore VIRTUAL_ENV
-    if old_os_venv is not None:
-        os.environ["VIRTUAL_ENV"] = old_os_venv
-    elif "VIRTUAL_ENV" in os.environ:
-        del os.environ["VIRTUAL_ENV"]
-    env.mock_process_env(python_path=old_process_env)
+    snapshot.restore()
     loader.PluginModuleFinder.reset()
     InmantaBootloader.AVAILABLE_EXTENSIONS = old_available_extensions
 
@@ -584,7 +555,7 @@ def reset_all_objects():
     V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
     auth.AuthJWTConfig.reset()
-    InmantaLoggerConfig.clean_instance(root_handlers_to_remove=[h for h in logging.root.handlers if not is_caplog_handler(h)])
+    InmantaLoggerConfig.clean_instance()
     AsyncHTTPClient.configure(None)
 
 
@@ -1074,14 +1045,23 @@ class ReentrantVirtualEnv(VirtualEnv):
     This is intended for use in testcases to require a lot of venv switching
     """
 
-    def __init__(self, env_path: str) -> None:
+    def __init__(self, env_path: str, re_check: bool = False):
+        """
+        :param re_check: For performance reasons, we don't check all constraints every time,
+            setting re_check makes it check every time
+        """
         super().__init__(env_path)
         self.working_set = None
+        self.was_checked = False
+        self.re_check = re_check
+        # The venv we replaced when getting activated
+        self.previous_venv: Optional[ActiveEnv] = None
 
     def deactivate(self):
         if self._using_venv:
             self._using_venv = False
             self.working_set = pkg_resources.working_set
+            swap_process_env(self.previous_venv)
 
     def use_virtual_env(self) -> None:
         """
@@ -1093,21 +1073,36 @@ class ReentrantVirtualEnv(VirtualEnv):
 
         if not self.working_set:
             # First run
+            self.previous_venv = env.process_env
             super().use_virtual_env()
         else:
             # Later run
             self._activate_that()
-            mock_process_env(python_path=self.python_path)
+            self.previous_venv = swap_process_env(self)
             pkg_resources.working_set = self.working_set
             self._using_venv = True
 
+    def check(
+        self,
+        strict_scope: Optional[Pattern[str]] = None,
+        constraints: Optional[list[Requirement]] = None,
+    ) -> None:
+        # Avoid re-checking
+        if not self.was_checked or self.re_check:
+            super().check(strict_scope, constraints)
+            self.was_checked = True
+
 
 class SnippetCompilationTest(KeepOnFail):
-    def setUpClass(self):
+    def setUpClass(self, re_check_venv: bool = False):
+        """
+        :param re_check_venv: For performance reasons, we don't check all constraints every time,
+            setting re_check_venv makes it check every time
+        """
         self.libs = tempfile.mkdtemp()
         self.repo: str = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
-        self.venv = ReentrantVirtualEnv(env_path=self.env)
+        self.venv = ReentrantVirtualEnv(env_path=self.env, re_check=re_check_venv)
         config.Config.load_config()
         self.keep_shared = False
         self.project = None
@@ -1139,7 +1134,8 @@ class SnippetCompilationTest(KeepOnFail):
         self,
         snippet: str,
         *,
-        autostd: bool = True,
+        autostd: bool = False,
+        ministd: bool = False,
         install_project: bool = True,
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
         add_to_module_path: Optional[list[str]] = None,
@@ -1175,6 +1171,10 @@ class SnippetCompilationTest(KeepOnFail):
                                     False if a package source is needed for v2 modules to work
         :param main_file: Path to the .cf file to use as main entry point. A relative or an absolute path can be provided.
             If a relative path is used, it's interpreted relative to the root of the project directory.
+        :param autostd: do we automatically import std? This does have a performance impact!
+            it is small on individual test cases, (100 ms) but it adds up quickly (as this is 50% of the run time)
+        :param ministd: if we need some of std, but not everything, this loads a small, embedded version of std, that has less
+            overhead
         """
         self.setup_for_snippet_external(
             snippet,
@@ -1190,7 +1190,7 @@ class SnippetCompilationTest(KeepOnFail):
             main_file,
         )
         return self._load_project(
-            autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check, main_file=main_file
+            autostd or ministd, install_project, install_v2_modules, strict_deps_check=strict_deps_check, main_file=main_file
         )
 
     def _load_project(
@@ -1207,18 +1207,10 @@ class SnippetCompilationTest(KeepOnFail):
         )
         Project.set(self.project)
         self.project.use_virtual_env()
-        self._patch_process_env()
         self._install_v2_modules(install_v2_modules)
         if install_project:
             self.project.install_modules()
         return self.project
-
-    def _patch_process_env(self) -> None:
-        """
-        Patch env.process_env to accommodate the SnippetCompilationTest's switching between active environments within a single
-        running process.
-        """
-        env.mock_process_env(env_path=self.env)
 
     def _install_v2_modules(self, install_v2_modules: Optional[list[LocalPackagePath]] = None) -> None:
         """Assumes we have a project set"""
@@ -1254,6 +1246,7 @@ class SnippetCompilationTest(KeepOnFail):
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
         main_file: str = "main.cf",
+        ministd: bool = False,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1261,6 +1254,9 @@ class SnippetCompilationTest(KeepOnFail):
         project_requires = project_requires if project_requires is not None else []
         python_requires = python_requires if python_requires is not None else []
         relation_precedence_rules = relation_precedence_rules if relation_precedence_rules else []
+        ministd_path = os.path.join(__file__, "..", "data/mini_str_container")
+        if ministd:
+            add_to_module_path += ministd_path
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 f"""
@@ -1402,12 +1398,19 @@ class SnippetCompilationTest(KeepOnFail):
             ),
         )
 
-    def setup_for_error(self, snippet, shouldbe, indent_offset=0):
+    def setup_for_error(
+        self,
+        snippet,
+        shouldbe,
+        indent_offset=0,
+        ministd: bool = False,
+        autostd: bool = False,
+    ):
         """
         Set up project to expect an error during compilation or project install.
         """
         try:
-            self.setup_for_snippet(snippet)
+            self.setup_for_snippet(snippet, ministd=ministd, autostd=autostd)
             compiler.do_compile()
             assert False, "Should get exception"
         except CompilerException as e:
@@ -1463,7 +1466,7 @@ def snippetcompiler_clean(modules_dir: str) -> Iterator[SnippetCompilationTest]:
     Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
     """
     ast = SnippetCompilationTest()
-    ast.setUpClass()
+    ast.setUpClass(re_check_venv=True)
     ast.setup_func(modules_dir)
     yield ast
     ast.tear_down_func()
@@ -1876,23 +1879,64 @@ def is_caplog_handler(handler: logging.Handler) -> bool:
     )
 
 
+ALLOW_OVERRIDING_ROOT_LOG_LEVEL: bool = False
+
+
+@pytest.fixture(scope="function")
+def allow_overriding_root_log_level() -> None:
+    """
+    Fixture that allows a test case to indicate that the root log level, specified in a call to
+    `inmanta_logging.FullLoggingConfig.apply_config()`, should be taken into account. By default,
+    it's ignored to make sure that pytest logging works correctly. This fixture is mainly intended
+    for the test cases that test the logging framework itself.
+    """
+    global ALLOW_OVERRIDING_ROOT_LOG_LEVEL
+    ALLOW_OVERRIDING_ROOT_LOG_LEVEL = True
+    yield
+    ALLOW_OVERRIDING_ROOT_LOG_LEVEL = False
+
+
 @pytest.fixture(scope="function", autouse=True)
 async def dont_remove_caplog_handlers(request, monkeypatch):
     """
-    Caplog captures log messages by attaching handlers to the root logger. This fixture makes sure the
-    inmanta.logging.FullLoggingConfig.apply_config() method doesn't remove any handlers that were added by the caplog fixture.
+    Caplog captures log messages by attaching handlers to the root logger. Applying a logging config with
+    `inmanta_logging.FullLoggingConfig.apply_config()` removes any existing logging configuration.
+    As such, this fixture puts a wrapper around the `apply_config()` method to make sure that:
+
+     * The pytest handlers are not removed/closed after the execution of the apply_config() method.
+     * The configured root log level is not altered by the call to apply_config().
     """
     original_apply_config = inmanta_logging.FullLoggingConfig.apply_config
 
-    def patched_apply_config(self) -> None:
-        caplog_handlers = [h for h in logging.root.handlers if is_caplog_handler(h)]
-        original_apply_config(self)
-        # Re-add caplog handlers that were removed by the call to apply_config()
-        for current_handler in caplog_handlers:
-            if current_handler not in logging.root.handlers:
-                logging.root.addHandler(current_handler)
+    def apply_config_wrapper(self) -> None:
+        # Make sure the root log level is not altered.
+        root_log_level: int = logging.root.level
+        # Save the caplog root handlers so that we can restore them after.
+        caplog_root_handler: list[logging.Handler] = [h for h in logging.root.handlers if is_caplog_handler(h)]
+        for current_handler in caplog_root_handler:
+            logging.root.removeHandler(current_handler)
+        # When the `apply_config()` method is called, the `logging._handlerList` is used to find all the handlers
+        # that should be closed. We remove the handlers from that list to prevent the handlers from being closed.
+        #
+        # This `logging._handlerList` is used to tear down the handlers in the reverse order with respect to the setup order.
+        # As such, this method should not alter the order. We assume the caplog handlers are entirely independent
+        # from any other handler. Like that the order only matters within the set of caplog handlers.
+        re_add_to_handler_list: list[weakref.ReferenceType] = [
+            weak_ref for weak_ref in logging._handlerList if is_caplog_handler(weak_ref())
+        ]
+        for weak_ref in re_add_to_handler_list:
+            logging._handlerList.remove(weak_ref)
 
-    monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "apply_config", patched_apply_config)
+        original_apply_config(self)
+
+        for weak_ref in re_add_to_handler_list:
+            logging._handlerList.append(weak_ref)
+        for current_handler in caplog_root_handler:
+            logging.root.addHandler(current_handler)
+        if not ALLOW_OVERRIDING_ROOT_LOG_LEVEL:
+            logging.root.setLevel(root_log_level)
+
+    monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "apply_config", apply_config_wrapper)
 
 
 @pytest.fixture(scope="session")
@@ -1910,8 +1954,11 @@ def index_with_pkgs_containing_optional_deps() -> str:
             path=os.path.join(tmpdirname, "pkg"),
             publish_index=pip_index,
             optional_dependencies={
-                "optional-a": [Requirement.parse("dep-a")],
-                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
+                "optional-a": [inmanta.util.parse_requirement(requirement="dep-a")],
+                "optional-b": [
+                    inmanta.util.parse_requirement(requirement="dep-b"),
+                    inmanta.util.parse_requirement(requirement="dep-c"),
+                ],
             },
         )
         for pkg_name in ["dep-a", "dep-b", "dep-c"]:

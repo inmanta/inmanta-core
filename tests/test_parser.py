@@ -2370,7 +2370,8 @@ Warnings in MLS:
 Bad escape sequence: \.
 """
 std::print(s1)
-        '''
+        ''',
+        autostd=True,
     )
     compiler.do_compile()
 

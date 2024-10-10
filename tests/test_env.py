@@ -30,11 +30,10 @@ from subprocess import CalledProcessError
 from typing import Callable, LiteralString, Optional
 from unittest.mock import patch
 
-import pkg_resources
 import py
 import pytest
-from pkg_resources import Requirement
 
+import inmanta.util
 from inmanta import env, loader, module
 from inmanta.data.model import PipConfig
 from inmanta.env import Pip
@@ -178,7 +177,7 @@ def test_gen_req_file():
 
     # make sure they all parse
     for req in reqs:
-        pkg_resources.parse_requirements(req)
+        inmanta.util.parse_requirement(requirement=req)
 
 
 def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
@@ -207,7 +206,7 @@ def test_process_env_install_from_index(
     package_name: str = "more-itertools"
     assert package_name not in env.process_env.get_installed_packages()
     env.process_env.install_for_config(
-        [Requirement.parse(package_name + (f"=={version}" if version is not None else ""))],
+        [inmanta.util.parse_requirement(requirement=package_name + (f"=={version}" if version is not None else ""))],
         config=PipConfig(
             use_system_config=True,  # we need an upstream for some packages
         ),
@@ -222,7 +221,7 @@ def test_process_env_install_from_index(
     # It should hit the cache there and return here.
     # Cheap and fast test
     env.process_env.install_from_index(
-        [Requirement.parse(package_name + (f"=={version}" if version is not None else ""))],
+        [inmanta.util.parse_requirement(requirement=package_name + (f"=={version}" if version is not None else ""))],
         use_pip_config=True,
     )
 
@@ -272,7 +271,7 @@ def test_process_env_install_from_index_not_found_env_var(
 
     with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
         env.process_env.install_for_config(
-            [Requirement.parse("this-package-does-not-exist")],
+            [inmanta.util.parse_requirement(requirement="this-package-does-not-exist")],
             config=PipConfig(
                 index_url=index_urls[0],
                 # The first element should only be passed to the index_url. If there are indexes in the environment
@@ -309,7 +308,7 @@ setup(name="test")
 
     with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
         env.process_env.install_for_config(
-            requirements=[Requirement.parse("this-package-does-not-exist")],
+            requirements=[inmanta.util.parse_requirement(requirement="this-package-does-not-exist")],
             paths=[env.LocalPackagePath(path=str(tmpdir))],
             config=PipConfig(use_system_config=use_system_config),
         )
@@ -326,7 +325,7 @@ def test_process_env_install_from_index_conflicting_reqs(
     package_name: str = "more-itertools"
     with pytest.raises(env.ConflictingRequirements) as e:
         env.process_env.install_for_config(
-            [Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]],
+            [inmanta.util.parse_requirement(requirement=f"{package_name}{version}") for version in [">8.5", "<=8"]],
             config=PipConfig(
                 use_system_config=True,  # we need an upstream for some packages
             ),
@@ -396,7 +395,7 @@ def test_active_env_get_module_file(
         loader.PluginModuleFinder.configure_module_finder([os.path.join(str(tmpdir), "libs")])
 
     assert env.ActiveEnv.get_module_file(module_name) is None
-    env.process_env.install_for_config([Requirement.parse(package_name)], pip_config)
+    env.process_env.install_for_config([inmanta.util.parse_requirement(requirement=package_name)], pip_config)
     assert package_name in env.process_env.get_installed_packages()
     module_info: Optional[tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
@@ -430,6 +429,7 @@ def test_active_env_get_module_file_editable_namespace_package(
         requirements=[],
         paths=[env.LocalPackagePath(path=project_dir, editable=True)],
         config=PipConfig(use_system_config=False, index_url=local_module_package_index),
+        add_inmanta_requires=False,
     )
     assert package_name in env.process_env.get_installed_packages()
     module_info: Optional[tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
@@ -452,7 +452,7 @@ def test_active_env_get_module_file_editable_namespace_package(
 
 
 def create_install_package(
-    name: str, version: version.Version, requirements: list[Requirement], local_module_package_index: str
+    name: str, version: version.Version, requirements: list[inmanta.util.CanonicalRequirement], local_module_package_index: str
 ) -> None:
     """
     Creates and installs a simple package with specified requirements. Creates package in a temporary directory and
@@ -526,21 +526,24 @@ def test_active_env_check_basic(
         for in_scope, expect in [(in_scope_test, expect_test), (in_scope_nonext, expect_nonext)]:
             caplog.clear()
             if expect[0]:
-                env.ActiveEnv.check(in_scope)
+                env.process_env.check(in_scope)
                 if expect[1] == "":
                     assert error_msg not in {rec.message for rec in caplog.records}
                 else:
                     assert expect[1] in {rec.message for rec in caplog.records}
             else:
                 with pytest.raises(env.ConflictingRequirements) as e:
-                    env.ActiveEnv.check(in_scope)
+                    env.process_env.check(in_scope)
                 assert expect[1] in e.value.get_message()
 
     assert_all_checks()
     create_install_package("test-package-one", version.Version("1.0.0"), [], local_module_package_index)
     assert_all_checks()
     create_install_package(
-        "test-package-two", version.Version("1.0.0"), [Requirement.parse("test-package-one~=1.0")], local_module_package_index
+        "test-package-two",
+        version.Version("1.0.0"),
+        [inmanta.util.parse_requirement(requirement="test-package-one~=1.0")],
+        local_module_package_index,
     )
     assert_all_checks()
     create_install_package("test-package-one", version.Version("2.0.0"), [], local_module_package_index)
@@ -560,26 +563,29 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local
     """
     caplog.set_level(logging.WARNING)
     in_scope: Pattern[str] = re.compile("test-package-.*")
-    constraints: list[Requirement] = [Requirement.parse("test-package-one~=1.0")]
+    constraints: list[inmanta.util.CanonicalRequirement] = [inmanta.util.parse_requirement(requirement="test-package-one~=1.0")]
 
-    env.ActiveEnv.check(in_scope)
+    env.process_env.check(in_scope)
 
     caplog.clear()
     with pytest.raises(env.ConflictingRequirements):
-        env.ActiveEnv.check(in_scope, constraints)
+        env.process_env.check(in_scope, constraints)
 
     caplog.clear()
     create_install_package("test-package-one", version.Version("1.0.0"), [], local_module_package_index)
-    env.ActiveEnv.check(in_scope, constraints)
+    env.process_env.check(in_scope, constraints)
     assert "Incompatibility between constraint" not in caplog.text
 
     # Add an unrelated package to the venv, that should not matter
     # setup for #4761
     caplog.clear()
     create_install_package(
-        "ext-package-one", version.Version("1.0.0"), [Requirement.parse("test-package-one==1.0")], local_module_package_index
+        "ext-package-one",
+        version.Version("1.0.0"),
+        [inmanta.util.parse_requirement(requirement="test-package-one==1.0")],
+        local_module_package_index,
     )
-    env.ActiveEnv.check(in_scope, constraints)
+    env.process_env.check(in_scope, constraints)
     assert "Incompatibility between constraint" not in caplog.text
 
     caplog.clear()
@@ -588,7 +594,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local
     # test for #4761
     # without additional constrain, this is not a hard failure
     # except for the unrelated package, which should produce a warning
-    env.ActiveEnv.check(in_scope, [])
+    env.process_env.check(in_scope, [])
     assert (
         "Incompatibility between constraint test-package-one==1.0 and installed version 2.0.0 (from ext-package-one)"
         in caplog.text
@@ -596,7 +602,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local
 
     caplog.clear()
     with pytest.raises(env.ConflictingRequirements):
-        env.ActiveEnv.check(in_scope, constraints)
+        env.process_env.check(in_scope, constraints)
 
 
 @pytest.mark.slowtest
@@ -607,7 +613,7 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
     installed_pkgs = tmpvenv_active_inherit.get_installed_packages()
     assert "inmanta-core" in installed_pkgs, "The inmanta-core package should be installed to run the tests"
 
-    inmanta_requirements = Requirement.parse("inmanta-core==4.0.0")
+    inmanta_requirements = inmanta.util.parse_requirement(requirement="inmanta-core==4.0.0")
     with pytest.raises(env.ConflictingRequirements) as excinfo:
         tmpvenv_active_inherit.install_for_config(
             requirements=[inmanta_requirements],
@@ -647,13 +653,13 @@ def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module
     """
 
     def _assert_install(requirement: str, installed: bool) -> None:
-        parsed_requirement = Requirement.parse(requirement)
+        parsed_requirement = inmanta.util.parse_requirement(requirement=requirement)
         for r in [requirement, parsed_requirement]:
             assert tmpvenv_active_inherit.are_installed(requirements=[r]) == installed
 
     _assert_install("inmanta-module-elaboratev2module==1.2.3", installed=False)
     tmpvenv_active_inherit.install_for_config(
-        requirements=[Requirement.parse("inmanta-module-elaboratev2module==1.2.3")],
+        requirements=[inmanta.util.parse_requirement(requirement="inmanta-module-elaboratev2module==1.2.3")],
         config=PipConfig(
             index_url=local_module_package_index,
         ),
@@ -697,7 +703,7 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
         path=os.path.join(tmpdir, "pkg"),
         publish_index=pip_index,
         optional_dependencies={
-            "optional-pkg": [Requirement.parse("dep[optional-dep]")],
+            "optional-pkg": [inmanta.util.parse_requirement(requirement="dep[optional-dep]")],
         },
     )
     create_python_package(
@@ -706,11 +712,11 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
         path=os.path.join(tmpdir, "dep"),
         publish_index=pip_index,
         optional_dependencies={
-            "optional-dep": [Requirement.parse("pkg[optional-pkg]")],
+            "optional-dep": [inmanta.util.parse_requirement(requirement="pkg[optional-pkg]")],
         },
     )
 
-    requirements = [Requirement.parse("pkg[optional-pkg]")]
+    requirements = [inmanta.util.parse_requirement(requirement="pkg[optional-pkg]")]
     tmpvenv_active_inherit.install_for_config(
         requirements=requirements,
         config=PipConfig(
