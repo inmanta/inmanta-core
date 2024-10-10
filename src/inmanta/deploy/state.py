@@ -199,7 +199,7 @@ class ModelState:
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
 
-    def block_provides(self, resources: set[ResourceIdStr]) -> set[ResourceIdStr]:
+    def block_provides(self, resources: Set[ResourceIdStr]) -> set[ResourceIdStr]:
         """
         Marks the provides of the given resources as blocked.
 
