@@ -36,6 +36,7 @@ def logger_for_agent(agent: str) -> logging.Logger:
     return logging.getLogger("agent").getChild(agent)
 
 
+# must remain frozen because it's used as key/identity for deploy intent
 @dataclass(frozen=True, kw_only=True)
 class Task(abc.ABC):
     """
