@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import importlib
 import logging.config
 import warnings
 from re import Pattern
@@ -121,7 +122,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, swap_process_env
+from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, store_venv, swap_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -1055,12 +1056,16 @@ class ReentrantVirtualEnv(VirtualEnv):
         self.was_checked = False
         self.re_check = re_check
         # The venv we replaced when getting activated
-        self.previous_venv: Optional[ActiveEnv] = None
+        self.previous_venv = None
+        self.snapshot = None
 
     def deactivate(self):
         if self._using_venv:
             self._using_venv = False
-            swap_process_env(self.previous_venv)
+            if self.snapshot:
+                self.snapshot.restore()
+                self.snapshot = None
+                swap_process_env(self.previous_venv)
 
     def fake_use(self) -> None:
         self._using_venv = True
@@ -1078,6 +1083,7 @@ class ReentrantVirtualEnv(VirtualEnv):
             self.init_env()
 
         self._using_venv = True
+        self.snapshot = store_venv()
         self.previous_venv = swap_process_env(self)
         self._activate_that()
 
@@ -1124,6 +1130,8 @@ class SnippetCompilationTest(KeepOnFail):
             shutil.rmtree(self.project_dir)
         self.project = None
         self.venv.deactivate()
+        sys.path_importer_cache.clear()
+        loader.PluginModuleFinder.reset()
 
     def keep(self):
         self._keep = True
