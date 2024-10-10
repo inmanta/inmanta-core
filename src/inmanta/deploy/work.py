@@ -116,10 +116,10 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         # use simple counter rather than time.monotonic_ns() for performance reasons
         self._entry_count: int = 0
         self._new_agent_notify: Callable[[str], None] = new_agent_notify
-        self._in_progress: set[tasks.Task] = set()
+        self._in_progress: dict[tasks.Task, TaskPriority] = {}
 
     @property
-    def in_progress(self) -> Set[tasks.Task]:
+    def in_progress(self) -> dict[tasks.Task, TaskPriority]:
         return self._in_progress
 
     def reset(self) -> None:
@@ -232,7 +232,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
                 continue
             # remove from the queue since it's been picked up
             self.discard(item.task.task)
-            self._in_progress.add(item.task.task)
+            self._in_progress[item.task.task] = item.task.priority
             return item.task.task
 
     def task_done(self, agent: str, task: tasks.Task) -> None:
@@ -242,7 +242,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         Used by queue consumers. For each get() used to fetch a task, a subsequent call to task_done() tells the corresponding
         agent queue that the processing on the task is complete.
         """
-        self._in_progress.remove(task)
+        del self._in_progress[task]
         self._agent_queues[agent].task_done()
 
     #########################
@@ -398,7 +398,7 @@ class ScheduledWork:
                 self._waiting[resource] = BlockedDeploy(
                     task=PrioritizedTask(
                         task=task,
-                        priority=task_priority if task_priority is not None and task_priority <= priority else priority,
+                        priority=min(task_priority, priority) if task_priority is not None else priority,
                     ),
                     # task was previously ready to execute => assume no other blockers than this one
                     blocked_on=new_blockers,

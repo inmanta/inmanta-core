@@ -31,7 +31,7 @@ from inmanta.data import ConfigurationModel
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import work
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
-from inmanta.deploy.tasks import DryRun, RefreshFact, Task
+from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
@@ -387,9 +387,15 @@ class ResourceScheduler(TaskManager):
                     if event_listeners:
                         # do not pass deploying tasks because for event propagation we really want to start a new one,
                         # even if the current intent is already being deployed
-                        self._work.deploy_with_context(
-                            event_listeners, priority=TaskPriority.NEW_VERSION_DEPLOY, deploying=set()
-                        )
+                        priority = self._work.agent_queues.in_progress.get(Deploy(resource=resource))
+                        if priority is None:
+                            LOGGER.warning(
+                                "Deploy task for resource %s not found on in_progress."
+                                "Assigning a priority of NEW_VERSION_DEPLOY to the events it produced",
+                                resource,
+                            )
+                            priority = TaskPriority.NEW_VERSION_DEPLOY
+                        self._work.deploy_with_context(event_listeners, priority=priority, deploying=set())
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
