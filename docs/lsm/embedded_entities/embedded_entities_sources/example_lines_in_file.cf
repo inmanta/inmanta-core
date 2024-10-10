@@ -14,7 +14,7 @@ entity File extends lsm::ServiceEntity:
 end
 
 index File(path)
-File.lines [0:] lsm::__rwplus__ Line
+File.lines [0:] lsm::__rwplus__ Line._file [1]
 
 entity Line extends lsm::EmbeddedEntity:
     """
@@ -27,13 +27,9 @@ entity Line extends lsm::EmbeddedEntity:
     string content = ""
     lsm::attribute_modifier content__modifier="rw+"
 
-    # These private attributes keep track of added/removed
-    # embedded entities across updates
-    bool _added = false
-    bool _removed = false
 end
 
-index Line(line_no)
+index Line(_file, line_no)
 
 binding = lsm::ServiceEntityBindingV2(
     service_entity="__config__::File",
@@ -41,7 +37,7 @@ binding = lsm::ServiceEntityBindingV2(
     service_entity_name="file",
 )
 
-for instance in lsm::all(binding, include_purged_embedded_entities=true):
+for instance in lsm::all(binding, include_purged_embedded_entities=false):
     file = File(
         instance_id=instance["id"],
         entity_binding=binding,

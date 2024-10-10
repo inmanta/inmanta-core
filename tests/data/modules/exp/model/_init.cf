@@ -1,4 +1,4 @@
-entity Test:
+entity Test extends std::Resource:
     string name
     string agent
     string field1=""
