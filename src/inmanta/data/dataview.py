@@ -156,8 +156,6 @@ class RequestedPagingBoundaries:
         return (self.end is not None) or (self.last_id is not None)
 
     def get_empty_page_boundaries(self) -> PagingBoundaries:
-        # TODO: off by one if boundary actually exists?
-        # TODO: clarify docstring
         """
         Return the virtual paging boundaries that corresponds to the boundaries of an empty page response for this request.
 

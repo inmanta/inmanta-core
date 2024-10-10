@@ -462,6 +462,15 @@ class PagingBoundaries:
     The largest / smallest value of the current page represents respectively the min / max boundary value (exclusive) for the
     neighbouring pages. Which represents next and which prev depends on sorting order (ASC or DESC).
 
+    Boundary values represent max and min values, regardless of sorting direction (ASC or DESC), i.e.
+    - ASC sorting based on next links: (>) end,last_id
+    - ASC sorting based on prev links: (<) start,first_id
+    - DESC sorting based on next links: (<) start,first_id
+    - DESC sorting based on prev links: (>) end,last_id
+
+    So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "highest"
+    and "lowest".
+
     :param start: largest value of current page for the primary sort column.
     :param end: smallest value of current page for the primary sort column.
     :param first_id: largest value of current page for the secondary sort column, if there is one.

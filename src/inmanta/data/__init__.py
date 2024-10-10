@@ -552,7 +552,6 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
 
     def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
         """Return the page boundaries, given the first and last record returned"""
-        # TODO h add +1
         if self.get_order() == PagingOrder.ASC:
             first, last = last, first
 
