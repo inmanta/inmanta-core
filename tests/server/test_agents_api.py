@@ -216,21 +216,25 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
 
     assert result.result["metadata"] == {"total": 7, "before": 0, "after": 0, "page_size": 100}
 
+    if order_by_column != "last_failover" or order != "ASC":
+        return
+
     # verify that paging beyond the last page returns correct counts and links
     result = await client.get_agents(
         environment,
         limit=1,
+        start="zz",
         first_id="zzzz",
-        sort="last_failover.asc",
+        sort="name.asc",
         filter={"status": ["paused"]},
     )
     assert result.code == 200
     assert len(result.result["data"]) == 0
-    assert response["links"] == {
-        "first": "/api/v2/agents?limit=1&sort=last_failover.asc&filter.status=paused",
-        "prev": "/api/v2/agents?limit=1&sort=last_failover.asc&filter.status=paused&last_id=zzzz",
+    assert result.result["links"] == {
+        "first": "/api/v2/agents?limit=1&sort=name.asc&filter.status=paused",
+        "prev": "/api/v2/agents?limit=1&sort=name.asc&filter.status=paused&end=zz&last_id=zzzz",
     }
-    assert response["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
+    assert result.result["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
 
 
 async def test_sorting_validation(client, environment: str, env_with_agents: None) -> None:
