@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import dataclasses
 import functools
 import itertools
 from collections.abc import Iterator, Mapping, Set
@@ -50,7 +51,7 @@ class PrioritizedTask(Generic[T]):
 
 @functools.total_ordering
 @dataclass(kw_only=True)
-class TaskQueueItem(Generic[T]):
+class TaskQueueItem:
     """
     Task item for the task queue. Tasks are prioritized based on TaskPriority, with insert order as tiebreaker.
 
@@ -68,13 +69,14 @@ class TaskQueueItem(Generic[T]):
     # Mutable state
     deleted: bool = False
 
+    # TODO: this is not used?
     def copy(self: Self) -> Self:
         return dataclasses.replace(self, deleted=False)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
             return NotImplemented
-        return (self.task.priority, self.insert_order, self.deleted) == (other.task.priority, other.insert_order, self.deleted)
+        return (self.priority, self.insert_order, self.deleted) == (other.priority, other.insert_order, self.deleted)
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
@@ -156,7 +158,7 @@ class AgentQueues:
         return queue_item.priority, queue_item.insert_order
 
     # TODO: docstring
-    def discard(self, task: tasks.Task) -> Optional[int, int]:
+    def discard(self, task: tasks.Task) -> Optional[tuple[int, int]]:
         """
         Removes the given task from its associated agent queue if it is present.
         Returns the priority at which the deleted task was queued, if it was at all.
@@ -169,7 +171,7 @@ class AgentQueues:
     def _queue_item_for_task(self, task: tasks.Task) -> Optional[TaskQueueItem]:
         return self._tasks_by_resource.get(task.resource, {}).get(task, None)
 
-    def sorted(self, agent: str) -> list[TaskQueueItem[tasks.Task]]:
+    def sorted(self, agent: str) -> list[tasks.Task]:
         # FIXME: remove this method: it's only a PoC to hightlight how to achieve a sorted view
         queue: asyncio.PriorityQueue[TaskQueueItem] = self._agent_queues[agent]
         backing_heapq: list[TaskQueueItem] = queue._queue  # type: ignore [attr-defined]
@@ -189,17 +191,14 @@ class AgentQueues:
         already_queued: Optional[TaskQueueItem] = self._queue_item_for_task(task)
         if (
             already_queued is not None
-            and (already_queued.task.priority, already_queued.insert_order) <= (priority, insert_order)
+            and (already_queued.priority, already_queued.insert_order) <= (priority, insert_order)
         ):
             # task is already queued with equal or higher priority
             return
         # reschedule with new priority, no need to explicitly remove, this is achieved by setting self._tasks_by_resource
         if already_queued is not None:
             already_queued.deleted = True
-
-        new_item: TaskQueueItem = dataclassses.replace(
-            already_queued, priority=priority, insert_order=insert_order, deleted=False
-        )
+        item: TaskQueueItem = TaskQueueItem(task=task, priority=priority, insert_order=insert_order)
         self._entry_count += 1
         if task.resource not in self._tasks_by_resource:
             self._tasks_by_resource[task.resource] = {}
@@ -382,7 +381,7 @@ class ScheduledWork:
                 # discard rather than remove because task may already be running, in which case we leave it run its course
                 # and simply add a new one
                 task: tasks.Deploy = tasks.Deploy(resource=resource)
-                discarded: Optional[int, int] = self.agent_queues.discard(task)
+                discarded: Optional[tuple[int, int]] = self.agent_queues.discard(task)
                 priority: int
                 priority_tiebreaker: Optional[int]
                 if discarded is not None:
