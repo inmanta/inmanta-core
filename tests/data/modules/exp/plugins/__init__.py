@@ -26,11 +26,15 @@ class Test(resources.ManagedResource):
     This class represents a service on a system.
     """
 
-    fields = ("name", "agent", "field1")
+    fields = ("name", "agent", "field1", "mapped")
 
     @staticmethod
     def get_test(exp, obj):
         return "test_value_" + obj.name
+
+    @staticmethod
+    def get_mapped(exp, obj):
+        return "mapped_value_" + obj.name
 
 
 @resources.resource("exp::Test2", agent="agent", id_attribute="name")
