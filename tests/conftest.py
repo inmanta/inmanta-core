@@ -121,7 +121,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import CommandRunner, LocalPackagePath, VirtualEnv, store_venv, swap_process_env
+from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -1618,8 +1618,18 @@ async def mocked_compiler_service_block(server, monkeypatch):
     yield runner_queue
 
 
+@pytest.fixture(name=venv)
+def venv_fixture(deactive_venv) -> ActiveEnv:
+    """
+    Fixture to inidcate the venv will be manipulated and needs to be reset, but that the shared venv can be used
+
+    the return value is intended to be used instead of env.process_venv
+    """
+    return process_env
+
+
 @pytest.fixture
-def tmpvenv(tmpdir: py.path.local) -> Iterator[tuple[py.path.local, py.path.local]]:
+def tmpvenv(tmpdir: py.path.local, deactive_venv) -> Iterator[tuple[py.path.local, py.path.local]]:
     """
     Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the `tmpdir`
     fixture. This venv is completely decoupled from the active development venv.

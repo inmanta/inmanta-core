@@ -115,7 +115,7 @@ def test_git_based_install(tmpdir: py.path.local) -> None:
 
 
 @pytest.mark.slowtest
-def test_install_package_already_installed_in_parent_env(tmpdir):
+def test_install_package_already_installed_in_parent_env(tmpdir, deactive_venv):
     """Test using and installing a package that is already present in the parent virtual environment."""
     # get all packages in the parent
     parent_installed = list(env.process_env.get_installed_packages().keys())
@@ -284,7 +284,7 @@ def test_process_env_install_from_index_not_found_env_var(
 
 
 @pytest.mark.parametrize_any("use_system_config", [True, False])
-def test_process_env_install_no_index(tmpdir: py.path.local, monkeypatch, use_system_config: bool) -> None:
+def test_process_env_install_no_index(tmpdir: py.path.local, monkeypatch, use_system_config: bool, venv) -> None:
     """
     Attempt to install a package that does not exist with --no-index.
     To have --no-index set in the pip cmd, the config should not contain an index_url,
@@ -307,7 +307,7 @@ setup(name="test")
     expected = "Packages this-package-does-not-exist were not found. No indexes were used."
 
     with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
-        env.process_env.install_for_config(
+        venv.install_for_config(
             requirements=[inmanta.util.parse_requirement(requirement="this-package-does-not-exist")],
             paths=[env.LocalPackagePath(path=str(tmpdir))],
             config=PipConfig(use_system_config=use_system_config),
