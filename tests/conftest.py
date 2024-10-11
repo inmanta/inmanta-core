@@ -502,12 +502,12 @@ def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[Optional[str
 
 
 @pytest.fixture(scope="function")
-def deactive_venv():
+def deactive_venv() -> ActiveEnv:
     snapshot = env.store_venv()
     old_available_extensions = (
         dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
     )
-    yield
+    yield process_env
     snapshot.restore()
     loader.PluginModuleFinder.reset()
     InmantaBootloader.AVAILABLE_EXTENSIONS = old_available_extensions
@@ -1616,16 +1616,6 @@ async def mocked_compiler_service_block(server, monkeypatch):
     monkey_patch_compiler_service(monkeypatch, server, True, runner_queue)
 
     yield runner_queue
-
-
-@pytest.fixture(name=venv)
-def venv_fixture(deactive_venv) -> ActiveEnv:
-    """
-    Fixture to inidcate the venv will be manipulated and needs to be reset, but that the shared venv can be used
-
-    the return value is intended to be used instead of env.process_venv
-    """
-    return process_env
 
 
 @pytest.fixture

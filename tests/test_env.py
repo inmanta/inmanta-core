@@ -285,7 +285,7 @@ def test_process_env_install_from_index_not_found_env_var(
 
 
 @pytest.mark.parametrize_any("use_system_config", [True, False])
-def test_process_env_install_no_index(tmpdir: py.path.local, monkeypatch, use_system_config: bool, venv) -> None:
+def test_process_env_install_no_index(tmpdir: py.path.local, monkeypatch, use_system_config: bool, deactive_venv) -> None:
     """
     Attempt to install a package that does not exist with --no-index.
     To have --no-index set in the pip cmd, the config should not contain an index_url,
@@ -308,7 +308,7 @@ setup(name="test")
     expected = "Packages this-package-does-not-exist were not found. No indexes were used."
 
     with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
-        venv.install_for_config(
+        deactive_venv.install_for_config(
             requirements=[inmanta.util.parse_requirement(requirement="this-package-does-not-exist")],
             paths=[env.LocalPackagePath(path=str(tmpdir))],
             config=PipConfig(use_system_config=use_system_config),
