@@ -1421,11 +1421,11 @@ class VirtualEnv(ActiveEnv):
             raise Exception("The env_path cannot be an empty string.")
 
         self.init_env()
-        self._activate_that()
         mock_process_env(python_path=self.python_path)
 
-        # patch up pkg
-        self.notify_change()
+        if self._activate_that():
+            # patch up pkg
+            self.notify_change()
 
         self._using_venv = True
 
@@ -1442,7 +1442,7 @@ class VirtualEnv(ActiveEnv):
         # Set sys.path
         sys.path = new_sys_path
 
-    def _activate_that(self) -> None:
+    def _activate_that(self) -> bool:
         # adapted from https://github.com/pypa/virtualenv/blob/master/virtualenv_embedded/activate_this.py
         # MIT license
         # Copyright (c) 2007 Ian Bicking and Contributors
@@ -1454,6 +1454,7 @@ class VirtualEnv(ActiveEnv):
         old_os_path = os.environ.get("PATH", "")
         os.environ["PATH"] = binpath + os.pathsep + old_os_path
 
+        is_change = sys.prefix != base
         sys.real_prefix = sys.prefix
         sys.prefix = base
         self._update_sys_path()
@@ -1500,26 +1501,28 @@ class VenvSnapshot:
     old_process_env: ActiveEnv
 
     def restore(self) -> None:
-        os.environ["PATH"] = self.old_os_path
-        sys.prefix = self.old_prefix
-        sys.path = self.old_path
-        # reset sys.meta_path because it might contain finders for editable installs, make sure to keep the same object
-        sys.meta_path.clear()
-        sys.meta_path.extend(self.old_meta_path)
-        sys.path_hooks.clear()
-        sys.path_hooks.extend(self.old_path_hooks)
-        # Clear cache for sys.path_hooks
-        sys.path_importer_cache.clear()
-        # Restore PYTHONPATH
-        if self.old_pythonpath is not None:
-            os.environ["PYTHONPATH"] = self.old_pythonpath
-        elif "PYTHONPATH" in os.environ:
-            del os.environ["PYTHONPATH"]
-        # Restore VIRTUAL_ENV
-        if self.old_os_venv is not None:
-            os.environ["VIRTUAL_ENV"] = self.old_os_venv
-        elif "VIRTUAL_ENV" in os.environ:
-            del os.environ["VIRTUAL_ENV"]
+        if sys.prefix != self.old_prefix:
+            # only reset on folder change
+            os.environ["PATH"] = self.old_os_path
+            sys.prefix = self.old_prefix
+            sys.path = self.old_path
+            # reset sys.meta_path because it might contain finders for editable installs, make sure to keep the same object
+            sys.meta_path.clear()
+            sys.meta_path.extend(self.old_meta_path)
+            sys.path_hooks.clear()
+            sys.path_hooks.extend(self.old_path_hooks)
+            # Clear cache for sys.path_hooks
+            sys.path_importer_cache.clear()
+            # Restore PYTHONPATH
+            if self.old_pythonpath is not None:
+                os.environ["PYTHONPATH"] = self.old_pythonpath
+            elif "PYTHONPATH" in os.environ:
+                del os.environ["PYTHONPATH"]
+            # Restore VIRTUAL_ENV
+            if self.old_os_venv is not None:
+                os.environ["VIRTUAL_ENV"] = self.old_os_venv
+            elif "VIRTUAL_ENV" in os.environ:
+                del os.environ["VIRTUAL_ENV"]
 
         # We reset the process_env both ways: we put the reference back and we do an in_place update
         swap_process_env(self.old_process_env)

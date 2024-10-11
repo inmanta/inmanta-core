@@ -274,6 +274,11 @@ def postgres_db(request: pytest.FixtureRequest):
         assert not has_deadlock
 
 
+@pytest.fixture(autouse=True)
+def venv_leak_test():
+    assert sys.prefix == real_prefix
+
+
 @pytest.fixture
 async def run_without_keeping_psql_logs(postgres_db):
     if os.path.exists(pg_logfile):
@@ -518,7 +523,7 @@ def reset_metrics():
 
 
 @pytest.fixture(scope="function")
-async def clean_reset(create_db, clean_db):
+async def clean_reset(create_db, clean_db, deactive_venv):
     reset_all_objects()
     config.Config._reset()
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
