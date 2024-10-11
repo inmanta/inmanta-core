@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import importlib
 import logging.config
 import warnings
 from re import Pattern
@@ -122,7 +121,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, store_venv, swap_process_env
+from inmanta.env import CommandRunner, LocalPackagePath, VirtualEnv, store_venv, swap_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -1197,8 +1196,16 @@ class SnippetCompilationTest(KeepOnFail):
             extra_index_url,
             main_file,
         )
+
+        dirty_venv = autostd or install_project or install_v2_modules or self.re_check_venv or python_requires
+
         return self._load_project(
-            autostd or ministd, install_project, install_v2_modules, strict_deps_check=strict_deps_check, main_file=main_file
+            autostd or ministd,
+            install_project,
+            install_v2_modules,
+            strict_deps_check=strict_deps_check,
+            main_file=main_file,
+            dirt_venv=dirty_venv,
         )
 
     def _load_project(
@@ -1208,6 +1215,7 @@ class SnippetCompilationTest(KeepOnFail):
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
         main_file: str = "main.cf",
         strict_deps_check: Optional[bool] = None,
+        dirt_venv: bool = True,
     ):
         loader.PluginModuleFinder.reset()
         self.project = Project(
@@ -1215,7 +1223,7 @@ class SnippetCompilationTest(KeepOnFail):
         )
         Project.set(self.project)
 
-        if autostd or install_project or install_v2_modules or self.re_check_venv:
+        if dirt_venv:
             # Don't bother loading the venv if we don't need to
             self.project.use_virtual_env()
             self._install_v2_modules(install_v2_modules)

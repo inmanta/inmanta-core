@@ -20,7 +20,6 @@ import asyncio
 import enum
 import importlib.metadata
 import importlib.util
-import json
 import logging
 import os
 import re
@@ -41,7 +40,7 @@ from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import Callable, List, NamedTuple, Optional, Tuple, TypeVar
+from typing import Callable, NamedTuple, Optional, Tuple, TypeVar
 
 import inmanta.util
 import packaging.requirements
