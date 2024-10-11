@@ -322,7 +322,7 @@ def test_plugin_module_finder(
     assert mod.where == "libs" if prefer_finder else "venv"
 
 
-def test_code_loader_prefer_finder(tmpdir: py.path.local) -> None:
+def test_code_loader_prefer_finder(tmpdir: py.path.local, deactive_venv) -> None:
     """
     Verify that the agent code loader prefers its loaded code over code in the Python venv.
     """

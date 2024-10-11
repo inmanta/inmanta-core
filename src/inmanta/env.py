@@ -20,6 +20,7 @@ import asyncio
 import enum
 import importlib.metadata
 import importlib.util
+import json
 import logging
 import os
 import re
@@ -803,7 +804,9 @@ import sys
         :param only_editable: List only packages installed in editable mode.
         :return: A dict with package names as keys and versions as values
         """
-        return {dist_info.name: packaging.version.Version(dist_info.version) for dist_info in distributions()}
+        cmd = PipCommandBuilder.compose_list_command(self.python_path, format=PipListFormat.json, only_editable=only_editable)
+        output = CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
+        return {r["name"]: packaging.version.Version(r["version"]) for r in json.loads(output)}
 
     def install_for_config(
         self,
@@ -1295,6 +1298,17 @@ class ActiveEnv(PythonEnvironment):
         except (ImportError, ModuleNotFoundError):
             spec = None
         return (spec.origin, spec.loader) if spec is not None else None
+
+    def get_installed_packages(self, only_editable: bool = False) -> dict[str, packaging.version.Version]:
+        """
+        Return a list of all installed packages in the site-packages of a python interpreter.
+
+        :param only_editable: List only packages installed in editable mode.
+        :return: A dict with package names as keys and versions as values
+        """
+        if self.is_using_virtual_env() and not only_editable:
+            return {dist_info.name: packaging.version.Version(dist_info.version) for dist_info in distributions()}
+        return super().get_installed_packages(only_editable=only_editable)
 
     def notify_change(self) -> None:
         """

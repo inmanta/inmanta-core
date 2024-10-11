@@ -1674,9 +1674,20 @@ def tmpvenv_active(
             base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
         )
 
+    this_source_root = os.path.dirname(os.path.dirname(__file__))
+
+    def keep_path_element(element: str) -> bool:
+        # old venv paths are dropped
+        if element.startswith(sys.prefix):
+            return False
+        # exclude source install of the module
+        if element.startswith(this_source_root):
+            return False
+        return True
+
     # prepend bin to PATH (this file is inside the bin directory), exclude old venv path
     os.environ["PATH"] = os.pathsep.join(
-        [binpath] + [elem for elem in os.environ.get("PATH", "").split(os.pathsep) if not elem.startswith(sys.prefix)]
+        [binpath] + [elem for elem in os.environ.get("PATH", "").split(os.pathsep) if keep_path_element(elem)]
     )
     os.environ["VIRTUAL_ENV"] = base  # virtual env is right above bin directory
 
@@ -1684,7 +1695,7 @@ def tmpvenv_active(
     prev_length = len(sys.path)
     site.addsitedir(site_packages)
     # exclude old venv path
-    sys.path[:] = sys.path[prev_length:] + [elem for elem in sys.path[0:prev_length] if not elem.startswith(sys.prefix)]
+    sys.path[:] = sys.path[prev_length:] + [elem for elem in sys.path[0:prev_length] if keep_path_element(elem)]
 
     sys.real_prefix = sys.prefix
     sys.prefix = base
