@@ -140,7 +140,7 @@ def span(
     _span_name: str | None = None,
     _level: LevelName | None = None,
     **attributes: Any,
-) -> LogfireSpan:
+) -> LogfireSpan:  # TODO h use union
     if enabled:
         return logfire.span(msg_template, _tags=_tags, _span_name=_span_name, _level=_level, **attributes)
     else:
