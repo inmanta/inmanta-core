@@ -119,7 +119,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         self._in_progress: dict[tasks.Task, TaskPriority] = {}
 
     @property
-    def in_progress(self) -> dict[tasks.Task, TaskPriority]:
+    def in_progress(self) -> Mapping[tasks.Task, TaskPriority]:
         return self._in_progress
 
     def reset(self) -> None:
@@ -232,6 +232,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
                 continue
             # remove from the queue since it's been picked up
             self.discard(item.task.task)
+            # add the item to _in_progress with the correct priority
             self._in_progress[item.task.task] = item.task.priority
             return item.task.task
 
@@ -338,6 +339,13 @@ class ScheduledWork:
         # lookup caches for visited nodes
         queued: set[ResourceIdStr] = set(deploying)  # queued or running, pre-populate with in-progress deploys
         not_scheduled: set[ResourceIdStr] = set()
+
+        # Update the priority of deploying tasks if this method was called with a higher priority
+        # This will only increase the priority of propagated events
+        for resourceId in queued:
+            if resourceId in resources:
+                task = tasks.Deploy(resource=resourceId)
+                self.agent_queues._in_progress[task] = min(self.agent_queues._in_progress[task], priority)
 
         # First drop all dropped requires so that we work on the smallest possible set for this operation.
         for resource, dropped in dropped_requires.items():

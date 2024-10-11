@@ -387,14 +387,9 @@ class ResourceScheduler(TaskManager):
                     if event_listeners:
                         # do not pass deploying tasks because for event propagation we really want to start a new one,
                         # even if the current intent is already being deployed
-                        priority = self._work.agent_queues.in_progress.get(Deploy(resource=resource))
-                        if priority is None:
-                            LOGGER.warning(
-                                "Deploy task for resource %s not found on in_progress."
-                                "Assigning a priority of NEW_VERSION_DEPLOY to the events it produced",
-                                resource,
-                            )
-                            priority = TaskPriority.NEW_VERSION_DEPLOY
+                        task = Deploy(resource=resource)
+                        assert task in self._work.agent_queues.in_progress
+                        priority = self._work.agent_queues.in_progress[task]
                         self._work.deploy_with_context(event_listeners, priority=priority, deploying=set())
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
