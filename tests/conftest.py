@@ -1643,6 +1643,9 @@ def tmpvenv(tmpdir: py.path.local, deactive_venv) -> Iterator[tuple[py.path.loca
     yield (venv_dir, python_path)
 
 
+real_prefix = sys.prefix
+
+
 @pytest.fixture
 def tmpvenv_active(
     deactive_venv, tmpvenv: tuple[py.path.local, py.path.local]
@@ -1688,7 +1691,7 @@ def tmpvenv_active(
 
     def keep_path_element(element: str) -> bool:
         # old venv paths are dropped
-        if element.startswith(sys.prefix):
+        if element.startswith(real_prefix):
             return False
         # exclude source install of the module
         if element.startswith(this_source_root):

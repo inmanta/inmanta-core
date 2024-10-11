@@ -40,14 +40,15 @@ from inmanta.env import Pip
 from packaging import version
 from utils import LogSequence, PipIndex, create_python_package
 
-if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
-    pytest.skip(
-        "The tests in this module will fail if it runs against inmanta-core installed in editable mode, "
-        "because the build tag on the development branch is set to .dev0 by default. The inmanta package protection feature "
-        "would make pip install a non-editable version of the same package. But no version with build tag .dev0 exists "
-        "on the python package repository.",
-        allow_module_level=True,
-    )
+
+def skip_if_editable():
+    if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
+        pytest.skip(
+            "The tests in this module will fail if it runs against inmanta-core installed in editable mode, "
+            "because the build tag on the development branch is set to .dev0 by default. The inmanta package protection feature "
+            "would make pip install a non-editable version of the same package. But no version with build tag .dev0 exists "
+            "on the python package repository.",
+        )
 
 
 @pytest.mark.slowtest
@@ -78,7 +79,7 @@ def test_venv_pyton_env_empty_string(tmpdir):
 
 
 @pytest.mark.slowtest
-def test_basic_install(tmpdir):
+def test_basic_install(tmpdir, deactive_venv):
     env_dir1 = tmpdir.mkdir("env1").strpath
     venv1 = env.VirtualEnv(env_dir1)
     assert not venv1.are_installed(["lorem"])
@@ -95,7 +96,7 @@ def test_basic_install(tmpdir):
     assert venv1.are_installed(["dummy-yummy"])
 
 
-def test_git_based_install(tmpdir: py.path.local) -> None:
+def test_git_based_install(tmpdir: py.path.local, deactive_venv) -> None:
     """
     Verify that the install methods can handle git-based installs over https.
     """
