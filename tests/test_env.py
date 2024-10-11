@@ -52,7 +52,7 @@ def skip_if_editable():
 
 
 @pytest.mark.slowtest
-def test_venv_pyton_env_empty_string(tmpdir):
+def test_venv_pyton_env_empty_string(tmpdir, deactive_venv):
     """test that an exception is raised if the venv path is an empty string"""
     with pytest.raises(ValueError) as e:
         env.VirtualEnv("")
