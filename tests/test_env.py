@@ -41,16 +41,6 @@ from packaging import version
 from utils import LogSequence, PipIndex, create_python_package
 
 
-def skip_if_editable():
-    if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
-        pytest.skip(
-            "The tests in this module will fail if it runs against inmanta-core installed in editable mode, "
-            "because the build tag on the development branch is set to .dev0 by default. The inmanta package protection feature "
-            "would make pip install a non-editable version of the same package. But no version with build tag .dev0 exists "
-            "on the python package repository.",
-        )
-
-
 @pytest.mark.slowtest
 def test_venv_pyton_env_empty_string(tmpdir, deactive_venv):
     """test that an exception is raised if the venv path is an empty string"""
