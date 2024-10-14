@@ -38,7 +38,7 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
     def provides_view(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
         return self.reverse_mapping()
 
-    def get_all_provides_transitively(self, resource: ResourceIdStr | set[ResourceIdStr]) -> list[ResourceIdStr]:
+    def get_all_provides_transitively(self, resource: ResourceIdStr | Set[ResourceIdStr]) -> list[ResourceIdStr]:
         """
         This method returns all the provides (transitively) of the given resource. The result will not include any
         resource ids from the input, even if there exists a provides edge between them.
@@ -52,7 +52,7 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
         # prevent that we queue the same element twice
         seen = set(input_set)
         provides_mapping = self.provides_view()
-        # Use a dict here to not lost the order of the elements.
+        # Use a dict here to not lose the order of the elements.
         result: dict[ResourceIdStr, None] = {}
         while not work.empty():
             current_resource = work.get()
