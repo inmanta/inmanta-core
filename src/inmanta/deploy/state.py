@@ -182,7 +182,8 @@ class ModelState:
 
     def block_resource(self, resource: ResourceIdStr, details: ResourceDetails, transient: bool) -> None:
         """
-        Mark the given resource as blocked, i.e. it's not deployable.
+        Mark the given resource as blocked, i.e. it's not deployable. This method updates the resource details
+        and the resource_status.
 
         :param resource: The resource that should be blocked.
         :param details: The details of the resource that should be blocked.
