@@ -118,13 +118,10 @@ class BlockedStatus(StrEnum):
     """
     YES: The resource will retain its blocked status within this model version. For example: A resource that has unknowns
          or depends on a resource with unknowns.
-    TRANSIENT: The resource is blocked but the blocked status may get resolved with the model version.
-               For example: The dependency of the resource failed to deploy.
     NO: The resource is not blocked
     """
 
     YES = enum.auto()
-    TRANSIENT = enum.auto()
     NO = enum.auto()
 
     def is_blocked(self) -> bool:
@@ -191,16 +188,14 @@ class ModelState:
                           is blocked.
         """
         self.resources[resource] = details
-        blocked_status = BlockedStatus.TRANSIENT if transient else BlockedStatus.YES
         if resource in self.resource_state:
             if not transient:
                 self.resource_state[resource].status = ResourceStatus.UNDEFINED
-            if self.resource_state[resource].blocked is not BlockedStatus.YES:
-                self.resource_state[resource].blocked = blocked_status
+            self.resource_state[resource].blocked = BlockedStatus.YES
         else:
             resource_status = ResourceStatus.UNDEFINED if not transient else ResourceStatus.HAS_UPDATE
             self.resource_state[resource] = ResourceState(
-                status=resource_status, deployment_result=DeploymentResult.NEW, blocked=blocked_status
+                status=resource_status, deployment_result=DeploymentResult.NEW, blocked=BlockedStatus.YES
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)

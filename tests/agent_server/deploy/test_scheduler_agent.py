@@ -1183,7 +1183,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5: deployed
     # rid6: deployed
     # rid7: deployed
-    assert_resource_state(rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT)
+    assert_resource_state(rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.YES)
     assert_resource_state(rid2, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
     assert_resource_state(rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
     assert_resource_state(rid4, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES)
@@ -1216,9 +1216,9 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5: blocked because it has an unknown attribute
     # rid6: blocked because it has an unknown attribute
     # rid7: deployed
-    assert_resource_state(rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT)
-    assert_resource_state(rid2, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.TRANSIENT)
-    assert_resource_state(rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.TRANSIENT)
+    assert_resource_state(rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.YES)
+    assert_resource_state(rid2, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
+    assert_resource_state(rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
     assert_resource_state(rid4, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
     assert_resource_state(rid5, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
     assert_resource_state(rid6, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
@@ -1240,9 +1240,9 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5: deployed
     # rid6: blocked because it has an unknown attribute
     # rid7: deployed
-    assert_resource_state(rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.TRANSIENT)
+    assert_resource_state(rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.YES)
     assert_resource_state(rid2, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
-    assert_resource_state(rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.TRANSIENT)
+    assert_resource_state(rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
     assert_resource_state(rid4, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
     assert_resource_state(rid5, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
     assert_resource_state(rid6, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
