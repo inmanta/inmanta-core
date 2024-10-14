@@ -41,7 +41,7 @@ from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import Callable, NamedTuple, Optional, Tuple, TypeVar
+from typing import Callable, NamedTuple, Optional, Tuple, TypeVar, cast
 
 import inmanta.util
 import packaging.requirements
@@ -53,6 +53,7 @@ from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from inmanta.util import parse_requirement, strtobool
+from packaging.utils import NormalizedName, canonicalize_name
 
 LOGGER = logging.getLogger(__name__)
 LOGGER_PIP = logging.getLogger("inmanta.pip")  # Use this logger to log pip commands or data related to pip commands.
@@ -251,11 +252,7 @@ class PythonWorkingSet:
         }
 
     @classmethod
-    def rebuild_working_set(cls) -> None:
-        raise Exception("OLD!")
-
-    @classmethod
-    def get_dependency_tree(cls, dists: abc.Iterable[str]) -> abc.Set[str]:
+    def get_dependency_tree(cls, dists: abc.Iterable[NormalizedName]) -> abc.Set[NormalizedName]:
         """
         Returns the full set of all dependencies (both direct and transitive) for the given distributions. Includes the
         distributions themselves.
@@ -265,15 +262,19 @@ class PythonWorkingSet:
         :param dists: The keys for the distributions to get the dependency tree for.
         """
         # create dict for O(1) lookup
-        installed_distributions: abc.Mapping[str, Distribution] = {dist_info.name: dist_info for dist_info in distributions()}
+        installed_distributions: abc.Mapping[NormalizedName, Distribution] = {
+            canonicalize_name(dist_info.name): dist_info for dist_info in distributions()
+        }
 
-        def _get_tree_recursive(dists: abc.Iterable[str], acc: abc.Set[str] = frozenset()) -> abc.Set[str]:
+        def _get_tree_recursive(
+            dists: abc.Iterable[NormalizedName], acc: abc.Set[NormalizedName] = frozenset()
+        ) -> abc.Set[NormalizedName]:
             """
             :param acc: Accumulator for requirements that have already been recursed on.
             """
             return reduce(_get_tree_recursive_single, dists, acc)
 
-        def _get_tree_recursive_single(acc: abc.Set[str], dist: str) -> abc.Set[str]:
+        def _get_tree_recursive_single(acc: abc.Set[NormalizedName], dist: NormalizedName) -> abc.Set[NormalizedName]:
             if dist in acc:
                 return acc
 
@@ -282,7 +283,10 @@ class PythonWorkingSet:
 
             # recurse on direct dependencies
             return _get_tree_recursive(
-                (parse_requirement(requirement).name for requirement in (installed_distributions[dist].requires or [])),
+                (
+                    cast(NormalizedName, parse_requirement(requirement).name)
+                    for requirement in (installed_distributions[dist].requires or [])
+                ),
                 acc=acc | {dist},
             )
 
@@ -1146,21 +1150,19 @@ class ActiveEnv(PythonEnvironment):
         Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
         in that order.
         """
-
-        # FIXME Canicalize or not????
-        # FIXME: weird overall algo structure
+        inmanta_core_canonical = packaging.utils.canonicalize_name("inmanta-core")
 
         class OwnedRequirement(NamedTuple):
             requirement: inmanta.util.CanonicalRequirement
-            owner: Optional[str] = None
+            owner: Optional[NormalizedName] = None
 
-            def is_owned_by(self, owners: abc.Set[str]) -> bool:
+            def is_owned_by(self, owners: abc.Set[NormalizedName]) -> bool:
                 return self.owner is None or self.owner in owners
 
         # all requirements of all packages installed in this environment
         # assume no extras
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(parsed, dist_info.name)
+            OwnedRequirement(parsed, packaging.utils.canonicalize_name(dist_info.name))
             for dist_info in distributions()
             for parsed in (
                 inmanta.util.parse_requirement(requirement=str(requirement)) for requirement in (dist_info.requires or [])
@@ -1169,7 +1171,7 @@ class ActiveEnv(PythonEnvironment):
         )
 
         inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
-            OwnedRequirement(r, owner="inmanta-core") for r in self._get_requirements_on_inmanta_package()
+            OwnedRequirement(r, owner=inmanta_core_canonical) for r in self._get_requirements_on_inmanta_package()
         )
         extra_constraints: abc.Set[OwnedRequirement] = frozenset(
             (OwnedRequirement(r) for r in constraints) if constraints is not None else []
@@ -1182,13 +1184,17 @@ class ActiveEnv(PythonEnvironment):
                 (
                     []
                     if strict_scope is None
-                    else (dist_info.name for dist_info in distributions() if strict_scope.fullmatch(dist_info.name))
+                    else (
+                        packaging.utils.canonicalize_name(dist_info.name)
+                        for dist_info in distributions()
+                        if strict_scope.fullmatch(dist_info.name)
+                    )
                 ),
-                (requirement.requirement.name for requirement in inmanta_constraints),
-                (requirement.requirement.name for requirement in extra_constraints),
+                (cast(NormalizedName, requirement.requirement.name) for requirement in inmanta_constraints),
+                (cast(NormalizedName, requirement.requirement.name) for requirement in extra_constraints),
             )
         )
-        full_strict_scope: abc.Set[str] = PythonWorkingSet.get_dependency_tree(parameters)
+        full_strict_scope: abc.Set[NormalizedName] = PythonWorkingSet.get_dependency_tree(parameters)
 
         installed_versions: dict[str, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
 
@@ -1458,6 +1464,7 @@ class VirtualEnv(ActiveEnv):
         sys.real_prefix = sys.prefix
         sys.prefix = base
         self._update_sys_path()
+        return is_change
 
     def install_for_config(
         self,
