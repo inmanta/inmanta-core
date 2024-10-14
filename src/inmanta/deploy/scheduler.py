@@ -331,9 +331,15 @@ class ResourceScheduler(TaskManager):
                 )
                 for resource in deleted_resources:
                     self._state.drop(resource)
+                for resource in blocked_resources | transitively_blocked_resources:
+                    self._work.delete_resource(resource)
+
             # Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added
             # again by a deploy trigger (because we dropped them outside the lock).
-            for resource in deleted_resources | blocked_resources | transitively_blocked_resources:
+            for resource in deleted_resources:
+                # Delete the deleted resources outside the _scheduler_lock, because we do not want to keep the _scheduler_lock
+                # acquired longer than required. The worst that can happen here is that we deploy the deleted resources one
+                # time too many, which is not so bad.
                 self._work.delete_resource(resource)
 
     def _start_for_agent(self, agent: str) -> None:
