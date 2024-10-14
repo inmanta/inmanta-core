@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+from collections.abc import Mapping
+
 import pytest
 
 from inmanta import resources
@@ -38,7 +40,7 @@ class Resource(Base):
 
 
 def test_field_merge():
-    assert len(Resource.fields) == 5
+    assert len(Resource.fields) == 6
 
 
 def test_fields_type():
@@ -387,3 +389,22 @@ def test_parse_rvid_regex():
 
     result = PARSE_RVID_REGEX.search("test::submodule::Resource[agent,key=id]")
     assert result is None
+
+
+def test_resource_deserialize_backward_compatibility() -> None:
+    """
+    Verify backward compatibiltiy of resource deserialization. This is important because we store resources in serialized form
+    in the database and then deserialize them on the agent executor. If backward incompatible changes are made to the base
+    resource class, deserilization will fail on the executor side because the stored resources are incompatible.
+    """
+    old_resource: Mapping[str, object] = {
+        "send_event": True,
+        # no receive_events, while new Resource class does have it
+        "requires": [],
+        "version": 1,
+        "id": "test::Resource[agent,k=v]",
+    }
+    # register base Resource as a resource
+    resources.resource(name="test::Resource", id_attribute="send_event", agent="agent")(resources.Resource)
+    # verify that this does not raise an exception
+    resources.Resource.deserialize(old_resource)

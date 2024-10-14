@@ -229,11 +229,12 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         started: datetime.datetime = datetime.datetime.now().astimezone()
         try:
             return Resource.deserialize(resource_details.attributes)
-        except Exception:
+        except Exception as e:
             msg = data.LogLine.log(
                 level=const.LogLevel.ERROR,
-                msg="Unable to deserialize %(resource_id)s",
+                msg="Unable to deserialize %(resource_id)s: %(cause)s",
                 resource_id=resource_details.rvid,
+                cause=e,
                 timestamp=datetime.datetime.now().astimezone(),
             )
 
