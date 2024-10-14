@@ -40,28 +40,35 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
 
     def get_all_provides_transitively(self, resource: ResourceIdStr | Set[ResourceIdStr]) -> list[ResourceIdStr]:
         """
-        This method returns all the provides (transitively) of the given resource. The result will not include any
-        resource ids from the input, even if there exists a provides edge between them.
+        This method returns all the provides (transitively) of the given resource. The returned list will be sorted as such
+        that all the requires of an elements in the list appear before that element in the list. The result will not include
+        any resource ids from the input, even if there exists a provides edge between them.
 
         :param resource: The resource or set of resources for which the provides have to be resolved transitively.
         """
+        # Use a dict here to not lose the order of the elements.
+        result: dict[ResourceIdStr, None] = {}
+
+        def append_to_result(res: ResourceIdStr) -> None:
+            """
+            Add `res` to the `result` dictionary. If `res` already exists in `result`, make sure that `res` appears
+            last when executing `result.keys()`.
+            """
+            result.pop(res, None)
+            result[res] = None
+
         input_set = {resource} if isinstance(resource, str) else set(resource)
         work: SimpleQueue[ResourceIdStr] = SimpleQueue()
         for elem in input_set:
             work.put_nowait(elem)
-        # prevent that we queue the same element twice
-        seen = set(input_set)
         provides_mapping = self.provides_view()
-        # Use a dict here to not lose the order of the elements.
-        result: dict[ResourceIdStr, None] = {}
         while not work.empty():
             current_resource = work.get()
-            result[current_resource] = None
+            append_to_result(current_resource)
             provides = provides_mapping.get(current_resource, set())
             for elem in provides:
-                if elem not in seen:
-                    work.put_nowait(elem)
-                    seen.add(elem)
+                # We may queue an element multiple times here. This is required to properly sort the result.
+                work.put_nowait(elem)
         for elem in input_set:
             result.pop(elem, None)
         return list(result.keys())
