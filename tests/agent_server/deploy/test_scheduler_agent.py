@@ -21,6 +21,7 @@
 import asyncio
 import hashlib
 import json
+import logging
 import typing
 import uuid
 from collections.abc import Callable
@@ -38,7 +39,12 @@ from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.data import ResourceIdStr
 from inmanta.deploy import state, tasks
+from inmanta.deploy.scheduler import ResourceScheduler
+from inmanta.deploy.state import AgentStatus
+from inmanta.deploy.tasks import Task
+from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
+from mypy.memprofile import defaultdict
 
 FAIL_DEPLOY: str = "fail_deploy"
 
@@ -166,6 +172,23 @@ async def pass_method():
     pass
 
 
+class TestScheduler(ResourceScheduler):
+    def __init__(self, environment: uuid.UUID, executor_manager: executor.ExecutorManager[executor.Executor], client: Client):
+        super().__init__(environment, executor_manager, client)
+        self._state.agent_status = defaultdict(lambda: AgentStatus.STARTED)
+
+    async def _run_for_agent(self, agent: str) -> None:
+        """Main loop for one agent"""
+        while self._running and self._state.agent_status[agent] == AgentStatus.STARTED:
+            task: Task = await self._work.agent_queues.queue_get(agent)
+            try:
+                await task.execute(self, agent)
+            except Exception:
+                logging.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
+
+            self._work.agent_queues.task_done(agent, task)
+
+
 class TestAgent(Agent):
 
     def __init__(
@@ -174,10 +197,12 @@ class TestAgent(Agent):
     ):
         super().__init__(environment)
         self.executor_manager = DummyManager()
+        self.scheduler = TestScheduler(self.scheduler.environment, self.scheduler.executor_manager, self.scheduler.client)
         self.scheduler.executor_manager = self.executor_manager
         self.scheduler.code_manager = DummyCodeManager(self._client)
         # Bypass DB
         self.scheduler.read_version = pass_method
+        self.scheduler.read_agent_instances = pass_method
         self.scheduler.mock_versions = {}
 
         async def build_resource_mappings_from_db(version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:

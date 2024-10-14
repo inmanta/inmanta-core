@@ -158,8 +158,8 @@ class ResourceScheduler(TaskManager):
     async def start(self) -> None:
         self.reset()
         self._running = True
-        await self.read_agent_instances()
         await self.read_version()
+        await self.read_agent_instances()
 
     async def stop(self) -> None:
         self._running = False
@@ -332,7 +332,7 @@ class ResourceScheduler(TaskManager):
     #  > Confirm if not stale when one agent (DB authorive)
     def _start_for_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
-        self._workers[agent] = asyncio.create_task(self._run_for_agent(agent))
+        self._workers[agent] = asyncio.create_task(self._run_for_agent(agent=agent))
 
     async def _run_for_agent(self, agent: str) -> None:
         """Main loop for one agent"""

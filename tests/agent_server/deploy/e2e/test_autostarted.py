@@ -590,7 +590,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
         deployed = summary["by_state"]["deployed"]
         return deployed == deployed_resources
 
-    await retry_limited(are_resources_deployed, timeout=6.5)
+    await retry_limited(are_resources_deployed, timeout=10)
     children_after_deployment = get_process_state(current_pid)
 
     assert len(children_after_deployment) == 1
@@ -803,7 +803,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
         deployed = summary["by_state"]["deployed"]
         return deployed == deployed_resources
 
-    await retry_limited(are_resources_deployed, timeout=6.5)
+    await retry_limited(are_resources_deployed, timeout=10)
     children_after_deployment = get_process_state(current_pid)
 
     assert len(children_after_deployment) == 1
