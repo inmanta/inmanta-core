@@ -1,0 +1,6 @@
+description: "Added receive_events to base Resource class"
+change-type: patch
+issue-repo: std
+issue-nr: 549
+destination-branches:
+  - master
