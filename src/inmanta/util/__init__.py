@@ -23,6 +23,7 @@ import datetime
 import enum
 import functools
 import hashlib
+import importlib.metadata
 import inspect
 import itertools
 import logging
@@ -46,7 +47,6 @@ from typing import BinaryIO, Callable, Generic, Optional, Sequence, TypeVar, Uni
 
 import asyncpg
 import click
-import importlib_metadata
 from tornado import gen
 
 import packaging
@@ -56,6 +56,7 @@ from crontab import CronTab
 from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
+from packaging.utils import NormalizedName
 from pydantic_core import Url
 
 LOGGER = logging.getLogger(__name__)
@@ -950,7 +951,7 @@ def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequi
 
 
 # Retaken from the `click-plugins` repo which is now unmaintained
-def click_group_with_plugins(plugins: Iterable[importlib_metadata.EntryPoint]) -> Callable[[click.Group], click.Group]:
+def click_group_with_plugins(plugins: Iterable[importlib.metadata.EntryPoint]) -> Callable[[click.Group], click.Group]:
     """
     A decorator to register external CLI commands to an instance of `click.Group()`.
 
