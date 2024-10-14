@@ -250,6 +250,8 @@ class ModelState:
     ) -> None:
         """
         Register a new desired state for a resource.
+
+        For blocked resources, block_resource() should be called instead.
         """
         self.resources[resource] = details
         if resource in self.resource_state:
