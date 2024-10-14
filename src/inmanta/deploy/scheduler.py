@@ -27,7 +27,7 @@ from typing import Optional
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.data import ConfigurationModel
+from inmanta.data import Agent, ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import work
 from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
@@ -158,6 +158,7 @@ class ResourceScheduler(TaskManager):
     async def start(self) -> None:
         self.reset()
         self._running = True
+        await self.read_agent_instances()
         await self.read_version()
 
     async def stop(self) -> None:
@@ -249,6 +250,23 @@ class ResourceScheduler(TaskManager):
         requires_from_db = self._construct_requires_mapping(resources_from_db)
         await self._new_version(version, resources_from_db, requires_from_db)
 
+    async def read_agent_instances(
+        self,
+    ) -> None:
+        """
+        Update model state and scheduled work based on the latest released version in the database, e.g. when the scheduler is
+        started or when a new version is released. Triggers a deploy after updating internal state:
+        - schedules new or updated resources to be deployed
+        - schedules any resources that are not in a known good state.
+        - rearranges deploy tasks by requires if required
+        """
+        agent_instances = await Agent.get_list(environment=self.environment)
+        if agent_instances is None:
+            return
+
+        for instance in agent_instances:
+            self._state.agent_status[instance.name] = AgentStatus.STOPPED if instance.paused else AgentStatus.STARTED
+
     async def _new_version(
         self,
         version: int,
@@ -310,13 +328,24 @@ class ResourceScheduler(TaskManager):
             for resource in deleted_resources:
                 self._work.delete_resource(resource)
 
+    # TODO h Read everytime we want to do something or only read from db when starting / resuming -
+    #  > Confirm if not stale when one agent (DB authorive)
     def _start_for_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
-        self._state.agent_status[agent] = AgentStatus.STARTED
         self._workers[agent] = asyncio.create_task(self._run_for_agent(agent))
 
     async def _run_for_agent(self, agent: str) -> None:
         """Main loop for one agent"""
+        current_environment = await Environment.get_by_id(self.environment)
+        assert current_environment
+        if current_environment.halted:
+            return
+
+        await data.Agent(environment=self.environment, name=agent).insert_if_not_exist()
+        # We need to retrieve the actual state to see if the agent is actually paused (if it existed before)
+        agent_state = await data.Agent.get(env=self.environment, endpoint=agent)
+        self._state.agent_status[agent] = AgentStatus.STOPPED if agent_state.paused else AgentStatus.STARTED
+
         while self._running and self._state.agent_status[agent] == AgentStatus.STARTED:
             task: Task = await self._work.agent_queues.queue_get(agent)
             try:
@@ -326,23 +355,41 @@ class ResourceScheduler(TaskManager):
 
             self._work.agent_queues.task_done(agent, task)
 
-    def stop_agent(self, agent: str) -> None:
-        """
-        Stop the given agent. The agent will be allowed to finish its current task
-        """
-        if agent not in self._state.agent_status:
-            raise LookupError(f"The agent {agent} does not exist!")
+    async def refresh_state(self) -> bool:
+        current_environment = await Environment.get_by_id(self.environment)
+        assert current_environment
+        requested_agent = await data.Agent.get(env=self.environment, endpoint=const.AGENT_SCHEDULER_ID)
+        return current_environment.halted or requested_agent.paused
 
-        self._state.agent_status[agent] = AgentStatus.STOPPED
-
-    def resume_agent(self, agent: str) -> None:
+    async def refresh_agent_state_from_db(self, name: str) -> None:
         """
-        Restart the given agent. The agent will be able to pop new tasks from the queue
-        """
-        if agent not in self._state.agent_status:
-            raise LookupError(f"The agent {agent} does not exist!")
+        Stop the scheduler / a particular agent. Depending on the provided name, one or the other will be impacted by this
+        action. If the scheduler is stopped, the executor manager will also be stopped to kill any remaining processes.
+        Otherwise, only the agent will be stopped (if it exists)
 
-        self._start_for_agent(agent)
+        :param name: The name of the agent to stop
+        """
+        requested_agent = await data.Agent.get(env=self.environment, endpoint=name)
+        # TODO h if agent not in dict?
+
+        # This should never occur as the Scheduler is creating these 'agents'!
+        if requested_agent and name not in self._state.agent_status:
+            raise RuntimeError("Agent exists in Database but not in the Scheduler state!")
+
+        if name not in self._state.agent_status and requested_agent is None:
+            raise LookupError(f"The agent `{name}` does not exist!")
+
+        is_expected_state = requested_agent.paused == (self._state.agent_status[name] == AgentStatus.STOPPED)
+        if is_expected_state:
+            return
+
+        if requested_agent.paused:
+            # We don't need to stop it, through the executor manager, because it will taking new task from the queue,
+            # so it will time out eventually
+            self._state.agent_status[name] = AgentStatus.STOPPED
+        else:
+            self._state.agent_status[name] = AgentStatus.STARTED
+            self._start_for_agent(name)
 
     # TaskManager interface
 

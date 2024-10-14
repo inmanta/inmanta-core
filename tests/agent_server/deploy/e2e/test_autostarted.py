@@ -30,7 +30,7 @@ import pytest
 from inmanta import config, const, data
 from inmanta.agent import Agent
 from inmanta.config import Config
-from inmanta.const import AgentAction
+from inmanta.const import AGENT_SCHEDULER_ID, AgentAction
 from inmanta.util import get_compiler_version
 from utils import _wait_until_deployment_finishes, resource_action_consistency_check, retry_limited
 
@@ -91,8 +91,9 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
         result = await client.list_agents(tid=environment)
         await asyncio.sleep(0.1)
 
-    assert len(result.result["agents"]) == 1
-    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+    assert len(result.result["agents"]) == 2
+    expected_agents = {e["name"] for e in result.result["agents"]}
+    assert expected_agents == {const.AGENT_SCHEDULER_ID, "agent1"}
 
 
 @pytest.mark.parametrize(
@@ -434,10 +435,19 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+    assert len(result.result["agents"]) == 1
+    assert result.result["agents"][0]["name"] == AGENT_SCHEDULER_ID
+    assert result.result["agents"][0]["state"] == "up"
+    assert not result.result["agents"][0]["paused"]
+
     try:
         await _wait_until_deployment_finishes(client, environment, version)
         assert not should_time_out, f"This was supposed to time out with a deployment sleep set to {time_to_sleep}!"
     except (asyncio.TimeoutError, AssertionError):
+        result = await client.list_agents(tid=environment)
+        assert result.code == 200
         assert should_time_out, f"This wasn't supposed to time out with a deployment sleep set to {time_to_sleep}!"
     finally:
         children_after_deployment = get_process_state(current_pid)
@@ -449,7 +459,10 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     expected_additional_children_after_deployment = 3
     assert (
         len(current_children_after_deployment) == len(pre_existent_children) + expected_additional_children_after_deployment
-    ), "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
+    ), (
+        "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent! "
+        f"Actual state: {current_children_after_deployment}"
+    )
     for children in current_children_after_deployment:
         assert children.is_running()
 
@@ -460,17 +473,22 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
 
     result = await client.list_agents(tid=environment)
     assert result.code == 200
-    assert len(result.result["agents"]) == 1
-    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+    assert not expected_agents_status["agent1"]
 
     result = await client.halt_environment(tid=environment)
     assert result.code == 200
 
     result = await client.list_agents(tid=environment)
     assert result.code == 200
-
-    assert len(result.result["agents"]) == 1
-    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert expected_agents_status[const.AGENT_SCHEDULER_ID]
+    assert expected_agents_status["agent1"]
 
     halted_children = get_process_state(current_pid)
     assert len(halted_children) == 1
@@ -507,6 +525,13 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     ), "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
 
     await retry_limited(lambda: all([children.is_running() for children in current_resumed_children]), 10)
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+    assert not expected_agents_status["agent1"]
 
 
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
@@ -565,12 +590,8 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
         deployed = summary["by_state"]["deployed"]
         return deployed == deployed_resources
 
-    try:
-        await retry_limited(are_resources_deployed, 10)
-    except (asyncio.TimeoutError, AssertionError):
-        pass
-    finally:
-        children_after_deployment = get_process_state(current_pid)
+    await retry_limited(are_resources_deployed, timeout=6.5)
+    children_after_deployment = get_process_state(current_pid)
 
     assert len(children_after_deployment) == 1
     assert len(children_after_deployment.values()) == 1
@@ -590,27 +611,28 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
 
     result = await client.list_agents(tid=environment)
     assert result.code == 200
-    assert len(result.result["agents"]) == 1
-    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     assert result.code == 200
 
     result = await client.list_agents(tid=environment)
     assert result.code == 200
-    assert len(result.result["agents"]) == 1
-    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
 
+    await retry_limited(are_resources_deployed, timeout=6, deployed_resources=2)
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
     assert summary["total"] == 3, f"Unexpected summary: {summary}"
     assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
-    assert summary["by_state"]["deploying"] == 1, f"Unexpected summary: {summary}"
-    assert summary["by_state"]["deployed"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
-    await retry_limited(are_resources_deployed, timeout=6, interval=1, deployed_resources=2)
-    await retry_limited(wait_for_terminated_status, timeout=10, current_children=current_children_after_deployment)
+    await retry_limited(wait_for_terminated_status, timeout=6, interval=1, current_children=current_children_after_deployment)
 
     halted_children = get_process_state(current_pid)
     assert len(halted_children) == 1
@@ -621,8 +643,6 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.unpause.value)
     assert result.code == 200
 
-    resumed_children = get_process_state(current_pid)
-
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
@@ -632,6 +652,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     ), f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
+    resumed_children = get_process_state(current_pid)
     assert len(resumed_children) == 1
     assert len(resumed_children.values()) == 1
     current_resumed_children: list[psutil.Process] = list(resumed_children.values())[0]
@@ -641,5 +662,245 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert (
         len(current_resumed_children) == len(pre_existent_children) + expected_additional_children_after_deployment
     ), "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
+    for children in current_resumed_children:
+        assert children.is_running()
+
+
+@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_agent_paused_scheduler_crash(
+    snippetcompiler,
+    server,
+    ensure_consistent_starting_point,
+    client,
+    clienthelper,
+    environment,
+    no_agent_backoff,
+    auto_start_agent: bool,
+):
+    """
+    Verify that the new scheduler can pause running agent:
+        - It will make sure that the agent finishes its current task before being stopped
+        - And take the remaining tasks when this agent is resumed
+    """
+    current_pid = ensure_consistent_starting_point
+
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    agent_name = "agent1"
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
+    await env.set(data.AUTOSTART_ON_START, True)
+
+    config.Config.set("config", "environment", environment)
+
+    start_children = get_process_state(current_pid)
+    assert len(start_children) == 1
+    assert len(start_children.values()) == 1
+    current_children = list(start_children.values())[0]
+    for children in current_children:
+        assert children.is_running()
+
+    pre_existent_children = {e.pid for e in current_children}
+
+    await data.Agent(environment=uuid.UUID(environment), name=agent_name, paused=True).insert_if_not_exist()
+
+    snippetcompiler.setup_for_snippet(
+        """
+import minimalv2waitingmodule
+
+a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=5)
+b = minimalv2waitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
+c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
+""",
+        autostd=True,
+    )
+
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    async def are_resources_deployed(deployed_resources: int = 1) -> bool:
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        deployed = summary["by_state"]["deployed"]
+        return deployed == deployed_resources
+
+    with pytest.raises(AssertionError):
+        await retry_limited(are_resources_deployed, 5)
+
+    children_after_deployment = get_process_state(current_pid)
+    assert len(children_after_deployment) == 1
+    assert len(children_after_deployment.values()) == 1
+    current_children_after_deployment: list[psutil.Process] = list(children_after_deployment.values())[0]
+    # The scheduler and the fork server should be there
+    expected_additional_children_after_deployment = 2
+
+    assert (
+        len(current_children_after_deployment) == len(pre_existent_children) + expected_additional_children_after_deployment
+    ), "These processes should be present: Pg_ctl, the Server, the Scheduler and the fork server!"
+    for children in current_children_after_deployment:
+        assert children.is_running()
+
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    summary = result.result["metadata"]["deploy_summary"]
+    assert summary["total"] == 3, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["available"] == 3, f"Unexpected summary: {summary}"
+
+
+@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_agent_paused_should_remain_paused_after_environment_resume(
+    snippetcompiler,
+    server,
+    ensure_consistent_starting_point,
+    client,
+    clienthelper,
+    environment,
+    no_agent_backoff,
+    auto_start_agent: bool,
+):
+    """
+    Verify that the new scheduler can pause running agent:
+        - It will make sure that the agent finishes its current task before being stopped
+        - And take the remaining tasks when this agent is resumed
+    """
+    current_pid = ensure_consistent_starting_point
+
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    agent_name = "agent1"
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
+    await env.set(data.AUTOSTART_ON_START, True)
+
+    config.Config.set("config", "environment", environment)
+
+    start_children = get_process_state(current_pid)
+    assert len(start_children) == 1
+    assert len(start_children.values()) == 1
+    current_children = list(start_children.values())[0]
+    for children in current_children:
+        assert children.is_running()
+
+    pre_existent_children = {e.pid for e in current_children}
+
+    snippetcompiler.setup_for_snippet(
+        """
+import minimalv2waitingmodule
+
+a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=5)
+b = minimalv2waitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
+c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
+""",
+        autostd=True,
+    )
+
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    async def are_resources_deployed(deployed_resources: int = 1) -> bool:
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        deployed = summary["by_state"]["deployed"]
+        return deployed == deployed_resources
+
+    await retry_limited(are_resources_deployed, timeout=6.5)
+    children_after_deployment = get_process_state(current_pid)
+
+    assert len(children_after_deployment) == 1
+    assert len(children_after_deployment.values()) == 1
+    current_children_after_deployment: list[psutil.Process] = list(children_after_deployment.values())[0]
+    # The scheduler, the fork server and the new executor should be there
+    expected_additional_children_after_deployment = 3
+    assert (
+        len(current_children_after_deployment) == len(pre_existent_children) + expected_additional_children_after_deployment
+    ), "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
+    for children in current_children_after_deployment:
+        assert children.is_running()
+
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    assert len(result.result["versions"]) == 1
+    assert result.result["versions"][0]["total"] == 3
+
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+
+    result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
+    assert result.code == 200
+
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert expected_agents_status["agent1"]
+    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+
+    await retry_limited(are_resources_deployed, timeout=6, interval=1, deployed_resources=2)
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    summary = result.result["metadata"]["deploy_summary"]
+    assert summary["total"] == 3, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
+
+    await retry_limited(wait_for_terminated_status, timeout=10, current_children=current_children_after_deployment)
+
+    result = await client.halt_environment(tid=environment)
+    assert result.code == 200
+
+    result = await client.agent_action(environment, name="agent1", action=AgentAction.keep_paused_on_resume.value)
+    assert result.code == 200
+
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+
+    halted_children = get_process_state(current_pid)
+    assert len(halted_children) == 1
+    assert len(halted_children.values()) == 1
+    current_halted_children = list(halted_children.values())[0]
+
+    await retry_limited(
+        wait_for_terminated_status, timeout=const.EXECUTOR_GRACE_HARD + 2, current_children=current_children_after_deployment
+    )
+
+    assert len(current_halted_children) == len(current_children_after_deployment) - 1, (
+        "These processes should be present: Pg_ctl, the Server, the Scheduler and the fork server. "
+        "The agent created by the scheduler should have been killed!"
+    )
+    for children in current_halted_children:
+        assert children.is_running()
+
+    await client.resume_environment(environment)
+
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    summary = result.result["metadata"]["deploy_summary"]
+    assert summary["total"] == 3, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
+
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert expected_agents_status["agent1"]
+    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+
+    resumed_children = get_process_state(current_pid)
+    assert len(resumed_children) == 1
+    assert len(resumed_children.values()) == 1
+    current_resumed_children = list(resumed_children.values())[0]
+    assert len(current_halted_children) == len(current_resumed_children), (
+        "These processes should be present: Pg_ctl, the Server, the Scheduler and the fork server. "
+        "The agent created by the scheduler should have been killed!"
+    )
     for children in current_resumed_children:
         assert children.is_running()

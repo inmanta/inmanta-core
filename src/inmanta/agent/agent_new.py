@@ -181,13 +181,15 @@ class Agent(SessionEndpoint):
         await self.scheduler.start()
         self._enable_time_triggers()
 
-    async def stop_working(self) -> None:
+    async def stop_working(self, timeout: Optional[int] = None) -> None:
         """Stop working, connection lost"""
         if not self.working:
             return
         self.working = False
         self._disable_time_triggers()
         await self.executor_manager.stop()
+        if timeout is not None:
+            await self.executor_manager.join([], timeout=timeout)
         await self.scheduler.stop()
 
     @protocol.handle(methods_v2.update_agent_map)
@@ -197,10 +199,21 @@ class Agent(SessionEndpoint):
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
-        if enabled:
-            return await self.resume_agent(agent)
+        if agent == AGENT_SCHEDULER_ID:
+            should_be_stopped = await self.scheduler.refresh_state()
+            enabled = not should_be_stopped  # TODO h remove
+
+            if enabled:
+                await self.start_working()
+            else:
+                await self.stop_working(timeout=const.EXECUTOR_GRACE_HARD)
         else:
-            return await self.stop_agent(agent)
+            try:
+                await self.scheduler.refresh_agent_state_from_db(name=agent)
+            except LookupError:
+                return 404, "No such agent"
+
+        return 200, f"{agent} has been {'started' if enabled else 'stopped'} - {should_be_stopped}"
 
     async def on_reconnect(self) -> None:
         name = AGENT_SCHEDULER_ID
@@ -317,43 +330,17 @@ class Agent(SessionEndpoint):
         return dir_map
 
     # TODO h missing change if agent is paused and then resumed
-    async def resume_agent(self, name: str) -> Apireturn:
-        """
-        Resume the scheduler / a particular agent. Depending on the provided name, one or the other will be impacted by this
-        action. If the scheduler is resumed, the executor manager will be resumed. Otherwise, only the agent will be resumed
-        (if it exists)
+    """
+    Resume the scheduler / a particular agent. Depending on the provided name, one or the other will be impacted by this
+    action. If the scheduler is resumed, the executor manager will be resumed. Otherwise, only the agent will be resumed
+    (if it exists)
 
-        :param name: The name of the agent to resume
-        """
-        if name == AGENT_SCHEDULER_ID:
-            await self.executor_manager.start()
-            await self.start_working()
-        else:
-            try:
-                self.scheduler.resume_agent(agent=name)
-            except LookupError:
-                return 404, "No such agent"
+    :param name: The name of the agent to resume
+    """
+    """
+    Stop the scheduler / a particular agent. Depending on the provided name, one or the other will be impacted by this
+    action. If the scheduler is stopped, the executor manager will also be stopped to kill any remaining processes.
+    Otherwise, only the agent will be stopped (if it exists)
 
-        return 200, f"{name} has been resumed"
-
-    async def stop_agent(self, name: str) -> Apireturn:
-        """
-        Stop the scheduler / a particular agent. Depending on the provided name, one or the other will be impacted by this
-        action. If the scheduler is stopped, the executor manager will also be stopped to kill any remaining processes.
-        Otherwise, only the agent will be stopped (if it exists)
-
-        :param name: The name of the agent to stop
-        """
-        if name == AGENT_SCHEDULER_ID:
-            await self.executor_manager.stop()
-            await self.executor_manager.join([], timeout=const.EXECUTOR_GRACE_HARD)
-            await self.stop_working()
-        else:
-            try:
-                self.scheduler.stop_agent(agent=name)
-                # We don't need to stop it, through the executor manager, because it will taking new task from the queue,
-                # so it will time out eventually
-            except LookupError:
-                return 404, "No such agent"
-
-        return 200, f"{name} has been stopped"
+    :param name: The name of the agent to stop
+    """

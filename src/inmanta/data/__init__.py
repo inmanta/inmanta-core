@@ -1494,6 +1494,21 @@ class BaseDocument(metaclass=DocumentMeta):
         )
         await self._execute_query(query, *values, connection=connection)
 
+    async def insert_if_not_exist(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Insert a new document based on the instance passed if it does not exist. Validation is done based on the defined fields.
+        """
+        (column_names, values) = self._get_column_names_and_values()
+        column_names_as_sql_string = ",".join(column_names)
+        values_as_parameterized_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
+        query = (
+            f"INSERT INTO {self.table_name()} "
+            f"({column_names_as_sql_string}) "
+            f"VALUES ({values_as_parameterized_sql_string}) "
+            "ON CONFLICT DO NOTHING"
+        )
+        await self._execute_query(query, *values, connection=connection)
+
     async def insert_with_overwrite(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Insert a new document based on the instance passed. If the document already exists, overwrite it.
