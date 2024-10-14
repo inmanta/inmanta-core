@@ -290,7 +290,7 @@ class PythonWorkingSet:
                     for requirement in (
                         parse_requirement(raw_requirement) for raw_requirement in (installed_distributions[dist].requires or [])
                     )
-                    if (not (requirement.marker) or requirement.marker.evaluate())
+                    if (requirement.marker is None or requirement.marker.evaluate())
                 ),
                 acc=acc | {dist},
             )
