@@ -40,7 +40,8 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
 
     def get_all_provides_transitively(self, resource: ResourceIdStr | set[ResourceIdStr]) -> list[ResourceIdStr]:
         """
-        This method returns all the provides (transitively) of the given resource.
+        This method returns all the provides (transitively) of the given resource. The result will not include any
+        resource ids from the input, even if there exists a provides edge between them.
 
         :param resource: The resource or set of resources for which the provides have to be resolved transitively.
         """
