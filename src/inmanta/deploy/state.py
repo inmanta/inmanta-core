@@ -38,7 +38,7 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
     def provides_view(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
         return self.reverse_mapping()
 
-    def get_all_provides_transitively(self, resource: ResourceIdStr | set[ResourceIdStr]) -> list[ResourceIdStr]:
+    def get_all_provides_transitively(self, resource: ResourceIdStr | Set[ResourceIdStr]) -> list[ResourceIdStr]:
         """
         This method returns all the provides (transitively) of the given resource.
 
