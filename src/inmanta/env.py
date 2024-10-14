@@ -259,6 +259,8 @@ class PythonWorkingSet:
         If one of the distributions or its dependencies is not installed, it is still included in the set but its dependencies
         are not.
 
+        extras are ignored
+
         :param dists: The keys for the distributions to get the dependency tree for.
         """
         # create dict for O(1) lookup
@@ -284,8 +286,11 @@ class PythonWorkingSet:
             # recurse on direct dependencies
             return _get_tree_recursive(
                 (
-                    cast(NormalizedName, parse_requirement(requirement).name)
-                    for requirement in (installed_distributions[dist].requires or [])
+                    cast(NormalizedName, requirement.name)
+                    for requirement in (
+                        parse_requirement(raw_requirement) for raw_requirement in (installed_distributions[dist].requires or [])
+                    )
+                    if (not (requirement.marker) or requirement.marker.evaluate())
                 ),
                 acc=acc | {dist},
             )

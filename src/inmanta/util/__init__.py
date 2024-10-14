@@ -56,7 +56,6 @@ from crontab import CronTab
 from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
-from packaging.utils import NormalizedName
 from pydantic_core import Url
 
 LOGGER = logging.getLogger(__name__)
