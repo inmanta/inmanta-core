@@ -49,7 +49,7 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
         for elem in input_set:
             work.put_nowait(elem)
         provides_mapping = self.provides_view()
-        # Use a dict here to not lost the order of the elements.
+        # Use a dict here to not lose the order of the elements.
         result: dict[ResourceIdStr, None] = {}
         while not work.empty():
             current_resource = work.get()
