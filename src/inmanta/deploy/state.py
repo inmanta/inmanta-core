@@ -48,6 +48,8 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
         work: SimpleQueue[ResourceIdStr] = SimpleQueue()
         for elem in input_set:
             work.put_nowait(elem)
+        # prevent that we queue the same element twice
+        seen = set(input_set)
         provides_mapping = self.provides_view()
         # Use a dict here to not lost the order of the elements.
         result: dict[ResourceIdStr, None] = {}
@@ -56,7 +58,9 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
             result[current_resource] = None
             provides = provides_mapping.get(current_resource, set())
             for elem in provides:
-                work.put_nowait(elem)
+                if elem not in seen:
+                    work.put_nowait(elem)
+                    seen.add(elem)
         for elem in input_set:
             result.pop(elem, None)
         return list(result.keys())
