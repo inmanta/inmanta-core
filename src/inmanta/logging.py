@@ -38,8 +38,10 @@ from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
 
 logfire_enabled = os.getenv("LOGFIRE_TOKEN", None) is not None
-if logfire_enabled:
+try:
     from logfire.integrations.logging import LogfireLoggingHandler
+except ModuleNotFoundError:
+    logfire_enabled = False
 
 LOGGER = logging.getLogger(__name__)
 
