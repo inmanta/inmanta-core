@@ -521,13 +521,13 @@ async def test_none_resources_paging(server, client, env_with_resources):
         env.id,
         limit=2,
         sort="agent.ASC",
-        start="zzausf",
-        first_id="zzanet_co",
+        start="zzz",
+        first_id="zzzz",
     )
     assert no_result_asc_prev.code == 200
     assert len(no_result_asc_prev.result["data"]) == 0
     assert no_result_asc_prev.result["links"] == {
-        "prev": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&end=zzausf&last_id=zzanet_co",
+        "prev": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&end=zzz&last_id=zzzz",
         "first": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False",
     }
     assert no_result_asc_prev.result["metadata"] == {"after": 0, "before": 6, "page_size": 2, "total": 6}

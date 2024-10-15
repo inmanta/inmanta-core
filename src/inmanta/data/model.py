@@ -467,11 +467,11 @@ class PagingBoundaries:
      -------------|-------------------------|------------------------------------------------|----------------------
      ASC sorting  | [  ...  ] (99 c)        | [ (100 d) ( 100 e) ... (10 000 r) (10 000 s) ] | (10 001 t) [ ...   ]
                   |            start = 99   |     end = 100            start = 10 000        |     end = 10 001
-                  |            first_id = c |    last_id = d          first_id = s           |     last_id = t
+                  |            first_id = c |    last_id = d          first_id = s           |     first_id = t
                   |
-     DESC sorting | [  ...  ] (9 999 s)     | [ (10 000 t) (10 000 r) ... (100 d) ( 100 c) ] |  (99 b) [ ...   ]
-                  |            end = 9 999  |          start = 10000          end = 100      |     start = 99
-                  |            last_id = s  |          first_id = t           last_id = c    |     first_id = b
+     DESC sorting | [  ...  ] (10 001 s)    | [ (10 000 t) (10 000 r) ... (100 d) ( 100 c) ] |  (99 b) [ ...   ]
+                  |            end = 10 001 |          start = 10000          end = 100      |     start = 99
+                  |            last_id = t  |          first_id = t           last_id = c    |     first_id = b
 
     So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "highest"
     and "lowest".

@@ -104,7 +104,7 @@ class RequestedPagingBoundaries:
      -------------|-------------------------|------------------------------------------------|----------------------
      ASC sorting  | [  ...  ] (99 c)        | [ (100 d) ( 100 e) ... (10 000 r) (10 000 s) ] | (10 001 t) [ ...   ]
                   |            end = 99     |     start = 100          end = 10 000          |     start = 10 001
-                  |            last_id = c  |     first_id = d         last_id = s           |     last_id = t
+                  |            last_id = c  |     first_id = d         last_id = s           |     first_id = t
                   |
      DESC sorting | [  ...  ] (10 001 t)    | [ (10 000 s) (10 000 r) ... (100 d) ( 100 c) ] |  (99 b) [ ...   ]
                   |          start = 10 001 |         end = 10000          start = 100       |     end = 99
