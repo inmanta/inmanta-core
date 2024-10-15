@@ -2129,6 +2129,9 @@ async def test_delete_active_version(client, clienthelper, server, environment):
 
 
 async def test_timeout_pytest():
+    """
+    Test to make sure that the soft timeout for the test suite is working as expected
+    """
     with tempfile.TemporaryDirectory() as tmp_dir:
         test_path = pathlib.Path(tmp_dir) / "test_timeout.py"
         with open(test_path, "w") as f:
