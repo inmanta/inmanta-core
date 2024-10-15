@@ -1,0 +1,4 @@
+description: Implement priority mechanism on scheduler
+change-type: minor
+destination-branches: [master]
+
