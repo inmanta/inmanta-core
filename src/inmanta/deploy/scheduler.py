@@ -217,6 +217,7 @@ class ResourceScheduler(TaskManager):
                 resource_id=resource.resource_id,
                 attribute_hash=resource.attribute_hash,
                 attributes=resource.attributes,
+                status=resource.status,
             )
             for resource in resources_from_db
         }
@@ -263,13 +264,26 @@ class ResourceScheduler(TaskManager):
                 self._work.delete_resource(resource)
 
             new_desired_state: set[ResourceIdStr] = set()
+            # Only contains the direct undeployable resources, not the transitive ones.
+            blocked_resources: set[ResourceIdStr] = set()
+            # Resources that were undeployable in a previous model version, but got unblocked. Not the transitive ones.
+            unblocked_resources: set[ResourceIdStr] = set()
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             for resource, details in resources.items():
-                if (
-                    resource not in self._state.resources
-                    or details.attribute_hash != self._state.resources[resource].attribute_hash
-                ):
+                if details.status is const.ResourceState.undefined:
+                    blocked_resources.add(resource)
+                    self._work.delete_resource(resource)
+                elif resource in self._state.resources:
+                    # It's a resource we know.
+                    if self._state.resource_state[resource].status is ResourceStatus.UNDEFINED:
+                        # The resource has been undeployable in previous versions, but not anymore.
+                        unblocked_resources.add(resource)
+                    elif details.attribute_hash != self._state.resources[resource].attribute_hash:
+                        # The desired state has changed.
+                        new_desired_state.add(resource)
+                else:
+                    # It's a resource we don't know yet.
                     new_desired_state.add(resource)
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
@@ -283,6 +297,11 @@ class ResourceScheduler(TaskManager):
                 # => regularly pass control to the event loop to not block scheduler operation during update prep
                 await asyncio.sleep(0)
 
+            # A resource should not be present in more than one of these resource sets
+            assert len(new_desired_state | blocked_resources | unblocked_resources) == len(new_desired_state) + len(
+                blocked_resources
+            ) + len(unblocked_resources)
+
             # in the current implementation everything below the lock is synchronous, so it's not technically required. It is
             # however kept for two reasons:
             # 1. pass context once more to event loop before starting on the sync path
@@ -290,12 +309,19 @@ class ResourceScheduler(TaskManager):
             # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
             async with self._scheduler_lock:
                 self._state.version = version
+                for resource in blocked_resources:
+                    self._state.block_resource(resource, details, transient=False)
                 for resource in new_desired_state:
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
+                transitively_blocked_resources: set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
+                for resource in unblocked_resources:
+                    self._state.unblock_resource(resource)
                 # Update set of in-progress non-stale deploys by trimming resources with new state
-                self._deploying_latest.difference_update(new_desired_state, deleted_resources)
+                self._deploying_latest.difference_update(
+                    new_desired_state, deleted_resources, blocked_resources, transitively_blocked_resources
+                )
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
                     self._state.dirty,
@@ -306,9 +332,15 @@ class ResourceScheduler(TaskManager):
                 )
                 for resource in deleted_resources:
                     self._state.drop(resource)
+                for resource in blocked_resources | transitively_blocked_resources:
+                    self._work.delete_resource(resource)
+
             # Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added
             # again by a deploy trigger (because we dropped them outside the lock).
             for resource in deleted_resources:
+                # Delete the deleted resources outside the _scheduler_lock, because we do not want to keep the _scheduler_lock
+                # acquired longer than required. The worst that can happen here is that we deploy the deleted resources one
+                # time too many, which is not so bad.
                 self._work.delete_resource(resource)
 
     def _start_for_agent(self, agent: str) -> None:
