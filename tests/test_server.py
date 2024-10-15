@@ -22,6 +22,9 @@ import functools
 import json
 import logging
 import os
+import pathlib
+import subprocess
+import tempfile
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
@@ -2123,3 +2126,43 @@ async def test_delete_active_version(client, clienthelper, server, environment):
     result = await client.delete_version(tid=environment, id=version)
     assert result.code == 400
     assert result.result["message"] == "Invalid request: Cannot delete the active version"
+
+
+async def test_timeout_pytest():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        test_path = pathlib.Path(tmp_dir) / "test_timeout.py"
+        with open(test_path, "w") as f:
+            f.write(
+                """
+import time
+
+def test_timeout_output():
+    time.sleep(30)
+            """
+            )
+        try:
+            subprocess.check_output(
+                [
+                    "timeout",
+                    "-s",
+                    "SIGINT",
+                    "1.5s",
+                    "pytest",
+                    "--log-cli-level",
+                    "DEBUG",
+                    "--full-trace",
+                    "-vvvv",
+                    str(test_path),
+                ],
+                cwd=tmp_dir,
+                stderr=subprocess.PIPE,
+            ).decode("utf-8").strip()
+            assert False, "Subprocess should have failed!"
+        except subprocess.CalledProcessError as e:
+            actual_logs = e.output.decode("utf-8").strip()
+            expected_trace = """
+    def test_timeout_output():
+>       time.sleep(30)
+E       KeyboardInterrupt
+"""
+            assert expected_trace in actual_logs
