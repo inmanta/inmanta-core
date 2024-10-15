@@ -324,11 +324,11 @@ def wait_for_terminated_status(current_children: list[psutil.Process], expected_
 async def ensure_consistent_starting_point(agent: Agent, ensure_resource_tracker_is_started: None) -> int:
     """
     Make sure that every test that uses this fixture will begin in a consistent, i.e.:
-        - 2 processes: a postgres server and one inmanta server
+        - 2 processes: a postgres server and the scheduler
         - 3 processes:
-            - a postgres server, one inmanta server and the resource tracker
-            - a postgres server, one inmanta server and one inmanta fork server
-        - 4 processes: a postgres server, one inmanta server, one inmanta fork server and the resource tracker
+            - a postgres server, the scheduler and the resource tracker
+            - a postgres server, the scheduler and one inmanta fork server (unrelated to the new scheduler)
+        - 4 processes: a postgres server, the scheduler, one inmanta fork server and the resource tracker
 
     :param agent: The agent fixture (that we want to stop before running the test)
     :param ensure_resource_tracker_is_started: The fixture that creates a Resource Tracker process
@@ -681,9 +681,11 @@ async def test_agent_paused_scheduler_crash(
     async_finalizer,
 ):
     """
-    Verify that the new scheduler can pause running agent:
-        - It will make sure that the agent finishes its current task before being stopped
-        - And take the remaining tasks when this agent is resumed
+    Verify that the new scheduler does not alter the state of agent after a restart:
+        - The agent is deploying something that takes a lot of time
+        - The agent is paused
+        - The server (and thus the scheduler) is (are) restarted
+        - The agent should remain paused (the Scheduler shouldn't do anything after the restart)
     """
     current_pid = ensure_consistent_starting_point
 
@@ -780,9 +782,8 @@ async def test_agent_paused_should_remain_paused_after_environment_resume(
     auto_start_agent: bool,
 ):
     """
-    Verify that the new scheduler can pause running agent:
-        - It will make sure that the agent finishes its current task before being stopped
-        - And take the remaining tasks when this agent is resumed
+    Verify that the new scheduler does not alter the state of agent after resuming the environment (if the agent was flag to
+        not be impacted by such event)
     """
     current_pid = ensure_consistent_starting_point
 
