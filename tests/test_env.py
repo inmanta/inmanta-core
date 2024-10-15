@@ -72,9 +72,10 @@ def test_venv_pyton_env_empty_string(tmpdir, deactive_venv):
 def test_basic_install(tmpdir, deactive_venv):
     env_dir1 = tmpdir.mkdir("env1").strpath
     venv1 = env.VirtualEnv(env_dir1)
+    venv1.use_virtual_env()
+
     assert not venv1.are_installed(["lorem"])
 
-    venv1.use_virtual_env()
     venv1.install_from_list(["lorem"])
     assert venv1.are_installed(["lorem"])
 
@@ -115,8 +116,7 @@ def test_install_package_already_installed_in_parent_env(tmpdir, deactive_venv):
     venv = env.VirtualEnv(str(tmpdir))
     venv.use_virtual_env()
 
-    installed_packages = list(env.PythonEnvironment(python_path=venv._parent_python).get_installed_packages().keys())
-
+    installed_packages = list(venv.get_installed_packages().keys())
     # verify that the venv sees all parent packages
     assert not set(parent_installed) - set(installed_packages)
 

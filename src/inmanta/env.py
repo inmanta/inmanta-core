@@ -247,8 +247,21 @@ class PythonWorkingSet:
         """
         return {
             packaging.utils.canonicalize_name(dist_info.name): packaging.version.Version(dist_info.version)
-            for dist_info in distributions()
+            for dist_info in reversed(list(distributions()))  # make sure we get the first entry for every name
             if not inmanta_modules_only or dist_info.name.startswith(const.MODULE_PKG_NAME_PREFIX)
+        }
+
+    @classmethod
+    def get_dist_in_working_set(cls) -> dict[NormalizedName, Distribution]:
+        """
+        Return all packages (under the canonicalized form) present in `pkg_resources.working_set` together with the version
+        of the package.
+
+        :param inmanta_modules_only: Only return inmanta modules from the working set
+        """
+        return {
+            packaging.utils.canonicalize_name(dist_info.name): dist_info
+            for dist_info in reversed(list(distributions()))  # make sure we get the first entry for every name
         }
 
     @classmethod
@@ -264,9 +277,7 @@ class PythonWorkingSet:
         :param dists: The keys for the distributions to get the dependency tree for.
         """
         # create dict for O(1) lookup
-        installed_distributions: abc.Mapping[NormalizedName, Distribution] = {
-            canonicalize_name(dist_info.name): dist_info for dist_info in distributions()
-        }
+        installed_distributions: abc.Mapping[NormalizedName, Distribution] = PythonWorkingSet.get_dist_in_working_set()
 
         def _get_tree_recursive(
             dists: abc.Iterable[NormalizedName], acc: abc.Set[NormalizedName] = frozenset()
@@ -806,7 +817,7 @@ import sys
         with open(self._path_pth_file, "w", encoding="utf-8") as fd:
             fd.write(script_as_oneliner)
 
-    def get_installed_packages(self, only_editable: bool = False) -> dict[str, packaging.version.Version]:
+    def get_installed_packages(self, only_editable: bool = False) -> dict[NormalizedName, packaging.version.Version]:
         """
         Return a list of all installed packages in the site-packages of a python interpreter.
 
@@ -815,7 +826,7 @@ import sys
         """
         cmd = PipCommandBuilder.compose_list_command(self.python_path, format=PipListFormat.json, only_editable=only_editable)
         output = CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
-        return {r["name"]: packaging.version.Version(r["version"]) for r in json.loads(output)}
+        return {canonicalize_name(r["name"]): packaging.version.Version(r["version"]) for r in json.loads(output)}
 
     def install_for_config(
         self,
@@ -1125,6 +1136,7 @@ class ActiveEnv(PythonEnvironment):
         """
         Return True iff the given requirements are installed in this environment.
         """
+        assert self.is_using_virtual_env()
         return PythonWorkingSet.are_installed(requirements)
 
     def install_for_config(
@@ -1168,7 +1180,7 @@ class ActiveEnv(PythonEnvironment):
         # assume no extras
         installed_constraints: abc.Set[OwnedRequirement] = frozenset(
             OwnedRequirement(parsed, packaging.utils.canonicalize_name(dist_info.name))
-            for dist_info in distributions()
+            for dist_info in PythonWorkingSet.get_dist_in_working_set().values()
             for parsed in (
                 inmanta.util.parse_requirement(requirement=str(requirement)) for requirement in (dist_info.requires or [])
             )
@@ -1191,8 +1203,8 @@ class ActiveEnv(PythonEnvironment):
                     if strict_scope is None
                     else (
                         packaging.utils.canonicalize_name(dist_info.name)
-                        for dist_info in distributions()
-                        if strict_scope.fullmatch(dist_info.name)
+                        for dist_info in PythonWorkingSet.get_dist_in_working_set().values()
+                        if strict_scope.fullmatch(packaging.utils.canonicalize_name(dist_info.name))
                     )
                 ),
                 (cast(NormalizedName, requirement.requirement.name) for requirement in inmanta_constraints),
@@ -1270,7 +1282,7 @@ class ActiveEnv(PythonEnvironment):
             in_scope, constraints
         )
 
-        working_set: abc.Iterable[importlib.metadata.Distribution] = importlib.metadata.distributions()
+        working_set: abc.Iterable[importlib.metadata.Distribution] = PythonWorkingSet.get_dist_in_working_set().values()
         # add all requirements of all in scope packages installed in this environment
         all_constraints: set[inmanta.util.CanonicalRequirement] = set(constraints if constraints is not None else []).union(
             inmanta.util.parse_requirement(requirement=requirement)
@@ -1310,7 +1322,7 @@ class ActiveEnv(PythonEnvironment):
             spec = None
         return (spec.origin, spec.loader) if spec is not None else None
 
-    def get_installed_packages(self, only_editable: bool = False) -> dict[str, packaging.version.Version]:
+    def get_installed_packages(self, only_editable: bool = False) -> dict[NormalizedName, packaging.version.Version]:
         """
         Return a list of all installed packages in the site-packages of a python interpreter.
 
@@ -1318,7 +1330,7 @@ class ActiveEnv(PythonEnvironment):
         :return: A dict with package names as keys and versions as values
         """
         if self.is_using_virtual_env() and not only_editable:
-            return {dist_info.name: packaging.version.Version(dist_info.version) for dist_info in distributions()}
+            return PythonWorkingSet.get_packages_in_working_set()
         return super().get_installed_packages(only_editable=only_editable)
 
     def notify_change(self) -> None:
