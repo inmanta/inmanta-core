@@ -187,10 +187,10 @@ class Agent(SessionEndpoint):
             return
         self.working = False
         self._disable_time_triggers()
+        await self.scheduler.stop()
         await self.executor_manager.stop()
         if timeout is not None:
             await self.executor_manager.join([], timeout=timeout)
-        await self.scheduler.stop()
 
     @protocol.handle(methods_v2.update_agent_map)
     async def update_agent_map(self, agent_map: dict[str, str]) -> None:
@@ -200,19 +200,29 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
         if agent == AGENT_SCHEDULER_ID:
-            enabled = await self.scheduler.is_running()
+            return (
+                400,
+                "Invalid request, cannot pause the scheduler! The closest action to that would be to pause the environment",
+            )
 
-            if enabled:
-                await self.start_working()
-            else:
-                await self.stop_working(timeout=const.EXECUTOR_GRACE_HARD)
-        else:
-            try:
-                await self.scheduler.refresh_agent_state_from_db(name=agent)
-            except LookupError:
-                return 404, "No such agent"
+        try:
+            await self.scheduler.refresh_agent_state_from_db(name=agent)
+        except LookupError:
+            return 404, f"No such agent: {agent}"
 
         return 200, f"{agent} has been {'started' if enabled else 'stopped'}"
+
+    @protocol.handle(methods_v2.resume_scheduler_environment)
+    async def resume_scheduler_environment(self, environment: uuid.UUID) -> Apireturn:
+        assert environment == self.environment
+        await self.start_working()
+        return 200, f"Environment {environment} has been resumed"
+
+    @protocol.handle(methods_v2.halt_scheduler_environment)
+    async def halt_scheduler_environment(self, environment: uuid.UUID) -> Apireturn:
+        assert environment == self.environment
+        await self.stop_working(timeout=const.EXECUTOR_GRACE_HARD)
+        return 200, f"Environment {environment} has been stopped"
 
     async def on_reconnect(self) -> None:
         name = AGENT_SCHEDULER_ID

@@ -19,6 +19,7 @@
 import abc
 import asyncio
 import logging
+import typing
 import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
@@ -27,7 +28,7 @@ from typing import Optional
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.data import Agent, ConfigurationModel, Environment
+from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import work
 from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
@@ -95,6 +96,54 @@ class TaskManager(abc.ABC):
         """
 
 
+class TaskRunner:
+    def __init__(self, endpoint: str, scheduler: "ResourceScheduler"):
+        self.endpoint = endpoint
+        self.status = AgentStatus.STOPPED
+        self._scheduler = scheduler
+        self._task: typing.Optional[asyncio.Task[None]] = None
+
+    def start(self) -> None:
+        if self.status == AgentStatus.STOPPED:
+            self._task = asyncio.create_task(self.run())
+
+    def stop(self) -> None:
+        self.status = AgentStatus.STOPPING
+
+    async def notify(self) -> None:
+        current_environment = await Environment.get_by_id(self._scheduler.environment)
+        assert current_environment
+        agent_state = await data.Agent.get(env=self._scheduler.environment, endpoint=self.endpoint)
+        assert agent_state
+        should_be_running = not (current_environment.halted or agent_state.paused)
+
+        match self.status:
+            case AgentStatus.STARTED if not should_be_running:
+                self.stop()
+            case AgentStatus.STOPPING | AgentStatus.STOPPED if should_be_running:
+                self.start()
+
+        self.status = AgentStatus.STOPPING
+
+    async def run(self) -> None:
+        """Main loop for one agent. It will first fetch its actual state from the DB (and the state of its environment) to make
+        sure that it's allowed to run."""
+        self.status = AgentStatus.STARTED
+        await self.notify()
+        while self.status == AgentStatus.STARTED:
+            task: Task = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
+            try:
+                await task.execute(self._scheduler, self.endpoint)
+            except Exception:
+                LOGGER.exception(
+                    "Task %s for agent %s has failed and the exception was not properly handled", task, self.endpoint
+                )
+
+            self._scheduler._work.agent_queues.task_done(self.endpoint, task)
+
+        self.status = AgentStatus.STOPPED
+
+
 class ResourceScheduler(TaskManager):
     """
     Scheduler for resource actions. Reads resource state from the database and accepts deploy, dry-run, ... requests from the
@@ -131,7 +180,7 @@ class ResourceScheduler(TaskManager):
         self._running = False
         # Agent name to worker task
         # here to prevent it from being GC-ed
-        self._workers: dict[str, asyncio.Task[None]] = {}
+        self._workers: dict[str, TaskRunner] = {}
         # Set of resources for which a concrete non-stale deploy is in progress, i.e. we've committed for a given intent and
         # that intent still reflects the latest resource intent
         # Apart from the obvious, this differs from the agent queues' in-progress deploys in the sense that those are simply
@@ -158,13 +207,13 @@ class ResourceScheduler(TaskManager):
     async def start(self) -> None:
         self.reset()
         self._running = True
-        await self.read_agent_instances()
         await self.read_version()
 
     async def stop(self) -> None:
         self._running = False
         self._work.agent_queues.send_shutdown()
-        await asyncio.gather(*self._workers.values())
+        worker_tasks = [worker._task for worker in self._workers.values() if worker.status != AgentStatus.STOPPED and worker._task is not None]
+        await asyncio.gather(*worker_tasks)
 
     async def deploy(self) -> None:
         """
@@ -250,19 +299,6 @@ class ResourceScheduler(TaskManager):
         resources_from_db = await self._build_resource_mappings_from_db(version=version)
         requires_from_db = self._construct_requires_mapping(resources_from_db)
         await self._new_version(version, resources_from_db, requires_from_db)
-
-    async def read_agent_instances(
-        self,
-    ) -> None:
-        """
-        Update model state and scheduled work based on the status of the different agents created by the Scheduler, e.g.
-        """
-        agent_instances = await Agent.get_list(environment=self.environment)
-        if agent_instances is None:
-            return
-
-        for instance in agent_instances:
-            self._state.agent_status[instance.name] = AgentStatus.STOPPED if instance.paused else AgentStatus.STARTED
 
     async def _new_version(
         self,
@@ -358,35 +394,8 @@ class ResourceScheduler(TaskManager):
 
     def _start_for_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
-        self._workers[agent] = asyncio.create_task(self._run_for_agent(agent=agent))
-
-    async def _run_for_agent(self, agent: str) -> None:
-        """Main loop for one agent. It will first fetch its actual state from the DB (and the state of its environment) to make
-        sure that it's allowed to run."""
-        current_environment = await Environment.get_by_id(self.environment)
-        assert current_environment
-        if current_environment.halted:
-            return
-
-        await data.Agent(environment=self.environment, name=agent).insert_if_not_exist()
-        # We need to retrieve the actual state to see if the agent is actually paused (if it existed before)
-        agent_state = await data.Agent.get(env=self.environment, endpoint=agent)
-        self._state.agent_status[agent] = AgentStatus.STOPPED if agent_state.paused else AgentStatus.STARTED
-
-        while self._running and self._state.agent_status[agent] == AgentStatus.STARTED:
-            task: Task = await self._work.agent_queues.queue_get(agent)
-            try:
-                await task.execute(self, agent)
-            except Exception:
-                LOGGER.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
-
-            self._work.agent_queues.task_done(agent, task)
-
-    async def is_running(self) -> bool:
-        current_environment = await Environment.get_by_id(self.environment)
-        assert current_environment
-        requested_agent = await data.Agent.get(env=self.environment, endpoint=const.AGENT_SCHEDULER_ID)
-        return not (current_environment.halted or requested_agent.paused)
+        self._workers[agent] = TaskRunner(endpoint=agent, scheduler=self)
+        self._workers[agent].start()
 
     async def refresh_agent_state_from_db(self, name: str) -> None:
         """
@@ -396,28 +405,16 @@ class ResourceScheduler(TaskManager):
 
         :param name: The name of the agent
         """
-        requested_agent = await data.Agent.get(env=self.environment, endpoint=name)
 
-        # This should never occur as the Scheduler is creating these 'agents'!
-        if requested_agent and name not in self._state.agent_status:
-            raise RuntimeError("Agent exists in Database but not in the Scheduler state!")
+        if name in self._workers:
+            await self._workers[name].notify()
+
+        requested_agent = await data.Agent.get(env=self.environment, endpoint=name)
+        if requested_agent:
+            self._start_for_agent(agent=requested_agent.name)
 
         if name not in self._state.agent_status and requested_agent is None:
             raise LookupError(f"The agent `{name}` does not exist!")
-
-        is_expected_state = requested_agent.paused == (self._state.agent_status[name] == AgentStatus.STOPPED)
-        if is_expected_state:
-            return
-
-        if requested_agent.paused:
-            # We don't need to stop it, through the executor manager, because it will taking new task from the queue,
-            # so it will time out eventually
-            self._state.agent_status[name] = AgentStatus.STOPPED
-        else:
-            old_status = self._state.agent_status[name]
-            self._state.agent_status[name] = AgentStatus.STARTED
-            if old_status != AgentStatus.STARTED and (name not in self._workers or self._workers[name].done()):
-                self._start_for_agent(name)
 
     # TaskManager interface
 

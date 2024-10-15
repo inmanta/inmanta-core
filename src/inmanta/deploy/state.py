@@ -126,10 +126,12 @@ class AgentStatus(StrEnum):
     The status of the agent responsible of a given resource.
 
     STARTED: Agent has been started.
+    STARTED: Agent is stopping.
     STOPPED: Agent has been stopped (previously called PAUSED).
     """
 
     STARTED = enum.auto()
+    STOPPING = enum.auto()
     STOPPED = enum.auto()
 
 
