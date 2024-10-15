@@ -262,8 +262,6 @@ class AgentManager(ServerSlice, SessionListener):
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
             if opt.server_use_resource_scheduler.get():
-                if endpoint is None:
-                    return
                 key = (env.id, const.AGENT_SCHEDULER_ID)
                 live_session = self.tid_endpoint_to_session.get(key)
                 # This should never be the case but as a safety measure, we need to make sure that the scheduler is up and
@@ -272,8 +270,12 @@ class AgentManager(ServerSlice, SessionListener):
                     await self._autostarted_agent_manager._ensure_scheduler(env)
                     live_session = self.tid_endpoint_to_session.get(key)
                     assert live_session
-                agent_to_stop = const.AGENT_SCHEDULER_ID if endpoint is None else endpoint
-                await live_session.get_client().set_state(agent_to_stop, enabled=False)
+
+                if endpoint is not None and endpoint != const.AGENT_SCHEDULER_ID:
+                    # We don't need to do this when the environment is resumed because the scheduler will need to have updated
+                    # information related to agents (being paused) and in order to have that, this transaction needs to
+                    # finish first
+                    await live_session.get_client().set_state(endpoint, enabled=False)
             else:
                 endpoints_with_new_primary = []
                 for agent_name in agents:
@@ -283,7 +285,6 @@ class AgentManager(ServerSlice, SessionListener):
                         # The agent has an active agent instance that has to be paused
                         del self.tid_endpoint_to_session[key]
                         await live_session.get_client().set_state(agent_name, enabled=False)
-                        # TODO h check this primary
                         endpoints_with_new_primary.append((agent_name, None))
                 await data.Agent.update_primary(
                     env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
@@ -295,8 +296,6 @@ class AgentManager(ServerSlice, SessionListener):
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
             if opt.server_use_resource_scheduler.get():
-                if endpoint is None:
-                    return
                 key = (env.id, const.AGENT_SCHEDULER_ID)
                 live_session = self.tid_endpoint_to_session.get(key)
                 if not live_session:
@@ -304,7 +303,12 @@ class AgentManager(ServerSlice, SessionListener):
                     live_session = self.tid_endpoint_to_session.get(key)
                     assert live_session
                     self.tid_endpoint_to_session[key] = live_session
-                await live_session.get_client().set_state(endpoint, enabled=True)
+
+                if endpoint is not None and endpoint != const.AGENT_SCHEDULER_ID:
+                    # We don't need to do this when the environment is resumed because the scheduler will need to have updated
+                    # information related to agents (being unpaused) and in order to have that, this transaction needs to
+                    # finish first
+                    await live_session.get_client().set_state(endpoint, enabled=True)
             else:
                 endpoints_with_new_primary = []
                 for agent_name in agents:
@@ -1241,7 +1245,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         :return: True iff a new agent process was started.
         """
-        logging.warning("I HAVE BEEN CALLED!!!!!")
         if self._stopping:
             raise ShutdownInProgress()
 

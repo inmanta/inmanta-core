@@ -158,8 +158,8 @@ class ResourceScheduler(TaskManager):
     async def start(self) -> None:
         self.reset()
         self._running = True
-        await self.read_version()
         await self.read_agent_instances()
+        await self.read_version()
 
     async def stop(self) -> None:
         self._running = False
@@ -254,11 +254,7 @@ class ResourceScheduler(TaskManager):
         self,
     ) -> None:
         """
-        Update model state and scheduled work based on the latest released version in the database, e.g. when the scheduler is
-        started or when a new version is released. Triggers a deploy after updating internal state:
-        - schedules new or updated resources to be deployed
-        - schedules any resources that are not in a known good state.
-        - rearranges deploy tasks by requires if required
+        Update model state and scheduled work based on the status of the different agents created by the Scheduler, e.g.
         """
         agent_instances = await Agent.get_list(environment=self.environment)
         if agent_instances is None:
@@ -328,14 +324,13 @@ class ResourceScheduler(TaskManager):
             for resource in deleted_resources:
                 self._work.delete_resource(resource)
 
-    # TODO h Read everytime we want to do something or only read from db when starting / resuming -
-    #  > Confirm if not stale when one agent (DB authorive)
     def _start_for_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
         self._workers[agent] = asyncio.create_task(self._run_for_agent(agent=agent))
 
     async def _run_for_agent(self, agent: str) -> None:
-        """Main loop for one agent"""
+        """Main loop for one agent. It will first fetch its actual state from the DB (and the state of its environment) to make
+        sure that it's allowed to run."""
         current_environment = await Environment.get_by_id(self.environment)
         assert current_environment
         if current_environment.halted:
@@ -355,22 +350,21 @@ class ResourceScheduler(TaskManager):
 
             self._work.agent_queues.task_done(agent, task)
 
-    async def refresh_state(self) -> bool:
+    async def is_running(self) -> bool:
         current_environment = await Environment.get_by_id(self.environment)
         assert current_environment
         requested_agent = await data.Agent.get(env=self.environment, endpoint=const.AGENT_SCHEDULER_ID)
-        return current_environment.halted or requested_agent.paused
+        return not (current_environment.halted or requested_agent.paused)
 
     async def refresh_agent_state_from_db(self, name: str) -> None:
         """
-        Stop the scheduler / a particular agent. Depending on the provided name, one or the other will be impacted by this
-        action. If the scheduler is stopped, the executor manager will also be stopped to kill any remaining processes.
-        Otherwise, only the agent will be stopped (if it exists)
+        Refresh from the DB (authoritative entity) the actual state of the agent.
+            - If the agent is not paused: It will make sure that the agent is running.
+            - If the agent is paused: Stop a particular agent.
 
-        :param name: The name of the agent to stop
+        :param name: The name of the agent
         """
         requested_agent = await data.Agent.get(env=self.environment, endpoint=name)
-        # TODO h if agent not in dict?
 
         # This should never occur as the Scheduler is creating these 'agents'!
         if requested_agent and name not in self._state.agent_status:
@@ -388,8 +382,10 @@ class ResourceScheduler(TaskManager):
             # so it will time out eventually
             self._state.agent_status[name] = AgentStatus.STOPPED
         else:
+            old_status = self._state.agent_status[name]
             self._state.agent_status[name] = AgentStatus.STARTED
-            self._start_for_agent(name)
+            if old_status != AgentStatus.STARTED and (name not in self._workers or self._workers[name].done()):
+                self._start_for_agent(name)
 
     # TaskManager interface
 

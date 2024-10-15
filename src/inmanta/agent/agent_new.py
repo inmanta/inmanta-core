@@ -200,8 +200,7 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
         if agent == AGENT_SCHEDULER_ID:
-            should_be_stopped = await self.scheduler.refresh_state()
-            enabled = not should_be_stopped  # TODO h remove
+            enabled = await self.scheduler.is_running()
 
             if enabled:
                 await self.start_working()
@@ -213,7 +212,7 @@ class Agent(SessionEndpoint):
             except LookupError:
                 return 404, "No such agent"
 
-        return 200, f"{agent} has been {'started' if enabled else 'stopped'} - {should_be_stopped}"
+        return 200, f"{agent} has been {'started' if enabled else 'stopped'}"
 
     async def on_reconnect(self) -> None:
         name = AGENT_SCHEDULER_ID
@@ -328,19 +327,3 @@ class Agent(SessionEndpoint):
             os.mkdir(executor_dir)
 
         return dir_map
-
-    # TODO h missing change if agent is paused and then resumed
-    """
-    Resume the scheduler / a particular agent. Depending on the provided name, one or the other will be impacted by this
-    action. If the scheduler is resumed, the executor manager will be resumed. Otherwise, only the agent will be resumed
-    (if it exists)
-
-    :param name: The name of the agent to resume
-    """
-    """
-    Stop the scheduler / a particular agent. Depending on the provided name, one or the other will be impacted by this
-    action. If the scheduler is stopped, the executor manager will also be stopped to kill any remaining processes.
-    Otherwise, only the agent will be stopped (if it exists)
-
-    :param name: The name of the agent to stop
-    """
