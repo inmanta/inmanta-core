@@ -40,11 +40,9 @@ from inmanta.config import Config
 from inmanta.data import ResourceIdStr
 from inmanta.deploy import state, tasks
 from inmanta.deploy.scheduler import ResourceScheduler
-from inmanta.deploy.state import AgentStatus
+from inmanta.deploy.state import AgentStatus, BlockedStatus
 from inmanta.deploy.tasks import Task
 from inmanta.protocol import Client
-from inmanta.deploy.scheduler import ResourceScheduler
-from inmanta.deploy.state import BlockedStatus
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.util import retry_limited
 from mypy.memprofile import defaultdict

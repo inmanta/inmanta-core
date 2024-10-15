@@ -217,7 +217,10 @@ class ModelState:
         else:
             resource_status = ResourceStatus.UNDEFINED if not transient else ResourceStatus.HAS_UPDATE
             self.resource_state[resource] = ResourceState(
-                status=resource_status, deployment_result=DeploymentResult.NEW, blocked=BlockedStatus.YES, agent_status=AgentStatus.STARTED
+                status=resource_status,
+                deployment_result=DeploymentResult.NEW,
+                blocked=BlockedStatus.YES,
+                agent_status=AgentStatus.STARTED,
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
@@ -281,7 +284,10 @@ class ModelState:
             self.resource_state[resource].blocked = BlockedStatus.NO
         else:
             self.resource_state[resource] = ResourceState(
-                status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW, blocked=BlockedStatus.NO, agent_status=AgentStatus.STARTED
+                status=ResourceStatus.HAS_UPDATE,
+                deployment_result=DeploymentResult.NEW,
+                blocked=BlockedStatus.NO,
+                agent_status=AgentStatus.STARTED,
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.add(resource)
