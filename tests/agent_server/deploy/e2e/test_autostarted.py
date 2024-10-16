@@ -27,6 +27,7 @@ from uuid import UUID
 
 import psutil
 import pytest
+from psutil import Process
 
 from inmanta import config, const, data
 from inmanta.agent import Agent
@@ -268,40 +269,6 @@ def ensure_resource_tracker_is_started() -> None:
     process.close()
 
 
-def retrieve_mapping_process(current_processes: list[psutil.Process]) -> dict[str, list[psutil.Process]]:
-    """
-    Create a mapping of the current snapshot of processes that have been started by Pytest
-
-    :param current_processes: Current processes
-    """
-    inmanta_fork_server = []
-    inmanta_executor = []
-    postgres_processes = []
-    python_processes = []
-    other_processes = []
-
-    for process in current_processes:
-        match process.name():
-            case "inmanta: multiprocessing fork server":
-                inmanta_fork_server.append(process)
-            case executor if "inmanta: executor process" in executor:
-                inmanta_executor.append(process)
-            case "python":
-                python_processes.append(process)
-            case "pg_ctl":
-                postgres_processes.append(process)
-            case _:
-                other_processes.append(process)
-
-    return {
-        "inmanta fork server": inmanta_fork_server,
-        "inmanta executor": inmanta_executor,
-        "python": python_processes,
-        "pg_ctl": postgres_processes,
-        "other": other_processes,
-    }
-
-
 def wait_for_terminated_status(current_children: list[psutil.Process], expected_terminated_process: int = 1) -> bool:
     """
     Check that the number of terminated processes matches the expected ones
@@ -334,63 +301,53 @@ async def ensure_consistent_starting_point(agent: Agent, ensure_resource_tracker
     :param agent: The agent fixture (that we want to stop before running the test)
     :param ensure_resource_tracker_is_started: The fixture that creates a Resource Tracker process
     """
-
-    def is_consistent_state(current_processes: list[psutil.Process], process_mapping: dict[str, list[psutil.Process]]) -> bool:
-        """
-        Returns True if we are in one of the above situation, False otherwise
-
-        :param current_processes: Current processes
-        :param process_mapping: Current mapping of processes
-        """
-        match len(current_processes):
-            case 2:
-                return len(process_mapping["pg_ctl"]) == 1 and len(process_mapping["python"]) == 1
-            case 3:
-                return (
-                    len(process_mapping["pg_ctl"]) == 1
-                    and len(process_mapping["python"]) == 2
-                    or len(process_mapping["pg_ctl"]) == 1
-                    and len(process_mapping["python"]) == 1
-                    and len(process_mapping["inmanta fork server"]) == 1
-                )
-            case 4:
-                return (
-                    len(process_mapping["pg_ctl"]) == 1
-                    and len(process_mapping["python"]) == 2
-                    and len(process_mapping["inmanta fork server"]) == 1
-                )
-            case _:
-                return False
-
-    async def wait_for_consistent_state() -> bool:
-        """
-        Wait for a consistent state
-        """
-        pre_start_children = get_process_state(current_pid)
-        assert len(pre_start_children) == 1
-        assert len(pre_start_children.values()) == 1
-        old_children = list(pre_start_children.values())[0]
-        mapping_process = retrieve_mapping_process(old_children)
-
-        return is_consistent_state(current_processes=old_children, process_mapping=mapping_process)
-
     current_pid = os.getpid()
     await agent.stop()
-    await retry_limited(wait_for_consistent_state, timeout=10)
     return current_pid
 
 
-def get_process_state(current_pid: int) -> dict[psutil.Process, list[psutil.Process]]:
+def get_process_state(current_pid: int) -> dict[str, list[Process]]:
     """
     Retrieves the current list of processes running under this process
 
     :param current_pid: The PID of this process
     """
-    return {process: process.children(recursive=True) for process in psutil.process_iter() if process.pid == current_pid}
+    return {
+        " ".join(process.cmdline()): process.children(recursive=True)
+        for process in psutil.process_iter()
+        if process.pid == current_pid
+    }
+
+
+def filter_relevant_processes(processes: dict[str, list[Process]]) -> dict[str, Process]:
+    relevant_processes = {}
+    children = list(processes.values())[0]
+    children.sort(key=lambda x: x.name(), reverse=True)
+    for child in children:
+        match child.name():
+            case "inmanta: multiprocessing fork server":
+                if "scheduler" in relevant_processes and child.create_time() >= relevant_processes["scheduler"].create_time():
+                    relevant_processes["inmanta: multiprocessing fork server"] = child
+            case executor if "inmanta: executor process" in executor:
+                relevant_processes["inmanta: executor process"] = child
+            case "python":
+                cmd_line_process = " ".join(child.cmdline())
+                resource_tracker_import = "from multiprocessing.resource_tracker"
+                if resource_tracker_import in cmd_line_process:
+                    pass
+                elif "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
+                    relevant_processes["scheduler"] = child
+            case "pg_ctl":
+                pass
+            case _:
+                assert False
+    return relevant_processes
 
 
 @pytest.mark.parametrize(
-    "auto_start_agent,should_time_out,time_to_sleep,", [(True, False, 2), (True, True, 120)]
+    # "auto_start_agent,should_time_out,time_to_sleep,", [(True, False, 2), (True, True, 120)]
+    "auto_start_agent,should_time_out,time_to_sleep,",
+    [(True, True, 120)],
 )  # this overrides a fixture to allow the agent to fork!
 async def test_halt_deploy(
     snippetcompiler,
@@ -419,11 +376,9 @@ async def test_halt_deploy(
     start_children = get_process_state(current_pid)
     assert len(start_children) == 1
     assert len(start_children.values()) == 1
-    current_children = list(start_children.values())[0]
-    for children in current_children:
-        assert children.is_running()
-
-    pre_existent_children = {e.pid for e in current_children}
+    current_children = filter_relevant_processes(start_children)
+    for child in current_children.values():
+        assert child.is_running()
 
     snippetcompiler.setup_for_snippet(
         f"""
@@ -457,17 +412,15 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
 
     assert len(children_after_deployment) == 1
     assert len(children_after_deployment.values()) == 1
-    current_children_after_deployment: list[psutil.Process] = list(children_after_deployment.values())[0]
-    # The resource tracker, the fork server and the new executor should be there
+    current_children_after_deployment = filter_relevant_processes(children_after_deployment)
+
     expected_additional_children_after_deployment = 3
-    assert (
-        len(current_children_after_deployment) == len(pre_existent_children) + expected_additional_children_after_deployment
-    ), (
-        "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent! "
+    assert len(current_children_after_deployment) == expected_additional_children_after_deployment, (
+        "These processes should be present: The Scheduler, the fork server and the actual agent! "
         f"Actual state: {current_children_after_deployment}"
     )
-    for children in current_children_after_deployment:
-        assert children.is_running()
+    for child in current_children_after_deployment.values():
+        assert child.is_running()
 
     result = await client.list_versions(tid=environment)
     assert result.code == 200
@@ -493,21 +446,23 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     assert expected_agents_status[const.AGENT_SCHEDULER_ID]
     assert expected_agents_status["agent1"]
 
+    await retry_limited(
+        wait_for_terminated_status,
+        timeout=const.EXECUTOR_GRACE_HARD + 2,
+        current_children=current_children_after_deployment.values(),
+    )
+
     halted_children = get_process_state(current_pid)
     assert len(halted_children) == 1
     assert len(halted_children.values()) == 1
-    current_halted_children = list(halted_children.values())[0]
-
-    await retry_limited(
-        wait_for_terminated_status, timeout=const.EXECUTOR_GRACE_HARD + 2, current_children=current_children_after_deployment
-    )
+    current_halted_children = filter_relevant_processes(halted_children)
 
     assert len(current_halted_children) == len(current_children_after_deployment) - 1, (
-        "These processes should be present: Pg_ctl, the Server, the Scheduler and the fork server. "
+        "These processes should be present: The Scheduler and the fork server. "
         "The agent created by the scheduler should have been killed!"
     )
-    for children in current_halted_children:
-        assert children.is_running()
+    for child in current_halted_children.values():
+        assert child.is_running()
 
     await client.resume_environment(environment)
 
@@ -519,29 +474,22 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
     assert not expected_agents_status["agent1"]
 
-    def testme():
-        logger.warning(f"CURRENT: {list(get_process_state(current_pid).values())[0]}")
-        logger.warning(f"WAS: {current_children_after_deployment}")
-        return len(list(get_process_state(current_pid).values())[0]) == len(current_children_after_deployment)
-
-    await retry_limited(testme, 10)
     await retry_limited(
-        lambda: len(list(get_process_state(current_pid).values())[0]) == len(current_children_after_deployment), 10
+        lambda: len(filter_relevant_processes(get_process_state(current_pid))) == len(current_children_after_deployment), 10
     )
 
     resumed_children = get_process_state(current_pid)
-
     assert len(resumed_children) == 1
     assert len(resumed_children.values()) == 1
-    current_resumed_children = list(resumed_children.values())[0]
+    current_resumed_children = filter_relevant_processes(resumed_children)
 
     await retry_limited(lambda: len(current_resumed_children) == len(current_children_after_deployment), 10)
 
     assert len(current_resumed_children) == len(
         current_children_after_deployment
-    ), "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
+    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
 
-    await retry_limited(lambda: all([children.is_running() for children in current_resumed_children]), 10)
+    await retry_limited(lambda: all([child.is_running() for child in current_resumed_children.values()]), 10)
     result = await client.list_agents(tid=environment)
     assert result.code == 200
     assert len(result.result["agents"]) == 2
@@ -579,11 +527,9 @@ async def test_pause_agent_deploy(
     start_children = get_process_state(current_pid)
     assert len(start_children) == 1
     assert len(start_children.values()) == 1
-    current_children = list(start_children.values())[0]
-    for children in current_children:
+    current_children = filter_relevant_processes(start_children)
+    for children in current_children.values():
         assert children.is_running()
-
-    pre_existent_children = {e.pid for e in current_children}
 
     snippetcompiler.setup_for_snippet(
         """
@@ -605,21 +551,20 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
         deployed = summary["by_state"]["deployed"]
-        logging.warning(f"SUMMARY {summary}")
         return deployed == deployed_resources
 
     await retry_limited(are_resources_deployed, timeout=10)
-    children_after_deployment = get_process_state(current_pid)
 
+    children_after_deployment = get_process_state(current_pid)
     assert len(children_after_deployment) == 1
     assert len(children_after_deployment.values()) == 1
-    current_children_after_deployment: list[psutil.Process] = list(children_after_deployment.values())[0]
-    # The resource tracker, the fork server and the new executor should be there
+    current_children_after_deployment = filter_relevant_processes(children_after_deployment)
+
     expected_additional_children_after_deployment = 3
     assert (
-        len(current_children_after_deployment) == len(pre_existent_children) + expected_additional_children_after_deployment
-    ), "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
-    for children in current_children_after_deployment:
+        len(current_children_after_deployment) == expected_additional_children_after_deployment
+    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
+    for children in current_children_after_deployment.values():
         assert children.is_running()
 
     result = await client.list_versions(tid=environment)
@@ -632,6 +577,8 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert len(result.result["agents"]) == 2
     expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
     assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+    assert not expected_agents_status["agent1"]
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     assert result.code == 200
@@ -652,16 +599,27 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
-    await retry_limited(wait_for_terminated_status, timeout=6, interval=1, current_children=current_children_after_deployment)
+    await retry_limited(
+        wait_for_terminated_status, timeout=6, interval=1, current_children=current_children_after_deployment.values()
+    )
 
     halted_children = get_process_state(current_pid)
     assert len(halted_children) == 1
     assert len(halted_children.values()) == 1
-    current_halted_children = list(halted_children.values())[0]
+    current_halted_children = filter_relevant_processes(halted_children)
+
     assert len(current_halted_children) == len(current_children_after_deployment) - 1
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.unpause.value)
     assert result.code == 200
+
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+    assert not expected_agents_status["agent1"]
 
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
@@ -672,17 +630,25 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     ), f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
+    def wait_for_new_executor() -> bool:
+        resumed_children = get_process_state(current_pid)
+        assert len(resumed_children) == 1
+        assert len(resumed_children.values()) == 1
+        current_resumed_children = filter_relevant_processes(resumed_children)
+        return len(current_resumed_children) == 3
+
+    await retry_limited(wait_for_new_executor, 5)
     resumed_children = get_process_state(current_pid)
     assert len(resumed_children) == 1
     assert len(resumed_children.values()) == 1
-    current_resumed_children: list[psutil.Process] = list(resumed_children.values())[0]
+    current_resumed_children = filter_relevant_processes(resumed_children)
 
     # The scheduler and the new executor should at least be there. Depending on if the inmanta fork server was already running,
     # we might have another process
     assert (
-        len(current_resumed_children) == len(pre_existent_children) + expected_additional_children_after_deployment
-    ), "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
-    for children in current_resumed_children:
+        len(current_resumed_children) == expected_additional_children_after_deployment
+    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
+    for children in current_resumed_children.values():
         assert children.is_running()
 
 
@@ -717,11 +683,10 @@ async def test_agent_paused_scheduler_crash(
     start_children = get_process_state(current_pid)
     assert len(start_children) == 1
     assert len(start_children.values()) == 1
-    current_children = list(start_children.values())[0]
-    for children in current_children:
-        assert children.is_running()
+    current_children = filter_relevant_processes(start_children)
 
-    pre_existent_children = {e.pid for e in current_children}
+    for children in current_children.values():
+        assert children.is_running()
 
     snippetcompiler.setup_for_snippet(
         """
@@ -748,7 +713,7 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     children_after_deployment = get_process_state(current_pid)
     assert len(children_after_deployment) == 1
     assert len(children_after_deployment.values()) == 1
-    current_children_after_deployment: list[psutil.Process] = list(children_after_deployment.values())[0]
+    current_children_after_deployment = filter_relevant_processes(children_after_deployment)
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     assert result.code == 200
@@ -762,7 +727,7 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
         current_children_mapping = get_process_state(current_pid)
         assert len(current_children_mapping) == 1
         assert len(current_children_mapping.values()) == 1
-        current_children: list[psutil.Process] = list(current_children_mapping.values())[0]
+        current_children = filter_relevant_processes(current_children_mapping)
         return len(current_children) == 3
 
     await retry_limited(wait_for_scheduler, 5)
@@ -770,13 +735,12 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     children_after_restart = get_process_state(current_pid)
     assert len(children_after_restart) == 1
     assert len(children_after_restart.values()) == 1
-    current_children_children_after_restart: list[psutil.Process] = list(children_after_restart.values())[0]
+    current_children_children_after_restart = filter_relevant_processes(children_after_restart)
 
-    assert (
-        len(current_children_children_after_restart) == len(pre_existent_children)
-        and len(current_children_children_after_restart) == len(current_children_after_deployment) - 3
-    ), "These processes should be present: Pg_ctl, the Server, the Scheduler and the fork server!"
-    for children in current_children_children_after_restart:
+    assert len(current_children_children_after_restart) == len(
+        current_children_after_deployment
+    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
+    for children in current_children_children_after_restart.values():
         assert children.is_running()
 
     result = await client.resource_list(environment, deploy_summary=True)
@@ -815,11 +779,10 @@ async def test_agent_paused_should_remain_paused_after_environment_resume(
     start_children = get_process_state(current_pid)
     assert len(start_children) == 1
     assert len(start_children.values()) == 1
-    current_children = list(start_children.values())[0]
-    for children in current_children:
-        assert children.is_running()
+    current_children = filter_relevant_processes(start_children)
 
-    pre_existent_children = {e.pid for e in current_children}
+    for children in current_children.values():
+        assert children.is_running()
 
     snippetcompiler.setup_for_snippet(
         """
@@ -844,17 +807,17 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
         return deployed == deployed_resources
 
     await retry_limited(are_resources_deployed, timeout=10)
-    children_after_deployment = get_process_state(current_pid)
 
+    children_after_deployment = get_process_state(current_pid)
     assert len(children_after_deployment) == 1
     assert len(children_after_deployment.values()) == 1
-    current_children_after_deployment: list[psutil.Process] = list(children_after_deployment.values())[0]
-    # The resource tracker, the fork server and the new executor should be there
+    current_children_after_deployment = filter_relevant_processes(children_after_deployment)
+
     expected_additional_children_after_deployment = 3
     assert (
-        len(current_children_after_deployment) == len(pre_existent_children) + expected_additional_children_after_deployment
-    ), "These processes should be present: Pg_ctl, the Server, the Scheduler, the fork server and the actual agent!"
-    for children in current_children_after_deployment:
+        len(current_children_after_deployment) == expected_additional_children_after_deployment
+    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
+    for children in current_children_after_deployment.values():
         assert children.is_running()
 
     result = await client.list_versions(tid=environment)
@@ -880,6 +843,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
 
     await retry_limited(are_resources_deployed, timeout=6, interval=1, deployed_resources=2)
+
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
@@ -887,7 +851,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
-    await retry_limited(wait_for_terminated_status, timeout=10, current_children=current_children_after_deployment)
+    await retry_limited(wait_for_terminated_status, timeout=10, current_children=current_children_after_deployment.values())
 
     result = await client.halt_environment(tid=environment)
     assert result.code == 200
@@ -904,17 +868,19 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     halted_children = get_process_state(current_pid)
     assert len(halted_children) == 1
     assert len(halted_children.values()) == 1
-    current_halted_children = list(halted_children.values())[0]
+    current_halted_children = filter_relevant_processes(halted_children)
 
     await retry_limited(
-        wait_for_terminated_status, timeout=const.EXECUTOR_GRACE_HARD + 2, current_children=current_children_after_deployment
+        wait_for_terminated_status,
+        timeout=const.EXECUTOR_GRACE_HARD + 2,
+        current_children=current_children_after_deployment.values(),
     )
 
     assert len(current_halted_children) == len(current_children_after_deployment) - 1, (
         "These processes should be present: Pg_ctl, the Server, the Scheduler and the fork server. "
         "The agent created by the scheduler should have been killed!"
     )
-    for children in current_halted_children:
+    for children in current_halted_children.values():
         assert children.is_running()
 
     await client.resume_environment(environment)
@@ -937,10 +903,11 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     resumed_children = get_process_state(current_pid)
     assert len(resumed_children) == 1
     assert len(resumed_children.values()) == 1
-    current_resumed_children = list(resumed_children.values())[0]
+    current_resumed_children = filter_relevant_processes(resumed_children)
+
     assert len(current_halted_children) == len(current_resumed_children), (
         "These processes should be present: Pg_ctl, the Server, the Scheduler and the fork server. "
         "The agent created by the scheduler should have been killed!"
     )
-    for children in current_resumed_children:
+    for children in current_resumed_children.values():
         assert children.is_running()

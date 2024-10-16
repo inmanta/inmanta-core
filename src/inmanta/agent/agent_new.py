@@ -199,29 +199,44 @@ class Agent(SessionEndpoint):
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
-        if agent == AGENT_SCHEDULER_ID:
-            return (
-                400,
-                "Invalid request, cannot pause the scheduler! The closest action to that would be to pause the environment",
-            )
+        # if agent == AGENT_SCHEDULER_ID:
+        #     return (
+        #         400,
+        #         "Invalid request, cannot pause the scheduler! The closest action to that would be to pause the environment",
+        #     )
 
-        try:
-            await self.scheduler.refresh_agent_state_from_db(name=agent)
-        except LookupError:
-            return 404, f"No such agent: {agent}"
+        if agent == AGENT_SCHEDULER_ID:
+            if enabled:
+                await self.executor_manager.start()
+                await self.scheduler.start()
+                self._enable_time_triggers()
+            else:
+                await self.executor_manager.stop()
+                await self.executor_manager.join([], timeout=const.EXECUTOR_GRACE_HARD)
+                await self.scheduler.stop()
+        else:
+
+            try:
+                await self.scheduler.refresh_agent_state_from_db(name=agent)
+            except LookupError:
+                return 404, f"No such agent: {agent}"
 
         return 200, f"{agent} has been {'started' if enabled else 'stopped'}"
 
-    @protocol.handle(methods_v2.resume_scheduler_environment)
+    @protocol.handle(methods_v2.resume_scheduler_environment, environment="tid")
     async def resume_scheduler_environment(self, environment: uuid.UUID) -> Apireturn:
         assert environment == self.environment
-        await self.start_working()
+        await self.executor_manager.start()
+        await self.scheduler.start()
+        self._enable_time_triggers()
         return 200, f"Environment {environment} has been resumed"
 
-    @protocol.handle(methods_v2.halt_scheduler_environment)
+    @protocol.handle(methods_v2.halt_scheduler_environment, environment="tid")
     async def halt_scheduler_environment(self, environment: uuid.UUID) -> Apireturn:
         assert environment == self.environment
-        await self.stop_working(timeout=const.EXECUTOR_GRACE_HARD)
+        await self.executor_manager.stop()
+        await self.executor_manager.join([], timeout=const.EXECUTOR_GRACE_HARD)
+        await self.scheduler.stop()
         return 200, f"Environment {environment} has been stopped"
 
     async def on_reconnect(self) -> None:

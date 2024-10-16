@@ -214,7 +214,7 @@ class ResourceScheduler(TaskManager):
     async def stop(self) -> None:
         self._running = False
         self._work.agent_queues.send_shutdown()
-        worker_tasks = [worker._task for worker in self._workers.values() if worker.status != AgentStatus.STOPPED and worker._task is not None]
+        worker_tasks = [worker._task for worker in self._workers.values() if worker._task is not None]
         await asyncio.gather(*worker_tasks)
 
     async def deploy(self) -> None:
