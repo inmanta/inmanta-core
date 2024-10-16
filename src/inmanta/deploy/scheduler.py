@@ -32,9 +32,6 @@ from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import work
 from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
-from inmanta.deploy.tasks import DryRun, RefreshFact, Task
-from inmanta.deploy.work import PrioritizedTask
-from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
 from inmanta.protocol import Client
