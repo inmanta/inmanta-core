@@ -539,6 +539,7 @@ async def test_pause_agent_deploy(
     """
     current_pid = ensure_consistent_starting_point
 
+    logger.warning(f"DB INFO: {server._slices['core.database']._pool._connect_kwargs}")
     # First, configure everything
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     agent_name = "agent1"
@@ -772,10 +773,20 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
         assert len(current_children_mapping) == 1
         assert len(current_children_mapping.values()) == 1
         current_children = filter_relevant_processes(current_children_mapping)
-        return len(current_children) == 3
+        # Only the Scheduler should be there as no agent will be recreated given that it's paused
+        return len(current_children) == 1
 
     # Wait for the scheduler
     await retry_limited(wait_for_scheduler, 5)
+
+    # Everything should be consistent in DB: the agent should still be paused
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+    assert expected_agents_status["agent1"]
 
     # Let's recheck the number of processes after restarting the server
     children_after_restart = get_process_state(current_pid)
@@ -783,8 +794,8 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     assert len(children_after_restart.values()) == 1
     current_children_children_after_restart = filter_relevant_processes(children_after_restart)
 
-    assert len(current_children_children_after_restart) == len(
-        current_children_after_deployment
+    assert (
+        len(current_children_children_after_restart) == len(current_children_after_deployment) - 2
     ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
     for children in current_children_children_after_restart.values():
         assert children.is_running()

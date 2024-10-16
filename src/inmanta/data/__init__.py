@@ -1494,7 +1494,9 @@ class BaseDocument(metaclass=DocumentMeta):
         )
         await self._execute_query(query, *values, connection=connection)
 
-    async def insert_if_not_exist(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def insert_if_not_exist(
+        self, field_to_return: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Optional[typing.Any]:
         """
         Insert a new document based on the instance passed if it does not exist. Validation is done based on the defined fields.
         """
@@ -1505,9 +1507,12 @@ class BaseDocument(metaclass=DocumentMeta):
             f"INSERT INTO {self.table_name()} "
             f"({column_names_as_sql_string}) "
             f"VALUES ({values_as_parameterized_sql_string}) "
-            "ON CONFLICT DO NOTHING"
+            "ON CONFLICT DO NOTHING "
+            f"RETURNING {field_to_return}"
+            if field_to_return is not None
+            else ""
         )
-        await self._execute_query(query, *values, connection=connection)
+        return await self._fetchval(query, *values, connection=connection)
 
     async def insert_with_overwrite(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
