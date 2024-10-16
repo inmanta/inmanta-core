@@ -113,6 +113,11 @@ class TaskRunner:
         self.status = AgentStatus.STOPPING
 
     async def notify(self) -> None:
+        """
+        Method to notify the runner that something has changed in the DB. This method will fetch the new information
+        regarding the environment and the information related to the runner (agent). Depending on the desired state of the
+        agent, it will either stop / start the agent or do nothing
+        """
         current_environment = await Environment.get_by_id(self._scheduler.environment)
         assert current_environment
         current_agent = await data.Agent.get(env=self._scheduler.environment, endpoint=self.endpoint)
@@ -129,8 +134,8 @@ class TaskRunner:
                 self.start()
 
     async def run(self) -> None:
-        """Main loop for one agent. It will first fetch its actual state from the DB (and the state of its environment) to make
-        sure that it's allowed to run."""
+        """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
+        allowed to run."""
         paused_status = await data.Agent(environment=self._scheduler.environment, name=self.endpoint).insert_if_not_exist(
             field_to_return="paused"
         )
