@@ -123,7 +123,7 @@ class InmantaBootloader:
         if not timeout:
             await self._stop()
         else:
-            await asyncio.wait_for(self._stop(), timeout=timeout + 5)
+            await asyncio.wait_for(self._stop(), timeout=timeout)
 
     async def _stop(self) -> None:
         await self.restserver.stop()

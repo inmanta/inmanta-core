@@ -302,7 +302,6 @@ class AgentManager(ServerSlice, SessionListener):
                     await self._autostarted_agent_manager._ensure_scheduler(env)
                     live_session = self.tid_endpoint_to_session.get(key)
                     assert live_session
-                    self.tid_endpoint_to_session[key] = live_session
 
                 if endpoint is not None and endpoint != const.AGENT_SCHEDULER_ID:
                     # We don't need to do this when the environment is resumed because the scheduler will need to have updated
