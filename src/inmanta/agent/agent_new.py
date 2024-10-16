@@ -229,7 +229,7 @@ class Agent(SessionEndpoint):
         if result.code == 200 and result.result is not None:
             state = result.result
             if "enabled" in state and isinstance(state["enabled"], bool):
-                await self.resume_scheduler_environment(self._env_id)
+                await self.start_working()
             else:
                 LOGGER.warning("Server reported invalid state %s" % (repr(state)))
         else:
