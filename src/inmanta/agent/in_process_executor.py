@@ -28,9 +28,9 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import FailedResources, ResourceDetails
+from inmanta.agent.executor import DeployResult, FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
-from inmanta.const import ParameterSource, ResourceState
+from inmanta.const import ParameterSource
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader
 from inmanta.resources import Id, Resource
@@ -253,16 +253,25 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
     @tracing.instrument("InProcessExecutor.execute", extract_args=True)
     async def execute(
         self,
+        action_id: uuid.UUID,
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-    ) -> ResourceState:
+        requires: dict[ResourceIdStr, const.ResourceState],
+    ) -> DeployResult:
         try:
-            resource: Resource | None = await self.deserialize(resource_details, const.ResourceAction.deploy)
-        except Exception:
-            return const.ResourceState.unavailable
-        assert resource is not None
-        ctx = handler.HandlerContext(resource, logger=self.logger)
+            resource: Resource = Resource.deserialize(resource_details.attributes)
+        except Exception as e:
+            msg = data.LogLine.log(
+                level=const.LogLevel.ERROR,
+                msg="Unable to deserialize %(resource_id)s: %(cause)s",
+                resource_id=resource_details.rvid,
+                cause=e,
+            )
+            return DeployResult.undeployable(resource_details.rvid, action_id, msg)
+
+        ctx = handler.HandlerContext(resource, action_id=action_id, logger=self.logger)
+
         ctx.debug(
             "Start run for resource %(resource)s because %(reason)s",
             resource=str(resource_details.rvid),
@@ -270,15 +279,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             agent=self.name,
             reason=reason,
         )
-
-        try:
-            requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(
-                ctx.action_id, self.environment, resource_details.rvid
-            )
-        except Exception:
-            ctx.set_status(const.ResourceState.failed)
-            ctx.exception("Failed to report the start of the deployment to the server")
-            return const.ResourceState.failed
 
         async with self.activity_lock:
             with self._cache:
@@ -296,12 +296,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-        await self._report_resource_deploy_done(resource_details, ctx)
-        # context should not be none at this point
-        if ctx.status is None:
-            ctx.error("Status not set, should not happen")
-            return const.ResourceState.failed
-        return ctx.status
+        return DeployResult.from_ctx(resource_details.rvid, ctx)
 
     async def dry_run(
         self,
