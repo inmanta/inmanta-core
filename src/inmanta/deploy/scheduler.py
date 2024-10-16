@@ -132,7 +132,7 @@ class TaskRunner:
         self.status = AgentStatus.STARTED
         await data.Agent(environment=self._scheduler.environment, name=self.endpoint).insert_if_not_exist()
 
-        while self.status == AgentStatus.STARTED:
+        while self._scheduler._running and self.status == AgentStatus.STARTED:
             task: Task = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
             try:
                 await task.execute(self._scheduler, self.endpoint)

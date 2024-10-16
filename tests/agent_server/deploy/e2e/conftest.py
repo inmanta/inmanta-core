@@ -70,5 +70,5 @@ async def agent(server, environment):
 
     yield a
 
-    await a.executor_manager.stop()
+    a.working = True
     await a.stop()

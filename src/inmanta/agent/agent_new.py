@@ -187,10 +187,10 @@ class Agent(SessionEndpoint):
             return
         self.working = False
         self._disable_time_triggers()
+        await self.scheduler.stop()
         await self.executor_manager.stop()
         if timeout is not None:
             await self.executor_manager.join([], timeout=timeout)
-        await self.scheduler.stop()
 
     @protocol.handle(methods_v2.update_agent_map)
     async def update_agent_map(self, agent_map: dict[str, str]) -> None:
