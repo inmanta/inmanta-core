@@ -70,5 +70,4 @@ async def agent(server, environment):
 
     yield a
 
-    a.working = True
     await a.stop()

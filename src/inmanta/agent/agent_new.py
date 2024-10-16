@@ -225,12 +225,11 @@ class Agent(SessionEndpoint):
         return 200, f"Environment {environment} has been stopped"
 
     async def on_reconnect(self) -> None:
-        name = AGENT_SCHEDULER_ID
-        result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=name)
+        result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)
         if result.code == 200 and result.result is not None:
             state = result.result
             if "enabled" in state and isinstance(state["enabled"], bool):
-                await self.set_state(name, state["enabled"])
+                await self.resume_scheduler_environment(self._env_id)
             else:
                 LOGGER.warning("Server reported invalid state %s" % (repr(state)))
         else:

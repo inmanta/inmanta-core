@@ -511,6 +511,20 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
 
     await client.resume_environment(environment)
 
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+    assert not expected_agents_status["agent1"]
+
+    def testme():
+        logger.warning(f"CURRENT: {list(get_process_state(current_pid).values())[0]}")
+        logger.warning(f"WAS: {current_children_after_deployment}")
+        return len(list(get_process_state(current_pid).values())[0]) == len(current_children_after_deployment)
+
+    await retry_limited(testme, 10)
     await retry_limited(
         lambda: len(list(get_process_state(current_pid).values())[0]) == len(current_children_after_deployment), 10
     )
