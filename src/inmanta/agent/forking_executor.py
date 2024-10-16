@@ -855,6 +855,9 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         venv_dir = pathlib.Path(self.storage_folder) / "venvs"
         venv_dir.mkdir(exist_ok=True)
 
+        self.code_folder = pathlib.Path(self.storage_folder) / "code"
+        self.code_folder.mkdir(exist_ok=True)
+
         # Env manager
         self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venv_dir.absolute()), self.thread_pool)
 
@@ -910,7 +913,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
             executor.process.pid,
             self.render_id(blueprint),
         )
-        storage_for_blueprint = os.path.join(self.storage_folder, "code", blueprint.blueprint_hash())
+        storage_for_blueprint = os.path.join(self.code_folder, blueprint.blueprint_hash())
         os.makedirs(storage_for_blueprint, exist_ok=True)
         failed_types = await executor.connection.call(
             InitCommand(

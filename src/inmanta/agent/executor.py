@@ -417,11 +417,11 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         This method must execute under the self._locks.get(<blueprint-hash>) lock to ensure thread-safe operations for each
         unique blueprint.
 
-        :param blueprint: The blueprint specifying the configuration for the new virtual environment.
+        :param member_id: The blueprint specifying the configuration for the new virtual environment.
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
         """
-        interal_id = member_id.blueprint_hash()
-        env_dir_name: str = interal_id
+        internal_id = member_id.blueprint_hash()
+        env_dir_name: str = internal_id
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
         # Check if the directory already exists and create it if not
@@ -433,7 +433,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
                 "Found existing venv for content %s at %s, content hash: %s",
                 str(member_id),
                 env_dir,
-                interal_id,
+                internal_id,
             )
             is_new = False  # Returning the path and False for existing directory
 
@@ -446,14 +446,14 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
                 "Venv is already present but it was not correctly initialized. Re-creating it for content %s, "
                 "content hash: %s located in %s",
                 str(member_id),
-                interal_id,
+                internal_id,
                 env_dir,
             )
             await loop.run_in_executor(self.thread_pool, process_environment.reset)
             is_new = True
 
         if is_new:
-            LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), interal_id)
+            LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), internal_id)
             await process_environment.create_and_install_environment(member_id)
         return process_environment
 

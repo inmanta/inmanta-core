@@ -322,7 +322,21 @@ class Agent(SessionEndpoint):
 
     def check_storage(self) -> dict[str, str]:
         """
-        Check if the server storage is configured and ready to use.
+        Check if the server storage is configured and ready to use. Ultimately, this is
+        what the layout on disk will look like:
+
+            /var/lib/inmanta/
+                ├─ executor_manager/
+                    ├─ venvs/
+                    │   ├─ venv_blueprint_hash_1/
+                    │   ├─ venv_blueprint_hash_2/
+                    │   ├─ ...
+                    │
+                    ├─ code/
+                        ├─ executor_blueprint_hash_1/
+                        ├─ executor_blueprint_hash_2/
+                        ├─ ...
+
         """
 
         state_dir = cfg.state_dir.get()
