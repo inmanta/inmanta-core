@@ -42,7 +42,16 @@ from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.resources import Id
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, TaskMethod, TaskSchedule, add_future, join_threadpools
+from inmanta.util import (
+    CronSchedule,
+    IntervalSchedule,
+    ScheduledTask,
+    TaskMethod,
+    TaskSchedule,
+    add_future,
+    ensure_directory_exist,
+    join_threadpools,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1317,36 +1326,15 @@ class Agent(SessionEndpoint):
         """
         Check if the server storage is configured and ready to use.
         """
-
-        # FIXME: review on disk layout: https://github.com/inmanta/inmanta-core/issues/7590
-
         state_dir = cfg.state_dir.get()
-
-        if not os.path.exists(state_dir):
-            os.mkdir(state_dir)
-
         agent_state_dir = os.path.join(state_dir, "agent")
 
-        if not os.path.exists(agent_state_dir):
-            os.mkdir(agent_state_dir)
-
-        dir_map = {"agent": agent_state_dir}
-
-        code_dir = os.path.join(agent_state_dir, "code")
-        dir_map["code"] = code_dir
-        if not os.path.exists(code_dir):
-            os.mkdir(code_dir)
-
-        env_dir = os.path.join(agent_state_dir, "env")
-        dir_map["env"] = env_dir
-        if not os.path.exists(env_dir):
-            os.mkdir(env_dir)
-
-        executor_dir = os.path.join(agent_state_dir, "executor")
-        dir_map["executor"] = executor_dir
-        if not os.path.exists(executor_dir):
-            os.mkdir(executor_dir)
-
+        dir_map = {
+            "agent": ensure_directory_exist(agent_state_dir),
+            "code": ensure_directory_exist(agent_state_dir, "code"),
+            "env": ensure_directory_exist(agent_state_dir, "env"),
+            "executor": ensure_directory_exist(agent_state_dir, "executor"),
+        }
         return dir_map
 
     @protocol.handle(methods.get_parameter, env="tid")

@@ -356,19 +356,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         os.makedirs(self.env_path)
 
 
-def initialize_envs_directory() -> str:
-    """
-    Initializes the base directory for storing virtual environments. If the directory
-    does not exist, it is created.
-
-    :return: The path to the environments directory.
-    """
-    state_dir = cfg.state_dir.get()
-    env_dir = os.path.join(state_dir, "envs")
-    os.makedirs(env_dir, exist_ok=True)
-    return env_dir
-
-
 class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, str, ExecutorVirtualEnvironment]):
     """
     Manages virtual environments to ensure efficient reuse.

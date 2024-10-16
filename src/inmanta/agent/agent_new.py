@@ -34,7 +34,16 @@ from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.types import Apireturn
-from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, Scheduler, TaskMethod, TaskSchedule, join_threadpools
+from inmanta.util import (
+    CronSchedule,
+    IntervalSchedule,
+    ScheduledTask,
+    Scheduler,
+    TaskMethod,
+    TaskSchedule,
+    ensure_directory_exist,
+    join_threadpools,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -168,7 +177,7 @@ class Agent(SessionEndpoint):
             self.sessionid,
             self._env_id,
             config.log_dir.get(),
-            self._storage["executor"],
+            self._storage["executor_manager"],
             LOGGER.level,
             cli_log=False,
         )
@@ -316,33 +325,10 @@ class Agent(SessionEndpoint):
         Check if the server storage is configured and ready to use.
         """
 
-        # FIXME: review on disk layout: https://github.com/inmanta/inmanta-core/issues/7590
-
         state_dir = cfg.state_dir.get()
+        executor_manager_state_dir = os.path.join(state_dir, "executor_manager")
 
-        if not os.path.exists(state_dir):
-            os.mkdir(state_dir)
-
-        agent_state_dir = os.path.join(state_dir, "agent")
-
-        if not os.path.exists(agent_state_dir):
-            os.mkdir(agent_state_dir)
-
-        dir_map = {"agent": agent_state_dir}
-
-        code_dir = os.path.join(agent_state_dir, "code")
-        dir_map["code"] = code_dir
-        if not os.path.exists(code_dir):
-            os.mkdir(code_dir)
-
-        env_dir = os.path.join(agent_state_dir, "env")
-        dir_map["env"] = env_dir
-        if not os.path.exists(env_dir):
-            os.mkdir(env_dir)
-
-        executor_dir = os.path.join(agent_state_dir, "executor")
-        dir_map["executor"] = executor_dir
-        if not os.path.exists(executor_dir):
-            os.mkdir(executor_dir)
-
+        dir_map = {
+            "executor_manager": ensure_directory_exist(executor_manager_state_dir),
+        }
         return dir_map
