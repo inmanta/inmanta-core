@@ -123,6 +123,8 @@ class TaskRunner:
         match self.status:
             case AgentStatus.STARTED if not should_be_running:
                 self.stop()
+                if current_environment.halted and self._task is not None:
+                    self._task.cancel("Environment is being halted")
             case AgentStatus.STOPPING | AgentStatus.STOPPED if should_be_running:
                 self.start()
 

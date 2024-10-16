@@ -284,7 +284,6 @@ def wait_for_terminated_status(current_children: list[psutil.Process], expected_
         except psutil.NoSuchProcess:
             terminated_process.append(None)
 
-    logger.warning(f"{terminated_process} - {current_children}")
     return len(terminated_process) == expected_terminated_process
 
 
@@ -539,7 +538,6 @@ async def test_pause_agent_deploy(
     """
     current_pid = ensure_consistent_starting_point
 
-    logger.warning(f"DB INFO: {server._slices['core.database']._pool._connect_kwargs}")
     # First, configure everything
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     agent_name = "agent1"
