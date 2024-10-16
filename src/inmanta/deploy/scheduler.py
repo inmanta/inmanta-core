@@ -427,7 +427,7 @@ class ResourceScheduler(TaskManager):
             await self._workers[name].notify()
             return
 
-        requested_agent = await data.Agent.get(env=self.environment, endpoint=name)  # TODO h worng
+        requested_agent = await data.Agent.get(env=self.environment, endpoint=name)
         if requested_agent:
             self._start_for_agent(agent=requested_agent.name)
             return
