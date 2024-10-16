@@ -146,7 +146,7 @@ def span(
         return no_span
 
 
-def attach_context(carrier: ContextCarrier | "logfire.propagate.ContextCarrier") -> ContextManager[None]:
+def attach_context(carrier: "ContextCarrier | logfire.propagate.ContextCarrier") -> ContextManager[None]:
     if enabled:
         return logfire.propagate.attach_context(carrier)
     else:
