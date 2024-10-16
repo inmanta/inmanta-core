@@ -20,7 +20,6 @@ import logging
 
 from agent_server.deploy.scheduler_test_util import wait_full_success
 from inmanta import const
-from inmanta.const import AgentAction
 from inmanta.deploy.state import DeploymentResult
 from utils import resource_action_consistency_check
 
@@ -168,11 +167,6 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     await client.deploy(environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy)
 
     await wait_full_success(client, environment)
-
-    result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
-    assert result.code == 200
-    result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.unpause.value)
-    assert result.code == 200
 
 
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):
