@@ -21,6 +21,7 @@ import functools
 import itertools
 from collections.abc import Iterator, Mapping, Set
 from dataclasses import dataclass
+from enum import IntEnum
 from typing import Callable, Generic, Optional, TypeVar
 
 from inmanta.data.model import ResourceIdStr
@@ -34,6 +35,18 @@ Type alias for the union of all task types. Allows exhaustive case matches.
 T = TypeVar("T", bound=tasks.Task, covariant=True)
 
 
+class TaskPriority(IntEnum):
+    # These priorities can be freely updated, we only care about the relative order
+    TERMINATED = -1
+    USER_DEPLOY = 0
+    NEW_VERSION_DEPLOY = 1
+    USER_REPAIR = 2
+    DRYRUN = 3
+    INTERVAL_DEPLOY = 4
+    FACT_REFRESH = 5
+    INTERVAL_REPAIR = 6
+
+
 @dataclass(frozen=True, kw_only=True)
 class PrioritizedTask(Generic[T]):
     """
@@ -45,7 +58,7 @@ class PrioritizedTask(Generic[T]):
     """
 
     task: T
-    priority: int
+    priority: TaskPriority
 
 
 @functools.total_ordering
@@ -103,10 +116,10 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         # use simple counter rather than time.monotonic_ns() for performance reasons
         self._entry_count: int = 0
         self._new_agent_notify: Callable[[str], None] = new_agent_notify
-        self._in_progress: set[tasks.Task] = set()
+        self._in_progress: dict[tasks.Task, TaskPriority] = {}
 
     @property
-    def in_progress(self) -> Set[tasks.Task]:
+    def in_progress(self) -> Mapping[tasks.Task, TaskPriority]:
         return self._in_progress
 
     def reset(self) -> None:
@@ -135,7 +148,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         """
         return set(self._tasks_by_resource.get(resource, {}).keys())
 
-    def remove(self, task: tasks.Task) -> int:
+    def remove(self, task: tasks.Task) -> TaskPriority:
         """
         Removes the given task from its associated agent queue. Raises KeyError if it is not in the queue.
         Returns the priority at which the deleted task was queued.
@@ -148,7 +161,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
             del self._tasks_by_resource[task.resource]
         return queue_item.task.priority
 
-    def discard(self, task: tasks.Task) -> Optional[int]:
+    def discard(self, task: tasks.Task) -> Optional[TaskPriority]:
         """
         Removes the given task from its associated agent queue if it is present.
         Returns the priority at which the deleted task was queued, if it was at all.
@@ -198,7 +211,8 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         """
         poison_pill = TaskQueueItem(
             task=PrioritizedTask(
-                task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")), priority=-1
+                task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")),
+                priority=TaskPriority.TERMINATED,
             ),
             insert_order=0,
         )
@@ -218,7 +232,8 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
                 continue
             # remove from the queue since it's been picked up
             self.discard(item.task.task)
-            self._in_progress.add(item.task.task)
+            # add the item to _in_progress with the correct priority
+            self._in_progress[item.task.task] = item.task.priority
             return item.task.task
 
     def task_done(self, agent: str, task: tasks.Task) -> None:
@@ -228,7 +243,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         Used by queue consumers. For each get() used to fetch a task, a subsequent call to task_done() tells the corresponding
         agent queue that the processing on the task is complete.
         """
-        self._in_progress.remove(task)
+        del self._in_progress[task]
         self._agent_queues[agent].task_done()
 
     #########################
@@ -295,6 +310,7 @@ class ScheduledWork:
         self,
         resources: Set[ResourceIdStr],
         *,
+        priority: TaskPriority,
         deploying: Optional[Set[ResourceIdStr]] = None,
         added_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
         dropped_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
@@ -306,6 +322,7 @@ class ScheduledWork:
 
         :param resources: Set of resources that should be deployed. Adds a deploy task to the scheduled work for each
             of these, unless it is already scheduled.
+        :param priority: The priority of this deploy.
         :param deploying: Set of resources for which a non-stale deploy is in progress, i.e. the scheduler does not need to
             take action to deploy the latest intent for any of these resources because that deploy is already in progress
             (it will still ensure they are scheduled if they have gotten new dependencies).
@@ -322,6 +339,13 @@ class ScheduledWork:
         # lookup caches for visited nodes
         queued: set[ResourceIdStr] = set(deploying)  # queued or running, pre-populate with in-progress deploys
         not_scheduled: set[ResourceIdStr] = set()
+
+        # Update the priority of deploying tasks if this method was called with a higher priority
+        # This will only increase the priority of propagated events
+        for resourceId in queued:
+            if resourceId in resources:
+                task = tasks.Deploy(resource=resourceId)
+                self.agent_queues._in_progress[task] = min(self.agent_queues._in_progress[task], priority)
 
         # First drop all dropped requires so that we work on the smallest possible set for this operation.
         for resource, dropped in dropped_requires.items():
@@ -377,11 +401,13 @@ class ScheduledWork:
                 # discard rather than remove because task may already be running, in which case we leave it run its course
                 # and simply add a new one
                 task: tasks.Deploy = tasks.Deploy(resource=resource)
-                priority: Optional[int] = self.agent_queues.discard(task)
+                task_priority: Optional[TaskPriority] = self.agent_queues.discard(task)
                 queued.remove(resource)
                 self._waiting[resource] = BlockedDeploy(
-                    # FIXME[#8015]: default priority
-                    task=PrioritizedTask(task=task, priority=priority if priority is not None else 0),
+                    task=PrioritizedTask(
+                        task=task,
+                        priority=min(task_priority, priority) if task_priority is not None else priority,
+                    ),
                     # task was previously ready to execute => assume no other blockers than this one
                     blocked_on=new_blockers,
                 )
@@ -391,17 +417,24 @@ class ScheduledWork:
 
         # ensure desired resource deploys are scheduled
         for resource in resources:
+            prioritized_task = PrioritizedTask(task=tasks.Deploy(resource=resource), priority=priority)
             if is_scheduled(resource):
-                # Deploy is already scheduled / running. No need to do anything here. If any of its dependencies are to be
+                # Deploy is already scheduled / running. Check to see if this task has a higher priority than the one already
+                # scheduled. If it has, update the priority. If any of its dependencies are to be
                 # scheduled as well, they will follow the provides relation to ensure this deploy waits its turn.
+                if prioritized_task.task in self.agent_queues:
+                    # simply add it again, the queue will make sure only the highest priority is kept
+                    self.agent_queues.queue_put_nowait(prioritized_task)
+                if resource in self._waiting:
+                    if self._waiting[resource].task.priority > priority:
+                        self._waiting[resource].task = prioritized_task
                 continue
             # task is not yet scheduled, schedule it now
             blocked_on: set[ResourceIdStr] = {
                 dependency for dependency in self.requires.get(resource, ()) if is_scheduled(dependency)
             }
             self._waiting[resource] = BlockedDeploy(
-                # FIXME[#8015]: priority
-                task=PrioritizedTask(task=tasks.Deploy(resource=resource), priority=0),
+                task=prioritized_task,
                 blocked_on=blocked_on,
             )
             not_scheduled.discard(resource)

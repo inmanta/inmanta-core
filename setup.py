@@ -36,7 +36,7 @@ requires = [
     "typing_inspect~=0.9",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
-    "setproctitle~=1.3"
+    "setproctitle~=1.3",
 ]
 
 

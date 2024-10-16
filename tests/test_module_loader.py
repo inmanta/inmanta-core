@@ -619,7 +619,8 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     # Activate the snippetcompiler venv
     project: Project = snippetcompiler_clean.setup_for_snippet("")
     active_env = project.virtualenv
-    jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
+
+    jinja2_version_before = active_env.get_installed_packages()["jinja2"].base_version
 
     # Install the module
     mod_artifact_path = ModuleTool().build(path=module_path)
@@ -628,7 +629,7 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
 
     assert ("these package versions have conflicting dependencies") in str(e.value.msg)
 
-    jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
+    jinja2_version_after = active_env.get_installed_packages()["jinja2"].base_version
     assert jinja2_version_before == jinja2_version_after
 
 
@@ -672,13 +673,13 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     )
 
     active_env = project.virtualenv
-    jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
+    jinja2_version_before = active_env.get_installed_packages()["jinja2"].base_version
 
     # Install project
     with pytest.raises(ConflictingRequirements):
         project.install_modules()
 
-    jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
+    jinja2_version_after = active_env.get_installed_packages()["jinja2"].base_version
     assert jinja2_version_before == jinja2_version_after
 
 

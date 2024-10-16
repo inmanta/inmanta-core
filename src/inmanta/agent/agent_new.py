@@ -31,6 +31,7 @@ from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
 from inmanta.deploy.scheduler import ResourceScheduler
+from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.types import Apireturn
 from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, Scheduler, TaskMethod, TaskSchedule, join_threadpools
@@ -132,8 +133,24 @@ class Agent(SessionEndpoint):
                 return True
             return False
 
-        periodic_schedule("deploy", self.scheduler.deploy, self._deploy_interval, self._deploy_splay_value)
-        periodic_schedule("repair", self.scheduler.repair, self._repair_interval, self._repair_splay_value)
+        async def interval_deploy() -> None:
+            await self.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
+
+        async def interval_repair() -> None:
+            await self.scheduler.repair(TaskPriority.INTERVAL_REPAIR)
+
+        periodic_schedule(
+            "deploy",
+            interval_deploy,
+            self._deploy_interval,
+            self._deploy_splay_value,
+        )
+        periodic_schedule(
+            "repair",
+            interval_repair,
+            self._repair_interval,
+            self._repair_splay_value,
+        )
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self._sched.add_action(action, schedule)
