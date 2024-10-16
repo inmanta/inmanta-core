@@ -47,7 +47,6 @@ from typing import BinaryIO, Callable, Generic, Optional, Sequence, TypeVar, Uni
 
 import asyncpg
 import click
-from packaging.utils import NormalizedName
 from tornado import gen
 
 import packaging
@@ -57,6 +56,7 @@ from crontab import CronTab
 from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
+from packaging.utils import NormalizedName
 from pydantic_core import Url
 
 LOGGER = logging.getLogger(__name__)
@@ -889,6 +889,7 @@ def remove_comment_part_from_specifier(to_clean: str) -> str:
 
 
 if typing.TYPE_CHECKING:
+
     class CanonicalRequirement(packaging.requirements.Requirement):
         name: NormalizedName
 

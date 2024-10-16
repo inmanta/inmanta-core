@@ -213,7 +213,7 @@ class PythonWorkingSet:
                 # The marker of the requirement doesn't apply on this environment
                 continue
 
-            name = NormalizedName(r.name) # requirement is normalized
+            name = NormalizedName(r.name)  # requirement is normalized
             if name not in installed_packages or not r.specifier.contains(installed_packages[name], prereleases=True):
                 return False
 
@@ -1220,7 +1220,7 @@ class ActiveEnv(PythonEnvironment):
         constraint_violations_strict: set[VersionConflict] = set()
         for c in all_constraints:
             requirement = c.requirement
-            req_name = NormalizedName(requirement.name) # requirement is already canonical
+            req_name = NormalizedName(requirement.name)  # requirement is already canonical
             if req_name not in installed_versions or (
                 not requirement.specifier.contains(installed_versions[req_name], prereleases=True)
                 and (not requirement.marker or (requirement.marker and requirement.marker.evaluate()))
@@ -1448,9 +1448,7 @@ class VirtualEnv(ActiveEnv):
         self.init_env()
         mock_process_env(python_path=self.python_path)
 
-        if self._activate_that():
-            # patch up pkg
-            self.notify_change()
+        self._activate_that()
 
         self._using_venv = True
 
@@ -1467,7 +1465,7 @@ class VirtualEnv(ActiveEnv):
         # Set sys.path
         sys.path = new_sys_path
 
-    def _activate_that(self) -> bool:
+    def _activate_that(self) -> None:
         # adapted from https://github.com/pypa/virtualenv/blob/master/virtualenv_embedded/activate_this.py
         # MIT license
         # Copyright (c) 2007 Ian Bicking and Contributors
@@ -1483,7 +1481,8 @@ class VirtualEnv(ActiveEnv):
         sys.real_prefix = sys.prefix
         sys.prefix = base
         self._update_sys_path()
-        return is_change
+        if is_change:
+            self.notify_change()
 
     def install_for_config(
         self,

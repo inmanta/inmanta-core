@@ -1056,7 +1056,6 @@ class ReentrantVirtualEnv(VirtualEnv):
             setting re_check makes it check every time
         """
         super().__init__(env_path)
-        self.first = True
         self.was_checked = False
         self.re_check = re_check
         # The venv we replaced when getting activated
@@ -1082,10 +1081,7 @@ class ReentrantVirtualEnv(VirtualEnv):
             # We are in use, just ignore double activation
             return
 
-        if self.first:
-            # First run
-            self.init_env()
-
+        self.init_env()
         self._using_venv = True
         self.snapshot = store_venv()
         self.previous_venv = swap_process_env(self)
@@ -1210,7 +1206,7 @@ class SnippetCompilationTest(KeepOnFail):
             install_v2_modules,
             strict_deps_check=strict_deps_check,
             main_file=main_file,
-            dirt_venv=dirty_venv,
+            dirty_venv=dirty_venv,
         )
 
     def _load_project(
@@ -1220,7 +1216,7 @@ class SnippetCompilationTest(KeepOnFail):
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
         main_file: str = "main.cf",
         strict_deps_check: Optional[bool] = None,
-        dirt_venv: bool = True,
+        dirty_venv: bool = True,
     ):
         loader.PluginModuleFinder.reset()
         self.project = Project(
@@ -1228,7 +1224,7 @@ class SnippetCompilationTest(KeepOnFail):
         )
         Project.set(self.project)
 
-        if dirt_venv:
+        if dirty_venv:
             # Don't bother loading the venv if we don't need to
             self.project.use_virtual_env()
             self._install_v2_modules(install_v2_modules)
@@ -1638,6 +1634,7 @@ def tmpvenv(tmpdir: py.path.local, deactive_venv) -> Iterator[tuple[py.path.loca
     yield (venv_dir, python_path)
 
 
+# Capture early, while loading code
 real_prefix = sys.prefix
 
 
