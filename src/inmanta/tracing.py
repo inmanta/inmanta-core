@@ -137,9 +137,9 @@ def span(
     *,
     _tags: Sequence[str] | None = None,
     _span_name: str | None = None,
-    _level: LevelName | None | "logfire.LevelName" = None,
+    _level: "LevelName | None | logfire.LevelName" = None,
     **attributes: Any,
-) -> NoopSpan | "logfire.LogfireSpan":
+) -> "NoopSpan | logfire.LogfireSpan":
     if enabled:
         return logfire.span(msg_template, _tags=_tags, _span_name=_span_name, _level=_level, **attributes)
     else:
