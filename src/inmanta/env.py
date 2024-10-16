@@ -41,7 +41,7 @@ from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import Callable, NamedTuple, Optional, Tuple, TypeVar, cast
+from typing import Callable, NamedTuple, Optional, Tuple, TypeVar
 
 import inmanta.util
 import packaging.requirements

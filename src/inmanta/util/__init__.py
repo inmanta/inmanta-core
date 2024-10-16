@@ -899,8 +899,8 @@ if typing.TYPE_CHECKING:
 else:
     CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
     """
-    A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized, which
-    allows us to compare names without dealing afterwards with the format of these requirements.
+    A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized,
+    which allows us to compare names without dealing afterwards with the format of these requirements.
     """
 
 
