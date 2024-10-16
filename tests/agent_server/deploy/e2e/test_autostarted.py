@@ -627,6 +627,8 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     assert len(result.result["agents"]) == 2
     expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
     assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+    assert expected_agents_status["agent1"]
 
     await retry_limited(are_resources_deployed, timeout=6, deployed_resources=2)
     result = await client.resource_list(environment, deploy_summary=True)
