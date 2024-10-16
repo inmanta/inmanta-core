@@ -106,6 +106,8 @@ class TaskRunner:
     def start(self) -> None:
         if self.status == AgentStatus.STOPPED:
             self._task = asyncio.create_task(self.run())
+        else:
+            self.status = AgentStatus.STARTED
 
     def stop(self) -> None:
         self.status = AgentStatus.STOPPING
@@ -113,9 +115,10 @@ class TaskRunner:
     async def notify(self) -> None:
         current_environment = await Environment.get_by_id(self._scheduler.environment)
         assert current_environment
-        agent_state = await data.Agent.get(env=self._scheduler.environment, endpoint=self.endpoint)
-        assert agent_state
-        should_be_running = not (current_environment.halted or agent_state.paused)
+        current_agent = await data.Agent.get(env=self._scheduler.environment, endpoint=self.endpoint)
+        if current_agent is None:
+            return
+        should_be_running = not (current_environment.halted or current_agent.paused)
 
         match self.status:
             case AgentStatus.STARTED if not should_be_running:
@@ -123,13 +126,12 @@ class TaskRunner:
             case AgentStatus.STOPPING | AgentStatus.STOPPED if should_be_running:
                 self.start()
 
-        self.status = AgentStatus.STOPPING
-
     async def run(self) -> None:
         """Main loop for one agent. It will first fetch its actual state from the DB (and the state of its environment) to make
         sure that it's allowed to run."""
         self.status = AgentStatus.STARTED
-        await self.notify()
+        await data.Agent(environment=self._scheduler.environment, name=self.endpoint).insert_if_not_exist()
+
         while self.status == AgentStatus.STARTED:
             task: Task = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
             try:
@@ -408,10 +410,12 @@ class ResourceScheduler(TaskManager):
 
         if name in self._workers:
             await self._workers[name].notify()
+            return
 
         requested_agent = await data.Agent.get(env=self.environment, endpoint=name)
         if requested_agent:
             self._start_for_agent(agent=requested_agent.name)
+            return
 
         if name not in self._state.agent_status and requested_agent is None:
             raise LookupError(f"The agent `{name}` does not exist!")

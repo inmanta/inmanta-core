@@ -317,6 +317,7 @@ def wait_for_terminated_status(current_children: list[psutil.Process], expected_
         except psutil.NoSuchProcess:
             terminated_process.append(None)
 
+    logger.warning(f"{terminated_process} - {current_children}")
     return len(terminated_process) == expected_terminated_process
 
 
@@ -590,6 +591,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
         deployed = summary["by_state"]["deployed"]
+        logging.warning(f"SUMMARY {summary}")
         return deployed == deployed_resources
 
     await retry_limited(are_resources_deployed, timeout=10)

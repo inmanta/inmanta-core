@@ -264,6 +264,7 @@ def resume_environment(tid: uuid.UUID) -> None:
     arg_options=methods.ENV_OPTS,
     client_types=[],
     server_agent=True,
+    enforce_auth=False,
     api_version=2,
 )
 def halt_scheduler_environment(tid: uuid.UUID) -> None:
@@ -284,6 +285,7 @@ def halt_scheduler_environment(tid: uuid.UUID) -> None:
     arg_options=methods.ENV_OPTS,
     client_types=[],
     server_agent=True,
+    enforce_auth=False,
     api_version=2,
 )
 def resume_scheduler_environment(tid: uuid.UUID) -> None:

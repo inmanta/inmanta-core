@@ -123,7 +123,6 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         # All we do is sync and on the io loop, no need for locks!
         out = self._agent_queues.get(agent_name, None)
         if out is not None:
-            out.task_done()
             return out
         out = asyncio.PriorityQueue()
         self._agent_queues[agent_name] = out
