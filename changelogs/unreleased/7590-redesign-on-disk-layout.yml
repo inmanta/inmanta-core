@@ -1,0 +1,4 @@
+description: Refactor agent/server on-disk layout.
+change-type: major
+destination-branches: [master]
+
