@@ -186,7 +186,7 @@ class PythonWorkingSet:
         """
         if not requirements:
             return True
-        installed_packages: dict[str, packaging.version.Version] = cls.get_packages_in_working_set()
+        installed_packages: dict[NormalizedName, packaging.version.Version] = cls.get_packages_in_working_set()
 
         # All thing to do, requirement + extra if added via extra
         worklist: list[Tuple[inmanta.util.CanonicalRequirement, Optional[str]]] = []
@@ -213,14 +213,15 @@ class PythonWorkingSet:
                 # The marker of the requirement doesn't apply on this environment
                 continue
 
-            if r.name not in installed_packages or not r.specifier.contains(installed_packages[r.name], prereleases=True):
+            name = NormalizedName(r.name) # requirement is normalized
+            if name not in installed_packages or not r.specifier.contains(installed_packages[name], prereleases=True):
                 return False
 
             if r.extras:
                 # if we have extr'as these may not have been installed!
                 # We have to recurse for them!
                 for extra in r.extras:
-                    found_distribution: Optional[Distribution] = distribution(r.name)
+                    found_distribution: Optional[Distribution] = distribution(name)
                     if found_distribution is None:
                         return False
 
@@ -238,7 +239,7 @@ class PythonWorkingSet:
         return True
 
     @classmethod
-    def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> dict[str, packaging.version.Version]:
+    def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> dict[NormalizedName, packaging.version.Version]:
         """
         Return all packages (under the canonicalized form) present in `pkg_resources.working_set` together with the version
         of the package.
@@ -297,7 +298,7 @@ class PythonWorkingSet:
             # recurse on direct dependencies
             return _get_tree_recursive(
                 (
-                    cast(NormalizedName, requirement.name)
+                    requirement.name
                     for requirement in (
                         parse_requirement(raw_requirement) for raw_requirement in (installed_distributions[dist].requires or [])
                     )
@@ -1009,7 +1010,7 @@ import sys
         to make sure that no Inmanta packages gets overridden.
         """
         protected_inmanta_packages: list[str] = cls.get_protected_inmanta_packages()
-        workingset: dict[str, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
+        workingset: dict[NormalizedName, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
         return [
             inmanta.util.parse_requirement(requirement=f"{pkg}=={workingset[pkg]}")
             for pkg in workingset
@@ -1207,25 +1208,26 @@ class ActiveEnv(PythonEnvironment):
                         if strict_scope.fullmatch(packaging.utils.canonicalize_name(dist_info.name))
                     )
                 ),
-                (cast(NormalizedName, requirement.requirement.name) for requirement in inmanta_constraints),
-                (cast(NormalizedName, requirement.requirement.name) for requirement in extra_constraints),
+                (requirement.requirement.name for requirement in inmanta_constraints),
+                (requirement.requirement.name for requirement in extra_constraints),
             )
         )
         full_strict_scope: abc.Set[NormalizedName] = PythonWorkingSet.get_dependency_tree(parameters)
 
-        installed_versions: dict[str, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
+        installed_versions: dict[NormalizedName, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
 
         constraint_violations: set[VersionConflict] = set()
         constraint_violations_strict: set[VersionConflict] = set()
         for c in all_constraints:
             requirement = c.requirement
-            if requirement.name not in installed_versions or (
-                not requirement.specifier.contains(installed_versions[requirement.name], prereleases=True)
+            req_name = NormalizedName(requirement.name) # requirement is already canonical
+            if req_name not in installed_versions or (
+                not requirement.specifier.contains(installed_versions[req_name], prereleases=True)
                 and (not requirement.marker or (requirement.marker and requirement.marker.evaluate()))
             ):
                 version_conflict = VersionConflict(
                     requirement=requirement,
-                    installed_version=installed_versions.get(requirement.name, None),
+                    installed_version=installed_versions.get(req_name, None),
                     owner=c.owner,
                 )
                 if c.is_owned_by(full_strict_scope):
@@ -1291,7 +1293,7 @@ class ActiveEnv(PythonEnvironment):
             for requirement in dist_info.requires or []
         )
 
-        installed_versions: dict[str, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
+        installed_versions: dict[NormalizedName, packaging.version.Version] = PythonWorkingSet.get_packages_in_working_set()
         constraint_violations: set[VersionConflict] = {
             VersionConflict(constraint, installed_versions.get(constraint.name, None))
             for constraint in all_constraints

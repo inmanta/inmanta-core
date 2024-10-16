@@ -47,6 +47,7 @@ from typing import BinaryIO, Callable, Generic, Optional, Sequence, TypeVar, Uni
 
 import asyncpg
 import click
+from packaging.utils import NormalizedName
 from tornado import gen
 
 import packaging
@@ -887,11 +888,19 @@ def remove_comment_part_from_specifier(to_clean: str) -> str:
     return drop_comment
 
 
-CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
-"""
-A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized, which
-allows us to compare names without dealing afterwards with the format of these requirements.
-"""
+if typing.TYPE_CHECKING:
+    class CanonicalRequirement(packaging.requirements.Requirement):
+        name: NormalizedName
+
+        def __init__(self, requirement: packaging.requirements.Requirement) -> None:
+            raise Exception("Typing dummy, should never be seen")
+
+else:
+    CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
+    """
+    A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized, which
+    allows us to compare names without dealing afterwards with the format of these requirements.
+    """
 
 
 def parse_requirement(requirement: str) -> CanonicalRequirement:
