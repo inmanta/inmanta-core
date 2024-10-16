@@ -241,24 +241,20 @@ class PythonWorkingSet:
     @classmethod
     def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> dict[NormalizedName, packaging.version.Version]:
         """
-        Return all packages (under the canonicalized form) present in `pkg_resources.working_set` together with the version
-        of the package.
+        Return all package names (under the canonicalized form) present on the sys.path with their version
 
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
         return {
-            packaging.utils.canonicalize_name(dist_info.name): packaging.version.Version(dist_info.version)
-            for dist_info in reversed(list(distributions()))  # make sure we get the first entry for every name
-            if not inmanta_modules_only or dist_info.name.startswith(const.MODULE_PKG_NAME_PREFIX)
+            name: packaging.version.Version(dist_info.version)
+            for name, dist_info in cls.get_dist_in_working_set().items()
+            if not inmanta_modules_only or name.startswith(const.MODULE_PKG_NAME_PREFIX)
         }
 
     @classmethod
     def get_dist_in_working_set(cls) -> dict[NormalizedName, Distribution]:
         """
-        Return all packages (under the canonicalized form) present in `pkg_resources.working_set` together with the version
-        of the package.
-
-        :param inmanta_modules_only: Only return inmanta modules from the working set
+        Return all packages (with the canonicalized name) present on the sys.path
         """
         return {
             packaging.utils.canonicalize_name(dist_info.name): dist_info
