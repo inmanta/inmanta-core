@@ -459,10 +459,27 @@ class PagingBoundaries:
     Represents the lower and upper bounds that should be used for the next and previous pages
     when listing domain entities.
 
-    :param start: largest value of the page for the primary sort column.
-    :param end: smallest value of the page for the primary sort column.
-    :param first_id: largest value of the page for the secondary sort column, if there is one.
-    :param last_id: smallest value of the page for the secondary sort column, if there is one.
+    The largest / smallest value of the current page represents respectively the min / max boundary value (exclusive) for the
+    neighbouring pages. Which represents next and which prev depends on sorting order (ASC or DESC).
+
+    Boundary values represent max and min values, regardless of sorting direction (ASC or DESC), i.e.
+                  |        prev             |                current page                    |    next
+     -------------|-------------------------|------------------------------------------------|----------------------
+     ASC sorting  | [  ...  ] (99 c)        | [ (100 d) ( 100 e) ... (10 000 r) (10 000 s) ] | (10 001 t) [ ...   ]
+                  |            start = 99   |     end = 100            start = 10 000        |     end = 10 001
+                  |            first_id = c |    last_id = d          first_id = s           |     first_id = t
+                  |
+     DESC sorting | [  ...  ] (10 001 s)    | [ (10 000 t) (10 000 r) ... (100 d) ( 100 c) ] |  (99 b) [ ...   ]
+                  |            end = 10 001 |          start = 10000          end = 100      |     start = 99
+                  |            last_id = t  |          first_id = t           last_id = c    |     first_id = b
+
+    So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "highest"
+    and "lowest".
+
+    :param start: largest value of current page for the primary sort column.
+    :param end: smallest value of current page for the primary sort column.
+    :param first_id: largest value of current page for the secondary sort column, if there is one.
+    :param last_id: smallest value of current page for the secondary sort column, if there is one.
     """
 
     def __init__(
