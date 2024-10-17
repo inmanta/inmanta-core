@@ -59,7 +59,14 @@ async def agent(server, environment):
     a = Agent(environment)
 
     executor = InProcessExecutorManager(
-        environment, a._client, asyncio.get_event_loop(), logger, a.thread_pool, str(pathlib.Path(a._storage["executor_manager"]) / "code"), str(pathlib.Path(a._storage["executor_manager"]) / "venvs"), False
+        environment,
+        a._client,
+        asyncio.get_event_loop(),
+        logger,
+        a.thread_pool,
+        str(pathlib.Path(a._storage["executor_manager"]) / "code"),
+        str(pathlib.Path(a._storage["executor_manager"]) / "venvs"),
+        False,
     )
     a.executor_manager = executor
     a.scheduler.executor_manager = executor
