@@ -1046,9 +1046,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
                 )
                 assert agent_client is not None, "The client towards the scheduler should not be down!"
-            # a = await agent_client.resume_scheduler_environment(tid=env.id)
-            a = await agent_client.set_state(const.AGENT_SCHEDULER_ID, enabled=True)
-            logging.warning(f"RESULT RESUMED: {a.result}")
+            await agent_client.set_state(const.AGENT_SCHEDULER_ID, enabled=True)
         else:
             agents = await data.Agent.get_list(environment=env.id)
             agent_list = [a.name for a in agents]
@@ -1070,11 +1068,8 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
                 )
                 if agent_client is None:
-
                     return
-                # a = await agent_client.halt_scheduler_environment(tid=env.id)
-                a = await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=False)
-                logging.warning(f"RESULT HALTED: {a.result}")
+                await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=False)
             else:
                 if env.id in self._agent_procs:
                     subproc = self._agent_procs[env.id]
