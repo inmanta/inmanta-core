@@ -1132,6 +1132,7 @@ src/inmanta/server/server.py:0: error: Argument 1 to "get_global_url_map" of "RE
 src/inmanta/server/services/resourceservice.py:0: error: Argument "args" to "__init__" of "LogRecord" has incompatible type "list[Never]"; expected "tuple[object, ...] | Mapping[str, object] | None"  [arg-type]
 src/inmanta/server/services/resourceservice.py:0: error: Module has no attribute "_startTime"  [attr-defined]
 src/inmanta/server/services/resourceservice.py:0: error: Missing type parameters for generic type "Feature"  [type-arg]
+src/inmanta/server/services/resourceservice.py:0: error: "ServerSlice" has no attribute "register_listener_for_multiple_actions"  [attr-defined]
 src/inmanta/server/services/resourceservice.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/server/services/resourceservice.py:0: error: Argument "changes" to "set_and_save" of "ResourceAction" has incompatible type "dict[ResourceVersionIdStr, dict[str, dict[str, Any]]]"; expected "dict[str, object]"  [arg-type]
 src/inmanta/server/services/resourceservice.py:0: error: Value of type variable "FuncT" of "__call__" of "handle" cannot be "Callable[[ResourceService, Environment, Id, UUID], Coroutine[Any, Any, dict[ResourceVersionIdStr, ResourceState]]]"  [type-var]
