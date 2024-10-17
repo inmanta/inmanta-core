@@ -317,6 +317,29 @@ class ResourceScheduler(TaskManager):
         requires_from_db = self._construct_requires_mapping(resources_from_db)
         await self._new_version(version, resources_from_db, requires_from_db)
 
+    async def reset_resource_state(
+        self,
+    ) -> None:
+        """
+        Update model state and scheduled work based on the latest released version in the database, e.g. when the scheduler is
+        started or when a new version is released. Triggers a deploy after updating internal state:
+        - schedules new or updated resources to be deployed
+        - schedules any resources that are not in a known good state.
+        - rearranges deploy tasks by requires if required
+        """
+        paused_executors = await data.Agent.get_list(environment=self.environment, paused=True)
+        for paused_executor in paused_executors:
+            deploying_resources = data.Resource.get_list(environment=self.environment,
+                                                         agent=paused_executor.name, status="deploying")
+
+        cm_version = await ConfigurationModel.get_latest_version(self.environment)
+        if cm_version is None:
+            return
+        version = cm_version.version
+        resources_from_db = await self._build_resource_mappings_from_db(version=version)
+        requires_from_db = self._construct_requires_mapping(resources_from_db)
+        await self._new_version(version, resources_from_db, requires_from_db)
+
     async def _new_version(
         self,
         version: int,
