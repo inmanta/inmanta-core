@@ -87,6 +87,7 @@ class Server(protocol.ServerSlice):
             "server": ensure_directory_exist(state_dir, "server"),
             "environments": ensure_directory_exist(server_state_dir, "environments"),
             "agents": ensure_directory_exist(server_state_dir, "agents"),
+            "scheduler_config": ensure_directory_exist(state_dir, "scheduler_config"),
             "logs": ensure_directory_exist(config.log_dir.get()),
         }
         return dir_map
