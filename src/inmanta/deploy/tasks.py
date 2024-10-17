@@ -18,7 +18,6 @@
 
 import abc
 import dataclasses
-import datetime
 import logging
 import traceback
 import uuid
@@ -26,6 +25,7 @@ from dataclasses import dataclass
 
 from inmanta import const, data, resources
 from inmanta.agent import executor
+from inmanta.agent.executor import DeployResult
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import scheduler, state
 
@@ -109,52 +109,81 @@ class PoisonPill(Task):
 
 class Deploy(Task):
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
+
+        # First do scheduler book keeping to establish what to do
         version: int
         resource_details: "state.ResourceDetails"
         intent = await task_manager.get_resource_intent(self.resource, for_deploy=True)
         if intent is None:
             # Stale resource, can simply be dropped.
             return
-        version, resource_details = intent
 
-        success: bool
+        # Resolve to exector form
+        version, resource_details = intent
+        executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
+
+        # Make id's
+        gid = uuid.uuid4()
+        action_id = uuid.uuid4()  # can this be gid ?
+
+        # The main difficulty off this code is exception handling
+        # We collect state here to report back in the finally block
+
+        # Status of the deploy for the executor/requires/provides
+        success: bool = True
+
+        # Full status of the deploy,
+        # may be unset if we fail before signaling start to the server, will be set if we signaled start
+        deploy_result: DeployResult | None = None
+
         try:
-            # FIXME: code loading interface is not nice like this,
-            #   - we may want to track modules per agent, instead of types
-            #   - we may also want to track the module version vs the model version
-            #       as it avoid the problem of fast chanfing model versions
-            executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
-            my_executor: executor.Executor = await self.get_executor(
-                task_manager, agent, executor_resource_details.id.entity_type, version
-            )
-        except Exception as e:
-            log_line = data.LogLine.log(
-                logging.ERROR,
-                "All resources of type `%(res_type)s` failed to load handler code or install handler code "
-                "dependencies: `%(error)s`\n%(traceback)s",
-                res_type=executor_resource_details.id.entity_type,
-                error=str(e),
-                traceback="".join(traceback.format_tb(e.__traceback__)),
-            )
-            await task_manager.client.resource_action_update(
-                tid=task_manager.environment,
-                resource_ids=[executor_resource_details.rvid],
-                action_id=uuid.uuid4(),
-                action=const.ResourceAction.deploy,
-                started=datetime.datetime.now().astimezone(),
-                finished=datetime.datetime.now().astimezone(),
-                messages=[log_line],
-                status=const.ResourceState.unavailable,
-            )
-            success = False
-        else:
+            # This try catch block ensures we report at the end of the task
+
+            # Signal start to server
             try:
-                gid = uuid.uuid4()
-                # FIXME: reason argument is not used
-                deploy_result: const.ResourceState = await my_executor.execute(
-                    gid, executor_resource_details, "New Scheduler initiated action"
+                requires: dict[ResourceIdStr, const.ResourceState] = await task_manager.send_in_progress(
+                    action_id, executor_resource_details.rvid
                 )
-                success = deploy_result == const.ResourceState.deployed
+            except Exception:
+                # Unrecoverable, can't reach server
+                success = False
+                LOGGER.error(
+                    "Failed to report the start of the deployment to the server for %s",
+                    resource_details.resource_id,
+                    exc_info=True,
+                )
+                return
+
+            # Get executor
+            try:
+                # FIXME: code loading interface is not nice like this,
+                #   - we may want to track modules per agent, instead of types
+                #   - we may also want to track the module version vs the model version
+                #       as it avoid the problem of fast chanfing model versions
+
+                my_executor: executor.Executor = await self.get_executor(
+                    task_manager, agent, executor_resource_details.id.entity_type, version
+                )
+            except Exception as e:
+                log_line = data.LogLine.log(
+                    logging.ERROR,
+                    "All resources of type `%(res_type)s` failed to load handler code or install handler code "
+                    "dependencies: `%(error)s`\n%(traceback)s",
+                    res_type=executor_resource_details.id.entity_type,
+                    error=str(e),
+                    traceback="".join(traceback.format_tb(e.__traceback__)),
+                )
+                deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
+                success = False
+                return
+
+            # Deploy
+            try:
+                # FIXME: reason argument is not used
+                deploy_result = await my_executor.execute(
+                    action_id, gid, executor_resource_details, "New Scheduler initiated action", requires
+                )
+                success = deploy_result.status == const.ResourceState.deployed
             except Exception as e:
                 log_line = data.LogLine.log(
                     logging.ERROR,
@@ -163,8 +192,22 @@ class Deploy(Task):
                     error=str(e),
                     traceback="".join(traceback.format_tb(e.__traceback__)),
                 )
+                deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
                 success = False
         finally:
+            if deploy_result is not None:
+                # We ignaled start, so we signal end
+                try:
+                    await task_manager.send_deploy_done(deploy_result)
+                except Exception:
+                    success = False
+                    LOGGER.error(
+                        "Failed to report the start of the deployment to the server for %s",
+                        resource_details.resource_id,
+                        exc_info=True,
+                    )
+
+            # Always notify scheduler
             await task_manager.report_resource_state(
                 resource=self.resource,
                 attribute_hash=resource_details.attribute_hash,

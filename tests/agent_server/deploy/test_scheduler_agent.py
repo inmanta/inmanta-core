@@ -26,6 +26,7 @@ import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Mapping, Optional, Sequence
+from uuid import UUID
 
 import pytest
 
@@ -34,10 +35,13 @@ from agent_server.deploy.scheduler_test_util import DummyCodeManager, make_requi
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployResult, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
+from inmanta.const import Change
 from inmanta.data import ResourceIdStr
+from inmanta.data.model import ResourceVersionIdStr
 from inmanta.deploy import state, tasks
+from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import BlockedStatus
 from inmanta.deploy.work import TaskPriority
@@ -75,12 +79,27 @@ class DummyExecutor(executor.Executor):
         self.dry_run_count = 0
         self.facts_count = 0
 
-    async def execute(self, gid: uuid.UUID, resource_details: ResourceDetails, reason: str) -> const.ResourceState:
+    async def execute(
+        self,
+        action_id: uuid.UUID,
+        gid: uuid.UUID,
+        resource_details: ResourceDetails,
+        reason: str,
+        requires: dict[ResourceIdStr, const.ResourceState],
+    ) -> DeployResult:
         self.execute_count += 1
-        return (
+        result = (
             const.ResourceState.failed
             if resource_details.attributes.get(FAIL_DEPLOY, False) is True
             else const.ResourceState.deployed
+        )
+        return DeployResult(
+            resource_details.rvid,
+            action_id,
+            result,
+            [],
+            {},
+            Change.nochange,
         )
 
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
@@ -123,14 +142,22 @@ class ManagedExecutor(DummyExecutor):
         for deploy in self._deploys.values():
             deploy.set_result(const.ResourceState.undefined)
 
-    async def execute(self, gid: uuid.UUID, resource_details: ResourceDetails, reason: str) -> const.ResourceState:
+    async def execute(
+        self,
+        action_id: uuid.UUID,
+        gid: uuid.UUID,
+        resource_details: ResourceDetails,
+        reason: str,
+        requires: dict[ResourceIdStr, const.ResourceState],
+    ) -> DeployResult:
         assert resource_details.rid not in self._deploys
         self._deploys[resource_details.rid] = asyncio.get_running_loop().create_future()
         # wait until the test case sets desired resource state
         result: const.ResourceState = await self._deploys[resource_details.rid]
         del self._deploys[resource_details.rid]
         self.execute_count += 1
-        return result
+
+        return DeployResult(resource_details.rvid, action_id, result, [], {}, Change.nochange)
 
 
 class DummyManager(executor.ExecutorManager[executor.Executor]):
@@ -166,6 +193,17 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
 
+class DummyStateManager(StateUpdateManager):
+
+    async def send_in_progress(
+        self, action_id: UUID, resource_id: ResourceVersionIdStr
+    ) -> dict[ResourceIdStr, const.ResourceState]:
+        pass
+
+    async def send_deploy_done(self, result: DeployResult) -> None:
+        pass
+
+
 async def pass_method():
     pass
 
@@ -188,6 +226,7 @@ class TestAgent(Agent):
             return self.scheduler.mock_versions[version]
 
         self.scheduler._build_resource_mappings_from_db = build_resource_mappings_from_db
+        self.scheduler._state_update_delegate = DummyStateManager()
 
 
 @pytest.fixture
@@ -342,12 +381,12 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
                 return False
         return True
 
-    await retry_limited_fast(lambda: rid1 in executor1.deploys)
+    await retry_limited_fast(lambda: rid1 in executor1.deploys, 50)
     executor1.deploys[rid1].set_result(const.ResourceState.deployed)
-    await retry_limited_fast(lambda: rid2 in executor2.deploys)
+    await retry_limited_fast(lambda: rid2 in executor2.deploys, 50)
     executor2.deploys[rid2].set_result(const.ResourceState.deployed)
 
-    await retry_limited_fast(done)
+    await retry_limited_fast(done, 50)
 
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 1
