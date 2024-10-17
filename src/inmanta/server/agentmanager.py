@@ -1269,7 +1269,8 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         if not os.path.exists(config_dir):
             os.mkdir(config_dir)
 
-        config_path = os.path.join(config_dir, "agent.cfg")
+        file_name: str = "scheduler.cfg" if use_resource_scheduler else "agent.cfg"
+        config_path = os.path.join(config_dir, file_name)
         with open(config_path, "w+", encoding="utf-8") as fd:
             fd.write(config)
 
