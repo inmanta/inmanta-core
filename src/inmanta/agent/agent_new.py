@@ -340,9 +340,10 @@ class Agent(SessionEndpoint):
         """
 
         state_dir = cfg.state_dir.get()
-        executor_manager_state_dir = os.path.join(state_dir, "executor_manager")
+        if not os.path.exists(state_dir):
+            os.mkdir(state_dir)
 
         dir_map = {
-            "executor_manager": ensure_directory_exist(executor_manager_state_dir),
+            "executor_manager": ensure_directory_exist(state_dir, "executor_manager"),
         }
         return dir_map
