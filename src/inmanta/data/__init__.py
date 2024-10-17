@@ -3394,21 +3394,22 @@ class Agent(BaseDocument):
         obj = await cls.get_one(environment=env, name=endpoint, connection=connection, lock=lock)
         return obj
 
-    async def retrieve_paused_status(self, connection: Optional[asyncpg.connection.Connection] = None) -> bool:
-        (column_names, values) = self._get_column_names_and_values()
-        column_names_as_sql_string = ",".join(column_names)
-        values_as_parameterized_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
-        query = (
-            f"INSERT INTO {self.table_name()} "
-            f"({column_names_as_sql_string}) "
-            f"VALUES ({values_as_parameterized_sql_string}) "
-            "ON CONFLICT DO NOTHING "
-            "RETURNING paused"
-        )
-        new_agent_paused_status = await self._fetchval(query, *values, connection=connection)
+    @classmethod
+    async def retrieve_paused_status(
+        cls, environment: uuid.UUID, endpoint: str, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> bool:
+        query = """
+            INSERT INTO agent
+            (last_failover,paused,id_primary,unpause_on_resume,environment,name)
+            VALUES (NULL,FALSE,NULL,NULL,$1,$2)
+            ON CONFLICT DO NOTHING
+            RETURNING paused
+        """
+        values = [cls._get_value(environment), cls._get_value(endpoint)]
+        new_agent_paused_status = await cls._fetchval(query, *values, connection=connection)
         # The entry already exists, we ended up in a conflict, so None is returned
         if new_agent_paused_status is None:
-            current_agent = await self.get(env=self.environment, endpoint=self.name)
+            current_agent = await cls.get(env=environment, endpoint=endpoint)
             assert current_agent is not None
             return current_agent.paused
         else:

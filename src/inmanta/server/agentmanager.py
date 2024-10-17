@@ -259,6 +259,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Pause a logical agent by pausing an active agent instance if it exists, and removing the logical agent's primary.
         """
+        endpoints_with_new_primary = []
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
             if opt.server_use_resource_scheduler.get():
@@ -276,8 +277,13 @@ class AgentManager(ServerSlice, SessionListener):
                     # information related to agents (being paused) and in order to have that, this transaction needs to
                     # finish first
                     await live_session.get_client().set_state(endpoint, enabled=False)
+                elif endpoint is None or endpoint == const.AGENT_SCHEDULER_ID:
+                    # We need to update information in the DB
+                    endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, None))
+                    await data.Agent.update_primary(
+                        env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
+                    )
             else:
-                endpoints_with_new_primary = []
                 for agent_name in agents:
                     key = (env.id, agent_name)
                     live_session = self.tid_endpoint_to_session.get(key)
@@ -293,6 +299,7 @@ class AgentManager(ServerSlice, SessionListener):
     async def _start_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
+        endpoints_with_new_primary = []
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
             if opt.server_use_resource_scheduler.get():
@@ -300,16 +307,22 @@ class AgentManager(ServerSlice, SessionListener):
                 live_session = self.tid_endpoint_to_session.get(key)
                 if not live_session:
                     await self._autostarted_agent_manager._ensure_scheduler(env)
-                    live_session = self.tid_endpoint_to_session.get(key)
+                    live_session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
                     assert live_session
+                    self.tid_endpoint_to_session[key] = live_session
 
                 if endpoint is not None and endpoint != const.AGENT_SCHEDULER_ID:
                     # We don't need to do this when the environment is resumed because the scheduler will need to have updated
                     # information related to agents (being unpaused) and in order to have that, this transaction needs to
                     # finish first
                     await live_session.get_client().set_state(endpoint, enabled=True)
+                elif endpoint is None or endpoint == const.AGENT_SCHEDULER_ID:
+                    # We need to update information in the DB
+                    endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, live_session.id))
+                    await data.Agent.update_primary(
+                        env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
+                    )
             else:
-                endpoints_with_new_primary = []
                 for agent_name in agents:
                     key = (env.id, agent_name)
                     live_session = self.tid_endpoint_to_session.get(key)
@@ -1070,6 +1083,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 if agent_client is None:
                     return
                 await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=False)
+                del self._agent_manager.tid_endpoint_to_session[(env.id, const.AGENT_SCHEDULER_ID)]
             else:
                 if env.id in self._agent_procs:
                     subproc = self._agent_procs[env.id]

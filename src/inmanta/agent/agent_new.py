@@ -198,7 +198,7 @@ class Agent(SessionEndpoint):
         await self.scheduler.start()
         self._enable_time_triggers()
 
-    async def stop_working(self, timeout: Optional[int] = None) -> None:
+    async def stop_working(self, timeout: float = 0.0) -> None:
         """Stop working, connection lost"""
         if not self.working:
             return
@@ -206,8 +206,7 @@ class Agent(SessionEndpoint):
         self._disable_time_triggers()
         await self.scheduler.stop()
         await self.executor_manager.stop()
-        if timeout is not None:
-            await self.executor_manager.join([], timeout=timeout)
+        await self.executor_manager.join([], timeout=timeout)
         await self.scheduler.join()
 
     @protocol.handle(methods_v2.update_agent_map)
@@ -217,11 +216,8 @@ class Agent(SessionEndpoint):
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
-        # logging.warning(f"SET STATE? {agent} - {enabled}")
-
         if agent == AGENT_SCHEDULER_ID:
             should_be_running = await self.scheduler.should_be_running(agent)
-            # logging.warning(f"SHOULD BE RUNNING? {should_be_running}")
             if should_be_running:
                 await self.start_working()
             else:
