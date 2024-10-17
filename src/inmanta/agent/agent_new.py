@@ -177,7 +177,7 @@ class Agent(SessionEndpoint):
             self.sessionid,
             self._env_id,
             config.log_dir.get(),
-            self._storage["executor_manager"],
+            self._storage["executors"],
             LOGGER.level,
             cli_log=False,
         )
@@ -326,7 +326,7 @@ class Agent(SessionEndpoint):
         what the layout on disk will look like:
 
             /var/lib/inmanta/
-                ├─ executor_manager/
+                ├─ executors/
                     ├─ venvs/
                     │   ├─ venv_blueprint_hash_1/
                     │   ├─ venv_blueprint_hash_2/
@@ -344,6 +344,6 @@ class Agent(SessionEndpoint):
             os.mkdir(state_dir)
 
         dir_map = {
-            "executor_manager": ensure_directory_exist(state_dir, "executor_manager"),
+            "executors": ensure_directory_exist(state_dir, "executors"),
         }
         return dir_map
