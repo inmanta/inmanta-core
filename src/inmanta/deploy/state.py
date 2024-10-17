@@ -126,7 +126,7 @@ class AgentStatus(StrEnum):
     The status of the agent responsible of a given resource.
 
     STARTED: Agent has been started.
-    STARTED: Agent is stopping.
+    STOPPING: Agent is stopping.
     STOPPED: Agent has been stopped (previously called PAUSED).
     """
 
@@ -177,6 +177,11 @@ class ModelState:
     version: int
     resources: dict[ResourceIdStr, ResourceDetails] = dataclasses.field(default_factory=dict)
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
+    """
+    Resources that have a new desired state (might be simply a change of its dependencies), which are still being processed by
+    the resource scheduler. This is a short-lived transient state, used for internal concurrency control. Kept separate from
+    ResourceStatus so that it lives outside of the scheduler lock's scope.
+    """
     resource_state: dict[ResourceIdStr, ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
     dirty: set[ResourceIdStr] = dataclasses.field(default_factory=set)
@@ -185,11 +190,6 @@ class ModelState:
     types_per_agent: dict[str, dict[ResourceType, int]] = dataclasses.field(
         default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
     )
-    """
-    Resources that have a new desired state (might be simply a change of its dependencies), which are still being processed by
-    the resource scheduler. This is a shortlived transient state, used for internal concurrency control. Kept separate from
-    ResourceStatus so that it lives outside of the scheduler lock's scope.
-    """
 
     def reset(self) -> None:
         self.version = 0

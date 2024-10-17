@@ -218,6 +218,8 @@ class Agent(SessionEndpoint):
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
         if agent == AGENT_SCHEDULER_ID:
             should_be_running = await self.scheduler.should_be_running(agent)
+            enabled = should_be_running
+
             if should_be_running:
                 await self.start_working()
             else:
@@ -228,6 +230,8 @@ class Agent(SessionEndpoint):
             except LookupError:
                 return 404, f"No such agent: {agent}"
 
+            enabled = await self.scheduler.is_agent_running(name=agent)
+
         return 200, f"{agent} has been {'started' if enabled else 'stopped'}"
 
     async def on_reconnect(self) -> None:
@@ -235,7 +239,10 @@ class Agent(SessionEndpoint):
         if result.code == 200 and result.result is not None:
             state = result.result
             if "enabled" in state and isinstance(state["enabled"], bool):
-                await self.start_working()
+                if state["enabled"]:
+                    await self.start_working()
+                else:
+                    await self.stop_working()
             else:
                 LOGGER.warning("Server reported invalid state %s" % (repr(state)))
         else:

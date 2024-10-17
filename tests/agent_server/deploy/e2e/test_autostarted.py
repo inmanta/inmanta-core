@@ -354,9 +354,7 @@ def filter_relevant_processes(processes: dict[str, list[Process]]) -> dict[str, 
 
 
 @pytest.mark.parametrize(
-    # "auto_start_agent,should_time_out,time_to_sleep,", [(True, False, 2), (True, True, 120)]
-    "auto_start_agent,should_time_out,time_to_sleep,",
-    [(True, True, 120)],
+    "auto_start_agent,should_time_out,time_to_sleep,", [(True, False, 2), (True, True, 120)]
 )  # this overrides a fixture to allow the agent to fork!
 async def test_halt_deploy(
     snippetcompiler,
@@ -506,21 +504,22 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
     assert not expected_agents_status["agent1"]
 
-    await retry_limited(
-        lambda: len(filter_relevant_processes(get_process_state(current_pid))) == len(current_children_after_deployment), 10
-    )
+    if should_time_out:
+        await retry_limited(
+            lambda: len(filter_relevant_processes(get_process_state(current_pid))) == len(current_children_after_deployment), 10
+        )
+    else:
+        await retry_limited(
+            lambda: len(filter_relevant_processes(get_process_state(current_pid))) == len(current_halted_children)
+            and len(filter_relevant_processes(get_process_state(current_pid))) == 2,
+            10,
+        )
 
     # Let's recheck the number of processes after resuming the environment
     resumed_children = get_process_state(current_pid)
     assert len(resumed_children) == 1
     assert len(resumed_children.values()) == 1
     current_resumed_children = filter_relevant_processes(resumed_children)
-
-    await retry_limited(lambda: len(current_resumed_children) == len(current_children_after_deployment), 10)
-
-    assert len(current_resumed_children) == len(
-        current_children_after_deployment
-    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
 
     await retry_limited(lambda: all([child.is_running() for child in current_resumed_children.values()]), 10)
     result = await client.list_agents(tid=environment)

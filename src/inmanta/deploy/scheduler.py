@@ -130,7 +130,6 @@ class TaskRunner:
         """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
         allowed to run."""
         paused_status = await data.Agent.retrieve_paused_status(environment=self._scheduler.environment, endpoint=self.endpoint)
-        # The entry already exists, we ended up in a conflict, so None is returned
         self.status = AgentStatus.STARTED if not paused_status else AgentStatus.STOPPED
 
         while self._scheduler._running and self.status == AgentStatus.STARTED:
@@ -167,7 +166,7 @@ class ResourceScheduler(TaskManager):
         self._work: work.ScheduledWork = work.ScheduledWork(
             requires=self._state.requires.requires_view(),
             provides=self._state.requires.provides_view(),
-            new_agent_notify=self._start_for_agent,
+            new_agent_notify=self._create_agent,
         )
 
         # We uphold two locks to prevent concurrency conflicts between external events (e.g. new version or deploy request)
@@ -398,16 +397,16 @@ class ResourceScheduler(TaskManager):
                 # time too many, which is not so bad.
                 self._work.delete_resource(resource)
 
-    def _start_for_agent(self, agent: str) -> None:
+    def _create_agent(self, agent: str, should_start: bool = True) -> None:
         """Start processing for the given agent"""
         self._workers[agent] = TaskRunner(endpoint=agent, scheduler=self)
-        self._workers[agent].start()
+        if should_start:
+            self._workers[agent].start()
 
     async def should_be_running(self, endpoint: str) -> bool:
         """
-        Return if the agent (or the Scheduler if endpoint == Scheduler id) should be running. This will also
-            check if the environment is halted
-
+        Check in the DB (authoritative entity) if the agent (or the Scheduler if endpoint == Scheduler id) should be running
+            i.e. if it is not paused and its environment is not halted.
         :param endpoint: The name of the agent
         """
         current_environment = await Environment.get_by_id(self.environment)
@@ -432,11 +431,21 @@ class ResourceScheduler(TaskManager):
 
         requested_agent = await data.Agent.get(env=self.environment, endpoint=name)
         if requested_agent:
-            self._start_for_agent(agent=requested_agent.name)
+            self._create_agent(agent=requested_agent.name, should_start=not requested_agent.paused)
             return
 
         if name not in self._workers and requested_agent is None:
             raise LookupError(f"The agent `{name}` does not exist!")
+
+    async def is_agent_running(self, name: str) -> bool:
+        """
+        Refresh from the DB (authoritative entity) the actual state of the agent.
+            - If the agent is not paused: It will make sure that the agent is running.
+            - If the agent is paused: Stop a particular agent.
+
+        :param name: The name of the agent
+        """
+        return name in self._workers and self._workers[name].status == AgentStatus.STARTED
 
     # TaskManager interface
 
