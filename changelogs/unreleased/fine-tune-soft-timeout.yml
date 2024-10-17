@@ -1,0 +1,4 @@
+description: Fine tune soft timeout in tox to retrieve some data, in case of stuck test suite, before being killed by Jenkins
+change-type: patch
+destination-branches: [master, iso7]
+
