@@ -3395,6 +3395,27 @@ class Agent(BaseDocument):
         return obj
 
     @classmethod
+    async def retrieve_paused_status(
+        cls, environment: uuid.UUID, endpoint: str, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> bool:
+        query = """
+            INSERT INTO agent
+            (last_failover,paused,id_primary,unpause_on_resume,environment,name)
+            VALUES (NULL,FALSE,NULL,NULL,$1,$2)
+            ON CONFLICT DO NOTHING
+            RETURNING paused
+        """
+        values = [cls._get_value(environment), cls._get_value(endpoint)]
+        new_agent_paused_status = await cls._fetchval(query, *values, connection=connection)
+        # The entry already exists, we ended up in a conflict, so None is returned
+        if new_agent_paused_status is None:
+            current_agent = await cls.get(env=environment, endpoint=endpoint)
+            assert current_agent is not None
+            return current_agent.paused
+        else:
+            return bool(new_agent_paused_status)
+
+    @classmethod
     async def persist_on_halt(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Persists paused state when halting all agents.
