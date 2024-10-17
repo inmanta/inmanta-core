@@ -1494,26 +1494,6 @@ class BaseDocument(metaclass=DocumentMeta):
         )
         await self._execute_query(query, *values, connection=connection)
 
-    async def insert_if_not_exist(
-        self, field_to_return: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Optional[typing.Any]:
-        """
-        Insert a new document based on the instance passed if it does not exist. Validation is done based on the defined fields.
-        """
-        (column_names, values) = self._get_column_names_and_values()
-        column_names_as_sql_string = ",".join(column_names)
-        values_as_parameterized_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
-        query = (
-            f"INSERT INTO {self.table_name()} "
-            f"({column_names_as_sql_string}) "
-            f"VALUES ({values_as_parameterized_sql_string}) "
-            "ON CONFLICT DO NOTHING "
-            f"RETURNING {field_to_return}"
-            if field_to_return is not None
-            else ""
-        )
-        return await self._fetchval(query, *values, connection=connection)
-
     async def insert_with_overwrite(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Insert a new document based on the instance passed. If the document already exists, overwrite it.
@@ -3413,6 +3393,27 @@ class Agent(BaseDocument):
     ) -> "Agent":
         obj = await cls.get_one(environment=env, name=endpoint, connection=connection, lock=lock)
         return obj
+
+    @classmethod
+    async def retrieve_paused_status(
+        cls, environment: uuid.UUID, endpoint: str, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> bool:
+        query = """
+            INSERT INTO agent
+            (last_failover,paused,id_primary,unpause_on_resume,environment,name)
+            VALUES (NULL,FALSE,NULL,NULL,$1,$2)
+            ON CONFLICT DO NOTHING
+            RETURNING paused
+        """
+        values = [cls._get_value(environment), cls._get_value(endpoint)]
+        new_agent_paused_status = await cls._fetchval(query, *values, connection=connection)
+        # The entry already exists, we ended up in a conflict, so None is returned
+        if new_agent_paused_status is None:
+            current_agent = await cls.get(env=environment, endpoint=endpoint)
+            assert current_agent is not None
+            return current_agent.paused
+        else:
+            return bool(new_agent_paused_status)
 
     @classmethod
     async def persist_on_halt(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:

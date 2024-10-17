@@ -238,6 +238,9 @@ class AgentManager(ServerSlice, SessionListener):
 
     @handle(methods_v2.agent_action, env="tid")
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
+        if name == const.AGENT_SCHEDULER_ID:
+            raise BadRequest(f"Particular action cannot be directed towards the Scheduler agent: {action.name}")
+
         if env.halted and action in {AgentAction.pause, AgentAction.unpause}:
             raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
         if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
@@ -259,6 +262,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Pause a logical agent by pausing an active agent instance if it exists, and removing the logical agent's primary.
         """
+        endpoints_with_new_primary = []
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
             if opt.server_use_resource_scheduler.get():
@@ -271,13 +275,18 @@ class AgentManager(ServerSlice, SessionListener):
                     live_session = self.tid_endpoint_to_session.get(key)
                     assert live_session
 
-                if endpoint is not None and endpoint != const.AGENT_SCHEDULER_ID:
+                if endpoint is not None:
                     # We don't need to do this when the environment is resumed because the scheduler will need to have updated
                     # information related to agents (being paused) and in order to have that, this transaction needs to
                     # finish first
                     await live_session.get_client().set_state(endpoint, enabled=False)
+                elif endpoint is None:
+                    # We need to update information in the DB
+                    endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, None))
+                    await data.Agent.update_primary(
+                        env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
+                    )
             else:
-                endpoints_with_new_primary = []
                 for agent_name in agents:
                     key = (env.id, agent_name)
                     live_session = self.tid_endpoint_to_session.get(key)
@@ -293,6 +302,7 @@ class AgentManager(ServerSlice, SessionListener):
     async def _start_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
+        endpoints_with_new_primary = []
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
             if opt.server_use_resource_scheduler.get():
@@ -300,16 +310,22 @@ class AgentManager(ServerSlice, SessionListener):
                 live_session = self.tid_endpoint_to_session.get(key)
                 if not live_session:
                     await self._autostarted_agent_manager._ensure_scheduler(env)
-                    live_session = self.tid_endpoint_to_session.get(key)
+                    live_session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
                     assert live_session
+                    self.tid_endpoint_to_session[key] = live_session
 
-                if endpoint is not None and endpoint != const.AGENT_SCHEDULER_ID:
+                if endpoint is not None:
                     # We don't need to do this when the environment is resumed because the scheduler will need to have updated
                     # information related to agents (being unpaused) and in order to have that, this transaction needs to
                     # finish first
                     await live_session.get_client().set_state(endpoint, enabled=True)
+                elif endpoint is None:
+                    # We need to update information in the DB
+                    endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, live_session.id))
+                    await data.Agent.update_primary(
+                        env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
+                    )
             else:
-                endpoints_with_new_primary = []
                 for agent_name in agents:
                     key = (env.id, agent_name)
                     live_session = self.tid_endpoint_to_session.get(key)
@@ -1046,9 +1062,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
                 )
                 assert agent_client is not None, "The client towards the scheduler should not be down!"
-            # a = await agent_client.resume_scheduler_environment(tid=env.id)
-            a = await agent_client.set_state(const.AGENT_SCHEDULER_ID, enabled=True)
-            logging.warning(f"RESULT RESUMED: {a.result}")
+            await agent_client.set_state(const.AGENT_SCHEDULER_ID, enabled=True)
         else:
             agents = await data.Agent.get_list(environment=env.id)
             agent_list = [a.name for a in agents]
@@ -1070,11 +1084,9 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
                 )
                 if agent_client is None:
-
                     return
-                # a = await agent_client.halt_scheduler_environment(tid=env.id)
-                a = await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=False)
-                logging.warning(f"RESULT HALTED: {a.result}")
+                await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=False)
+                del self._agent_manager.tid_endpoint_to_session[(env.id, const.AGENT_SCHEDULER_ID)]
             else:
                 if env.id in self._agent_procs:
                     subproc = self._agent_procs[env.id]

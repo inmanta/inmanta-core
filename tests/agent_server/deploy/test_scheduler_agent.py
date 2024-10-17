@@ -39,14 +39,13 @@ from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.data import ResourceIdStr
 from inmanta.deploy import state, tasks
-from inmanta.deploy.scheduler import ResourceScheduler
+from inmanta.deploy.scheduler import ResourceScheduler, TaskRunner
 from inmanta.deploy.state import AgentStatus, BlockedStatus
 from inmanta.deploy.tasks import Task
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.util import retry_limited
-from mypy.memprofile import defaultdict
 
 FAIL_DEPLOY: str = "fail_deploy"
 
@@ -177,18 +176,34 @@ async def pass_method():
 class TestScheduler(ResourceScheduler):
     def __init__(self, environment: uuid.UUID, executor_manager: executor.ExecutorManager[executor.Executor], client: Client):
         super().__init__(environment, executor_manager, client)
-        self._state.agent_status = defaultdict(lambda: AgentStatus.STARTED)
 
-    async def _run_for_agent(self, agent: str) -> None:
-        """Main loop for one agent"""
-        while self._running and self._state.agent_status[agent] == AgentStatus.STARTED:
-            task: Task = await self._work.agent_queues.queue_get(agent)
+    async def should_be_running(self, endpoint: str) -> bool:
+        return True
+
+    def _create_agent(self, agent: str, should_start: bool = True) -> None:
+        """Start processing for the given agent"""
+        self._workers[agent] = TestTaskRunner(endpoint=agent, scheduler=self)
+        self._workers[agent].start()
+
+
+class TestTaskRunner(TaskRunner):
+    async def run(self) -> None:
+        """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
+        allowed to run."""
+        self.status = AgentStatus.STARTED
+
+        while self._scheduler._running and self.status == AgentStatus.STARTED:
+            task: Task = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
             try:
-                await task.execute(self, agent)
+                await task.execute(self._scheduler, self.endpoint)
             except Exception:
-                logging.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
+                logging.exception(
+                    "Task %s for agent %s has failed and the exception was not properly handled", task, self.endpoint
+                )
 
-            self._work.agent_queues.task_done(agent, task)
+            self._scheduler._work.agent_queues.task_done(self.endpoint, task)
+
+        self.status = AgentStatus.STOPPED
 
 
 class TestAgent(Agent):
@@ -204,7 +219,6 @@ class TestAgent(Agent):
         self.scheduler.code_manager = DummyCodeManager(self._client)
         # Bypass DB
         self.scheduler.read_version = pass_method
-        self.scheduler.read_agent_instances = pass_method
         self.scheduler.mock_versions = {}
 
         async def build_resource_mappings_from_db(version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:
@@ -644,7 +658,6 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         status=state.ResourceStatus.UP_TO_DATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
-        agent_status=state.AgentStatus.STARTED,
     )
     assert rid1 not in agent.scheduler._state.dirty
     # set up initial state: release two changes for r1 -> the second makes the first stale
@@ -659,7 +672,6 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         status=state.ResourceStatus.HAS_UPDATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
-        agent_status=state.AgentStatus.STARTED,
     )
     assert rid1 in agent.scheduler._state.dirty
 
@@ -672,7 +684,6 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         status=state.ResourceStatus.HAS_UPDATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
-        agent_status=state.AgentStatus.STARTED,
     )
     assert rid1 in agent.scheduler._state.dirty
     # verify that r2 is still blocked on r1
@@ -699,7 +710,6 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         status=state.ResourceStatus.UP_TO_DATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
-        agent_status=state.AgentStatus.STARTED,
     )
     assert rid1 not in agent.scheduler._state.dirty
 

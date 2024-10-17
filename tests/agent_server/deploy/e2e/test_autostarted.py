@@ -32,7 +32,7 @@ from psutil import Process
 from inmanta import config, const, data
 from inmanta.agent import Agent
 from inmanta.config import Config
-from inmanta.const import AGENT_SCHEDULER_ID, AgentAction
+from inmanta.const import AgentAction
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from utils import _wait_until_deployment_finishes, resource_action_consistency_check, retry_limited
@@ -354,9 +354,7 @@ def filter_relevant_processes(processes: dict[str, list[Process]]) -> dict[str, 
 
 
 @pytest.mark.parametrize(
-    # "auto_start_agent,should_time_out,time_to_sleep,", [(True, False, 2), (True, True, 120)]
-    "auto_start_agent,should_time_out,time_to_sleep,",
-    [(True, True, 120)],
+    "auto_start_agent,should_time_out,time_to_sleep,", [(True, False, 2), (True, True, 120)]
 )  # this overrides a fixture to allow the agent to fork!
 async def test_halt_deploy(
     snippetcompiler,
@@ -404,12 +402,24 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
+    async def are_resources_being_deployed() -> bool:
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        deployed = summary["by_state"]["deploying"]
+        return deployed == 1
+
+    # Wait for at least one resource to be deployed
+    await retry_limited(are_resources_being_deployed, timeout=5)
+
+    # Let's check the agent table and check that agent1 is present and not paused
     result = await client.list_agents(tid=environment)
     assert result.code == 200
-    assert len(result.result["agents"]) == 1
-    assert result.result["agents"][0]["name"] == AGENT_SCHEDULER_ID
-    assert result.result["agents"][0]["state"] == "up"
-    assert not result.result["agents"][0]["paused"]
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+    assert not expected_agents_status["agent1"]
 
     # Wait for something to be deployed
     try:
@@ -494,21 +504,22 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
     assert not expected_agents_status["agent1"]
 
-    await retry_limited(
-        lambda: len(filter_relevant_processes(get_process_state(current_pid))) == len(current_children_after_deployment), 10
-    )
+    if should_time_out:
+        await retry_limited(
+            lambda: len(filter_relevant_processes(get_process_state(current_pid))) == len(current_children_after_deployment), 10
+        )
+    else:
+        await retry_limited(
+            lambda: len(filter_relevant_processes(get_process_state(current_pid))) == len(current_halted_children)
+            and len(filter_relevant_processes(get_process_state(current_pid))) == 2,
+            10,
+        )
 
     # Let's recheck the number of processes after resuming the environment
     resumed_children = get_process_state(current_pid)
     assert len(resumed_children) == 1
     assert len(resumed_children.values()) == 1
     current_resumed_children = filter_relevant_processes(resumed_children)
-
-    await retry_limited(lambda: len(current_resumed_children) == len(current_children_after_deployment), 10)
-
-    assert len(current_resumed_children) == len(
-        current_children_after_deployment
-    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
 
     await retry_limited(lambda: all([child.is_running() for child in current_resumed_children.values()]), 10)
     result = await client.list_agents(tid=environment)
@@ -687,6 +698,13 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
     for children in current_resumed_children.values():
         assert children.is_running()
+
+    # Let's make sure that we cannot interact directly with the Scheduler agent!
+    result = await client.agent_action(tid=environment, name=const.AGENT_SCHEDULER_ID, action=AgentAction.pause.value)
+    assert result.code == 400, result.result
+    assert (
+        result.result["message"] == "Invalid request: Particular action cannot be directed towards the Scheduler agent: pause"
+    ), result.result
 
 
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
