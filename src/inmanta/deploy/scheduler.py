@@ -439,9 +439,7 @@ class ResourceScheduler(TaskManager):
 
     async def is_agent_running(self, name: str) -> bool:
         """
-        Refresh from the DB (authoritative entity) the actual state of the agent.
-            - If the agent is not paused: It will make sure that the agent is running.
-            - If the agent is paused: Stop a particular agent.
+        Return True if the provided agent is running, at least an agent that the Scheduler is aware of
 
         :param name: The name of the agent
         """
