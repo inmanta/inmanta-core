@@ -129,15 +129,8 @@ class TaskRunner:
     async def run(self) -> None:
         """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
         allowed to run."""
-        paused_status = await data.Agent(environment=self._scheduler.environment, name=self.endpoint).insert_if_not_exist(
-            field_to_return="paused"
-        )
+        paused_status = await data.Agent(environment=self._scheduler.environment, name=self.endpoint).retrieve_paused_status()
         # The entry already exists, we ended up in a conflict, so None is returned
-        if paused_status is None:
-            current_agent = await data.Agent.get(env=self._scheduler.environment, endpoint=self.endpoint)
-            assert current_agent is not None
-            paused_status = current_agent.paused
-
         self.status = AgentStatus.STARTED if not paused_status else AgentStatus.STOPPED
 
         while self._scheduler._running and self.status == AgentStatus.STARTED:

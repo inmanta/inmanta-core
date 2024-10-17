@@ -32,7 +32,7 @@ from psutil import Process
 from inmanta import config, const, data
 from inmanta.agent import Agent
 from inmanta.config import Config
-from inmanta.const import AGENT_SCHEDULER_ID, AgentAction
+from inmanta.const import AgentAction
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from utils import _wait_until_deployment_finishes, resource_action_consistency_check, retry_limited
@@ -404,12 +404,24 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
+    async def are_resources_being_deployed() -> bool:
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        deployed = summary["by_state"]["deploying"]
+        return deployed == 1
+
+    # Wait for at least one resource to be deployed
+    await retry_limited(are_resources_being_deployed, timeout=5)
+
+    # Let's check the agent table and check that agent1 is present and not paused
     result = await client.list_agents(tid=environment)
     assert result.code == 200
-    assert len(result.result["agents"]) == 1
-    assert result.result["agents"][0]["name"] == AGENT_SCHEDULER_ID
-    assert result.result["agents"][0]["state"] == "up"
-    assert not result.result["agents"][0]["paused"]
+    assert len(result.result["agents"]) == 2
+    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
+    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+    assert not expected_agents_status["agent1"]
 
     # Wait for something to be deployed
     try:
