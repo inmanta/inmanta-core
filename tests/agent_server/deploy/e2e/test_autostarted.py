@@ -700,6 +700,13 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     for children in current_resumed_children.values():
         assert children.is_running()
 
+    # Let's make sure that we cannot interact directly with the Scheduler agent!
+    result = await client.agent_action(tid=environment, name=const.AGENT_SCHEDULER_ID, action=AgentAction.pause.value)
+    assert result.code == 400, result.result
+    assert (
+        result.result["message"] == "Invalid request: Particular action cannot be directed towards the Scheduler agent: pause"
+    ), result.result
+
 
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_agent_paused_scheduler_crash(

@@ -238,6 +238,9 @@ class AgentManager(ServerSlice, SessionListener):
 
     @handle(methods_v2.agent_action, env="tid")
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
+        if name == const.AGENT_SCHEDULER_ID:
+            raise BadRequest(f"Particular action cannot be directed towards the Scheduler agent: {action.name}")
+
         if env.halted and action in {AgentAction.pause, AgentAction.unpause}:
             raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
         if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
@@ -272,12 +275,12 @@ class AgentManager(ServerSlice, SessionListener):
                     live_session = self.tid_endpoint_to_session.get(key)
                     assert live_session
 
-                if endpoint is not None and endpoint != const.AGENT_SCHEDULER_ID:
+                if endpoint is not None:
                     # We don't need to do this when the environment is resumed because the scheduler will need to have updated
                     # information related to agents (being paused) and in order to have that, this transaction needs to
                     # finish first
                     await live_session.get_client().set_state(endpoint, enabled=False)
-                elif endpoint is None or endpoint == const.AGENT_SCHEDULER_ID:
+                elif endpoint is None:
                     # We need to update information in the DB
                     endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, None))
                     await data.Agent.update_primary(
@@ -311,12 +314,12 @@ class AgentManager(ServerSlice, SessionListener):
                     assert live_session
                     self.tid_endpoint_to_session[key] = live_session
 
-                if endpoint is not None and endpoint != const.AGENT_SCHEDULER_ID:
+                if endpoint is not None:
                     # We don't need to do this when the environment is resumed because the scheduler will need to have updated
                     # information related to agents (being unpaused) and in order to have that, this transaction needs to
                     # finish first
                     await live_session.get_client().set_state(endpoint, enabled=True)
-                elif endpoint is None or endpoint == const.AGENT_SCHEDULER_ID:
+                elif endpoint is None:
                     # We need to update information in the DB
                     endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, live_session.id))
                     await data.Agent.update_primary(
