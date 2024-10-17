@@ -36,7 +36,12 @@ from colorlog.formatter import LogColors
 from inmanta import config, const
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
-from logfire.integrations.logging import LogfireLoggingHandler
+
+logfire_enabled = os.getenv("LOGFIRE_TOKEN", None) is not None
+try:
+    from logfire.integrations.logging import LogfireLoggingHandler
+except ModuleNotFoundError:
+    logfire_enabled = False
 
 LOGGER = logging.getLogger(__name__)
 
@@ -545,7 +550,8 @@ class InmantaLoggerConfig:
         self._handlers: abc.Sequence[logging.Handler] = self._apply_logging_config(log_config)
         self._options_applied: bool = False
         self._logging_configs_extensions: list[LoggingConfigExtension] = []
-        logging.root.addHandler(LogfireLoggingHandler())
+        if logfire_enabled:
+            logging.root.addHandler(LogfireLoggingHandler())
 
     @classmethod
     def get_current_instance(cls) -> "InmantaLoggerConfig":
