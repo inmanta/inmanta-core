@@ -1693,7 +1693,7 @@ async def test_put_partial_dep_on_shared_set_removed(server, client, environment
     assert rid_to_resource[rid1].provides == []
 
 
-async def test_put_partial_dep_on_specific_set_removed(server, client, environment, clienthelper) -> None:
+async def test_put_partial_dep_on_specific_set_removed(server, client, environment, clienthelper, agent) -> None:
     """
     Ensure that the put_partial endpoint correctly updates the requires/provides relationship when a resource A from the shared
     resource set depends on a resource B from a specific resource set and this dependency is removed by a partial compile.

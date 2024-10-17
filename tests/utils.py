@@ -89,6 +89,7 @@ async def wait_until_logs_are_available(client: Client, environment: str, resour
     async def all_logs_are_available():
         response = await client.get_resource(environment, resource_id, logs=True)
         assert response.code == 200
+        LOGGER.warning("%s", response.result["logs"])
         return len(response.result["logs"]) >= expect_nr_of_logs
 
     await retry_limited(all_logs_are_available, 10)
@@ -119,28 +120,6 @@ def assert_equal_ish(minimal, actual, sortby=[]):
         return
     else:
         assert minimal == actual, f"Minimal value expected is '{minimal}' but got '{actual}'"
-
-
-def assert_graph(graph, expected):
-    lines = [f"{f.id.get_attribute_value()}: {t.id.get_attribute_value()}" for f in graph.values() for t in f.resource_requires]
-    lines = sorted(lines)
-
-    elines = [x.strip() for x in expected.split("\n")]
-    elines = sorted(elines)
-
-    assert elines == lines, (lines, elines)
-
-
-class AsyncClosing:
-    def __init__(self, awaitable):
-        self.awaitable = awaitable
-
-    async def __aenter__(self):
-        self.closable = await self.awaitable
-        return object
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.closable.stop()
 
 
 def no_error_in_logs(caplog, levels=[logging.ERROR], ignore_namespaces=["tornado.access"]):
@@ -220,12 +199,23 @@ class LogSequence:
 
         :return: matched index in the capture buffer, -1 for no match
         """
+        close = []
+
         for i, (logger_name, log_level, message) in enumerate(self.caplog.record_tuples[after:]):
             if msg in message:
                 if loggerpart in logger_name and (level == log_level or (log_level >= min_level)):
                     if any(i in logger_name for i in self.ignore):
                         continue
                     return i + after
+                else:
+                    close.append((logger_name, log_level, message))
+
+        if close:
+            print("found nearly matching")
+            for logger_name, log_level, message in close:
+                print(logger_name, log_level, message)
+            print("------------")
+
         return -1
 
     def get(self, loggerpart, level, msg, min_level: int = math.inf) -> LogRecord:
@@ -381,16 +371,24 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     return versions.result
 
 
-async def _wait_until_deployment_finishes(client: Client, environment: str, version: int, timeout: int = 10) -> None:
-    async def is_deployment_finished() -> bool:
-        result = await client.get_version(environment, version)
-        print(version, result.result)
-        return result.result["model"]["deployed"]
+async def wait_until_deployment_finishes(client: Client, environment: str, version: int = -1, timeout: int = 10) -> None:
+    """Interface kept for backward compat"""
 
-    await retry_limited(is_deployment_finished, timeout)
+    async def done():
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
+        #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
+        print(summary)
+        available = summary["by_state"]["available"]
+        deploying = summary["by_state"]["deploying"]
+        return available + deploying == 0
+
+    await retry_limited(done, 10)
 
 
-async def _wait_for_resource_actions(
+async def wait_for_resource_actions(
     client: Client, environment: str, rid: ResourceIdStr, deploy_count: int, timeout: int = 10
 ) -> None:
     async def is_deployment_finished() -> bool:
@@ -401,6 +399,23 @@ async def _wait_for_resource_actions(
         return len(end_lines) >= deploy_count
 
     await retry_limited(is_deployment_finished, timeout)
+
+
+async def wait_full_success(client: Client, environment: str, version: int = -1, timeout: int = 10) -> None:
+    """Interface kept for backward compat"""
+
+    async def done():
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
+        #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
+        print(summary)
+        total = summary["total"]
+        success = summary["by_state"]["deployed"]
+        return total == success
+
+    await retry_limited(done, 10)
 
 
 class ClientHelper:
@@ -435,8 +450,11 @@ class ClientHelper:
         lookup = {v["version"]: v["released"] for v in versions.result["versions"]}
         return lookup[version]
 
-    async def wait_for_deployed(self, version: int) -> None:
-        await _wait_until_deployment_finishes(client=self.client, environment=self.environment, version=version)
+    async def wait_for_deployed(self, version: int = -1) -> None:
+        await wait_until_deployment_finishes(self.client, self.environment)
+
+    async def wait_full_success(self, environment: str) -> None:
+        await wait_full_success(self.client, environment)
 
 
 def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> dict[str, Any]:
@@ -820,3 +838,48 @@ def make_random_file(size: int = 0) -> tuple[str, bytes, str]:
     body = base64.b64encode(content).decode("ascii")
 
     return hash, content, body
+
+
+async def _deploy_resources(client, environment, resources, version, push, agent_trigger_method=None):
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    # do a deploy
+    result = await client.release_version(environment, version, push, agent_trigger_method)
+    assert result.code == 200
+
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == len(resources)
+
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+
+    return result
+
+
+async def wait_for_n_deployed_resources(client, environment, version, n, timeout=5):
+    async def is_deployment_finished():
+        result = await client.get_version(environment, version)
+        assert result.code == 200
+        print(result.result["model"])
+        return result.result["model"]["done"] >= n
+
+    await retry_limited(is_deployment_finished, timeout)
+
+
+async def _wait_for_n_deploying(client, environment, version, n, timeout=10):
+    async def in_progress():
+        result = await client.get_version(environment, version)
+        assert result.code == 200
+        res = [res for res in result.result["resources"] if res["status"] == "deploying"]
+        return len(res) >= n
+
+    await retry_limited(in_progress, timeout)

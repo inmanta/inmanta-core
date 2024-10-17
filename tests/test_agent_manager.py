@@ -30,7 +30,6 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient
 
 from inmanta import config, data
-from inmanta.agent import Agent, agent
 from inmanta.agent import config as agent_config
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus

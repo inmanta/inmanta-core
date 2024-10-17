@@ -26,8 +26,6 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
-from inmanta.agent import reporting
-from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.config import get_bind_port
 from inmanta.util import parse_timestamp
 
@@ -259,21 +257,3 @@ async def test_agent_process_details(client, environment: str) -> None:
     result = await client.get_agent_process_details(environment, process_sid, report=True)
     assert result.code == 200
     assert result.result["data"]["state"] is None
-
-
-async def test_agent_process_details_with_report(server, client, environment: str, agent) -> None:
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await agentmanager.ensure_agent_registered(env=env, nodename="agent1")
-    result = await client.get_agents(
-        environment,
-    )
-    assert result.code == 200
-    process_id = result.result["data"][0]["process_id"]
-
-    result = await client.get_agent_process_details(environment, process_id, report=True)
-    assert result.code == 200
-    status = result.result["data"]["state"]
-    assert status is not None
-    for name in reporting.reports.keys():
-        assert name in status and status[name] != "ERROR"

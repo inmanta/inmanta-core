@@ -30,7 +30,7 @@ import pytest
 
 from inmanta import data
 from inmanta.data import model
-from utils import _wait_until_deployment_finishes, v1_module_from_template
+from utils import v1_module_from_template, wait_until_deployment_finishes
 
 DOCS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "docs")
 
@@ -173,7 +173,7 @@ async def test_docs_snippets_unmanaged_resources_basic(
     snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True, autostd=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 
-    await _wait_until_deployment_finishes(client, environment, version=1)
+    await wait_until_deployment_finishes(client, environment, version=1)
 
     result = await client.discovered_resources_get_batch(tid=environment)
     assert result.code == 200
@@ -234,7 +234,7 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
     snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 
-    await _wait_until_deployment_finishes(client, environment, version=1)
+    await wait_until_deployment_finishes(client, environment, version=1)
 
     result = await client.discovered_resources_get_batch(tid=environment)
     assert result.code == 200
