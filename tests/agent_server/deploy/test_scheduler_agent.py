@@ -180,7 +180,7 @@ class TestScheduler(ResourceScheduler):
     async def should_be_running(self, endpoint: str) -> bool:
         return True
 
-    def _create_agent(self, agent: str) -> None:
+    def _create_agent(self, agent: str, should_start: bool = True) -> None:
         """Start processing for the given agent"""
         self._workers[agent] = TestTaskRunner(endpoint=agent, scheduler=self)
         self._workers[agent].start()
