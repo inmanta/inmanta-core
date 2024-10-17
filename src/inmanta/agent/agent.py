@@ -1327,7 +1327,12 @@ class Agent(SessionEndpoint):
         Check if the server storage is configured and ready to use.
         """
         state_dir = cfg.state_dir.get()
+        if not os.path.exists(state_dir):
+            os.mkdir(state_dir)
+
         agent_state_dir = os.path.join(state_dir, "agent")
+        if not os.path.exists(agent_state_dir):
+            os.mkdir(agent_state_dir)
 
         dir_map = {
             "agent": ensure_directory_exist(agent_state_dir),
