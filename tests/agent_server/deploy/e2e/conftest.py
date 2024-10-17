@@ -64,8 +64,8 @@ async def agent(server, environment):
         asyncio.get_event_loop(),
         logger,
         a.thread_pool,
-        str(pathlib.Path(a._storage["executor_manager"]) / "code"),
-        str(pathlib.Path(a._storage["executor_manager"]) / "venvs"),
+        str(pathlib.Path(a._storage["executors"]) / "code"),
+        str(pathlib.Path(a._storage["executors"]) / "venvs"),
         False,
     )
     a.executor_manager = executor
