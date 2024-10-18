@@ -273,11 +273,6 @@ server_access_control_allow_origin = Option(
     is_str_opt,
 )
 
-server_use_resource_scheduler = Option(
-    "server", "new-resource-scheduler", False, "Enable the new Resource Scheduler component", is_bool
-)
-
-
 def default_hangtime() -> int:
     """:inmanta.config:option:`server.agent-timeout` *3/4"""
     return int(agent_timeout.get() * 3 / 4)

@@ -530,7 +530,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
         resources=[
             {
                 "id": f"test::Resource[agent1,key=test1],v={version1}",
-                "key":"test1",
+                "key": "test1",
                 "value": "val1",
                 "send_event": True,
                 "requires": [],

@@ -32,7 +32,7 @@ from tornado.httpclient import AsyncHTTPClient
 from inmanta import config, data
 from inmanta.agent import config as agent_config
 from inmanta.config import Config
-from inmanta.const import AgentAction, AgentStatus
+from inmanta.const import AgentAction, AgentStatus, AGENT_SCHEDULER_ID
 from inmanta.protocol import Result, handle, typedmethod
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, protocol
@@ -1393,8 +1393,8 @@ async def test_auto_started_agent_log_in_debug_mode(server, environment):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     autostarted_agentmanager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
 
-    await agentmanager.ensure_agent_registered(env, "test1")
-    await autostarted_agentmanager._ensure_agents(env, ["test1"])
+    await agentmanager.ensure_agent_registered(env, AGENT_SCHEDULER_ID)
+    await autostarted_agentmanager._ensure_scheduler(environment)
 
     logdir = Config.get("config", "log-dir")
     log_file_path = f"{logdir}/agent-{environment}.log"  # Path to the log file

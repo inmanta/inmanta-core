@@ -45,12 +45,15 @@ import packaging.requirements
 import packaging.version
 from _pytest.mark import MarkDecorator
 from inmanta import config, const, data, env, module, protocol, util
+from inmanta.agent import config as cfg
+from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data import ResourceIdStr
-from inmanta.data.model import PipConfig
+from inmanta.data.model import AttributeStateChange, PipConfig, ResourceVersionIdStr
 from inmanta.moduletool import ModuleTool
-from inmanta.protocol import Client
+from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
+from inmanta.types import Apireturn
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
 
@@ -384,7 +387,15 @@ async def wait_until_deployment_finishes(client: Client, environment: str, versi
         deploying = summary["by_state"]["deploying"]
         if available + deploying != 0:
             return False
-        return summary["by_state"]["deployed"] + summary["by_state"]["failed"]+ summary["by_state"]["skipped"]+ summary["by_state"]["skipped_for_undefined"] + summary["by_state"]["unavailable"] + summary["by_state"]["undefined"]  == summary["total"]
+        return (
+            summary["by_state"]["deployed"]
+            + summary["by_state"]["failed"]
+            + summary["by_state"]["skipped"]
+            + summary["by_state"]["skipped_for_undefined"]
+            + summary["by_state"]["unavailable"]
+            + summary["by_state"]["undefined"]
+            == summary["total"]
+        )
 
     await retry_limited(done, 10)
 
@@ -885,3 +896,71 @@ async def _wait_for_n_deploying(client, environment, version, n, timeout=10):
         return len(res) >= n
 
     await retry_limited(in_progress, timeout)
+
+
+class NullAgent(SessionEndpoint):
+
+    def __init__(
+        self,
+        environment: Optional[uuid.UUID] = None,
+    ):
+        """
+        :param environment: environment id
+        """
+        super().__init__(name="agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
+        self._env_id = environment
+
+    async def start_connected(self) -> None:
+        """
+        Setup our single endpoint
+        """
+        await self.add_end_point_name(AGENT_SCHEDULER_ID)
+
+    @protocol.handle(methods_v2.update_agent_map)
+    async def update_agent_map(self, agent_map: dict[str, str]) -> None:
+        # Not used here
+        pass
+
+    @protocol.handle(methods.set_state)
+    async def set_state(self, agent: str, enabled: bool) -> Apireturn:
+        pass
+
+    async def on_reconnect(self) -> None:
+        pass
+
+    async def on_disconnect(self) -> None:
+        pass
+
+    @protocol.handle(methods.trigger, env="tid", agent="id")
+    async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
+        pass
+
+    @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
+    async def read_version(self, env: uuid.UUID) -> Apireturn:
+        pass
+
+    @protocol.handle(methods.resource_event, env="tid", agent="id")
+    async def resource_event(
+        self,
+        env: uuid.UUID,
+        agent: str,
+        resource: ResourceVersionIdStr,
+        send_events: bool,
+        state: const.ResourceState,
+        change: const.Change,
+        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]],
+    ) -> Apireturn:
+        # Doesn't do anything
+        pass
+
+    @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
+    async def run_dryrun(self, env: uuid.UUID, dry_run_id: uuid.UUID, agent: str, version: int) -> Apireturn:
+        return 200
+
+    @protocol.handle(methods.get_parameter, env="tid")
+    async def get_facts(self, env: uuid.UUID, agent: str, resource: dict[str, Any]) -> Apireturn:
+        return 200
+
+    @protocol.handle(methods.get_status)
+    async def get_status(self) -> Apireturn:
+        return 200, {}

@@ -144,7 +144,6 @@ from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.config import server_use_resource_scheduler
 from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
@@ -153,7 +152,7 @@ from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
 from pytest_postgresql import factories
-from utils import ClientHelper
+from utils import ClientHelper, NullAgent
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
@@ -691,7 +690,6 @@ def log_state_tcp_ports(request, log_file):
 async def server_config(inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory, auto_start_agent):
     reset_metrics()
     agentmanager.assert_no_start_scheduler = not auto_start_agent
-    server_use_resource_scheduler.set("True")
 
     with tempfile.TemporaryDirectory() as state_dir:
         port = str(unused_tcp_port_factory())
@@ -812,6 +810,7 @@ async def server_multi(
 async def auto_start_agent():
     return False
 
+
 @pytest.fixture(scope="function")
 async def no_agent():
     inmanta.server.agentmanager.no_start_scheduler = True
@@ -837,6 +836,22 @@ async def agent(server, environment):
     a.executor_manager = executor
     a.scheduler.executor_manager = executor
     a.scheduler.code_manager = DummyCodeManager(a._client)
+
+    await a.start()
+
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
+
+
+@pytest.fixture(scope="function")
+async def null_agent(server, environment):
+    """Construct an agent that can execute using the resource container"""
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    a = NullAgent(environment)
 
     await a.start()
 

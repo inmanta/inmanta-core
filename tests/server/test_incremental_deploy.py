@@ -323,6 +323,7 @@ async def test_deploy(server, agent, environment, caplog):
 def strip_version(v):
     return sub(",v=[0-9]+", "", v)
 
+
 @pytest.mark.skip("Requies ability to pause an agent")
 async def test_deploy_scenarios(server, agent, environment, caplog):
     with caplog.at_level(logging.WARNING):
@@ -386,6 +387,7 @@ async def test_deploy_scenarios_removed_req_by_increment(server, agent, environm
         assert not resources[id2]["attributes"]["requires"]
 
     assert_no_warning(caplog)
+
 
 @pytest.mark.skip("Requies ability to pause an agent")
 async def test_deploy_scenarios_removed_req_by_increment2(server, environment, caplog, agent):

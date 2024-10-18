@@ -738,7 +738,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
 
 
 @pytest.mark.slowtest
-async def test_server_recompile(server, client, environment, monkeypatch):
+async def test_server_recompile(server, client, environment, monkeypatch, no_agent):
     """
     Test a recompile on the server and verify recompile triggers
     """
@@ -1254,7 +1254,7 @@ async def test_compileservice_queue_with_env_var_merging(
     assert t2.request.used_environment_variables == {"my_var": "1", "v1": "a C", "v2": "b"}
 
 
-async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
+async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID, no_agent) -> None:
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     result = await client.get_compile_queue(environment)
@@ -1895,7 +1895,13 @@ def {exporter_name}(exporter: Exporter) -> None:
 @pytest.mark.parametrize("only_clear_environment", [True, False])
 @pytest.mark.parametrize("compile_is_running", [True, False])
 async def test_status_compilerservice_task_queue(
-    server, client, environment: str, mocked_compiler_service_block, only_clear_environment: bool, compile_is_running: bool
+    server,
+    client,
+    environment: str,
+    mocked_compiler_service_block,
+    only_clear_environment: bool,
+    compile_is_running: bool,
+    no_agent,
 ) -> None:
     """
     Verify that the size of the compiler queue, reported by the /serverstatus API endpoint, is correctly

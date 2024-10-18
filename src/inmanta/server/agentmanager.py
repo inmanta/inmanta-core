@@ -874,14 +874,8 @@ class AgentManager(ServerSlice, SessionListener):
                 resource_id not in self._fact_resource_block_set
                 or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now
             ):
-                if opt.server_use_resource_scheduler.get():
-                    await self._autostarted_agent_manager._ensure_scheduler(env)
-                    agent = const.AGENT_SCHEDULER_ID
-                else:
-                    agents = await data.ConfigurationModel.get_agents(env.id, version)
-                    await self._autostarted_agent_manager._ensure_agents(env, agents)
-                    agent = res.agent
-
+                await self._autostarted_agent_manager._ensure_scheduler(env)
+                agent = const.AGENT_SCHEDULER_ID
                 client = self.get_agent_client(env_id, agent)
                 if client is not None:
                     await client.get_parameter(str(env_id), agent, res.to_dict())
@@ -997,22 +991,11 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             autostart = await env.get(data.AUTOSTART_ON_START)
             if not autostart:
                 continue
-
-            if opt.server_use_resource_scheduler.get():
-                await self._ensure_scheduler(env)
-            else:
-                agents = await data.Agent.get_list(environment=env.id)
-                agent_list = {a.name for a in agents}
-                await self._ensure_agents(env, agent_list)
+            await self._ensure_scheduler(env)
 
     async def restart_agents(self, env: data.Environment) -> None:
         LOGGER.debug("Restarting agents in environment %s", env.id)
-        if opt.server_use_resource_scheduler.get():
-            await self._ensure_scheduler(env)
-        else:
-            agents = await data.Agent.get_list(environment=env.id)
-            agent_list = [a.name for a in agents]
-            await self._ensure_agents(env, agent_list, restart=True)
+        await self._ensure_scheduler(env)
 
     async def stop_agents(
         self,
@@ -1261,9 +1244,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         assert not assert_no_start_scheduler
 
-        use_resource_scheduler: bool = opt.server_use_resource_scheduler.get()
-
-        config: str = await self._make_agent_config(env, connection=connection, scheduler=use_resource_scheduler)
+        config: str = await self._make_agent_config(env, connection=connection, scheduler=True)
 
         config_dir = os.path.join(self._server_storage["agents"], str(env.id))
         if not os.path.exists(config_dir):
@@ -1289,7 +1270,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 Config._config_dir if Config._config_dir is not None else "",
                 "--log-file",
                 agent_log,
-                "scheduler" if use_resource_scheduler else "agent",
+                "scheduler",
             ],
             out,
             err,
@@ -1303,7 +1284,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         env: data.Environment,
         *,
         connection: Optional[asyncpg.connection.Connection],
-        scheduler: bool = False,
+
     ) -> str:
         """
         Generate the config file for the process that hosts the autostarted agents
@@ -1381,8 +1362,7 @@ ssl_ca_cert_file=%s
             config += """
 ssl=True
     """
-        if scheduler:
-            config += f"""
+        config += f"""
 [database]
 wait_time={opt.db_wait_time.get()}
 host={opt.db_host.get()}
@@ -1514,9 +1494,6 @@ password={opt.db_password.get()}
 
         :param env: The new environment
         """
-        if not opt.server_use_resource_scheduler.get():
-            return
-
         env_db = await data.Environment.get_by_id(env.id)
         # We need to make sure that the AGENT_SCHEDULER is registered to be up and running
         await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)

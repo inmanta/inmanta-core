@@ -25,10 +25,10 @@ from typing import Optional
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
+import inmanta.server.agentmanager
 from inmanta import data
 from inmanta.server.config import get_bind_port
 from inmanta.util import parse_timestamp
-import inmanta.server.agentmanager
 
 
 @pytest.fixture

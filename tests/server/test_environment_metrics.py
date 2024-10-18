@@ -614,7 +614,10 @@ async def test_resource_count_metric_released(client, server, agent, clienthelpe
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
     assert len(result_gauge) == 10
     assert any(
-        x.count == 3 and x.metric_name == "resource.resource_count" and x.category == "unavailable" and str(x.environment) == environment
+        x.count == 3
+        and x.metric_name == "resource.resource_count"
+        and x.category == "unavailable"
+        and str(x.environment) == environment
         for x in result_gauge
     )
     assert 9 == len([obj for obj in result_gauge if obj.count == 0])
@@ -645,6 +648,7 @@ async def test_resource_count_empty_datapoint(client, server):
     # 2 envs with each 10 statuses with count 0
     assert len(result_gauge) == 20
     assert all(hasattr(res, "category") and res.category != "__None__" and res.count == 0 for res in result_gauge)
+
 
 @pytest.mark.skip("To be fixed with agent view")
 async def test_agent_count_metric(clienthelper, client, server):
