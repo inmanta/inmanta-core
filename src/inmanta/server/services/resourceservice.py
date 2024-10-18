@@ -115,7 +115,7 @@ class ResourceActionLogLine(logging.LogRecord):
 class ResourceService(protocol.ServerSlice, EnvironmentListener):
     """Resource Manager service"""
 
-    agentmanager_service: "AgentManager"
+    agentmanager_service: "agentmanager.AgentManager"
 
     def __init__(self) -> None:
         super().__init__(SLICE_RESOURCE)

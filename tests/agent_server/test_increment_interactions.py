@@ -458,10 +458,10 @@ async def test_release_stuck(
     assert result.code == 200
 
     #  a version v1 is deploying
-    v1 = await make_version()
+    await make_version()
 
     #  a version v2 is deploying
-    v1 = await make_version()
+    await make_version()
 
     # Delete environment
     result = await client.environment_delete(environment)
@@ -473,6 +473,6 @@ async def test_release_stuck(
     result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
     assert result.code == 200
 
-    v1 = await make_version()
+    await make_version()
     # This will time-out when there is a run_ahead_lock still in place
-    v1 = await make_version()
+    await make_version()
