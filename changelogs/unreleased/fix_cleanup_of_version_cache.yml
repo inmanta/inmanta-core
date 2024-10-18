@@ -1,5 +1,5 @@
 description: Fix clearing of increment cache on environment delete
 change-type: patch
-destination-branches: [master, iso7]
+destination-branches: [iso7]
 sections:
   bugfix: "{{description}}"
