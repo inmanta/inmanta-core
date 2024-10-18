@@ -86,6 +86,7 @@ class Server(protocol.ServerSlice):
         dir_map = {
             "server": ensure_directory_exist(state_dir, "server"),
             "environments": ensure_directory_exist(server_state_dir, "environments"),
+            # FIXME remove "agents" dir when old agent is stripped out
             "agents": ensure_directory_exist(server_state_dir, "agents"),
             "logs": ensure_directory_exist(config.log_dir.get()),
         }

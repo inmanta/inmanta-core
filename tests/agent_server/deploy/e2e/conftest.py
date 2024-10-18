@@ -27,7 +27,7 @@ import utils
 from agent_server.deploy.scheduler_test_util import ClientHelper, DummyCodeManager
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.in_process_executor import InProcessExecutorManager
-from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, config
 from inmanta.server.config import server_use_resource_scheduler
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,15 @@ async def agent(server, environment):
     """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
+    # Mock scheduler state-dir: outside of tests this happens
+    # when the scheduler config is loaded, before starting the scheduler
+    server_state_dir = config.Config.get("config", "state-dir")
+    scheduler_state_dir = pathlib.Path(server_state_dir) / str(environment)
+    scheduler_state_dir.mkdir(exist_ok=True)
+    config.Config.set("config", "state-dir", str(scheduler_state_dir))
     a = Agent(environment)
+    # Restore state-dir
+    config.Config.set("config", "state-dir", str(server_state_dir))
 
     executor = InProcessExecutorManager(
         environment,
@@ -77,5 +85,4 @@ async def agent(server, environment):
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     yield a
-
     await a.stop()

@@ -17,13 +17,85 @@
 """
 
 import logging
+import pathlib
+from typing import Mapping
 
 from agent_server.deploy.scheduler_test_util import wait_full_success
 from inmanta import const
 from inmanta.deploy.state import DeploymentResult
+from inmanta.server import SLICE_SERVER, config
 from utils import resource_action_consistency_check
 
 logger = logging.getLogger(__name__)
+
+
+async def test_on_disk_layout(server, agent, environment):
+    """
+    Check that the storage is configured correctly:
+          <state-dir>
+              ├─ env_uuid_1/
+              │   ├─ executors/
+              │   │   ├─ venvs/
+              │   │   │  ├─ venv_blueprint_hash_1/
+              │   │   │  ├─ venv_blueprint_hash_2/
+              │   │   │  ├─ ...
+              │   │   ├─ code/
+              │   │      ├─ executor_blueprint_hash_1/
+              │   │      ├─ executor_blueprint_hash_2/
+              │   │      ├─ ...
+              │   ├─ scheduler.cfg
+              │
+              │
+              │
+              ├─ env_uuid_2/
+              │  ├─ ( ... )
+              │
+              ├─ server/
+                  ├─ environments/
+                     ├─ env_uuid_1/
+                     ├─ env_uuid_2/
+                     ├─ ...
+
+
+          <log-dir>
+              ├─ logs/
+
+
+    """
+    state_dir = pathlib.Path(config.Config.get("config", "state-dir"))
+    log_dir = pathlib.Path(config.Config.get("config", "log-dir"))
+
+    server_storage = server.get_slice(SLICE_SERVER)._server_storage
+    agent_storage = agent._storage
+
+    expected_server_storage = {
+        "server": str(state_dir / "server"),
+        "agents": str(state_dir / "server" / "agents"),  # FIXME remove once old agent is stripped out
+        "environments": str(state_dir / "server" / "environments"),
+        "logs": str(log_dir),
+    }
+
+    executors_dir = pathlib.Path(str(state_dir / str(environment) / "executors"))
+    expected_agent_storage = {"executors": str(executors_dir)}
+
+    def check_on_disk_structure(expected_structure: Mapping[str, str], actual_structure: Mapping[str, str]):
+        """
+        Expects 2 mappings representing expected and actual on-disk file structure.
+        Checks for equality between the 2 and checks that the underlying structure is present.
+        """
+        # Check structure is as expected
+        assert expected_structure == actual_structure
+        # Check existence
+        for path in actual_structure.values():
+            assert pathlib.Path(path).exists()
+
+    check_on_disk_structure(expected_server_storage, server_storage)
+    check_on_disk_structure(expected_agent_storage, agent_storage)
+
+    # Also check that "venvs" and "code" directories are properly created:
+    for sub_dir_name in ["venvs", "code"]:
+        sub_dir = executors_dir / sub_dir_name
+        assert sub_dir.exists()
 
 
 async def test_basics(agent, resource_container, clienthelper, client, environment):
