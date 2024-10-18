@@ -263,15 +263,15 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
             LOGGER.debug("%s: created %s", self.my_name(), self.render_id(member_id))
             return out
 
-    async def _create_or_replace(self, member_id: TPoolID, interal_id: TIntPoolID) -> TPoolMember:
+    async def _create_or_replace(self, member_id: TPoolID, internal_id: TIntPoolID) -> TPoolMember:
         """
         MUST BE CALLED UNDER LOCK!
         """
         await self.pre_create_capacity_check(member_id)
 
         my_executor = await self.create_member(member_id)
-        assert my_executor.id == interal_id
-        self.pool[interal_id] = my_executor
+        assert my_executor.id == internal_id
+        self.pool[internal_id] = my_executor
         my_executor.termination_listeners.append(self.notify_member_shutdown)
 
         return my_executor

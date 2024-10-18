@@ -17,13 +17,79 @@
 """
 
 import logging
+import pathlib
+from typing import Mapping
 
 from agent_server.deploy.scheduler_test_util import wait_full_success
 from inmanta import const
 from inmanta.deploy.state import DeploymentResult
+from inmanta.server import SLICE_SERVER, config
 from utils import resource_action_consistency_check
 
 logger = logging.getLogger(__name__)
+
+
+async def test_on_disk_layout(server, agent, environment):
+    """
+    Check that the storage is configured correctly:
+          <state-dir>
+              ├─ server/
+                 ├─ env_uuid_1/
+                 │   ├─ executors/
+                 │   │   ├─ venvs/
+                 │   │   │  ├─ venv_blueprint_hash_1/
+                 │   │   │  ├─ venv_blueprint_hash_2/
+                 │   │   │  ├─ ...
+                 │   │   ├─ code/
+                 │   │      ├─ executor_blueprint_hash_1/
+                 │   │      ├─ executor_blueprint_hash_2/
+                 │   │      ├─ ...
+                 │   ├─ scheduler.cfg
+                 │   ├─ compiler/
+                 │
+                 ├─ env_uuid_2/
+                 │  ├─ ( ... )
+
+          <log-dir>
+              ├─ logs/
+
+
+    """
+    state_dir = pathlib.Path(config.Config.get("config", "state-dir"))
+    log_dir = pathlib.Path(config.Config.get("config", "log-dir"))
+
+    server_storage = server.get_slice(SLICE_SERVER)._server_storage
+    agent_storage = agent._storage
+
+    expected_server_storage = {
+        "server": str(state_dir / "server"),
+        "logs": str(log_dir),
+    }
+    scheduler_state_dir = pathlib.Path(state_dir / "server" / str(environment))
+    executors_dir = scheduler_state_dir / "executors"
+    expected_agent_storage = {"executors": str(executors_dir)}
+
+    def check_on_disk_structure(expected_structure: Mapping[str, str], actual_structure: Mapping[str, str]):
+        """
+        Expects 2 mappings representing expected and actual on-disk file structure.
+        Checks for equality between the 2 and checks that the underlying structure is present.
+        """
+        # Check structure is as expected
+        assert expected_structure == actual_structure
+        # Check existence
+        for path in actual_structure.values():
+            assert pathlib.Path(path).exists()
+
+    check_on_disk_structure(expected_server_storage, server_storage)
+    check_on_disk_structure(expected_agent_storage, agent_storage)
+
+    # Also check that "venvs" and "code" directories are properly created:
+    for sub_dir in [
+        executors_dir / "venvs",
+        executors_dir / "code",
+        # scheduler_state_dir / "compiler",
+    ]:
+        assert sub_dir.exists()
 
 
 async def test_basics(agent, resource_container, clienthelper, client, environment):
