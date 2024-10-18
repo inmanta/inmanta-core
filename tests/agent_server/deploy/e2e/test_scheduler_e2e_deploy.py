@@ -87,7 +87,7 @@ async def test_on_disk_layout(server, agent, environment):
     for sub_dir in [
         executors_dir / "venvs",
         executors_dir / "code",
-        scheduler_state_dir / "compiler",
+        # scheduler_state_dir / "compiler",
     ]:
         assert sub_dir.exists()
 

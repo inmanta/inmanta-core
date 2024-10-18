@@ -1258,7 +1258,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         Start an autostarted agent process for the given environment. Should only be called if none is running yet.
         """
         assert not no_auto_start_scheduler
-
         use_resource_scheduler: bool = opt.server_use_resource_scheduler.get()
         assert use_resource_scheduler
 
