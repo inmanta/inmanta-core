@@ -31,14 +31,7 @@ import pydantic
 import inmanta.util
 from inmanta import const, data, tracing
 from inmanta.const import ResourceState
-from inmanta.data import (
-    APILIMIT,
-    AVAILABLE_VERSIONS_TO_KEEP,
-    ENVIRONMENT_AGENT_TRIGGER_METHOD,
-    InvalidSort,
-    ResourcePersistentState,
-    RowLockMode,
-)
+from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
@@ -1196,13 +1189,12 @@ class OrchestrationService(protocol.ServerSlice):
                 await model.mark_done(connection=connection)
                 return 200, {"model": model}
 
-
             if connection.is_in_transaction():
                 raise RuntimeError(
                     "The release of a new version cannot be in a transaction! "
                     "The agent would not see the data that as committed"
                 )
-            await self.autostarted_agent_manager._ensure_scheduler(env)
+            await self.autostarted_agent_manager._ensure_scheduler(env.id)
             agent = const.AGENT_SCHEDULER_ID
 
             client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
@@ -1242,9 +1234,7 @@ class OrchestrationService(protocol.ServerSlice):
         if not allagents:
             return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
 
-
-
-        await self.autostarted_agent_manager._ensure_scheduler(env)
+        await self.autostarted_agent_manager._ensure_scheduler(env.id)
         allagents = [const.AGENT_SCHEDULER_ID]
 
         present = set()

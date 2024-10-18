@@ -273,6 +273,7 @@ server_access_control_allow_origin = Option(
     is_str_opt,
 )
 
+
 def default_hangtime() -> int:
     """:inmanta.config:option:`server.agent-timeout` *3/4"""
     return int(agent_timeout.get() * 3 / 4)

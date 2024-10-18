@@ -24,8 +24,6 @@ import uuid
 
 import pytest
 
-import inmanta.agent
-import inmanta.agent.executor
 import utils
 from inmanta import const
 from inmanta.agent.forking_executor import MPManager

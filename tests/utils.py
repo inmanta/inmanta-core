@@ -463,7 +463,8 @@ class ClientHelper:
         return lookup[version]
 
     async def wait_for_deployed(self, version: int = -1) -> None:
-        await self.wait_for_released(version)
+        if version != -1:
+            await self.wait_for_released(version)
         await wait_until_deployment_finishes(self.client, self.environment)
 
     async def wait_full_success(self, environment: str) -> None:
@@ -909,6 +910,7 @@ class NullAgent(SessionEndpoint):
         """
         super().__init__(name="agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
         self._env_id = environment
+        self.enabled: dict[str, bool] = {}
 
     async def start_connected(self) -> None:
         """
@@ -919,11 +921,12 @@ class NullAgent(SessionEndpoint):
     @protocol.handle(methods_v2.update_agent_map)
     async def update_agent_map(self, agent_map: dict[str, str]) -> None:
         # Not used here
-        pass
+        return 200
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
-        pass
+        self.enabled[agent] = enabled
+        return 200
 
     async def on_reconnect(self) -> None:
         pass
@@ -933,11 +936,11 @@ class NullAgent(SessionEndpoint):
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
-        pass
+        return 200
 
     @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
     async def read_version(self, env: uuid.UUID) -> Apireturn:
-        pass
+        return 200
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")
     async def resource_event(
@@ -951,7 +954,7 @@ class NullAgent(SessionEndpoint):
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]],
     ) -> Apireturn:
         # Doesn't do anything
-        pass
+        return 200
 
     @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
     async def run_dryrun(self, env: uuid.UUID, dry_run_id: uuid.UUID, agent: str, version: int) -> Apireturn:
