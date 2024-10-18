@@ -1196,6 +1196,8 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         :return: True iff a new agent process was started.
         """
+        if no_start_scheduler:
+            return False
         if self._stopping:
             raise ShutdownInProgress()
 
@@ -1257,7 +1259,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         Start an autostarted agent process for the given environment. Should only be called if none is running yet.
         """
-        assert not no_auto_start_scheduler
+        assert not assert_no_start_scheduler
 
         use_resource_scheduler: bool = opt.server_use_resource_scheduler.get()
 
@@ -1518,8 +1520,12 @@ password={opt.db_password.get()}
         env_db = await data.Environment.get_by_id(env.id)
         # We need to make sure that the AGENT_SCHEDULER is registered to be up and running
         await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
-        if not no_auto_start_scheduler:
+        if not (assert_no_start_scheduler or no_start_scheduler):
             await self._ensure_scheduler(env_db)
 
 
-no_auto_start_scheduler = False
+# For testing only
+# Assert the scheduler will not be started (i.e. agent mock setup is correct)
+assert_no_start_scheduler = False
+# Ensure the scheduler is not started
+no_start_scheduler = False

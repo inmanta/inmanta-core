@@ -21,6 +21,7 @@ from uuid import UUID
 
 import pytest
 
+import inmanta.server.agentmanager
 from inmanta import data
 from inmanta.data import Environment, Setting, convert_boolean
 from inmanta.util import get_compiler_version
@@ -212,7 +213,7 @@ async def test_delete_protected_environment(server, client):
     await assert_env_deletion(env_id, deletion_succeeds=True)
 
 
-async def test_clear_protected_environment(server, client):
+async def test_clear_protected_environment(server, client, no_agent):
     result = await client.create_project("env-test")
     assert result.code == 200
     project_id = result.result["project"]["id"]

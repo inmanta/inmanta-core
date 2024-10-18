@@ -515,7 +515,7 @@ async def test_resource_details(server, client, env_with_resources):
     }
 
 
-async def test_move_to_available_state(server, environment, client, clienthelper, agent):
+async def test_move_to_available_state(server, environment, client, clienthelper, agent, resource_container):
     """
     Verify that the endpoints, that return the state of a resource, return the correct state
     when a resource moved back to the available state. This state is not written back to the
@@ -529,32 +529,42 @@ async def test_move_to_available_state(server, environment, client, clienthelper
         version=version1,
         resources=[
             {
-                "id": f"std::testing::NullResource[agent1,name=test1],v={version1}",
-                "val": "val1",
+                "id": f"test::Resource[agent1,key=test1],v={version1}",
+                "key":"test1",
+                "value": "val1",
+                "send_event": True,
                 "requires": [],
             },
             {
-                "id": f"std::testing::NullResource[agent1,name=test2],v={version1}",
-                "val": "val2",
+                "id": f"test::Resource[agent1,key=test2],v={version1}",
+                "key": "test2",
+                "value": "val2",
+                "send_event": True,
                 "requires": [],
             },
             {
-                "id": f"std::testing::NullResource[agent1,name=test3],v={version1}",
-                "val": "val3",
+                "id": f"test::Resource[agent1,key=test3],v={version1}",
+                "key": "test3",
+                "value": "val3",
+                "send_event": True,
                 "requires": [],
             },
             {
-                "id": f"std::testing::NullResource[agent1,name=test4],v={version1}",
-                "val": "val4",
+                "id": f"test::Resource[agent1,key=test4],v={version1}",
+                "key": "test4",
+                "value": "val4",
+                "send_event": True,
                 "requires": [],
             },
             {
-                "id": f"std::testing::NullResource[agent1,name=test5],v={version1}",
-                "val": "val5",
-                "requires": [f"std::testing::NullResource[agent1,name=test4],v={version1}"],
+                "id": f"test::Resource[agent1,key=test5],v={version1}",
+                "key": "test5",
+                "value": "val5",
+                "send_event": True,
+                "requires": [f"test::Resource[agent1,key=test4],v={version1}"],
             },
         ],
-        resource_state={"std::testing::NullResource[agent1,name=test4]": const.ResourceState.undefined},
+        resource_state={"test::Resource[agent1,key=test4]": const.ResourceState.undefined},
         compiler_version=util.get_compiler_version(),
     )
     assert result.code == 200, result.result
@@ -564,58 +574,58 @@ async def test_move_to_available_state(server, environment, client, clienthelper
     assert result.code == 200
 
     # Move resources
-    #    * std::testing::NullResource[agent1,name=test1]
-    #    * std::testing::NullResource[agent1,name=test2]
+    #    * test::Resource[agent1,key=test1]
+    #    * test::Resource[agent1,key=test2]
     # to deployed state
     aclient = agent._client
     for i in range(1, 3):
         action_id = uuid.uuid4()
         result = await aclient.resource_deploy_start(
             tid=environment,
-            rvid=f"std::testing::NullResource[agent1,name=test{i}],v={version1}",
+            rvid=f"test::Resource[agent1,key=test{i}],v={version1}",
             action_id=action_id,
         )
         assert result.code == 200
         result = await aclient.resource_deploy_done(
             tid=environment,
-            rvid=f"std::testing::NullResource[agent1,name=test{i}],v={version1}",
+            rvid=f"test::Resource[agent1,key=test{i}],v={version1}",
             action_id=action_id,
             status=const.ResourceState.deployed,
         )
         assert result.code == 200, result.result
 
     # Create a new version containing:
-    #    * an updated desired state for resource std::testing::NullResource[agent1,name=test1]
-    #    * A version of the std::testing::NullResource[agent1,name=test4] that is no longer undefined but available.
+    #    * an updated desired state for resource test::Resource[agent1,key=test1]
+    #    * A version of the test::Resource[agent1,key=test4] that is no longer undefined but available.
     version2 = await clienthelper.get_version()
     result = await client.put_version(
         tid=environment,
         version=version2,
         resources=[
             {
-                "id": f"std::testing::NullResource[agent1,name=test1],v={version2}",
+                "id": f"test::Resource[agent1,key=test1],v={version2}",
                 "val": "val1_updated",
                 "requires": [],
             },
             {
-                "id": f"std::testing::NullResource[agent1,name=test2],v={version2}",
+                "id": f"test::Resource[agent1,key=test2],v={version2}",
                 "val": "val2",
                 "requires": [],
             },
             {
-                "id": f"std::testing::NullResource[agent1,name=test3],v={version2}",
+                "id": f"test::Resource[agent1,key=test3],v={version2}",
                 "val": "val3",
                 "requires": [],
             },
             {
-                "id": f"std::testing::NullResource[agent1,name=test4],v={version2}",
+                "id": f"test::Resource[agent1,key=test4],v={version2}",
                 "val": "val4",
                 "requires": [],
             },
             {
-                "id": f"std::testing::NullResource[agent1,name=test5],v={version2}",
+                "id": f"test::Resource[agent1,key=test5],v={version2}",
                 "val": "val5",
-                "requires": [f"std::testing::NullResource[agent1,name=test4],v={version2}"],
+                "requires": [f"test::Resource[agent1,key=test4],v={version2}"],
             },
         ],
         resource_state={},
@@ -646,11 +656,11 @@ async def test_move_to_available_state(server, environment, client, clienthelper
 
     await assert_states(
         {
-            ResourceIdStr("std::testing::NullResource[agent1,name=test1]"): const.ResourceState.deployed,
-            ResourceIdStr("std::testing::NullResource[agent1,name=test2]"): const.ResourceState.deployed,
-            ResourceIdStr("std::testing::NullResource[agent1,name=test3]"): const.ResourceState.available,
-            ResourceIdStr("std::testing::NullResource[agent1,name=test4]"): const.ResourceState.undefined,
-            ResourceIdStr("std::testing::NullResource[agent1,name=test5]"): const.ResourceState.skipped_for_undefined,
+            ResourceIdStr("test::Resource[agent1,key=test1]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=test2]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=test3]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=test4]"): const.ResourceState.undefined,
+            ResourceIdStr("test::Resource[agent1,key=test5]"): const.ResourceState.skipped_for_undefined,
         }
     )
 
@@ -660,10 +670,10 @@ async def test_move_to_available_state(server, environment, client, clienthelper
 
     await assert_states(
         {
-            ResourceIdStr("std::testing::NullResource[agent1,name=test1]"): const.ResourceState.available,
-            ResourceIdStr("std::testing::NullResource[agent1,name=test2]"): const.ResourceState.deployed,
-            ResourceIdStr("std::testing::NullResource[agent1,name=test3]"): const.ResourceState.available,
-            ResourceIdStr("std::testing::NullResource[agent1,name=test4]"): const.ResourceState.available,
-            ResourceIdStr("std::testing::NullResource[agent1,name=test5]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=test1]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=test2]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=test3]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=test4]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=test5]"): const.ResourceState.available,
         }
     )

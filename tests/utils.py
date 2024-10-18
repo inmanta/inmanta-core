@@ -372,7 +372,6 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
 
 
 async def wait_until_deployment_finishes(client: Client, environment: str, version: int = -1, timeout: int = 10) -> None:
-    """Interface kept for backward compat"""
 
     async def done():
         result = await client.resource_list(environment, deploy_summary=True)
@@ -383,7 +382,9 @@ async def wait_until_deployment_finishes(client: Client, environment: str, versi
         print(summary)
         available = summary["by_state"]["available"]
         deploying = summary["by_state"]["deploying"]
-        return available + deploying == 0
+        if available + deploying != 0:
+            return False
+        return summary["by_state"]["deployed"] + summary["by_state"]["failed"]+ summary["by_state"]["skipped"]+ summary["by_state"]["skipped_for_undefined"] + summary["by_state"]["unavailable"] + summary["by_state"]["undefined"]  == summary["total"]
 
     await retry_limited(done, 10)
 
@@ -451,6 +452,7 @@ class ClientHelper:
         return lookup[version]
 
     async def wait_for_deployed(self, version: int = -1) -> None:
+        await self.wait_for_released(version)
         await wait_until_deployment_finishes(self.client, self.environment)
 
     async def wait_full_success(self, environment: str) -> None:

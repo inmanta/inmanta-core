@@ -26,6 +26,7 @@ from operator import itemgetter
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
+import inmanta.server.agentmanager
 from inmanta import const, data
 from inmanta.server import SLICE_NOTIFICATION
 from inmanta.server.config import get_bind_port
@@ -334,7 +335,7 @@ async def test_notifications_deleted_when_env_deleted(environment_with_notificat
     assert len(notifications_in_db) == 0
 
 
-async def test_notifications_deleted_when_env_cleared(environment_with_notifications, client) -> None:
+async def test_notifications_deleted_when_env_cleared(environment_with_notifications, client, no_agent) -> None:
     environment = environment_with_notifications
 
     result = await client.list_notifications(environment)
@@ -413,7 +414,7 @@ async def test_notification_cleanup_on_start(init_dataclasses_and_load_schema, a
 
 
 @pytest.mark.parametrize("halted", [True, False])
-async def test_cleanup_notifications(server, client, halted_env_with_old_notifications, halted):
+async def test_cleanup_notifications(server, client, halted_env_with_old_notifications, halted, no_agent):
     # test that the notifications are only cleaned up if the env is not halted
     env_id = halted_env_with_old_notifications
     result = await client.list_notifications(env_id)

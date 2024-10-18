@@ -690,7 +690,7 @@ def log_state_tcp_ports(request, log_file):
 @pytest.fixture(scope="function")
 async def server_config(inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory, auto_start_agent):
     reset_metrics()
-    agentmanager.no_auto_start_scheduler = not auto_start_agent
+    agentmanager.assert_no_start_scheduler = not auto_start_agent
     server_use_resource_scheduler.set("True")
 
     with tempfile.TemporaryDirectory() as state_dir:
@@ -721,7 +721,7 @@ async def server_config(inmanta_config, postgres_db, database_name, clean_reset,
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
         yield config
-    agentmanager.no_auto_start_scheduler = False
+    agentmanager.assert_no_start_scheduler = False
 
 
 @pytest.fixture(scope="function")
@@ -811,6 +811,12 @@ async def server_multi(
 @pytest.fixture(scope="function")
 async def auto_start_agent():
     return False
+
+@pytest.fixture(scope="function")
+async def no_agent():
+    inmanta.server.agentmanager.no_start_scheduler = True
+    yield
+    inmanta.server.agentmanager.no_start_scheduler = False
 
 
 @pytest.fixture(scope="function")

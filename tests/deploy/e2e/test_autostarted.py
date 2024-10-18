@@ -38,7 +38,7 @@ logger = logging.getLogger("inmanta.test.server_agent")
 
 
 @pytest.fixture(scope="function")
-async def auto_start_agent(server_config):
+async def auto_start_agent():
     # In this file, we allow auto started agents
     return True
 
@@ -145,11 +145,10 @@ def ps_diff_inmanta_agent_processes(original: list[psutil.Process], current_proc
     )
 
 
-async def test_auto_deploy_no_splay(server, client, clienthelper, resource_container, environment):
+async def test_auto_deploy_no_splay(server, client, clienthelper: ClientHelper, environment):
     """
     Verify that the new scheduler can actually fork
     """
-    resource_container.Provider.reset()
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTOSTART_ON_START, True)
@@ -181,8 +180,11 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
 
     await clienthelper.put_version_simple(resources, version)
 
+    await clienthelper.wait_for_released(version)
+
     # check deploy
     await wait_until_deployment_finishes(client, environment, version)
+
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
