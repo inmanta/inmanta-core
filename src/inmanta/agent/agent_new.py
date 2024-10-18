@@ -326,17 +326,22 @@ class Agent(SessionEndpoint):
         what the layout on disk will look like:
 
             /var/lib/inmanta/
-                ├─ env_uuid
-                    ├─ executors/
-                        ├─ venvs/
-                        │   ├─ venv_blueprint_hash_1/
-                        │   ├─ venv_blueprint_hash_2/
-                        │   ├─ ...
+                ├─ server
+                    ├─ env_uuid
+                        ├─ executors/
+                        │   ├─ venvs/
+                        │   │   ├─ venv_blueprint_hash_1/
+                        │   │   ├─ venv_blueprint_hash_2/
+                        │   │   ├─ ...
+                        │   │
+                        │   ├─ code/
+                        │       ├─ executor_blueprint_hash_1/
+                        │       ├─ executor_blueprint_hash_2/
+                        │       ├─ ...
                         │
-                        ├─ code/
-                            ├─ executor_blueprint_hash_1/
-                            ├─ executor_blueprint_hash_2/
-                            ├─ ...
+                        ├─ compiler/
+                        │
+                        ├─ scheduler.cfg
 
         """
 

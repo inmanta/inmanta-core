@@ -33,29 +33,22 @@ async def test_on_disk_layout(server, agent, environment):
     """
     Check that the storage is configured correctly:
           <state-dir>
-              ├─ env_uuid_1/
-              │   ├─ executors/
-              │   │   ├─ venvs/
-              │   │   │  ├─ venv_blueprint_hash_1/
-              │   │   │  ├─ venv_blueprint_hash_2/
-              │   │   │  ├─ ...
-              │   │   ├─ code/
-              │   │      ├─ executor_blueprint_hash_1/
-              │   │      ├─ executor_blueprint_hash_2/
-              │   │      ├─ ...
-              │   ├─ scheduler.cfg
-              │
-              │
-              │
-              ├─ env_uuid_2/
-              │  ├─ ( ... )
-              │
               ├─ server/
-                  ├─ environments/
-                     ├─ env_uuid_1/
-                     ├─ env_uuid_2/
-                     ├─ ...
-
+                 ├─ env_uuid_1/
+                 │   ├─ executors/
+                 │   │   ├─ venvs/
+                 │   │   │  ├─ venv_blueprint_hash_1/
+                 │   │   │  ├─ venv_blueprint_hash_2/
+                 │   │   │  ├─ ...
+                 │   │   ├─ code/
+                 │   │      ├─ executor_blueprint_hash_1/
+                 │   │      ├─ executor_blueprint_hash_2/
+                 │   │      ├─ ...
+                 │   ├─ scheduler.cfg
+                 │   ├─ compiler/
+                 │
+                 ├─ env_uuid_2/
+                 │  ├─ ( ... )
 
           <log-dir>
               ├─ logs/
@@ -70,12 +63,10 @@ async def test_on_disk_layout(server, agent, environment):
 
     expected_server_storage = {
         "server": str(state_dir / "server"),
-        "agents": str(state_dir / "server" / "agents"),  # FIXME remove once old agent is stripped out
-        "environments": str(state_dir / "server" / "environments"),
         "logs": str(log_dir),
     }
 
-    executors_dir = pathlib.Path(str(state_dir / str(environment) / "executors"))
+    executors_dir = pathlib.Path(str(state_dir / "server" / str(environment) / "executors"))
     expected_agent_storage = {"executors": str(executors_dir)}
 
     def check_on_disk_structure(expected_structure: Mapping[str, str], actual_structure: Mapping[str, str]):

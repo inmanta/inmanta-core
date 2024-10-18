@@ -59,7 +59,7 @@ async def agent(server, environment):
     # Mock scheduler state-dir: outside of tests this happens
     # when the scheduler config is loaded, before starting the scheduler
     server_state_dir = config.Config.get("config", "state-dir")
-    scheduler_state_dir = pathlib.Path(server_state_dir) / str(environment)
+    scheduler_state_dir = pathlib.Path(server_state_dir) / "server" / str(environment)
     scheduler_state_dir.mkdir(exist_ok=True)
     config.Config.set("config", "state-dir", str(scheduler_state_dir))
     a = Agent(environment)
