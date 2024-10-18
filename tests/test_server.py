@@ -37,13 +37,7 @@ from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange, LogLine, ResourceVersionIdStr
 from inmanta.export import upload_code
 from inmanta.protocol import Client
-from inmanta.server import (
-    SLICE_AGENT_MANAGER,
-    SLICE_AUTOSTARTED_AGENT_MANAGER,
-    SLICE_ORCHESTRATION,
-    SLICE_SERVER,
-    SLICE_SESSION_MANAGER,
-)
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version

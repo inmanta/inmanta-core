@@ -865,6 +865,7 @@ async def agent_multi(server_multi, environment_multi):
 
     await a.stop()
 
+
 @pytest.fixture(scope="function")
 def client(server):
     client = protocol.Client("client")
@@ -881,11 +882,6 @@ def client_multi(server_multi):
 def sync_client_multi(server_multi):
     client = protocol.SyncClient("client")
     yield client
-
-
-@pytest.fixture(scope="function")
-def clienthelper(client, environment):
-    return utils.ClientHelper(client, environment)
 
 
 @pytest.fixture(scope="function", autouse=True)

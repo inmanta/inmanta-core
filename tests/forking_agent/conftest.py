@@ -26,8 +26,6 @@ import pytest
 
 import inmanta.agent
 import inmanta.agent.executor
-import inmanta.config
-import inmanta.data
 import utils
 from inmanta import const
 from inmanta.agent.forking_executor import MPManager

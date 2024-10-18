@@ -16,21 +16,15 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
-import concurrent
 import logging
-import uuid
 
 import pytest
 
-from inmanta import config, data, protocol
 from inmanta.agent import reporting
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange
 from inmanta.resources import Id, PurgeableResource
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
-from inmanta.server.bootloader import InmantaBootloader
-from utils import retry_limited
+from inmanta.server import SLICE_SESSION_MANAGER
 
 logger = logging.getLogger(__name__)
 
@@ -82,4 +76,3 @@ def test_context_changes():
 
     with pytest.raises(InvalidOperation):
         ctx.update_changes({"value": "test"})
-

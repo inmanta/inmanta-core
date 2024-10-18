@@ -24,8 +24,7 @@ import pytest
 
 from inmanta import const
 from inmanta.config import Config
-from tests.utils import resource_action_consistency_check
-from utils import get_resource, log_contains, log_doesnt_contain, retry_limited
+from utils import get_resource, log_contains, log_doesnt_contain, resource_action_consistency_check, retry_limited
 
 
 @pytest.mark.skip("Broken")
