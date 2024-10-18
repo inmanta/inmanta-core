@@ -859,7 +859,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         self.code_folder.mkdir(exist_ok=True)
 
         # Env manager
-        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venv_dir.absolute()), self.thread_pool)
+        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(envs_dir=str(venv_dir.absolute()),thread_pool= self.thread_pool)
 
         # logging
         self.log_level = log_level
