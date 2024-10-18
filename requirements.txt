@@ -4,7 +4,7 @@ click==8.1.7
 colorlog==6.8.2
 cookiecutter==2.6.0
 crontab==1.0.1
-cryptography==43.0.1
+cryptography==43.0.3
 docstring-parser==0.16
 email-validator==2.2.0
 logfire==1.1.0
