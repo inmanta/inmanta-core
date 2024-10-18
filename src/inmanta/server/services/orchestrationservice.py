@@ -1198,9 +1198,8 @@ class OrchestrationService(protocol.ServerSlice):
                 await model.mark_done(connection=connection)
                 return 200, {"model": model}
 
-            is_using_new_scheduler = opt.server_use_resource_scheduler.get()
             # New code relying on the ResourceScheduler
-            if is_using_new_scheduler:
+            if opt.server_use_resource_scheduler.get():
                 if connection.is_in_transaction():
                     raise RuntimeError(
                         "The release of a new version cannot be in a transaction! "

@@ -157,6 +157,7 @@ def resource_container(clean_reset):
         A file on a filesystem
         """
 
+        timeout: float = 10
         fields = ("key", "value", "purged")
 
     @resource("test::Noprov", agent="agent", id_attribute="key")
@@ -590,11 +591,11 @@ def resource_container(clean_reset):
             super().__init__(agent, io)
             self.traceid = uuid.uuid4()
 
-        def deploy(self, ctx, resource, requires) -> None:
+        def deploy(self, ctx, resource: WaitR, requires) -> None:
             # Hang even when skipped
             logger.info("Hanging waiter %s", self.traceid)
             waiter.acquire()
-            notified_before_timeout = waiter.wait(timeout=10)
+            notified_before_timeout = waiter.wait(timeout=resource.timeout)
             waiter.release()
             if not notified_before_timeout:
                 raise Exception("Timeout occurred")
