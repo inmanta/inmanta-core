@@ -65,8 +65,8 @@ async def test_on_disk_layout(server, agent, environment):
         "server": str(state_dir / "server"),
         "logs": str(log_dir),
     }
-
-    executors_dir = pathlib.Path(str(state_dir / "server" / str(environment) / "executors"))
+    scheduler_state_dir = pathlib.Path(state_dir / "server" / str(environment))
+    executors_dir = scheduler_state_dir / "executors"
     expected_agent_storage = {"executors": str(executors_dir)}
 
     def check_on_disk_structure(expected_structure: Mapping[str, str], actual_structure: Mapping[str, str]):
@@ -84,8 +84,11 @@ async def test_on_disk_layout(server, agent, environment):
     check_on_disk_structure(expected_agent_storage, agent_storage)
 
     # Also check that "venvs" and "code" directories are properly created:
-    for sub_dir_name in ["venvs", "code"]:
-        sub_dir = executors_dir / sub_dir_name
+    for sub_dir in [
+        executors_dir / "venvs",
+        executors_dir / "code",
+        scheduler_state_dir / "compiler",
+    ]:
         assert sub_dir.exists()
 
 
