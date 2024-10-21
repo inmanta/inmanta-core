@@ -176,9 +176,18 @@ async def pass_method():
 class TestScheduler(ResourceScheduler):
     def __init__(self, environment: uuid.UUID, executor_manager: executor.ExecutorManager[executor.Executor], client: Client):
         super().__init__(environment, executor_manager, client)
+        self.executor_manager = self.executor_manager
+        self.code_manager = DummyCodeManager(client)
+        self.mock_versions = {}
+        # Bypass DB
+        self.read_version = pass_method
+
 
     async def should_be_running(self, endpoint: str) -> bool:
         return True
+
+    async def _build_resource_mappings_from_db(self, version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:
+        return self.mock_versions[version]
 
     def _create_agent(self, agent: str, should_start: bool = True) -> None:
         """Start processing for the given agent"""
@@ -214,17 +223,8 @@ class TestAgent(Agent):
     ):
         super().__init__(environment)
         self.executor_manager = DummyManager()
-        self.scheduler = TestScheduler(self.scheduler.environment, self.scheduler.executor_manager, self.scheduler.client)
-        self.scheduler.executor_manager = self.executor_manager
-        self.scheduler.code_manager = DummyCodeManager(self._client)
-        # Bypass DB
-        self.scheduler.read_version = pass_method
-        self.scheduler.mock_versions = {}
+        self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
 
-        async def build_resource_mappings_from_db(version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:
-            return self.scheduler.mock_versions[version]
-
-        self.scheduler._build_resource_mappings_from_db = build_resource_mappings_from_db
 
 
 @pytest.fixture
