@@ -1210,18 +1210,32 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         return "/api/v2/agents"
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        base = SimpleQueryBuilder(
-            select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
-                                            ap.hostname as process_name, ai.process as process_id,
-                                            (CASE WHEN paused THEN 'paused'
-                                                WHEN id_primary IS NOT NULL THEN 'up'
-                                                ELSE 'down'
-                                            END) as status""",
-            from_clause=f" FROM {Agent.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
-            " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
-            filter_statements=[" a.environment = $1 "],
-            values=[self.environment.id],
-        )
+        if opt.server_use_resource_scheduler.get():
+            base = SimpleQueryBuilder(
+                select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
+                                                ap.hostname as process_name, ai.process as process_id,
+                                                (CASE WHEN paused THEN 'paused'
+                                                    WHEN id_primary IS NOT NULL THEN 'up'
+                                                    ELSE 'down'
+                                                END) as status""",
+                from_clause=f" FROM {Agent.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
+                " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
+                filter_statements=[" a.environment = $1 "],
+                values=[self.environment.id],
+            )
+        else:
+            base = SimpleQueryBuilder(
+                select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
+                                                ap.hostname as process_name, ai.process as process_id,
+                                                (CASE WHEN paused THEN 'paused'
+                                                    WHEN id_primary IS NOT NULL THEN 'up'
+                                                    ELSE 'down'
+                                                END) as status""",
+                from_clause=f" FROM {Agent.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
+                " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
+                filter_statements=[" a.environment = $1 "],
+                values=[self.environment.id],
+            )
         # wrap when using compound fields
         virtual_fields = {"status", "process_name", "process_id"}
         used_fields = set(self.filter.keys()).union({t[0] for t in self.order.get_order_elements(False)})
