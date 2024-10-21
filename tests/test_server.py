@@ -732,7 +732,7 @@ async def test_clear_environment(client, server, clienthelper, environment):
 
     # Wait for env directory to appear
     slice = server.get_slice(SLICE_SERVER)
-    env_dir = os.path.join(slice._server_storage["environments"], environment)
+    env_dir = os.path.join(slice._server_storage["server"], environment, "compiler")
 
     while not os.path.exists(env_dir):
         await asyncio.sleep(0.1)
