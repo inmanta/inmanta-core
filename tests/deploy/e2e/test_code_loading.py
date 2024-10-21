@@ -280,14 +280,6 @@ inmanta.test_agent_code_loading = 15
     await agent.executor_manager.ensure_code(code=resource_install_specs_6)
     assert getattr(inmanta, "test_agent_code_loading") == 10
 
-    # # ensure we clean up on restart
-    # assert os.path.exists(os.path.join(executor_manager._loader.mod_dir, "tests/plugins/__init__.py"))
-    # await agent.stop()
-    # await agent_factory(
-    #     environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
-    # )
-    # assert not os.path.exists(os.path.join(executor_manager._loader.mod_dir, "tests"))
-
 
 @pytest.mark.slowtest
 async def test_agent_installs_dependency_containing_extras(

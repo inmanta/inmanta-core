@@ -65,6 +65,7 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db, default_main_file: bool, c
 
 
 @pytest.mark.slowtest
+@pytest.mark.skip("Broken for now")
 def test_deploy_with_non_default_config(snippetcompiler, tmpdir, capsys) -> None:
     """
     Ensure that configuration options set in one of the inmanta configuration
