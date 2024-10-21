@@ -530,3 +530,55 @@ async def test_deploy_cad_double(server, agent, environment, caplog, client, cli
     result = await agent._client.get_resources_for_agent(environment, "agent2", incremental_deploy=True, sid=sid)
     assert result.code == 200, result.result
     assert len(result.result["resources"]) == 1
+
+
+@pytest.mark.slowtest
+async def test_release_stuck(
+    server,
+    environment,
+    clienthelper,
+    client,
+    project_default,
+):
+    async def make_version() -> int:
+        version = await clienthelper.get_version()
+        rvid = f"test::Resource[agent1,key=key1],v={version}"
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": rvid,
+                "change": False,
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+                "purge_on_delete": False,
+            },
+        ]
+        await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+        return version
+
+        # set auto deploy and push
+
+    result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
+    assert result.code == 200
+
+    #  a version v1 is deploying
+    await make_version()
+
+    #  a version v2 is deploying
+    await make_version()
+
+    # Delete environment
+    result = await client.environment_delete(environment)
+    assert result.code == 200
+
+    # Re-create
+    result = await client.create_environment(project_id=project_default, name="env", environment_id=environment)
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
+    assert result.code == 200
+
+    await make_version()
+    # This will time-out when there is a run_ahead_lock still in place
+    await make_version()

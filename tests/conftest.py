@@ -21,7 +21,6 @@ import warnings
 from re import Pattern
 from threading import Condition
 
-import pkg_resources
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
@@ -136,7 +135,7 @@ from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, swap_process_env
+from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -518,12 +517,12 @@ def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[Optional[str
 
 
 @pytest.fixture(scope="function")
-def deactive_venv():
+def deactive_venv() -> ActiveEnv:
     snapshot = env.store_venv()
     old_available_extensions = (
         dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
     )
-    yield
+    yield process_env
     snapshot.restore()
     loader.PluginModuleFinder.reset()
     InmantaBootloader.AVAILABLE_EXTENSIONS = old_available_extensions
@@ -812,13 +811,13 @@ async def server_multi(
 
 @pytest.fixture(scope="function")
 async def auto_start_agent():
-    """ Marker fixture, indicates we done expected scheduler autostart, any attempt to start the scheduler results in failure"""
+    """Marker fixture, indicates we done expected scheduler autostart, any attempt to start the scheduler results in failure"""
     return False
 
 
 @pytest.fixture(scope="function")
 async def no_agent() -> bool:
-    """ Marker fixture, disables scheduler autostart, any attempt to start the scheduler is ignored """
+    """Marker fixture, disables scheduler autostart, any attempt to start the scheduler is ignored"""
     return False
 
 
@@ -1061,17 +1060,22 @@ class ReentrantVirtualEnv(VirtualEnv):
             setting re_check makes it check every time
         """
         super().__init__(env_path)
-        self.working_set = None
         self.was_checked = False
         self.re_check = re_check
         # The venv we replaced when getting activated
-        self.previous_venv: Optional[ActiveEnv] = None
+        self.previous_venv = None
+        self.snapshot = None
 
     def deactivate(self):
         if self._using_venv:
             self._using_venv = False
-            self.working_set = pkg_resources.working_set
-            swap_process_env(self.previous_venv)
+            if self.snapshot:
+                self.snapshot.restore()
+                self.snapshot = None
+                swap_process_env(self.previous_venv)
+
+    def fake_use(self) -> None:
+        self._using_venv = True
 
     def use_virtual_env(self) -> None:
         """
@@ -1081,16 +1085,11 @@ class ReentrantVirtualEnv(VirtualEnv):
             # We are in use, just ignore double activation
             return
 
-        if not self.working_set:
-            # First run
-            self.previous_venv = env.process_env
-            super().use_virtual_env()
-        else:
-            # Later run
-            self._activate_that()
-            self.previous_venv = swap_process_env(self)
-            pkg_resources.working_set = self.working_set
-            self._using_venv = True
+        self.init_env()
+        self._using_venv = True
+        self.snapshot = store_venv()
+        self.previous_venv = swap_process_env(self)
+        self._activate_that()
 
     def check(
         self,
@@ -1113,6 +1112,7 @@ class SnippetCompilationTest(KeepOnFail):
         self.repo: str = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
         self.venv = ReentrantVirtualEnv(env_path=self.env, re_check=re_check_venv)
+        self.re_check_venv = re_check_venv
         config.Config.load_config()
         self.keep_shared = False
         self.project = None
@@ -1134,6 +1134,8 @@ class SnippetCompilationTest(KeepOnFail):
             shutil.rmtree(self.project_dir)
         self.project = None
         self.venv.deactivate()
+        sys.path_importer_cache.clear()
+        loader.PluginModuleFinder.reset()
 
     def keep(self):
         self._keep = True
@@ -1199,8 +1201,16 @@ class SnippetCompilationTest(KeepOnFail):
             extra_index_url,
             main_file,
         )
+
+        dirty_venv = autostd or install_project or install_v2_modules or self.re_check_venv or python_requires
+
         return self._load_project(
-            autostd or ministd, install_project, install_v2_modules, strict_deps_check=strict_deps_check, main_file=main_file
+            autostd or ministd,
+            install_project,
+            install_v2_modules,
+            strict_deps_check=strict_deps_check,
+            main_file=main_file,
+            dirty_venv=dirty_venv,
         )
 
     def _load_project(
@@ -1210,16 +1220,22 @@ class SnippetCompilationTest(KeepOnFail):
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
         main_file: str = "main.cf",
         strict_deps_check: Optional[bool] = None,
+        dirty_venv: bool = True,
     ):
         loader.PluginModuleFinder.reset()
         self.project = Project(
             self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
         )
         Project.set(self.project)
-        self.project.use_virtual_env()
-        self._install_v2_modules(install_v2_modules)
-        if install_project:
-            self.project.install_modules()
+
+        if dirty_venv:
+            # Don't bother loading the venv if we don't need to
+            self.project.use_virtual_env()
+            self._install_v2_modules(install_v2_modules)
+            if install_project:
+                self.project.install_modules()
+        else:
+            self.venv.fake_use()
         return self.project
 
     def _install_v2_modules(self, install_v2_modules: Optional[list[LocalPackagePath]] = None) -> None:
@@ -1471,7 +1487,7 @@ def snippetcompiler(
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler_clean(modules_dir: str, clean_reset) -> Iterator[SnippetCompilationTest]:
+def snippetcompiler_clean(modules_dir: str, clean_reset, deactive_venv) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
     """
@@ -1608,7 +1624,7 @@ async def mocked_compiler_service_block(server, monkeypatch):
 
 
 @pytest.fixture
-def tmpvenv(tmpdir: py.path.local) -> Iterator[tuple[py.path.local, py.path.local]]:
+def tmpvenv(tmpdir: py.path.local, deactive_venv) -> Iterator[tuple[py.path.local, py.path.local]]:
     """
     Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the `tmpdir`
     fixture. This venv is completely decoupled from the active development venv.
@@ -1620,6 +1636,10 @@ def tmpvenv(tmpdir: py.path.local) -> Iterator[tuple[py.path.local, py.path.loca
     venv.create(venv_dir, with_pip=True)
     subprocess.check_output([str(python_path), "-m", "pip", "install", "-U", "pip"])
     yield (venv_dir, python_path)
+
+
+# Capture early, while loading code
+real_prefix = sys.prefix
 
 
 @pytest.fixture
@@ -1663,9 +1683,20 @@ def tmpvenv_active(
             base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
         )
 
+    this_source_root = os.path.dirname(os.path.dirname(__file__))
+
+    def keep_path_element(element: str) -> bool:
+        # old venv paths are dropped
+        if element.startswith(real_prefix):
+            return False
+        # exclude source install of the module
+        if element.startswith(this_source_root):
+            return False
+        return True
+
     # prepend bin to PATH (this file is inside the bin directory), exclude old venv path
     os.environ["PATH"] = os.pathsep.join(
-        [binpath] + [elem for elem in os.environ.get("PATH", "").split(os.pathsep) if not elem.startswith(sys.prefix)]
+        [binpath] + [elem for elem in os.environ.get("PATH", "").split(os.pathsep) if keep_path_element(elem)]
     )
     os.environ["VIRTUAL_ENV"] = base  # virtual env is right above bin directory
 
@@ -1673,7 +1704,7 @@ def tmpvenv_active(
     prev_length = len(sys.path)
     site.addsitedir(site_packages)
     # exclude old venv path
-    sys.path[:] = sys.path[prev_length:] + [elem for elem in sys.path[0:prev_length] if not elem.startswith(sys.prefix)]
+    sys.path[:] = sys.path[prev_length:] + [elem for elem in sys.path[0:prev_length] if keep_path_element(elem)]
 
     sys.real_prefix = sys.prefix
     sys.prefix = base
