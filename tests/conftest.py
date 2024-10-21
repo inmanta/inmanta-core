@@ -812,11 +812,13 @@ async def server_multi(
 
 @pytest.fixture(scope="function")
 async def auto_start_agent():
+    """ Marker fixture, indicates we done expected scheduler autostart, any attempt to start the scheduler results in failure"""
     return False
 
 
 @pytest.fixture(scope="function")
 async def no_agent() -> bool:
+    """ Marker fixture, disables scheduler autostart, any attempt to start the scheduler is ignored """
     return False
 
 
@@ -850,7 +852,7 @@ async def agent(server, environment):
 
 @pytest.fixture(scope="function")
 async def null_agent(server, environment):
-    """Construct an agent that can execute using the resource container"""
+    """Construct an agent that does nothing"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     a = NullAgent(environment)
