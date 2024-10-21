@@ -169,16 +169,36 @@ class ResourceScheduler(TaskManager):
         """
         Trigger a deploy
         """
+        match priority:
+            case TaskPriority.USER_DEPLOY:
+                reason = "User has requested a deploy"
+            case TaskPriority.INTERVAL_DEPLOY:
+                reason = "Deploy is being triggered by interval"
+            case _ as e:
+                raise RuntimeError(f"Unhandled case: {e}!")
+
         async with self._scheduler_lock:
-            self._work.deploy_with_context(self._state.dirty, priority=priority, deploying=self._deploying_latest)
+            self._work.deploy_with_context(
+                self._state.dirty, priority=priority, deploying=self._deploying_latest, reason=reason
+            )
 
     async def repair(self, priority: TaskPriority = TaskPriority.USER_REPAIR) -> None:
         """
         Trigger a repair, i.e. mark all resources as dirty, then trigger a deploy.
         """
+        match priority:
+            case TaskPriority.USER_REPAIR:
+                reason = "User has requested a repair"
+            case TaskPriority.INTERVAL_REPAIR:
+                reason = "Repair is being triggered by interval"
+            case _ as e:
+                raise RuntimeError(f"Unhandled case: {e}!")
+
         async with self._scheduler_lock:
             self._state.dirty.update(self._state.resources.keys())
-            self._work.deploy_with_context(self._state.dirty, priority=priority, deploying=self._deploying_latest)
+            self._work.deploy_with_context(
+                self._state.dirty, priority=priority, deploying=self._deploying_latest, reason=reason
+            )
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         resources = await self._build_resource_mappings_from_db(version)
@@ -190,6 +210,7 @@ class ResourceScheduler(TaskManager):
                         version=version,
                         resource_details=resource,
                         dry_run_id=dry_run_id,
+                        reason="Resource is being dry-run",
                     ),
                     priority=TaskPriority.DRYRUN,
                 )
@@ -199,7 +220,7 @@ class ResourceScheduler(TaskManager):
         rid = Id.parse_id(resource["id"]).resource_str()
         self._work.agent_queues.queue_put_nowait(
             PrioritizedTask(
-                task=RefreshFact(resource=rid),
+                task=RefreshFact(resource=rid, reason="Facts are being refreshed"),
                 priority=TaskPriority.FACT_REFRESH,
             )
         )
@@ -325,6 +346,7 @@ class ResourceScheduler(TaskManager):
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
                     self._state.dirty,
+                    reason="A new version has been released",
                     priority=TaskPriority.NEW_VERSION_DEPLOY,
                     deploying=self._deploying_latest,
                     added_requires=added_requires,
@@ -422,7 +444,11 @@ class ResourceScheduler(TaskManager):
                         task = Deploy(resource=resource)
                         assert task in self._work.agent_queues.in_progress
                         priority = self._work.agent_queues.in_progress[task]
-                        self._work.deploy_with_context(event_listeners, priority=priority, deploying=set())
+                        task_with_reason = self._work.agent_queues._tasks_by_resource[task.resource][task].task.task
+                        assert task_with_reason.reason is not None
+                        self._work.deploy_with_context(
+                            event_listeners, priority=priority, deploying=set(), reason=task_with_reason.reason
+                        )
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
