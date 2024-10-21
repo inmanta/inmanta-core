@@ -389,9 +389,9 @@ async def test_halt_deploy(
 
     snippetcompiler.setup_for_snippet(
         f"""
-import minimalv2waitingmodule
+import minimalwaitingmodule
 
-a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep={time_to_sleep})
+a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep={time_to_sleep})
 """,
         autostd=True,
     )
@@ -463,17 +463,24 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     result = await client.halt_environment(tid=environment)
     assert result.code == 200
 
-    # snippetcompiler.reset()  # TODO h issue
-    # version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
-    # result = await client.release_version(environment, version, push=False)
-    # assert result.code == 200
+    snippetcompiler.setup_for_snippet(
+        f"""
+    import minimalwaitingmodule
+
+    a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep={time_to_sleep})
+    """,
+        autostd=True,
+    )
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
 
     # version = await clienthelper.get_version()
     # resources = [
     #     {
     #         "key": "name",
     #         "value": "test_sleep",
-    #         "id": f"minimalv2waitingmodule::Sleep[agent1,name=test_sleep],v={version}",
+    #         "id": f"minimalwaitingmodule::Sleep[agent1,name=test_sleep],v={version}",
     #         "values": {},
     #         "requires": [],
     #         "purged": False,
@@ -593,11 +600,11 @@ async def test_pause_agent_deploy(
 
     snippetcompiler.setup_for_snippet(
         """
-import minimalv2waitingmodule
+import minimalwaitingmodule
 
-a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=5)
-b = minimalv2waitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
-c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
+a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=5)
+b = minimalwaitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
+c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
 """,
         autostd=True,
     )
@@ -772,9 +779,9 @@ async def test_agent_paused_scheduler_crash(
 
     snippetcompiler.setup_for_snippet(
         """
-import minimalv2waitingmodule
+import minimalwaitingmodule
 
-a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
+a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
 """,
         autostd=True,
     )
@@ -886,11 +893,11 @@ async def test_agent_paused_should_remain_paused_after_environment_resume(
 
     snippetcompiler.setup_for_snippet(
         """
-import minimalv2waitingmodule
+import minimalwaitingmodule
 
-a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=5)
-b = minimalv2waitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
-c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
+a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=5)
+b = minimalwaitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
+c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
 """,
         autostd=True,
     )
