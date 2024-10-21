@@ -305,9 +305,7 @@ class ResourceScheduler(TaskManager):
         requires_from_db = self._construct_requires_mapping(resources_from_db)
         await self._new_version(version, resources_from_db, requires_from_db)
 
-    async def reset_resource_state(
-        self
-    ) -> None:
+    async def reset_resource_state(self) -> None:
         """
         Update model state and scheduled work based on the latest released version in the database, e.g. when the scheduler is
         started or when a new version is released. Triggers a deploy after updating internal state:

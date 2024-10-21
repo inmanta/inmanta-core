@@ -23,7 +23,6 @@ import os
 import time
 import uuid
 from functools import partial
-from sched import scheduler
 from uuid import UUID
 
 import psutil
@@ -719,7 +718,7 @@ async def test_agent_paused_scheduler_crash(
     no_agent_backoff,
     auto_start_agent: bool,
     async_finalizer,
-    agent
+    agent,
 ):
     """
     Verify that the new scheduler does not alter the state of agent after a restart:
@@ -818,6 +817,17 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     for children in current_children_children_after_restart.values():
         assert children.is_running()
 
+    async def wait_for_db_update_from_scheduler():
+        """
+        Wait for DB update that the Scheduler should do once it restarts for inconsistent resources: resources in invalid
+            states -> "deploying" state
+        """
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        return summary["by_state"]["available"] == 1
+
+    await retry_limited(wait_for_db_update_from_scheduler, 10)
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]

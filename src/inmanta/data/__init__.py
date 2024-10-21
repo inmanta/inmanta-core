@@ -4934,8 +4934,6 @@ class Resource(BaseDocument):
         projection: Optional[list[typing.LiteralString]],
         projection_presistent: Optional[list[typing.LiteralString]],
         project_attributes: Optional[list[typing.LiteralString]] = None,
-        filter_values: Optional[dict[str, typing.Any]] = None,
-        filter_values_persistent: Optional[dict[str, typing.Any]] = None,
         *,
         connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
@@ -4957,36 +4955,12 @@ class Resource(BaseDocument):
         else:
             json_projection = ""
 
-        values = [cls._get_value(environment), cls._get_value(version)]
-
-        len_filter_values = len(filter_values) if filter_values is not None else 0
-        if filter_values is not None:
-            additional_filtering_list = [f"r.{key} = ${i}" for i, key in enumerate(filter_values.keys(), 3)]
-            additional_filtering = " and ".join(additional_filtering_list)
-            if len(additional_filtering) > 0:
-                additional_filtering = f"and {additional_filtering}"
-                for value in range(len_filter_values):
-                    values.append(cls._get_value(filter_values.popitem()[1]))
-        else:
-            additional_filtering = ""
-
-        if filter_values_persistent is not None:
-            len_filter_values_persistent = len(filter_values_persistent)
-            additional_filtering_persistent_list = [f"ps.{key} = ${i}" for i, key in enumerate(filter_values_persistent.keys(), 3 + len_filter_values)]
-            additional_persistent_filtering = " and ".join(additional_filtering_persistent_list)
-            if len(additional_persistent_filtering) > 0:
-                additional_persistent_filtering = f"and {additional_persistent_filtering}"
-                for value in range(len_filter_values_persistent):
-                    values.append(cls._get_value(filter_values_persistent.popitem()[1]))
-        else:
-            additional_persistent_filtering = ""
-
         query = f"""
         SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_presistent, 'ps')} {json_projection}
             FROM {cls.table_name()} r JOIN resource_persistent_state ps ON r.resource_id = ps.resource_id
-            WHERE r.environment=$1 AND ps.environment = $1 and r.model = $2 {additional_filtering} {additional_persistent_filtering};"""
+            WHERE r.environment=$1 AND ps.environment = $1 and r.model = $2;"""
 
-        resource_records = await cls._fetch_query(query, *values, connection=connection)
+        resource_records = await cls._fetch_query(query, environment, version, connection=connection)
         resources = [dict(record) for record in resource_records]
         for res in resources:
             if project_attributes:
