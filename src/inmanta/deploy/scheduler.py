@@ -32,7 +32,7 @@ from inmanta.agent.executor import DeployResult
 from inmanta.data import ConfigurationModel
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
-from inmanta.deploy.persistence import StateUpdateManager, ToServerUpdateManager
+from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager, ToServerUpdateManager
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
@@ -147,7 +147,7 @@ class ResourceScheduler(TaskManager):
         self.client = client
         self.code_manager = CodeManager(client)
         self.executor_manager = executor_manager
-        self._state_update_delegate = ToServerUpdateManager(client, environment)
+        self._state_update_delegate = ToDbUpdateManager(environment)
 
     def reset(self) -> None:
         """
