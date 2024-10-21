@@ -1259,7 +1259,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         assert not no_auto_start_scheduler
         use_resource_scheduler: bool = opt.server_use_resource_scheduler.get()
-        assert use_resource_scheduler
 
         config: str = await self._make_agent_config(env, connection=connection, scheduler=use_resource_scheduler)
 
