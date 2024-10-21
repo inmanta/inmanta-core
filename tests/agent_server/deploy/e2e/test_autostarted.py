@@ -693,7 +693,7 @@ c = minimalv2waitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sl
     actual_data = result.result["data"]
     assert len(actual_data) == 2
     assert all([not agent["paused"] for agent in actual_data])
-    assert {e["name"] for e in actual_data} == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert {e["name"] for e in actual_data} == {"agent1"}
 
 
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
