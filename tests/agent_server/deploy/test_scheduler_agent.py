@@ -182,7 +182,6 @@ class TestScheduler(ResourceScheduler):
         # Bypass DB
         self.read_version = pass_method
 
-
     async def should_be_running(self, endpoint: str) -> bool:
         return True
 
@@ -224,7 +223,6 @@ class TestAgent(Agent):
         super().__init__(environment)
         self.executor_manager = DummyManager()
         self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
-
 
 
 @pytest.fixture

@@ -365,6 +365,10 @@ async def test_halt_deploy(
 ):
     """
     Verify that the new scheduler can actually halt an ongoing deployment and can resume it when the user requests it
+    Two cases are tested:
+        - If the deployment gets through before halting the environment
+        - If the deployment is taking too much time, the halting of the environment will stop the active deployment. We will
+        assert that this deployment is started again once the environment is resumed
     """
     current_pid = os.getpid()
 
