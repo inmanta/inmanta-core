@@ -288,21 +288,16 @@ def wait_for_terminated_status(current_children: list[psutil.Process], expected_
 
 
 @pytest.fixture
-async def ensure_consistent_starting_point(agent: Agent, ensure_resource_tracker_is_started: None) -> int:
+async def ensure_consistent_starting_point(agent: Agent, ensure_resource_tracker_is_started: None) -> None:
     """
     Make sure that every test that uses this fixture will begin in a consistent, i.e.:
-        - 2 processes: a postgres server and the scheduler
-        - 3 processes:
-            - a postgres server, the scheduler and the resource tracker
-            - a postgres server, the scheduler and one inmanta fork server (unrelated to the new scheduler)
-        - 4 processes: a postgres server, the scheduler, one inmanta fork server and the resource tracker
+        - Make sure the agent (running in-process) is stopped before we run any test
+        - Make sure the Multiprocessing resource tracker is already present before doing anything
 
     :param agent: The agent fixture (that we want to stop before running the test)
     :param ensure_resource_tracker_is_started: The fixture that creates a Resource Tracker process
     """
-    current_pid = os.getpid()
     await agent.stop()
-    return current_pid
 
 
 def get_process_state(current_pid: int) -> dict[str, list[Process]]:
@@ -359,7 +354,7 @@ def filter_relevant_processes(processes: dict[str, list[Process]]) -> dict[str, 
 async def test_halt_deploy(
     snippetcompiler,
     server,
-    ensure_consistent_starting_point: int,
+    ensure_consistent_starting_point,
     client,
     clienthelper,
     environment,
@@ -371,7 +366,7 @@ async def test_halt_deploy(
     """
     Verify that the new scheduler can actually halt an ongoing deployment and can resume it when the user requests it
     """
-    current_pid = ensure_consistent_starting_point
+    current_pid = os.getpid()
 
     # First, configure everything
     env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -406,10 +401,10 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
-        deployed = summary["by_state"]["deploying"]
-        return deployed == 1
+        deploying = summary["by_state"]["deploying"]
+        return deploying == 1
 
-    # Wait for at least one resource to be deployed
+    # Wait for at least one resource to be in deploying
     await retry_limited(are_resources_being_deployed, timeout=5)
 
     # Let's check the agent table and check that agent1 is present and not paused
@@ -464,6 +459,31 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     result = await client.halt_environment(tid=environment)
     assert result.code == 200
 
+    # snippetcompiler.reset()  # TODO h issue
+    # version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    # result = await client.release_version(environment, version, push=False)
+    # assert result.code == 200
+
+    # version = await clienthelper.get_version()
+    # resources = [
+    #     {
+    #         "key": "name",
+    #         "value": "test_sleep",
+    #         "id": f"minimalv2waitingmodule::Sleep[agent1,name=test_sleep],v={version}",
+    #         "values": {},
+    #         "requires": [],
+    #         "purged": False,
+    #         "send_event": False,
+    #     }
+    # ]
+    # await clienthelper.put_version_simple(resources, version)
+    # result = await client.release_version(environment, version, push=False)
+    # assert result.code == 200
+
+    # Wait for at least one resource to be deploying (should not happen)
+    # with pytest.raises(AssertionError):
+    #     await retry_limited(are_resources_being_deployed, timeout=5)
+
     # Let's recheck the agent table and check that the scheduler and agent1 are present and paused
     result = await client.list_agents(tid=environment)
     assert result.code == 200
@@ -505,6 +525,8 @@ a = minimalv2waitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sle
     assert not expected_agents_status["agent1"]
 
     if should_time_out:
+        # Wait for at least one resource to be in deploying
+        await retry_limited(are_resources_being_deployed, timeout=5)
         await retry_limited(
             lambda: len(filter_relevant_processes(get_process_state(current_pid))) == len(current_children_after_deployment), 10
         )
@@ -547,7 +569,7 @@ async def test_pause_agent_deploy(
         - It will make sure that the agent finishes its current task before being stopped
         - And take the remaining tasks when this agent is resumed
     """
-    current_pid = ensure_consistent_starting_point
+    current_pid = os.getpid()
 
     # First, configure everything
     env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -726,7 +748,7 @@ async def test_agent_paused_scheduler_crash(
         - The server (and thus the scheduler) is (are) restarted
         - The agent should remain paused (the Scheduler shouldn't do anything after the restart)
     """
-    current_pid = ensure_consistent_starting_point
+    current_pid = os.getpid()
 
     # First, configure everything
     env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -840,7 +862,7 @@ async def test_agent_paused_should_remain_paused_after_environment_resume(
     Verify that the new scheduler does not alter the state of agent after resuming the environment (if the agent was flag to
         not be impacted by such event)
     """
-    current_pid = ensure_consistent_starting_point
+    current_pid = os.getpid()
 
     # First, configure everything
     env = await data.Environment.get_by_id(uuid.UUID(environment))

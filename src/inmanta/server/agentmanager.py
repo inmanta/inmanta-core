@@ -261,6 +261,20 @@ class AgentManager(ServerSlice, SessionListener):
     ) -> None:
         """
         Pause a logical agent by pausing an active agent instance if it exists, and removing the logical agent's primary.
+
+        When the Scheduler is used, this method can either halt an environment or pause a particular agent. The main difference
+        between these would be the following:
+            - The endpoint is not provided -> We want to halt the environment
+            - The endpoint is provided -> We want to pause an agent
+        The things that will differ in the logic will be:
+            - The number of agent that are set to "paused" in the agent table:
+                - Only one if an agent is paused or all of them if the environment is halted
+            - The request that will be sent to the Scheduler to pause an agent:
+                - This will be only sent if we stop a particular agent
+                - If we want to pause the environment we cannot send the request here as this is part of a big DB transaction,
+                    so this one needs to go through before being able to send the request to the Scheduler to halt everything
+            - The update of the primary will be only be taken care of when we deal with the Scheduler as the Server is not
+                aware of the executors created by the Scheduler -> It does not need to maintain this information
         """
         endpoints_with_new_primary = []
         async with self.session_lock:
@@ -268,17 +282,10 @@ class AgentManager(ServerSlice, SessionListener):
             if opt.server_use_resource_scheduler.get():
                 key = (env.id, const.AGENT_SCHEDULER_ID)
                 live_session = self.tid_endpoint_to_session.get(key)
-                # This should never be the case but as a safety measure, we need to make sure that the scheduler is up and
-                # running
                 if not live_session:
-                    await self._autostarted_agent_manager._ensure_scheduler(env)
-                    live_session = self.tid_endpoint_to_session.get(key)
-                    assert live_session
+                    return
 
                 if endpoint is not None:
-                    # We don't need to do this when the environment is resumed because the scheduler will need to have updated
-                    # information related to agents (being paused) and in order to have that, this transaction needs to
-                    # finish first
                     await live_session.get_client().set_state(endpoint, enabled=False)
                 elif endpoint is None:
                     # We need to update information in the DB
