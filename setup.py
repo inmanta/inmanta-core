@@ -19,7 +19,7 @@ requires = [
     "jinja2~=3.0",
     "more-itertools>=8,<11",
     # leave upper bound floating for fast-moving and extremely stable packaging
-    "packaging>=21.3",
+    "packaging>=21.3,<24.2",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
@@ -88,6 +88,7 @@ setup(
         # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
         "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~={version}.0.dev"],
         "datatrace": ["graphviz"],
+        "tracing": ["logfire>=0.46,<2.0", "opentelemetry-instrumentation-asyncpg~=0.46b0"],
     },
     entry_points={
         "console_scripts": [
