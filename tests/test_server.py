@@ -446,12 +446,12 @@ async def test_get_environment(client, clienthelper, server, environment):
     assert len(result.result["environment"]["resources"]) == 9
 
 
-async def test_resource_update(postgresql_client, client, clienthelper, server, environment, async_finalizer, agent):
+async def test_resource_update(postgresql_client, client, clienthelper, server, environment, async_finalizer, null_agent):
     """
     Test updating resources and logging
     """
 
-    aclient = agent._client
+    aclient = null_agent._client
 
     version = await clienthelper.get_version()
 

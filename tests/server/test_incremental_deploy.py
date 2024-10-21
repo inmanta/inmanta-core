@@ -25,8 +25,6 @@ from re import sub
 from typing import Any
 from uuid import UUID, uuid4
 
-import pytest
-
 from inmanta import const, data
 from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.resources import Id
@@ -209,11 +207,11 @@ class MultiVersionSetup:
         return allresources
 
 
-@pytest.mark.skip("Broken")
-async def test_deploy(server, agent, environment, caplog):
+async def test_deploy(server, null_agent, environment, caplog):
     """
     Test basic deploy mechanism mocking
     """
+    agent = null_agent
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
@@ -324,8 +322,8 @@ def strip_version(v):
     return sub(",v=[0-9]+", "", v)
 
 
-@pytest.mark.skip("Requies ability to pause an agent")
-async def test_deploy_scenarios(server, agent, environment, caplog):
+async def test_deploy_scenarios(server, null_agent, environment, caplog):
+    agent = null_agent
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
@@ -367,8 +365,8 @@ async def test_deploy_scenarios(server, agent, environment, caplog):
     assert_no_warning(caplog)
 
 
-@pytest.mark.skip("Requies ability to pause an agent")
-async def test_deploy_scenarios_removed_req_by_increment(server, agent, environment, caplog):
+async def test_deploy_scenarios_removed_req_by_increment(server, null_agent, environment, caplog):
+    agent = null_agent
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
@@ -389,8 +387,8 @@ async def test_deploy_scenarios_removed_req_by_increment(server, agent, environm
     assert_no_warning(caplog)
 
 
-@pytest.mark.skip("Requies ability to pause an agent")
-async def test_deploy_scenarios_removed_req_by_increment2(server, environment, caplog, agent):
+async def test_deploy_scenarios_removed_req_by_increment2(server, environment, caplog, null_agent):
+    agent = null_agent
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
@@ -442,7 +440,8 @@ async def test_deploy_scenarios_added_by_send_event(server, agent, environment, 
     assert_no_warning(caplog)
 
 
-async def test_deploy_scenarios_added_by_send_event_cad(server, agent, environment, caplog):
+async def test_deploy_scenarios_added_by_send_event_cad(server, null_agent, environment, caplog):
+    agent = null_agent
     # ensure CAD does not change send_event
     with caplog.at_level(logging.WARNING):
         # acquire raw server

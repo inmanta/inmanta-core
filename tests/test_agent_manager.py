@@ -152,6 +152,7 @@ def assert_state_agents_retry(
     return func
 
 
+@pytest.mark.parametrize("auto_start_agent", [False])  # prevent autostart to keep agent under control
 async def test_primary_selection(server, environment):
     env_id = UUID(environment)
     env = await data.Environment.get_by_id(env_id)
@@ -728,6 +729,7 @@ async def test_fix_corrupted_database(init_dataclasses_and_load_schema):
     await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
 
 
+@pytest.mark.parametrize("auto_start_agent", [False])  # prevent autostart to keep agent under control
 async def test_session_creation_fails(server, environment, async_finalizer, caplog):
     """
     Verify that:
@@ -737,6 +739,9 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     """
     env_id = UUID(environment)
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    assert len(agentmanager.sessions) == 0
+
     a = NullAgent(environment=environment)
     await a.add_end_point_name("agent1")
     async_finalizer(a.stop)
@@ -1081,12 +1086,13 @@ async def test_process_already_terminated(server, environment):
     assert len(autostarted_agent_manager._agent_procs) == 1
 
     # Terminate process
-    autostarted_agent_manager._agent_procs[environment].terminate()
+    autostarted_agent_manager._agent_procs[env_id].terminate()
 
     # This call shouldn't raise an exception
     await autostarted_agent_manager._terminate_agents()
 
 
+@pytest.mark.parametrize("auto_start_agent", [False])  # prevent autostart to keep agent under control
 async def test_exception_occurs_while_processing_session_action(server, environment, async_finalizer, monkeypatch, caplog):
     """
     This test verifies that the consumer of the _session_listener_actions queue keeps working

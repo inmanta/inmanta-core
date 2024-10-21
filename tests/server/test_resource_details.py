@@ -515,13 +515,14 @@ async def test_resource_details(server, client, env_with_resources):
     }
 
 
-async def test_move_to_available_state(server, environment, client, clienthelper, agent, resource_container):
+async def test_move_to_available_state(server, environment, client, clienthelper, null_agent, resource_container):
     """
     Verify that the endpoints, that return the state of a resource, return the correct state
     when a resource moved back to the available state. This state is not written back to the
     resource_persistent_state table and should be determined based on the content of the
     resource table.
     """
+    agent = null_agent
     # Create model version1
     version1 = await clienthelper.get_version()
     result = await client.put_version(
@@ -533,6 +534,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
                 "key": "test1",
                 "value": "val1",
                 "send_event": True,
+                "purged": False,
                 "requires": [],
             },
             {
@@ -540,6 +542,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
                 "key": "test2",
                 "value": "val2",
                 "send_event": True,
+                "purged": False,
                 "requires": [],
             },
             {
@@ -547,6 +550,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
                 "key": "test3",
                 "value": "val3",
                 "send_event": True,
+                "purged": False,
                 "requires": [],
             },
             {
@@ -554,6 +558,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
                 "key": "test4",
                 "value": "val4",
                 "send_event": True,
+                "purged": False,
                 "requires": [],
             },
             {
@@ -604,27 +609,41 @@ async def test_move_to_available_state(server, environment, client, clienthelper
         resources=[
             {
                 "id": f"test::Resource[agent1,key=test1],v={version2}",
-                "val": "val1_updated",
+                "key": "test1",
+                "value": "val1_udpated",
+                "send_event": True,
+                "purged": False,
                 "requires": [],
             },
             {
                 "id": f"test::Resource[agent1,key=test2],v={version2}",
-                "val": "val2",
+                "key": "test2",
+                "value": "val2",
+                "send_event": True,
+                "purged": False,
                 "requires": [],
             },
             {
                 "id": f"test::Resource[agent1,key=test3],v={version2}",
-                "val": "val3",
+                "key": "test3",
+                "value": "val3",
+                "send_event": True,
+                "purged": False,
                 "requires": [],
             },
             {
                 "id": f"test::Resource[agent1,key=test4],v={version2}",
-                "val": "val4",
+                "key": "test4",
+                "value": "val4",
+                "send_event": True,
+                "purged": False,
                 "requires": [],
             },
             {
                 "id": f"test::Resource[agent1,key=test5],v={version2}",
-                "val": "val5",
+                "key": "test5",
+                "value": "val5",
+                "send_event": True,
                 "requires": [f"test::Resource[agent1,key=test4],v={version2}"],
             },
         ],
