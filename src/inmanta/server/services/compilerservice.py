@@ -50,7 +50,7 @@ from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
-from inmanta.server.services import environmentservice
+from inmanta.server.services.environmentlistener import EnvironmentListener
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import TaskMethod, ensure_directory_exist
@@ -487,7 +487,7 @@ class CompileRun:
             return success, None
 
 
-class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
+class CompilerService(ServerSlice, EnvironmentListener):
     """
     Compiler services offers:
 
