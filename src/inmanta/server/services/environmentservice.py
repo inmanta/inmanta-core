@@ -28,7 +28,6 @@ import warnings
 from collections import defaultdict
 from collections.abc import Set
 from concurrent import futures
-from enum import Enum
 from re import Pattern
 from typing import Optional, cast
 
