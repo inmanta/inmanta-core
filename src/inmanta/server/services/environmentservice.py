@@ -617,7 +617,7 @@ class EnvironmentService(protocol.ServerSlice):
         one running the Inmanta server inside the environment directory marked for removal.
         """
         state_dir = config.state_dir.get()
-        environment_dir = os.path.join(state_dir, "server", "environments", str(environment_id))
+        environment_dir = os.path.join(state_dir, "server", str(environment_id), 'compiler')
 
         if os.path.exists(environment_dir):
             loop = asyncio.get_running_loop()

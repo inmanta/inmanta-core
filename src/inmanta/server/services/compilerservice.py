@@ -258,7 +258,7 @@ class CompileRun:
 
             if not os.path.exists(project_dir):
                 await self._info(f"Creating project directory for environment {environment_id} at {project_dir}")
-                os.mkdir(project_dir)
+                os.makedirs(project_dir)
 
             # Use a separate venv to compile the project to prevent that packages are installed in the
             # venv of the Inmanta server.
