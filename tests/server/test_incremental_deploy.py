@@ -25,6 +25,8 @@ from re import sub
 from typing import Any
 from uuid import UUID, uuid4
 
+import pytest
+
 from inmanta import const, data
 from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.resources import Id
