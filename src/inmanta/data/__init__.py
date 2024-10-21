@@ -4715,6 +4715,28 @@ class Resource(BaseDocument):
             await connection.execute(query, environment, version, resource_ids)
 
     @classmethod
+    async def reset_resource_state(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        query = """
+            UPDATE resource AS updated_r
+            SET status=inconsistent_r.last_non_deploying_status::TEXT::resourcestate
+            FROM (
+                SELECT r.resource_id, r.status, r.model, ps.last_non_deploying_status
+                FROM resource r JOIN resource_persistent_state ps ON r.resource_id = ps.resource_id
+                WHERE r.environment=$1 AND ps.environment = $1 and r.model = $2 and r.status = 'deploying'
+            ) AS inconsistent_r
+            WHERE inconsistent_r.resource_id = updated_r.resource_id and inconsistent_r.model = updated_r.model
+        """
+        values = [cls._get_value(environment), cls._get_value(version)]
+        async with cls.get_connection(connection) as connection:
+            await connection.execute(query, *values)
+
+    @classmethod
     async def get_resource_ids_with_status(
         cls,
         environment: uuid.UUID,
@@ -4912,6 +4934,8 @@ class Resource(BaseDocument):
         projection: Optional[list[typing.LiteralString]],
         projection_presistent: Optional[list[typing.LiteralString]],
         project_attributes: Optional[list[typing.LiteralString]] = None,
+        filter_values: Optional[dict[str, typing.Any]] = None,
+        filter_values_persistent: Optional[dict[str, typing.Any]] = None,
         *,
         connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
@@ -4933,12 +4957,36 @@ class Resource(BaseDocument):
         else:
             json_projection = ""
 
+        values = [cls._get_value(environment), cls._get_value(version)]
+
+        len_filter_values = len(filter_values) if filter_values is not None else 0
+        if filter_values is not None:
+            additional_filtering_list = [f"r.{key} = ${i}" for i, key in enumerate(filter_values.keys(), 3)]
+            additional_filtering = " and ".join(additional_filtering_list)
+            if len(additional_filtering) > 0:
+                additional_filtering = f"and {additional_filtering}"
+                for value in range(len_filter_values):
+                    values.append(cls._get_value(filter_values.popitem()[1]))
+        else:
+            additional_filtering = ""
+
+        if filter_values_persistent is not None:
+            len_filter_values_persistent = len(filter_values_persistent)
+            additional_filtering_persistent_list = [f"ps.{key} = ${i}" for i, key in enumerate(filter_values_persistent.keys(), 3 + len_filter_values)]
+            additional_persistent_filtering = " and ".join(additional_filtering_persistent_list)
+            if len(additional_persistent_filtering) > 0:
+                additional_persistent_filtering = f"and {additional_persistent_filtering}"
+                for value in range(len_filter_values_persistent):
+                    values.append(cls._get_value(filter_values_persistent.popitem()[1]))
+        else:
+            additional_persistent_filtering = ""
+
         query = f"""
         SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_presistent, 'ps')} {json_projection}
             FROM {cls.table_name()} r JOIN resource_persistent_state ps ON r.resource_id = ps.resource_id
-            WHERE r.environment=$1 AND ps.environment = $1 and r.model = $2;"""
+            WHERE r.environment=$1 AND ps.environment = $1 and r.model = $2 {additional_filtering} {additional_persistent_filtering};"""
 
-        resource_records = await cls._fetch_query(query, environment, version, connection=connection)
+        resource_records = await cls._fetch_query(query, *values, connection=connection)
         resources = [dict(record) for record in resource_records]
         for res in resources:
             if project_attributes:
