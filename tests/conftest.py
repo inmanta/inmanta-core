@@ -811,7 +811,7 @@ async def server_multi(
 
 @pytest.fixture(scope="function")
 async def auto_start_agent():
-    """Marker fixture, indicates we done expected scheduler autostart, any attempt to start the scheduler results in failure"""
+    """Marker fixture, indicates if we expect scheduler autostart. If set to False, any attempt to start the scheduler results in failure"""
     return False
 
 
