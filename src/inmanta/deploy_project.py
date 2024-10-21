@@ -286,7 +286,7 @@ host=localhost
         self._environment_id = env_id
 
         # link the project into the server environment
-        server_env = os.path.join(self._data_path, "state", "server", "environments", self._environment_id)
+        server_env = os.path.join(self._data_path, "state", "server",self._environment_id, "compiler")
         full_path = os.path.abspath(self._project_path)
         if not os.path.islink(server_env) or os.readlink(server_env) != full_path:
             if os.path.exists(server_env):
