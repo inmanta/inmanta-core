@@ -1045,7 +1045,6 @@ src/inmanta/model.py:0: error: Call to untyped function "ReferenceValue" in type
 src/inmanta/model.py:0: error: "Value" has no attribute "to_dict"  [attr-defined]
 src/inmanta/model.py:0: error: "Value" has no attribute "to_dict"  [attr-defined]
 src/inmanta/main.py:0: error: Returning Any from function declared to return "dict[str, Any] | None"  [no-any-return]
-src/inmanta/main.py:0: error: Value of type "object" is not indexable  [index]
 src/inmanta/main.py:0: error: Invalid index type "str" for "str"; expected type "SupportsIndex | slice"  [index]
 src/inmanta/main.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/main.py:0: error: Need type annotation for "bar"  [var-annotated]
