@@ -30,12 +30,12 @@ try:
     import logfire.integrations
     import logfire.integrations.pydantic
     import logfire.propagate
+    from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
 
     # Make sure we don't get warnings when it is off
     logfire._internal.config.GLOBAL_CONFIG.ignore_no_config = True
     enabled = os.getenv("LOGFIRE_TOKEN", None) is not None
 
-    from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
 
 except (ModuleNotFoundError, Exception):
     enabled = False
