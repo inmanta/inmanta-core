@@ -154,13 +154,44 @@ class ResourceScheduler(TaskManager):
         assert not self._running
         self._state.reset()
         self._work.reset()
+        self._workers.clear()
+        self._deploying_latest.clear()
 
     async def start(self) -> None:
+        if self._running:
+            return
         self.reset()
+        await self._initialize()
         self._running = True
-        await self.read_version()
+
+    async def _initialize(self) -> None:
+        """
+        Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
+        """
+        async with data.ConfigurationModel.get_connection() as con:
+            # Get resources from the database
+            try:
+                version, resources, requires = await self._get_resources_in_latest_version(connection=con)
+            except KeyError:
+                # No model version has been released yet.
+                return
+
+            # Rely on the incremental calculation to determine which resources should be deployed and which not.
+            increment: set[ResourceIdStr]
+            increment, _ = await ConfigurationModel.get_increment(self.environment, version, connection=con)
+
+        resources_to_deploy: Mapping[ResourceIdStr, ResourceDetails] = {rid: resources[rid] for rid in increment}
+        up_to_date_resources: Mapping[ResourceIdStr, ResourceDetails] = {
+            rid: resources[rid] for rid in resources.keys() if rid not in increment
+        }
+
+        await self._new_version(
+            version, resources=resources_to_deploy, requires=requires, up_to_date_resources=up_to_date_resources
+        )
 
     async def stop(self) -> None:
+        if not self._running:
+            return
         self._running = False
         self._work.agent_queues.send_shutdown()
         await asyncio.gather(*self._workers.values())
@@ -169,6 +200,8 @@ class ResourceScheduler(TaskManager):
         """
         Trigger a deploy
         """
+        if not self._running:
+            return
         async with self._scheduler_lock:
             self._work.deploy_with_context(self._state.dirty, priority=priority, deploying=self._deploying_latest)
 
@@ -176,11 +209,15 @@ class ResourceScheduler(TaskManager):
         """
         Trigger a repair, i.e. mark all resources as dirty, then trigger a deploy.
         """
+        if not self._running:
+            return
         async with self._scheduler_lock:
             self._state.dirty.update(self._state.resources.keys())
             self._work.deploy_with_context(self._state.dirty, priority=priority, deploying=self._deploying_latest)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
+        if not self._running:
+            return
         resources = await self._build_resource_mappings_from_db(version)
         for rid, resource in resources.items():
             self._work.agent_queues.queue_put_nowait(
@@ -196,6 +233,8 @@ class ResourceScheduler(TaskManager):
             )
 
     async def get_facts(self, resource: dict[str, object]) -> None:
+        if not self._running:
+            return
         rid = Id.parse_id(resource["id"]).resource_str()
         self._work.agent_queues.queue_put_nowait(
             PrioritizedTask(
@@ -204,13 +243,16 @@ class ResourceScheduler(TaskManager):
             )
         )
 
-    async def _build_resource_mappings_from_db(self, version: int) -> Mapping[ResourceIdStr, ResourceDetails]:
+    async def _build_resource_mappings_from_db(
+        self, version: int, *, connection: Optional[data.Connection] = None
+    ) -> Mapping[ResourceIdStr, ResourceDetails]:
         """
         Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
 
         :return: resource_mapping {id -> resource details}
         """
-        resources_from_db = await data.Resource.get_resources_for_version(self.environment, version)
+        async with data.Resource.get_connection(connection) as con:
+            resources_from_db = await data.Resource.get_resources_for_version(self.environment, version, connection=con)
 
         resource_mapping = {
             resource.resource_id: ResourceDetails(
@@ -232,30 +274,52 @@ class ResourceScheduler(TaskManager):
         }
         return require_mapping
 
+    async def _get_resources_in_latest_version(
+        self, *, connection: Optional[data.Connection] = None,
+    ) -> tuple[int, Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
+        """
+        Returns a tuple containing:
+            1. The version number of the latest released model.
+            2. A dict mapping every resource_id in the latest released version to its ResourceDetails.
+            3. A dict mapping every resource_id in the latest released version to the set of resources it requires.
+        """
+        async with ConfigurationModel.get_connection(connection) as con:
+            cm_version = await ConfigurationModel.get_latest_version(self.environment, connection=con)
+            if cm_version is None:
+                raise KeyError()
+            model_version = cm_version.version
+            resources_from_db = await self._build_resource_mappings_from_db(version=model_version, connection=con)
+            requires_from_db = self._construct_requires_mapping(resources_from_db)
+            return model_version, resources_from_db, requires_from_db
+
     async def read_version(
         self,
     ) -> None:
         """
-        Update model state and scheduled work based on the latest released version in the database, e.g. when the scheduler is
-        started or when a new version is released. Triggers a deploy after updating internal state:
+        Update model state and scheduled work based on the latest released version in the database,
+        e.g. when a new version is released. Triggers a deploy after updating internal state:
         - schedules new or updated resources to be deployed
         - schedules any resources that are not in a known good state.
         - rearranges deploy tasks by requires if required
         """
-        cm_version = await ConfigurationModel.get_latest_version(self.environment)
-        if cm_version is None:
+        if not self._running:
             return
-        version = cm_version.version
-        resources_from_db = await self._build_resource_mappings_from_db(version=version)
-        requires_from_db = self._construct_requires_mapping(resources_from_db)
-        await self._new_version(version, resources_from_db, requires_from_db)
+        try:
+            version, resources, requires = await self._get_resources_in_latest_version()
+        except KeyError:
+            # No model version has been released yet.
+            return
+        else:
+            await self._new_version(version, resources, requires)
 
     async def _new_version(
         self,
         version: int,
         resources: Mapping[ResourceIdStr, ResourceDetails],
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
+        up_to_date_resources: Optional[Mapping[ResourceIdStr, ResourceDetails]] = None,
     ) -> None:
+        up_to_date_resources = {} if up_to_date_resources is None else up_to_date_resources
         async with self._intent_lock:
             # Inspect new state and compare it with the old one before acquiring scheduler the lock.
             # This is safe because we only read intent-related state here, for which we've already acquired the lock
@@ -270,6 +334,9 @@ class ResourceScheduler(TaskManager):
             unblocked_resources: set[ResourceIdStr] = set()
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
+            for resource, details in up_to_date_resources.items():
+                self._state.add_up_to_date_resource(resource, details)
+
             for resource, details in resources.items():
                 if details.status is const.ResourceState.undefined:
                     blocked_resources.add(resource)

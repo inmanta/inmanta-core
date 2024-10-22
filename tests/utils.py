@@ -53,6 +53,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
+from inmanta.deploy.scheduler import ResourceScheduler
 
 T = TypeVar("T")
 
@@ -820,3 +821,17 @@ def make_random_file(size: int = 0) -> tuple[str, bytes, str]:
     body = base64.b64encode(content).decode("ascii")
 
     return hash, content, body
+
+
+async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:
+    """
+    Return True iff the given agent has finished executing all its tasks.
+
+    :param scheduler: The resource scheduler that hands out work to the agent for which the done status has to be checked.
+    :param agent_name: The name of the agent for which the done status has to be checked.
+    """
+    agent_queue = scheduler._work.agent_queues._agent_queues.get(agent_name)
+    if not agent_queue:
+        # Agent queue doesn't exist -> Tasks have not been queued yet
+        return False
+    return agent_queue._unfinished_tasks == 0
