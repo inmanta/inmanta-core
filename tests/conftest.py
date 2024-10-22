@@ -19,15 +19,26 @@
 import logging.config
 import warnings
 from re import Pattern
+from threading import Condition
 
-import pkg_resources
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
 import toml
 from inmanta import logging as inmanta_logging
+from inmanta.agent.handler import (
+    CRUDHandler,
+    HandlerContext,
+    ResourceHandler,
+    ResourcePurged,
+    SkipResource,
+    TResource,
+    provider,
+)
+from inmanta.data.model import ResourceIdStr
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
+from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
 
@@ -92,10 +103,10 @@ import traceback
 import uuid
 import venv
 import weakref
-from collections import abc
+from collections import abc, defaultdict, namedtuple
 from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
-from typing import Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, Generic, Optional, Union
 
 import asyncpg
 import psutil
@@ -113,16 +124,17 @@ import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
+import inmanta.server.agentmanager as agentmanager
 import inmanta.user_setup
-import logfire
+from deploy.scheduler_test_util import DummyCodeManager
 from inmanta import config, const, data, env, loader, protocol, resources
-from inmanta.agent import config as agent_cfg
 from inmanta.agent import handler
-from inmanta.agent.agent import Agent
+from inmanta.agent.agent_new import Agent
+from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, swap_process_env
+from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -138,6 +150,7 @@ from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
 from pytest_postgresql import factories
+from utils import ClientHelper, NullAgent
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
@@ -503,12 +516,12 @@ def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[Optional[str
 
 
 @pytest.fixture(scope="function")
-def deactive_venv():
+def deactive_venv() -> ActiveEnv:
     snapshot = env.store_venv()
     old_available_extensions = (
         dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
     )
-    yield
+    yield process_env
     snapshot.restore()
     loader.PluginModuleFinder.reset()
     InmantaBootloader.AVAILABLE_EXTENSIONS = old_available_extensions
@@ -574,14 +587,6 @@ def restore_cwd():
     os.chdir(initial_cwd)
 
 
-@pytest.fixture(scope="function")
-def no_agent_backoff(inmanta_config: ConfigParser) -> None:
-    old_backoff = agent_cfg.agent_get_resource_backoff.get()
-    agent_cfg.agent_get_resource_backoff.set("0")
-    yield
-    agent_cfg.agent_get_resource_backoff.set(str(old_backoff))
-
-
 @pytest.fixture()
 def free_socket():
     bound_sockets = []
@@ -637,86 +642,6 @@ def disable_background_jobs(monkeypatch):
 
 
 @pytest.fixture(scope="function")
-async def agent_multi(server_multi, environment_multi):
-    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
-
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
-    a = Agent(hostname="node1", environment=environment_multi, agent_map={"agent1": "localhost"}, code_loader=False)
-    await a.add_end_point_name("agent1")
-    await a.start()
-    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-    yield a
-
-    await a.stop()
-
-
-@pytest.fixture(scope="function")
-async def agent(server, environment):
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
-    a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    await a.add_end_point_name("agent1")
-    await a.start()
-    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-    yield a
-
-    await a.stop()
-
-
-@pytest.fixture(scope="function")
-async def agent_factory(
-    server,
-) -> Callable[[uuid.UUID, Optional[str], Optional[dict[str, str]], bool, list[str]], Awaitable[Agent]]:
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
-
-    started_agents = []
-
-    async def create_agent(
-        environment: uuid.UUID,
-        hostname: Optional[str] = None,
-        agent_map: Optional[dict[str, str]] = None,
-        code_loader: bool = False,
-        agent_names: list[str] = [],
-    ) -> Agent:
-        a = Agent(hostname=hostname, environment=environment, agent_map=agent_map, code_loader=code_loader)
-        for agent_name in agent_names:
-            await a.add_end_point_name(agent_name)
-        await a.start()
-        started_agents.append(a)
-        await utils.retry_limited(lambda: a.sessionid in agentmanager.sessions, 10)
-        return a
-
-    yield create_agent
-    await asyncio.gather(*[agent.stop() for agent in started_agents])
-
-
-@pytest.fixture(scope="function")
-async def autostarted_agent(server, client, environment):
-    """Configure agent1 as an autostarted agent."""
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
-    assert result.code == 200
-    result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
-    assert result.code == 200
-    result = await client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
-    assert result.code == 200
-    # disable deploy and repair intervals
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
-    assert result.code == 200
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
-    assert result.code == 200
-    result = await client.set_setting(environment, data.AUTOSTART_ON_START, True)
-    assert result.code == 200
-
-
-@pytest.fixture(scope="function")
 def client_v2(server):
     client = protocol.Client("client", version_match=VersionMatch.exact, exact_version=2)
     yield client
@@ -760,8 +685,12 @@ def log_state_tcp_ports(request, log_file):
 
 
 @pytest.fixture(scope="function")
-async def server_config(inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
+async def server_config(
+    inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory, auto_start_agent, no_agent
+):
     reset_metrics()
+    agentmanager.assert_no_start_scheduler = not auto_start_agent
+    agentmanager.no_start_scheduler = no_agent
 
     with tempfile.TemporaryDirectory() as state_dir:
         port = str(unused_tcp_port_factory())
@@ -791,6 +720,8 @@ async def server_config(inmanta_config, postgres_db, database_name, clean_reset,
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
         yield config
+    agentmanager.assert_no_start_scheduler = False
+    agentmanager.no_start_scheduler = False
 
 
 @pytest.fixture(scope="function")
@@ -878,6 +809,88 @@ async def server_multi(
 
 
 @pytest.fixture(scope="function")
+async def auto_start_agent():
+    """Marker fixture, indicates if we expect scheduler autostart.
+    If set to False, any attempt to start the scheduler results in failure"""
+    return False
+
+
+@pytest.fixture(scope="function")
+async def no_agent() -> bool:
+    """Marker fixture, disables scheduler autostart, any attempt to start the scheduler is ignored"""
+    return False
+
+
+@pytest.fixture(scope="function")
+async def clienthelper(client, environment):
+    return ClientHelper(client, environment)
+
+
+@pytest.fixture(scope="function")
+async def agent(server, environment):
+    """Construct an agent that can execute using the resource container"""
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    a = Agent(environment)
+
+    executor = InProcessExecutorManager(
+        environment, a._client, asyncio.get_event_loop(), logger, a.thread_pool, a._storage["code"], a._storage["env"], False
+    )
+    a.executor_manager = executor
+    a.scheduler.executor_manager = executor
+    a.scheduler.code_manager = DummyCodeManager(a._client)
+
+    await a.start()
+
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
+
+
+@pytest.fixture(scope="function")
+async def null_agent(server, environment):
+    """Construct an agent that does nothing"""
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    a = NullAgent(environment)
+
+    await a.start()
+
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
+
+
+@pytest.fixture(scope="function")
+async def agent_multi(server_multi, environment_multi):
+    """Construct an agent that can execute using the resource container"""
+    server = server_multi
+    environment = environment_multi
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    a = Agent(environment)
+
+    executor = InProcessExecutorManager(
+        environment, a._client, asyncio.get_event_loop(), logger, a.thread_pool, a._storage["code"], a._storage["env"], False
+    )
+    a.executor_manager = executor
+    a.scheduler.executor_manager = executor
+    a.scheduler.code_manager = DummyCodeManager(a._client)
+
+    await a.start()
+
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
+
+
+@pytest.fixture(scope="function")
 def client(server):
     client = protocol.Client("client")
     yield client
@@ -893,11 +906,6 @@ def client_multi(server_multi):
 def sync_client_multi(server_multi):
     client = protocol.SyncClient("client")
     yield client
-
-
-@pytest.fixture(scope="function")
-def clienthelper(client, environment):
-    return utils.ClientHelper(client, environment)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -1052,17 +1060,22 @@ class ReentrantVirtualEnv(VirtualEnv):
             setting re_check makes it check every time
         """
         super().__init__(env_path)
-        self.working_set = None
         self.was_checked = False
         self.re_check = re_check
         # The venv we replaced when getting activated
-        self.previous_venv: Optional[ActiveEnv] = None
+        self.previous_venv = None
+        self.snapshot = None
 
     def deactivate(self):
         if self._using_venv:
             self._using_venv = False
-            self.working_set = pkg_resources.working_set
-            swap_process_env(self.previous_venv)
+            if self.snapshot:
+                self.snapshot.restore()
+                self.snapshot = None
+                swap_process_env(self.previous_venv)
+
+    def fake_use(self) -> None:
+        self._using_venv = True
 
     def use_virtual_env(self) -> None:
         """
@@ -1072,16 +1085,11 @@ class ReentrantVirtualEnv(VirtualEnv):
             # We are in use, just ignore double activation
             return
 
-        if not self.working_set:
-            # First run
-            self.previous_venv = env.process_env
-            super().use_virtual_env()
-        else:
-            # Later run
-            self._activate_that()
-            self.previous_venv = swap_process_env(self)
-            pkg_resources.working_set = self.working_set
-            self._using_venv = True
+        self.init_env()
+        self._using_venv = True
+        self.snapshot = store_venv()
+        self.previous_venv = swap_process_env(self)
+        self._activate_that()
 
     def check(
         self,
@@ -1104,6 +1112,7 @@ class SnippetCompilationTest(KeepOnFail):
         self.repo: str = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
         self.venv = ReentrantVirtualEnv(env_path=self.env, re_check=re_check_venv)
+        self.re_check_venv = re_check_venv
         config.Config.load_config()
         self.keep_shared = False
         self.project = None
@@ -1125,6 +1134,8 @@ class SnippetCompilationTest(KeepOnFail):
             shutil.rmtree(self.project_dir)
         self.project = None
         self.venv.deactivate()
+        sys.path_importer_cache.clear()
+        loader.PluginModuleFinder.reset()
 
     def keep(self):
         self._keep = True
@@ -1190,8 +1201,16 @@ class SnippetCompilationTest(KeepOnFail):
             extra_index_url,
             main_file,
         )
+
+        dirty_venv = autostd or install_project or install_v2_modules or self.re_check_venv or python_requires
+
         return self._load_project(
-            autostd or ministd, install_project, install_v2_modules, strict_deps_check=strict_deps_check, main_file=main_file
+            autostd or ministd,
+            install_project,
+            install_v2_modules,
+            strict_deps_check=strict_deps_check,
+            main_file=main_file,
+            dirty_venv=dirty_venv,
         )
 
     def _load_project(
@@ -1201,16 +1220,22 @@ class SnippetCompilationTest(KeepOnFail):
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
         main_file: str = "main.cf",
         strict_deps_check: Optional[bool] = None,
+        dirty_venv: bool = True,
     ):
         loader.PluginModuleFinder.reset()
         self.project = Project(
             self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
         )
         Project.set(self.project)
-        self.project.use_virtual_env()
-        self._install_v2_modules(install_v2_modules)
-        if install_project:
-            self.project.install_modules()
+
+        if dirty_venv:
+            # Don't bother loading the venv if we don't need to
+            self.project.use_virtual_env()
+            self._install_v2_modules(install_v2_modules)
+            if install_project:
+                self.project.install_modules()
+        else:
+            self.venv.fake_use()
         return self.project
 
     def _install_v2_modules(self, install_v2_modules: Optional[list[LocalPackagePath]] = None) -> None:
@@ -1462,7 +1487,7 @@ def snippetcompiler(
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler_clean(modules_dir: str, clean_reset) -> Iterator[SnippetCompilationTest]:
+def snippetcompiler_clean(modules_dir: str, clean_reset, deactive_venv) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
     """
@@ -1599,7 +1624,7 @@ async def mocked_compiler_service_block(server, monkeypatch):
 
 
 @pytest.fixture
-def tmpvenv(tmpdir: py.path.local) -> Iterator[tuple[py.path.local, py.path.local]]:
+def tmpvenv(tmpdir: py.path.local, deactive_venv) -> Iterator[tuple[py.path.local, py.path.local]]:
     """
     Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the `tmpdir`
     fixture. This venv is completely decoupled from the active development venv.
@@ -1611,6 +1636,10 @@ def tmpvenv(tmpdir: py.path.local) -> Iterator[tuple[py.path.local, py.path.loca
     venv.create(venv_dir, with_pip=True)
     subprocess.check_output([str(python_path), "-m", "pip", "install", "-U", "pip"])
     yield (venv_dir, python_path)
+
+
+# Capture early, while loading code
+real_prefix = sys.prefix
 
 
 @pytest.fixture
@@ -1654,9 +1683,20 @@ def tmpvenv_active(
             base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
         )
 
+    this_source_root = os.path.dirname(os.path.dirname(__file__))
+
+    def keep_path_element(element: str) -> bool:
+        # old venv paths are dropped
+        if element.startswith(real_prefix):
+            return False
+        # exclude source install of the module
+        if element.startswith(this_source_root):
+            return False
+        return True
+
     # prepend bin to PATH (this file is inside the bin directory), exclude old venv path
     os.environ["PATH"] = os.pathsep.join(
-        [binpath] + [elem for elem in os.environ.get("PATH", "").split(os.pathsep) if not elem.startswith(sys.prefix)]
+        [binpath] + [elem for elem in os.environ.get("PATH", "").split(os.pathsep) if keep_path_element(elem)]
     )
     os.environ["VIRTUAL_ENV"] = base  # virtual env is right above bin directory
 
@@ -1664,7 +1704,7 @@ def tmpvenv_active(
     prev_length = len(sys.path)
     site.addsitedir(site_packages)
     # exclude old venv path
-    sys.path[:] = sys.path[prev_length:] + [elem for elem in sys.path[0:prev_length] if not elem.startswith(sys.prefix)]
+    sys.path[:] = sys.path[prev_length:] + [elem for elem in sys.path[0:prev_length] if keep_path_element(elem)]
 
     sys.real_prefix = sys.prefix
     sys.prefix = base
@@ -1985,11 +2025,577 @@ def disable_version_and_agent_cleanup_job():
     orchestrationservice.PERFORM_CLEANUP = old_perform_cleanup
 
 
-@pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
-def configure_logfire():
-    """Configure logfire to ensure all the instrumentation works correctly and does not provide warnings. This does not
-    setup tracing for tests"""
-    logfire.configure(
-        send_to_logfire=False,
-        console=False,
+ResourceContainer = namedtuple(
+    "ResourceContainer", ["Provider", "waiter", "wait_for_done_with_waiters", "wait_for_condition_with_waiters"]
+)
+
+
+@pytest.fixture(scope="function")
+def resource_container(clean_reset):
+    @resource("test::Resource", agent="agent", id_attribute="key")
+    class MyResource(Resource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::Fact", agent="agent", id_attribute="key")
+    class FactResource(Resource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged", "skip", "factvalue", "skipFact")
+
+    @resource("test::SetFact", agent="agent", id_attribute="key")
+    class SetFactResource(PurgeableResource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
+
+    @resource("test::SetNonExpiringFact", agent="agent", id_attribute="key")
+    class SetNonExpiringFactResource(PurgeableResource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
+
+    @resource("test::Fail", agent="agent", id_attribute="key")
+    class FailR(Resource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::Wait", agent="agent", id_attribute="key")
+    class WaitR(Resource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::Noprov", agent="agent", id_attribute="key")
+    class NoProv(Resource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::FailFast", agent="agent", id_attribute="key")
+    class FailFastR(Resource):
+        """
+        Raise an exception in the check_resource() method.
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::FailFastCRUD", agent="agent", id_attribute="key")
+    class FailFastPR(PurgeableResource):
+        """
+        Raise an exception at the beginning of the read_resource() method
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
+
+    @resource("test::BadPost", agent="agent", id_attribute="key")
+    class BadPostR(Resource):
+        """
+        Raise an exception in the post() method of the ResourceHandler.
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::BadPostCRUD", agent="agent", id_attribute="key")
+    class BadPostPR(PurgeableResource):
+        """
+        Raise an exception in the post() method of the CRUDHandlerGeneric.
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
+
+    @resource("test::BadLogging", agent="agent", id_attribute="key")
+    class BadLoggingR(Resource):
+        """
+        Raises an exception when trying to log a message that's not serializable.
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::Deploy", agent="agent", id_attribute="key")
+    class DeployR(Resource):
+        """
+        Raise a SkipResource exception in the deploy() handler method.
+        """
+
+        fields = ("key", "value", "set_state_to_deployed", "purged")
+
+    @resource("test::EventResource", agent="agent", id_attribute="key")
+    class EventResource(PurgeableResource):
+        """
+        Raise a SkipResource exception in the deploy() handler method.
+        """
+
+        fields = ("key", "value", "change", "purged")
+
+        @classmethod
+        def get_change(cls, _, r):
+            return False
+
+    # Remote control state, shared over all resources
+    _STATE = defaultdict(dict)
+    _WRITE_COUNT = defaultdict(lambda: defaultdict(int))
+    _RELOAD_COUNT = defaultdict(lambda: defaultdict(int))
+    _READ_COUNT = defaultdict(lambda: defaultdict(int))
+    _TO_SKIP = defaultdict(lambda: defaultdict(int))
+    _TO_FAIL = defaultdict(lambda: defaultdict(int))
+
+    class Provider(ResourceHandler[TResource], Generic[TResource]):
+        def check_resource(self, ctx, resource):
+            self.read(resource.id.get_agent_name(), resource.key)
+            assert resource.value != const.UNKNOWN_STRING
+            current = resource.clone()
+            current.purged = not self.isset(resource.id.get_agent_name(), resource.key)
+
+            if not current.purged:
+                current.value = self.get(resource.id.get_agent_name(), resource.key)
+            else:
+                current.value = None
+
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            if self.skip(resource.id.get_agent_name(), resource.key):
+                raise SkipResource()
+
+            if self.fail(resource.id.get_agent_name(), resource.key):
+                raise Exception("Failed")
+
+            if "purged" in changes:
+                self.touch(resource.id.get_agent_name(), resource.key)
+                if changes["purged"]["desired"]:
+                    self.delete(resource.id.get_agent_name(), resource.key)
+                    ctx.set_purged()
+                else:
+                    self.set(resource.id.get_agent_name(), resource.key, resource.value)
+                    ctx.set_created()
+
+            elif "value" in changes:
+                ctx.info("Set key '%(key)s' to value '%(value)s'", key=resource.key, value=resource.value)
+                self.touch(resource.id.get_agent_name(), resource.key)
+                self.set(resource.id.get_agent_name(), resource.key, resource.value)
+                ctx.set_updated()
+
+            return changes
+
+        def facts(self, ctx, resource):
+            return {"length": len(self.get(resource.id.get_agent_name(), resource.key)), "key1": "value1", "key2": "value2"}
+
+        def can_reload(self) -> bool:
+            return True
+
+        def do_reload(self, ctx, resource):
+            _RELOAD_COUNT[resource.id.get_agent_name()][resource.key] += 1
+
+        @classmethod
+        def set_skip(cls, agent, key, skip):
+            _TO_SKIP[agent][key] = skip
+
+        @classmethod
+        def set_fail(cls, agent, key, failcount):
+            _TO_FAIL[agent][key] = failcount
+
+        @classmethod
+        def skip(cls, agent, key):
+            doskip = _TO_SKIP[agent][key]
+            if doskip == 0:
+                return False
+            _TO_SKIP[agent][key] -= 1
+            return True
+
+        @classmethod
+        def fail(cls, agent, key):
+            doskip = _TO_FAIL[agent][key]
+            if doskip == 0:
+                return False
+            _TO_FAIL[agent][key] -= 1
+            return True
+
+        @classmethod
+        def touch(cls, agent, key):
+            _WRITE_COUNT[agent][key] += 1
+
+        @classmethod
+        def read(cls, agent, key):
+            _READ_COUNT[agent][key] += 1
+
+        @classmethod
+        def set(cls, agent, key, value):
+            _STATE[agent][key] = value
+
+        @classmethod
+        def get(cls, agent, key):
+            if key in _STATE[agent]:
+                return _STATE[agent][key]
+            return None
+
+        @classmethod
+        def isset(cls, agent, key):
+            return key in _STATE[agent]
+
+        @classmethod
+        def delete(cls, agent, key):
+            if cls.isset(agent, key):
+                del _STATE[agent][key]
+
+        @classmethod
+        def changecount(cls, agent, key):
+            return _WRITE_COUNT[agent][key]
+
+        @classmethod
+        def readcount(cls, agent, key):
+            return _READ_COUNT[agent][key]
+
+        @classmethod
+        def reloadcount(cls, agent, key):
+            return _RELOAD_COUNT[agent][key]
+
+        @classmethod
+        def reset(cls):
+            _STATE.clear()
+            _WRITE_COUNT.clear()
+            _READ_COUNT.clear()
+            _TO_SKIP.clear()
+            _TO_FAIL.clear()
+            _RELOAD_COUNT.clear()
+
+    @provider("test::Resource", name="test_resource")
+    class ResourceProvider(Provider[MyResource]):
+        pass
+
+    @provider("test::Fail", name="test_fail")
+    class Fail(ResourceHandler[FailR]):
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
+
+            if not current.purged:
+                current.value = Provider.get(resource.id.get_agent_name(), resource.key)
+            else:
+                current.value = None
+
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            raise Exception()
+
+    @provider("test::FailFast", name="test_failfast")
+    class FailFast(ResourceHandler[FailFastR]):
+        def check_resource(self, ctx: HandlerContext, resource: Resource) -> Resource:
+            raise Exception("An\nError\tMessage")
+
+    @provider("test::FailFastCRUD", name="test_failfast_crud")
+    class FailFastCRUD(CRUDHandler[FailFastPR]):
+        def read_resource(self, ctx: HandlerContext, resource: FailFastPR) -> None:
+            raise Exception("An\nError\tMessage")
+
+    @provider("test::Fact", name="test_fact")
+    class Fact(ResourceHandler[FactResource]):
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
+
+            current.value = "that"
+
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            if resource.skip:
+                raise SkipResource("can not deploy")
+            if "purged" in changes:
+                if changes["purged"]["desired"]:
+                    Provider.delete(resource.id.get_agent_name(), resource.key)
+                    ctx.set_purged()
+                else:
+                    Provider.set(resource.id.get_agent_name(), resource.key, "x")
+                    ctx.set_created()
+            else:
+                ctx.set_updated()
+
+        def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
+            if not Provider.isset(resource.id.get_agent_name(), resource.key):
+                return {}
+            elif resource.skipFact:
+                raise SkipResource("Not ready")
+            return {"fact": resource.factvalue}
+
+    @provider("test::SetFact", name="test_set_fact")
+    class SetFact(CRUDHandler[SetFactResource]):
+        def read_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+            self._do_set_fact(ctx, resource)
+
+        def create_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+            pass
+
+        def delete_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+            pass
+
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: SetFactResource) -> None:
+            pass
+
+        def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
+            self._do_set_fact(ctx, resource)
+            return {f"returned_fact_{resource.key}": "test"}
+
+        def _do_set_fact(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+            ctx.set_fact(fact_id=resource.key, value=resource.value)
+
+    @provider("test::SetNonExpiringFact", name="test_set_non_expiring_fact")
+    class SetNonExpiringFact(CRUDHandler[SetNonExpiringFactResource]):
+        def read_resource(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
+            self._do_set_fact(ctx, resource)
+
+        def create_resource(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
+            pass
+
+        def delete_resource(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
+            pass
+
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: SetNonExpiringFactResource) -> None:
+            pass
+
+        def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
+            self._do_set_fact(ctx, resource)
+            return {}
+
+        def _do_set_fact(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
+            expires = resource.key == "expiring"
+            ctx.set_fact(fact_id=resource.key, value=resource.value, expires=expires)
+
+    @provider("test::BadPost", name="test_bad_posts")
+    class BadPost(Provider):
+        def post(self, ctx: HandlerContext, resource: Resource) -> None:
+            raise Exception("An\nError\tMessage")
+
+    @provider("test::BadPostCRUD", name="test_bad_posts_crud")
+    class BadPostCRUD(CRUDHandler[BadPostPR]):
+        def post(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+            raise Exception("An\nError\tMessage")
+
+    class Empty:
+        pass
+
+    @provider("test::BadLogging", name="test_bad_logging")
+    class BadLogging(ResourceHandler[BadLoggingR]):
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            ctx.info("This is not JSON serializable: %(val)s", val=Empty())
+
+    @resource("test::AgentConfig", agent="agent", id_attribute="agentname")
+    class AgentConfig(PurgeableResource):
+        """
+        A resource that can modify the agentmap for autostarted agents
+        """
+
+        fields = ("agentname", "uri", "autostart")
+
+        @staticmethod
+        def get_autostart(exp, obj):
+            try:
+                if not obj.autostart:
+                    raise IgnoreResourceException()
+            except Exception as e:
+                # When this attribute is not set, also ignore it
+                raise IgnoreResourceException() from e
+            return obj.autostart
+
+    @provider("test::AgentConfig", name="agentrest")
+    class AgentConfigHandler(CRUDHandler[AgentConfig]):
+        def _get_map(self) -> dict:
+            def call():
+                return self.get_client().get_setting(tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP)
+
+            value = self.run_sync(call)
+            return value.result["value"]
+
+        def _set_map(self, agent_config: dict) -> None:
+            def call():
+                return self.get_client().set_setting(
+                    tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP, value=agent_config
+                )
+
+            return self.run_sync(call)
+
+        def read_resource(self, ctx: HandlerContext, resource: AgentConfig) -> None:
+            agent_config = self._get_map()
+            ctx.set("map", agent_config)
+
+            if resource.agentname not in agent_config:
+                raise ResourcePurged()
+
+            resource.uri = agent_config[resource.agentname]
+
+        def create_resource(self, ctx: HandlerContext, resource: AgentConfig) -> None:
+            agent_config = ctx.get("map")
+            agent_config[resource.agentname] = resource.uri
+            self._set_map(agent_config)
+
+        def delete_resource(self, ctx: HandlerContext, resource: AgentConfig) -> None:
+            agent_config = ctx.get("map")
+            del agent_config[resource.agentname]
+            self._set_map(agent_config)
+
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: AgentConfig) -> None:
+            agent_config = ctx.get("map")
+            agent_config[resource.agentname] = resource.uri
+            self._set_map(agent_config)
+
+    waiter = Condition()
+
+    async def wait_for_done_with_waiters(client, env_id, version, wait_for_this_amount_of_resources_in_done=None, timeout=10):
+        def log_progress(done: int, total: int) -> None:
+            logger.info(
+                "waiting with waiters, %s/%s resources done",
+                done,
+                (wait_for_this_amount_of_resources_in_done if wait_for_this_amount_of_resources_in_done else total),
+            )
+
+        # unhang waiters
+        result = await client.get_version(env_id, version)
+        assert result.code == 200
+        now = time.time()
+        log_progress(result.result["model"]["done"], result.result["model"]["total"])
+        while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+            if now + timeout < time.time():
+                raise Exception("Timeout")
+            if (
+                wait_for_this_amount_of_resources_in_done
+                and result.result["model"]["done"] - wait_for_this_amount_of_resources_in_done >= 0
+            ):
+                break
+            result = await client.get_version(env_id, version)
+            log_progress(result.result["model"]["done"], result.result["model"]["total"])
+            waiter.acquire()
+            waiter.notify_all()
+            waiter.release()
+            await asyncio.sleep(0.1)
+
+        return result
+
+    async def wait_for_condition_with_waiters(wait_condition, timeout=10):
+        """
+        Wait until wait_condition() returns false
+        """
+        now = time.time()
+        while await wait_condition():
+            if now + timeout < time.time():
+                raise Exception("Timeout")
+            logger.info("waiting with waiters")
+            waiter.acquire()
+            waiter.notify_all()
+            waiter.release()
+            await asyncio.sleep(0.1)
+
+    @provider("test::Wait", name="test_wait")
+    class Wait(Provider[WaitR]):
+        def __init__(self, agent, io=None):
+            super().__init__(agent, io)
+            self.traceid = uuid.uuid4()
+
+        def deploy(self, ctx, resource, requires) -> None:
+            # Hang even when skipped
+            logger.info("Hanging waiter %s", self.traceid)
+            waiter.acquire()
+            notified_before_timeout = waiter.wait(timeout=10)
+            waiter.release()
+            if not notified_before_timeout:
+                raise Exception("Timeout occurred")
+            logger.info("Releasing waiter %s", self.traceid)
+            super().deploy(ctx, resource, requires)
+
+    @provider("test::EventResource", name="test_event_processing")
+    class EventResourceProvider(CRUDHandler[EventResource]):
+        def __init__(self, agent, io=None):
+            super().__init__(agent, io)
+            self.traceid = uuid.uuid4()
+
+        def read_resource(self, ctx: HandlerContext, resource: EventResource) -> None:
+            logger.info("Hanging waiter %s", self.traceid)
+            waiter.acquire()
+            notified_before_timeout = waiter.wait(timeout=10)
+            waiter.release()
+            if not notified_before_timeout:
+                raise Exception("Timeout occurred")
+            logger.info("Releasing waiter %s", self.traceid)
+
+            Provider.read(resource.id.get_agent_name(), resource.key)
+            environment = self._agent.environment
+
+            async def should_redeploy() -> bool:
+                client = self.get_client()
+                result = await client.get_resource_events(
+                    environment,
+                    resource.id.resource_version_str(),
+                    const.Change.nochange,
+                )
+                if result.code != 200:
+                    raise RuntimeError(
+                        f"Unexpected response code when checking for events: received {result.code} "
+                        f"(expected 200): {result.result}"
+                    )
+                changed_dependencies = result.result["data"]
+                assert isinstance(changed_dependencies, dict)
+
+                actual_changes = {k: v for k, v in changed_dependencies.items() if v}
+                if actual_changes:
+                    ctx.debug("Change found: %(changes)s, deploying", changes=actual_changes)
+                else:
+                    ctx.debug("No changes, not deploying")
+
+                return bool(actual_changes)
+
+            resource.change = self.run_sync(should_redeploy)
+
+        def create_resource(self, ctx: HandlerContext, resource: EventResource) -> None:
+            Provider.touch(resource.id.get_agent_name(), resource.key)
+            ctx.set_created()
+
+        def update_resource(self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: EventResource) -> None:
+            Provider.touch(resource.id.get_agent_name(), resource.key)
+            ctx.set_updated()
+
+        def delete_resource(self, ctx: HandlerContext, resource: EventResource) -> None:
+            Provider.touch(resource.id.get_agent_name(), resource.key)
+            ctx.set_purged()
+
+    @provider("test::Deploy", name="test_wait")
+    class Deploy(Provider):
+        def deploy(
+            self,
+            ctx: HandlerContext,
+            resource: Resource,
+            requires: dict[ResourceIdStr, const.ResourceState],
+        ) -> None:
+            if self.skip(resource.id.agent_name, resource.key):
+                raise SkipResource()
+            elif self.fail(resource.id.agent_name, resource.key):
+                raise Exception()
+            elif resource.set_state_to_deployed:
+                ctx.set_status(const.ResourceState.deployed)
+
+    yield ResourceContainer(
+        Provider=Provider,
+        wait_for_done_with_waiters=wait_for_done_with_waiters,
+        waiter=waiter,
+        wait_for_condition_with_waiters=wait_for_condition_with_waiters,
     )
+    Provider.reset()

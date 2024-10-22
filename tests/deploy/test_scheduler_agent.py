@@ -31,7 +31,7 @@ from uuid import UUID
 import pytest
 
 import inmanta.types
-from agent_server.deploy.scheduler_test_util import DummyCodeManager, make_requires
+from deploy.scheduler_test_util import DummyCodeManager, make_requires
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent

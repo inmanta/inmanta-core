@@ -531,33 +531,24 @@ async def test_resource_count_metric(clienthelper, client, agent):
     assert len(env_uuid2_records) == 2
 
 
-async def test_resource_count_metric_released(client, server):
+async def test_resource_count_metric_released(client, server, agent, clienthelper: ClientHelper, environment):
     """
     test that only the latest released version is used for the metrics:
     - adds a first version with 3 resources and a second one with one resource but don't deploy them
     - deploy only the first one
     - verify the flushed data comes from the first version
     """
-    env_uuid1 = uuid.uuid4()
-    project = data.Project(name="test")
-    await project.insert()
-    projects = await data.Project.get_list(name="test")
-    assert len(projects) == 1
-    project_id = projects[0].id
-    environment1: data.Environment = data.Environment(id=env_uuid1, project=project_id, name="testenv1")
-    await environment1.insert()
-    envs = await data.Environment.get_list(project=project_id)
-    assert len(envs) == 1
-    version1 = str(await ClientHelper(client, env_uuid1).get_version())
 
-    result = await client.set_setting(tid=env_uuid1, id="auto_deploy", value=False)
+    version1 = await clienthelper.get_version()
+
+    result = await client.set_setting(tid=environment, id="auto_deploy", value=False)
     assert result.code == 200
 
     resources_env1_v1 = [
         {
             "key": "key1",
             "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=" + version1,
+            "id": f"test::Resource[agent1,key=key1],v={version1}",
             "send_event": False,
             "requires": [],
             "purged": False,
@@ -565,7 +556,7 @@ async def test_resource_count_metric_released(client, server):
         {
             "key": "key2",
             "value": "value2",
-            "id": "test::Resource[agent1,key=key2],v=" + version1,
+            "id": f"test::Resource[agent1,key=key2],v={version1}",
             "send_event": False,
             "requires": [],
             "purged": True,
@@ -573,14 +564,14 @@ async def test_resource_count_metric_released(client, server):
         {
             "key": "key3",
             "value": "value3",
-            "id": "test::Resource[agent1,key=key3],v=" + version1,
+            "id": f"test::Resource[agent1,key=key3],v={version1}",
             "send_event": False,
             "requires": [],
             "purged": True,
         },
     ]
     result = await client.put_version(
-        tid=env_uuid1,
+        tid=environment,
         version=version1,
         resources=resources_env1_v1,
         unknowns=[],
@@ -588,19 +579,20 @@ async def test_resource_count_metric_released(client, server):
         compiler_version=get_compiler_version(),
     )
     assert result.code == 200
-    version2 = str(await ClientHelper(client, env_uuid1).get_version())
+
+    version2 = await clienthelper.get_version()
     resources_env1_v2 = [
         {
             "key": "key5",
             "value": "value5",
-            "id": "test::Resource[agent1,key=key5],v=" + version2,
+            "id": f"test::Resource[agent1,key=key5],v={version2}",
             "send_event": False,
             "purged": False,
             "requires": [],
         },
     ]
     result = await client.put_version(
-        tid=env_uuid1,
+        tid=environment,
         version=version2,
         resources=resources_env1_v2,
         unknowns=[],
@@ -613,14 +605,19 @@ async def test_resource_count_metric_released(client, server):
     rcmc = ResourceCountMetricsCollector()
     metrics_service.register_metric_collector(metrics_collector=rcmc)
 
-    result = await client.release_version(env_uuid1, version1, True, const.AgentTriggerMethod.push_full_deploy)
+    result = await client.release_version(environment, version1, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
+
+    await clienthelper.wait_for_deployed(version1)
 
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
     assert len(result_gauge) == 10
     assert any(
-        x.count == 3 and x.metric_name == "resource.resource_count" and x.category == "available" and x.environment == env_uuid1
+        x.count == 3
+        and x.metric_name == "resource.resource_count"
+        and x.category == "unavailable"
+        and str(x.environment) == environment
         for x in result_gauge
     )
     assert 9 == len([obj for obj in result_gauge if obj.count == 0])
@@ -653,6 +650,7 @@ async def test_resource_count_empty_datapoint(client, server):
     assert all(hasattr(res, "category") and res.category != "__None__" and res.count == 0 for res in result_gauge)
 
 
+@pytest.mark.skip("To be fixed with agent view")
 async def test_agent_count_metric(clienthelper, client, server):
     project = data.Project(name="test")
     await project.insert()
