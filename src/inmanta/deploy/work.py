@@ -352,14 +352,17 @@ class ScheduledWork:
                 if self.agent_queues._in_progress[task] > priority:
                     self.agent_queues._in_progress[task] = priority
                     actual_task.set_reason(reason=reason)
-                elif self.agent_queues._in_progress[task] < priority or \
-                    (self.agent_queues._in_progress[task] == priority and actual_task.reason == reason):
+                elif self.agent_queues._in_progress[task] < priority or (
+                    self.agent_queues._in_progress[task] == priority and actual_task.reason == reason
+                ):
                     # We don't need to do anything in that particular case, the lowest priority is already set
                     pass
                 else:
-                    raise RuntimeError(f"Current task is equals to 2 different priorities: currently stored `{actual_task}` "
-                                       f"- `{self.agent_queues._in_progress[task]}` | new priority `{reason}` - "
-                                       f"`{priority}")
+                    raise RuntimeError(
+                        f"Current task is equals to 2 different priorities: currently stored `{actual_task}` "
+                        f"- `{self.agent_queues._in_progress[task]}` | new priority `{reason}` - "
+                        f"`{priority}"
+                    )
 
         # First drop all dropped requires so that we work on the smallest possible set for this operation.
         for resource, dropped in dropped_requires.items():
