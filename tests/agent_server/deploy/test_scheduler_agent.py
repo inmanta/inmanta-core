@@ -516,8 +516,8 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     executor2.deploys[rid2].set_result(const.ResourceState.deployed)
-    await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
+    await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     assert len(agent.scheduler._work._waiting) == 0
 
     # release another change to r1
