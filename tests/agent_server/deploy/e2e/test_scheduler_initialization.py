@@ -15,10 +15,12 @@
 
     Contact: code@inmanta.com
 """
+
 import pytest
 
-from inmanta import config, const
 import utils
+from inmanta import config, const
+
 
 @pytest.fixture
 async def server_pre_start(server_config):
@@ -26,9 +28,7 @@ async def server_pre_start(server_config):
     config.Config.set("config", "agent-repair-interval", "0")
 
 
-async def test_scheduler_initialization(
-    agent, resource_container, clienthelper, server, client, environment
-) -> None:
+async def test_scheduler_initialization(agent, resource_container, clienthelper, server, client, environment) -> None:
     """
     Ensure that when the scheduler starts, it only deploys the resources that need to be deployed,
     i.e. the resources that are not up-to-date or have outstanding events.
@@ -75,7 +75,7 @@ async def test_scheduler_initialization(
     for rid, expected_status in [
         ("test::Resource[agent1,key=key1]", const.ResourceState.deployed),
         ("test::Resource[agent1,key=key2]", const.ResourceState.failed),
-        ("test::Resource[agent1,key=key3]", const.ResourceState.skipped)
+        ("test::Resource[agent1,key=key3]", const.ResourceState.skipped),
     ]:
         result = await client.resource_details(tid=environment, rid=rid)
         assert result.code == 200
@@ -91,7 +91,6 @@ async def test_scheduler_initialization(
     assert len(result.result["data"]) == 1
     assert result.result["data"][0]["resource_version_ids"] == ["test::Resource[agent1,key=key1],v=1"]
 
-
     result = await client.get_resource_actions(
         tid=environment,
         resource_type="test::Resource",
@@ -99,21 +98,17 @@ async def test_scheduler_initialization(
     )
     assert result.code == 200
 
-
-
     # Pause the agent to stop the scheduler
     result = await client.agent_action(tid=environment, name=const.AGENT_SCHEDULER_ID, action=const.AgentAction.pause.value)
     assert result.code == 200
     result = await client.agent_action(tid=environment, name=const.AGENT_SCHEDULER_ID, action=const.AgentAction.unpause.value)
     assert result.code == 200
-    await utils.retry_limited(
-        utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1", timeout=10, interval=0.05
-    )
+    await utils.retry_limited(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1", timeout=10, interval=0.05)
 
     for rid, expected_status in [
         ("test::Resource[agent1,key=key1]", const.ResourceState.deployed),
         ("test::Resource[agent1,key=key2]", const.ResourceState.deployed),
-        ("test::Resource[agent1,key=key3]", const.ResourceState.deployed)
+        ("test::Resource[agent1,key=key3]", const.ResourceState.deployed),
     ]:
         result = await client.resource_details(tid=environment, rid=rid)
         assert result.code == 200

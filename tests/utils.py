@@ -47,13 +47,13 @@ from _pytest.mark import MarkDecorator
 from inmanta import config, const, data, env, module, protocol, util
 from inmanta.data import ResourceIdStr
 from inmanta.data.model import PipConfig
+from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
-from inmanta.deploy.scheduler import ResourceScheduler
 
 T = TypeVar("T")
 

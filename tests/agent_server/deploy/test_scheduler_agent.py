@@ -25,13 +25,14 @@ import typing
 import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Mapping, Optional, Sequence, Set
+from typing import Mapping, Optional, Sequence
 
 import pytest
 
 import inmanta.types
+import utils
 from agent_server.deploy.scheduler_test_util import DummyCodeManager, make_requires
-from inmanta import const, util, data
+from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
@@ -42,7 +43,6 @@ from inmanta.deploy.state import BlockedStatus
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.util import retry_limited
-import utils
 
 FAIL_DEPLOY: str = "fail_deploy"
 
@@ -269,8 +269,6 @@ def make_resource_minimal(environment):
         return state.ResourceDetails(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash, status=status)
 
     return make_resource_minimal
-
-
 
 
 async def test_basic_deploy(agent: TestAgent, make_resource_minimal):

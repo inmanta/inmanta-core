@@ -275,7 +275,9 @@ class ResourceScheduler(TaskManager):
         return require_mapping
 
     async def _get_resources_in_latest_version(
-        self, *, connection: Optional[data.Connection] = None,
+        self,
+        *,
+        connection: Optional[data.Connection] = None,
     ) -> tuple[int, Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
         """
         Returns a tuple containing:
