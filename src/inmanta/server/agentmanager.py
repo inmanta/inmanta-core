@@ -210,14 +210,14 @@ class AgentManager(ServerSlice, SessionListener):
         Halts all agents for an environment. Persists prior paused state.
         """
         await data.Agent.persist_on_halt(env.id, connection=connection)
-        await self._pause_agent(env, connection=connection)
+        await self._stop_agent(env, connection=connection)
 
     async def resume_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Resumes after halting. Unpauses all agents that had been paused by halting.
         """
-        to_unpause: list[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
-        await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
+        to_unpause: list[str] = await data.Agent.persist_on_resume(env=env.id, connection=connection)
+        await asyncio.gather(*[self._start_agent(env=env, endpoint=agent, connection=connection) for agent in to_unpause])
 
     @handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:
@@ -226,9 +226,9 @@ class AgentManager(ServerSlice, SessionListener):
         if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
             raise Forbidden("Cannot set on_resume state of agents when the environment is not halted.")
         if action is AgentAction.pause:
-            await self._pause_agent(env)
+            await self._stop_agent(env)
         elif action is AgentAction.unpause:
-            await self._unpause_agent(env)
+            await self._start_agent(env)
         elif action is AgentAction.keep_paused_on_resume:
             await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False)
         elif action is AgentAction.unpause_on_resume:
@@ -238,14 +238,17 @@ class AgentManager(ServerSlice, SessionListener):
 
     @handle(methods_v2.agent_action, env="tid")
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
+        if name == const.AGENT_SCHEDULER_ID:
+            raise BadRequest(f"Particular action cannot be directed towards the Scheduler agent: {action.name}")
+
         if env.halted and action in {AgentAction.pause, AgentAction.unpause}:
             raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
         if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
             raise Forbidden("Cannot set on_resume state of agents when the environment is not halted.")
         if action is AgentAction.pause:
-            await self._pause_agent(env, name)
+            await self._stop_agent(env, name)
         elif action is AgentAction.unpause:
-            await self._unpause_agent(env, name)
+            await self._start_agent(env, name)
         elif action is AgentAction.keep_paused_on_resume:
             await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False, endpoint=name)
         elif action is AgentAction.unpause_on_resume:
@@ -253,47 +256,96 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             raise BadRequest(f"Unknown agent action: {action.name}")
 
-    async def _pause_agent(
+    async def _stop_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         """
         Pause a logical agent by pausing an active agent instance if it exists, and removing the logical agent's primary.
-        """
 
+        When the Scheduler is used, this method can either halt an environment or pause a particular agent. The main difference
+        between these would be the following:
+            - The endpoint is not provided -> We want to halt the environment
+            - The endpoint is provided -> We want to pause an agent
+        The things that will differ in the logic will be:
+            - The number of agent that are set to "paused" in the agent table:
+                - Only one if an agent is paused or all of them if the environment is halted
+            - The request that will be sent to the Scheduler to pause an agent:
+                - This will be only sent if we stop a particular agent
+                - If we want to pause the environment we cannot send the request here as this is part of a big DB transaction,
+                    so this one needs to go through before being able to send the request to the Scheduler to halt everything
+            - The update of the primary will be only be taken care of when we deal with the Scheduler as the Server is not
+                aware of the executors created by the Scheduler -> It does not need to maintain this information
+        """
+        endpoints_with_new_primary = []
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
-            endpoints_with_new_primary = []
-            for agent_name in agents:
-                key = (env.id, agent_name)
+            if opt.server_use_resource_scheduler.get():
+                key = (env.id, const.AGENT_SCHEDULER_ID)
                 live_session = self.tid_endpoint_to_session.get(key)
-                if live_session:
-                    # The agent has an active agent instance that has to be paused
-                    del self.tid_endpoint_to_session[key]
-                    await live_session.get_client().set_state(agent_name, enabled=False)
-                    endpoints_with_new_primary.append((agent_name, None))
-            await data.Agent.update_primary(
-                env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
-            )
+                if not live_session:
+                    return
 
-    async def _unpause_agent(
+                if endpoint is not None:
+                    await live_session.get_client().set_state(endpoint, enabled=False)
+                elif endpoint is None:
+                    # We need to update information in the DB
+                    endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, None))
+                    await data.Agent.update_primary(
+                        env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
+                    )
+            else:
+                for agent_name in agents:
+                    key = (env.id, agent_name)
+                    live_session = self.tid_endpoint_to_session.get(key)
+                    if live_session:
+                        # The agent has an active agent instance that has to be paused
+                        del self.tid_endpoint_to_session[key]
+                        await live_session.get_client().set_state(agent_name, enabled=False)
+                        endpoints_with_new_primary.append((agent_name, None))
+                await data.Agent.update_primary(
+                    env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
+                )
+
+    async def _start_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
+        endpoints_with_new_primary = []
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
-            endpoints_with_new_primary = []
-            for agent_name in agents:
-                key = (env.id, agent_name)
+            if opt.server_use_resource_scheduler.get():
+                key = (env.id, const.AGENT_SCHEDULER_ID)
                 live_session = self.tid_endpoint_to_session.get(key)
-                # If the agent has a live_session, the agent wasn't paused
                 if not live_session:
-                    session = self.get_session_for(tid=env.id, endpoint=agent_name)
-                    if session:
-                        self.tid_endpoint_to_session[key] = session
-                        await session.get_client().set_state(agent_name, enabled=True)
-                        endpoints_with_new_primary.append((agent_name, session.id))
-            await data.Agent.update_primary(
-                env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
-            )
+                    await self._autostarted_agent_manager._ensure_scheduler(env)
+                    live_session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
+                    assert live_session
+                    self.tid_endpoint_to_session[key] = live_session
+
+                if endpoint is not None:
+                    # We don't need to do this when the environment is resumed because the scheduler will need to have updated
+                    # information related to agents (being unpaused) and in order to have that, this transaction needs to
+                    # finish first
+                    await live_session.get_client().set_state(endpoint, enabled=True)
+                elif endpoint is None:
+                    # We need to update information in the DB
+                    endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, live_session.id))
+                    await data.Agent.update_primary(
+                        env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
+                    )
+            else:
+                for agent_name in agents:
+                    key = (env.id, agent_name)
+                    live_session = self.tid_endpoint_to_session.get(key)
+                    # If the agent has a live_session, the agent wasn't paused
+                    if not live_session:
+                        session = self.get_session_for(tid=env.id, endpoint=agent_name)
+                        if session:
+                            self.tid_endpoint_to_session[key] = session
+                            await session.get_client().set_state(agent_name, enabled=True)
+                            endpoints_with_new_primary.append((agent_name, session.id))
+                await data.Agent.update_primary(
+                    env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
+                )
 
     async def _set_unpause_on_resume(
         self,
@@ -1008,7 +1060,16 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
     async def restart_agents(self, env: data.Environment) -> None:
         LOGGER.debug("Restarting agents in environment %s", env.id)
         if opt.server_use_resource_scheduler.get():
-            await self._ensure_scheduler(env)
+            agent_client = self._agent_manager.get_agent_client(
+                tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
+            )
+            if agent_client is None:
+                await self._ensure_scheduler(env)
+                agent_client = self._agent_manager.get_agent_client(
+                    tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
+                )
+                assert agent_client is not None, "The client towards the scheduler should not be down!"
+            await agent_client.set_state(const.AGENT_SCHEDULER_ID, enabled=True)
         else:
             agents = await data.Agent.get_list(environment=env.id)
             agent_list = [a.name for a in agents]
@@ -1025,16 +1086,25 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         async with self.agent_lock:
             LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
-            if env.id in self._agent_procs:
-                subproc = self._agent_procs[env.id]
-                self._stop_process(subproc)
-                await self._wait_for_proc_bounded([subproc])
-                del self._agent_procs[env.id]
-            if delete_venv:
-                self._remove_venv_for_agent_in_env(env.id)
+            if opt.server_use_resource_scheduler.get():
+                agent_client = self._agent_manager.get_agent_client(
+                    tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
+                )
+                if agent_client is None:
+                    return
+                await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=False)
+                del self._agent_manager.tid_endpoint_to_session[(env.id, const.AGENT_SCHEDULER_ID)]
+            else:
+                if env.id in self._agent_procs:
+                    subproc = self._agent_procs[env.id]
+                    self._stop_process(subproc)
+                    await self._wait_for_proc_bounded([subproc])
+                    del self._agent_procs[env.id]
+                if delete_venv:
+                    self._remove_venv_for_agent_in_env(env.id)
 
-            LOGGER.debug("Expiring all sessions for %s", env.id)
-            await self._agent_manager.expire_all_sessions_for_environment(env.id)
+                LOGGER.debug("Expiring all sessions for %s", env.id)
+                await self._agent_manager.expire_all_sessions_for_environment(env.id)
 
     async def _stop_autostarted_agents(
         self,
