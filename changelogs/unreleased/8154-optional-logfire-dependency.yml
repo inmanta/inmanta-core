@@ -1,0 +1,4 @@
+description: Make logfire as an optional dependency
+issue-nr: 8154
+change-type: patch
+destination-branches: [iso7]
