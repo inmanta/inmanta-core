@@ -444,7 +444,7 @@ class ResourceScheduler(TaskManager):
                         task = Deploy(resource=resource)
                         assert task in self._work.agent_queues.in_progress
                         priority = self._work.agent_queues.in_progress[task]
-                        task_with_reason = self._work.agent_queues._tasks_by_resource[task.resource][task].task.task
+                        task_with_reason = [e for e in self._work.agent_queues.in_progress.keys() if e == task][0]
                         assert task_with_reason.reason is not None
                         self._work.deploy_with_context(
                             event_listeners, priority=priority, deploying=set(), reason=task_with_reason.reason

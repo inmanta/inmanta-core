@@ -347,14 +347,19 @@ class ScheduledWork:
         for resourceId in queued:
             if resourceId in resources:
                 task = tasks.Deploy(resource=resourceId)
+                assert task in self.agent_queues._in_progress
+                actual_task = [e for e in self.agent_queues._in_progress.keys() if e == task][0]
                 if self.agent_queues._in_progress[task] > priority:
                     self.agent_queues._in_progress[task] = priority
-                    task.set_reason(reason=reason)
-                elif self.agent_queues._in_progress[task] < priority:
+                    actual_task.set_reason(reason=reason)
+                elif self.agent_queues._in_progress[task] < priority or \
+                    (self.agent_queues._in_progress[task] == priority and actual_task.reason == reason):
                     # We don't need to do anything in that particular case, the lowest priority is already set
                     pass
                 else:
-                    raise RuntimeError(f"Current task is equals to 2 different priorities: `{task}` - `{priority}`")
+                    raise RuntimeError(f"Current task is equals to 2 different priorities: currently stored `{actual_task}` "
+                                       f"- `{self.agent_queues._in_progress[task]}` | new priority `{reason}` - "
+                                       f"`{priority}")
 
         # First drop all dropped requires so that we work on the smallest possible set for this operation.
         for resource, dropped in dropped_requires.items():
