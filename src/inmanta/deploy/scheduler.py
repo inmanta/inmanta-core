@@ -24,6 +24,8 @@ from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
 from typing import Optional
 
+import asyncpg
+
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
@@ -244,7 +246,7 @@ class ResourceScheduler(TaskManager):
         )
 
     async def _build_resource_mappings_from_db(
-        self, version: int, *, connection: Optional[data.Connection] = None
+        self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> Mapping[ResourceIdStr, ResourceDetails]:
         """
         Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
@@ -277,7 +279,7 @@ class ResourceScheduler(TaskManager):
     async def _get_resources_in_latest_version(
         self,
         *,
-        connection: Optional[data.Connection] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> tuple[int, Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
         """
         Returns a tuple containing:
