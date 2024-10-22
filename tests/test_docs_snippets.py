@@ -16,8 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import functools
-
 """
 Tests to verify correctness/compatibility of code snippets in the docs.
 """
@@ -32,7 +30,7 @@ import pytest
 
 from inmanta import data
 from inmanta.data import model
-from utils import retry_limited, v1_module_from_template, wait_until_deployment_finishes
+from utils import v1_module_from_template, wait_until_deployment_finishes
 
 DOCS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "docs")
 
