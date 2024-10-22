@@ -1,9 +1,0 @@
-entity Sleep extends std::PurgeableResource:
-    string name
-    string agent
-    int time_to_sleep=120
-    bool managed=true
-    bool purged=false
-end
-
-implement Sleep using std::none

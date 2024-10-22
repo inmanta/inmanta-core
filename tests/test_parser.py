@@ -481,7 +481,7 @@ typedef test as string matching{sep}/[a-fA-F0-9]{{8}}-[a-fA-F0-9]{{4}}-[a-fA-F0-
     assert regex_expr.regex == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
 
 
-def test_matching_keyword_in_identifier():
+def test_matching_keyword_in_identifier(snippetcompiler):
     """
     Verify that 'matching' is allowed as part of an identifier even though it's a keyword.
     """

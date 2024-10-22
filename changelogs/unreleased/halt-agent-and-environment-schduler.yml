@@ -1,3 +1,0 @@
-description: Integrate environment and agent halting with the new scheduler
-change-type: minor
-destination-branches: [master]

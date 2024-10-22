@@ -3395,19 +3395,6 @@ class Agent(BaseDocument):
         return obj
 
     @classmethod
-    async def insert_if_not_exist(
-        cls, environment: uuid.UUID, endpoint: str, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        query = """
-            INSERT INTO agent
-            (last_failover,paused,id_primary,unpause_on_resume,environment,name)
-            VALUES (now(),FALSE,NULL,NULL,$1,$2)
-            ON CONFLICT DO NOTHING
-        """
-        values = [cls._get_value(environment), cls._get_value(endpoint)]
-        await cls._execute_query(query, *values, connection=connection)
-
-    @classmethod
     async def persist_on_halt(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Persists paused state when halting all agents.

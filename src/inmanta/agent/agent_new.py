@@ -198,51 +198,48 @@ class Agent(SessionEndpoint):
         await self.scheduler.start()
         self._enable_time_triggers()
 
-    async def stop_working(self, timeout: float = 0.0) -> None:
+    async def stop_working(self) -> None:
         """Stop working, connection lost"""
         if not self.working:
             return
         self.working = False
         self._disable_time_triggers()
-        await self.scheduler.stop()
         await self.executor_manager.stop()
-        await self.executor_manager.join([], timeout=timeout)
-        await self.scheduler.join()
+        await self.scheduler.stop()
 
     @protocol.handle(methods_v2.update_agent_map)
     async def update_agent_map(self, agent_map: dict[str, str]) -> None:
         # Not used here
         pass
 
+    async def unpause(self, name: str) -> Apireturn:
+        if name != AGENT_SCHEDULER_ID:
+            return 404, "No such agent"
+
+        await self.start_working()
+        return 200
+
+    async def pause(self, name: str) -> Apireturn:
+        if name != AGENT_SCHEDULER_ID:
+            return 404, "No such agent"
+
+        await self.stop_working()
+        return 200
+
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
-        if agent == AGENT_SCHEDULER_ID:
-            should_be_running = await self.scheduler.should_be_running(agent)
-            enabled = should_be_running
-
-            if should_be_running:
-                await self.start_working()
-            else:
-                await self.stop_working(timeout=const.EXECUTOR_GRACE_HARD)
+        if enabled:
+            return await self.unpause(agent)
         else:
-            try:
-                await self.scheduler.refresh_agent_state_from_db(name=agent)
-            except LookupError:
-                return 404, f"No such agent: {agent}"
-
-            enabled = await self.scheduler.is_agent_running(name=agent)
-
-        return 200, f"{agent} has been {'started' if enabled else 'stopped'}"
+            return await self.pause(agent)
 
     async def on_reconnect(self) -> None:
-        result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)
+        name = AGENT_SCHEDULER_ID
+        result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=name)
         if result.code == 200 and result.result is not None:
             state = result.result
             if "enabled" in state and isinstance(state["enabled"], bool):
-                if state["enabled"]:
-                    await self.start_working()
-                else:
-                    await self.stop_working()
+                await self.set_state(name, state["enabled"])
             else:
                 LOGGER.warning("Server reported invalid state %s" % (repr(state)))
         else:
