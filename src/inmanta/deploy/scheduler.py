@@ -102,14 +102,13 @@ class TaskRunner:
         self.status = AgentStatus.STOPPED
         self._scheduler = scheduler
         self._task: typing.Optional[asyncio.Task[None]] = None
+        self._notify_task: typing.Optional[asyncio.Task[None]] = None
 
-    def start(self) -> None:
-        if self.status == AgentStatus.STOPPED:
-            self._task = asyncio.create_task(self.run())
-        else:
-            self.status = AgentStatus.STARTED
+    async def _start(self) -> None:
+        self.status = AgentStatus.STARTED
+        self._task = asyncio.create_task(self.run())
 
-    def stop(self) -> None:
+    async def _stop(self) -> None:
         self.status = AgentStatus.STOPPING
 
     async def notify(self) -> None:
@@ -118,20 +117,24 @@ class TaskRunner:
         regarding the environment and the information related to the runner (agent). Depending on the desired state of the
         agent, it will either stop / start the agent or do nothing
         """
+        await data.Agent.insert_if_not_exist(environment=self._scheduler.environment, endpoint=self.endpoint)
         should_be_running = await self._scheduler.should_be_running(self.endpoint)
 
         match self.status:
             case AgentStatus.STARTED if not should_be_running:
-                self.stop()
+                await self._stop()
             case AgentStatus.STOPPING | AgentStatus.STOPPED if should_be_running:
-                self.start()
+                await self._start()
+
+    def notify_sync(self) -> None:
+        """
+        Method to notify the runner that something has changed in the DB in a synchronous manner.
+        """
+        self._notify_task = asyncio.create_task(self.notify())
 
     async def run(self) -> None:
         """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
         allowed to run."""
-        await data.Agent.insert_if_not_exist(environment=self._scheduler.environment, endpoint=self.endpoint)
-        self.status = AgentStatus.STARTED if self._scheduler.should_be_running(endpoint=self.endpoint) else AgentStatus.STOPPED
-
         while self._scheduler._running and self.status == AgentStatus.STARTED:
             task: Task = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
             try:
@@ -206,6 +209,7 @@ class ResourceScheduler(TaskManager):
         self._state.reset()
         self._work.reset()
 
+    # TODO h scheduler should be killed
     async def start(self) -> None:
         self.reset()
         self._running = True
@@ -400,7 +404,7 @@ class ResourceScheduler(TaskManager):
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
         self._workers[agent] = TaskRunner(endpoint=agent, scheduler=self)
-        self._workers[agent].start()
+        self._workers[agent].notify_sync()
 
     async def should_be_running(self, endpoint: str) -> bool:
         """
