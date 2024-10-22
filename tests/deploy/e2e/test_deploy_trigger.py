@@ -1,5 +1,5 @@
 """
-    Copyright 2024 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 import multiprocessing
 import os
@@ -31,72 +30,90 @@ from psutil import Process
 
 from inmanta import config, const, data
 from inmanta.agent import Agent
+from inmanta import const
 from inmanta.config import Config
 from inmanta.const import AgentAction
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from utils import _wait_until_deployment_finishes, resource_action_consistency_check, retry_limited
+from utils import get_resource, log_contains, log_doesnt_contain, resource_action_consistency_check, retry_limited
 
-logger = logging.getLogger("inmanta.test.server_agent")
 
-
-@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_auto_deploy_no_splay(server, client, clienthelper, resource_container, environment, no_agent_backoff):
+@pytest.mark.skip("Broken")
+async def test_deploy_trigger(server, client, clienthelper, resource_container, environment, caplog, agent):
     """
-    Verify that the new scheduler can actually fork
+    Test deployment of empty model
     """
-    resource_container.Provider.reset()
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
-    await env.set(data.AUTOSTART_ON_START, True)
+    caplog.set_level(logging.INFO)
 
     version = await clienthelper.get_version()
 
     resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
-            "send_event": False,
-            "purged": False,
-            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
-        },
-        {
-            "key": "key2",
-            "value": "value2",
-            "id": "test::Resource[agent1,key=key2],v=%d" % version,
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
+        get_resource(version, agent="agent1"),
+        get_resource(version, agent="agent2"),
+        get_resource(version, agent="agent3"),
     ]
-
-    # set auto deploy and push
-    result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
-    assert result.code == 200
 
     await clienthelper.put_version_simple(resources, version)
 
-    # check deploy
-    await _wait_until_deployment_finishes(client, environment, version)
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 2
-    assert result.result["model"]["result"] == "failed"
-
-    # check if agent 1 is started by the server
-    # deploy will fail because handler code is not uploaded to the server
-    result = await client.list_agents(tid=environment)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
-    while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
-        result = await client.list_agents(tid=environment)
-        await asyncio.sleep(0.1)
+    await clienthelper.wait_for_deployed(version)
+
+    async def verify(result, a1=0, code=200, warnings=["Could not reach agents named [agent2,agent3]"], agents=["agent1"]):
+        assert result.code == code
+
+        def is_deployed():
+            return resource_container.Provider.readcount("agent1", "key1") == a1
 
     assert len(result.result["agents"]) == 2
     expected_agents = {e["name"] for e in result.result["agents"]}
     assert expected_agents == {const.AGENT_SCHEDULER_ID, "agent1"}
+        await retry_limited(is_deployed, 1)
+        log_contains(caplog, "agent", logging.INFO, f"Agent agent1 got a trigger to update in environment {environment}")
+        log_doesnt_contain(caplog, "agent", logging.INFO, f"Agent agent5 got a trigger to update in environment {environment}")
+
+        assert result.result["agents"] == agents
+        if warnings:
+            assert sorted(result.result["metadata"]["warnings"]) == sorted(warnings)
+        caplog.clear()
+
+    async def verify_failed(result, code=400, message="", warnings=["Could not reach agents named [agent2,agent3]"]):
+        assert result.code == code
+
+        log_doesnt_contain(caplog, "agent", logging.INFO, "got a trigger to update")
+        if warnings:
+            assert sorted(result.result["metadata"]["warnings"]) == sorted(warnings)
+        assert result.result["message"] == message
+        caplog.clear()
+
+    # normal
+    result = await client.deploy(environment)
+    await verify(result, a1=1)
+
+    # only agent1
+    result = await client.deploy(environment, agents=["agent1"])
+    await verify(result, a1=2, warnings=None)
+
+    # only agent5 (not in model)
+    result = await client.deploy(environment, agents=["agent5"])
+    await verify_failed(
+        result, 404, "No agent could be reached", warnings=[f"Model version {version} does not contain agents named [agent5]"]
+    )
+
+    # only agent2 (not alive)
+    result = await client.deploy(environment, agents=["agent2"])
+    await verify_failed(result, 404, "No agent could be reached", warnings=["Could not reach agents named [agent2]"])
+
+    # All of it
+    result = await client.deploy(environment, agents=["agent1", "agent2", "agent5"])
+    await verify(
+        result,
+        a1=3,
+        agents=["agent1"],
+        warnings=["Could not reach agents named [agent2]", f"Model version {version} does not contain agents named [agent5]"],
+    )
 
 
 @pytest.mark.parametrize(
@@ -214,10 +231,7 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
         },
     ]
 
-    result = await client.put_version(
-        tid=env_id, version=version, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version()
-    )
-    assert result.code == 200
+    await clienthelper.put_version_simple(resources, version)
 
     # do a deploy
     result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)

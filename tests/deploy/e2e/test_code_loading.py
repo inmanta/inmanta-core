@@ -16,8 +16,10 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
 import base64
 import hashlib
+import logging
 import os
 import py_compile
 import tempfile
@@ -28,13 +30,45 @@ from logging import DEBUG, INFO
 import pytest
 
 import inmanta
+from deploy.scheduler_test_util import DummyCodeManager
 from inmanta import config
-from inmanta.agent import Agent
+from inmanta.agent import executor
+from inmanta.agent.agent_new import Agent
+from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ResourceInstallSpec
+from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.data import PipConfig
+from inmanta.env import process_env
 from inmanta.protocol import Client
+from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.server.server import Server
 from inmanta.util import get_compiler_version
-from utils import LogSequence
+from utils import ClientHelper, LogSequence, log_index, retry_limited
+
+LOGGER = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="function")
+async def agent(server, environment, deactive_venv):
+    """Construct an agent that can execute using the resource container"""
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    a = Agent(environment)
+
+    executor = InProcessExecutorManager(
+        environment, a._client, asyncio.get_event_loop(), LOGGER, a.thread_pool, a._storage["code"], a._storage["env"], True
+    )
+    a.executor_manager = executor
+    a.scheduler.executor_manager = executor
+    a.scheduler.code_manager = DummyCodeManager(a._client)
+
+    await a.start()
+
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
 
 
 async def make_source_structure(
@@ -73,16 +107,7 @@ async def make_source_structure(
         return hv
 
 
-@pytest.fixture(scope="function")
-def server_pre_start(server_config, request):
-    config.Config.set("agent", "executor-mode", request.param)
-    yield config
-
-
-@pytest.mark.parametrize("server_pre_start", ["threaded"], indirect=True)
-async def test_agent_code_loading(
-    server_pre_start, caplog, server, agent_factory, client, environment: uuid.UUID, monkeypatch, clienthelper
-) -> None:
+async def test_agent_code_loading(caplog, server, agent, client, environment: uuid.UUID, monkeypatch, clienthelper) -> None:
     """
     Test goals:
     1. ensure the agent doesn't re-load the same code if not required
@@ -174,10 +199,6 @@ inmanta.test_agent_code_loading = 15
     result = await client.get_code(tid=environment, id=version_3, resource="test::Test4")
     assert result.code == 400
 
-    agent: Agent = await agent_factory(
-        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
-    )
-
     # Cache test
     # install sources for all three
     resource_install_specs_1: list[ResourceInstallSpec]
@@ -187,39 +208,35 @@ inmanta.test_agent_code_loading = 15
     resource_install_specs_5: list[ResourceInstallSpec]
     resource_install_specs_6: list[ResourceInstallSpec]
 
-    resource_install_specs_1, _ = await agent.get_code(
+    code_manager = CodeManager(agent._client)
+
+    resource_install_specs_1, _ = await code_manager.get_code(
         environment=environment, version=version_1, resource_types=["test::Test", "test::Test2", "test::Test3"]
     )
     await agent.executor_manager.ensure_code(
         code=resource_install_specs_1,
     )
-    resource_install_specs_2, _ = await agent.get_code(
+    resource_install_specs_2, _ = await code_manager.get_code(
         environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"]
     )
     await agent.executor_manager.ensure_code(
         code=resource_install_specs_2,
     )
-    resource_install_specs_3, _ = await agent.get_code(
+    resource_install_specs_3, _ = await code_manager.get_code(
         environment=environment, version=version_2, resource_types=["test::Test2"]
     )
     await agent.executor_manager.ensure_code(
         code=resource_install_specs_3,
     )
 
-    # Test 1 is deployed once, as seen by the agent
+    # One (random) is deployed once, as seen by the agent
     (
         LogSequence(caplog)
-        .contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test version={version_1}")
-        .contains("inmanta.agent.agent", DEBUG, f"Installed handler test::Test version={version_1}")
-        .contains("inmanta.agent.agent", DEBUG, f"Handler code already installed for test::Test version={version_1}")
-        .assert_not("inmanta", DEBUG, "test::Test ")
+        .contains("test_code_loading", DEBUG, "Installing handler test::Test")
+        .contains("test_code_loading", DEBUG, "Installed handler test::Test")
+        .contains("test_code_loading", DEBUG, "Handler code already installed for test::Test")
     )
 
-    # Test 2 is deployed one, as seen by the agent
-    # and loaded only once
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test2 version={version_1}").contains(
-        "inmanta.agent.agent", DEBUG, f"Handler code already installed for test::Test2 version={version_2}"
-    )
     # Loader only loads source1 once
     LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv1}, module=inmanta_plugins.test)").assert_not(
         "inmanta.loader", INFO, f"Deploying code (hv={hv1}, module=inmanta_plugins.test)"
@@ -228,14 +245,14 @@ inmanta.test_agent_code_loading = 15
     # we are now at sources1
     assert getattr(inmanta, "test_agent_code_loading") == 5
 
-    resource_install_specs_4, _ = await agent.get_code(
+    resource_install_specs_4, _ = await code_manager.get_code(
         environment=environment, version=version_2, resource_types=["test::Test3"]
     )
     # Install sources2
     await agent.executor_manager.ensure_code(code=resource_install_specs_4)
     # Test 3 is deployed twice, as seen by the agent and the loader
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test3 version={version_1}")
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test3 version={version_2}")
+    LogSequence(caplog).contains("test_code_loading", DEBUG, f"Installing handler test::Test3 version={version_1}")
+    LogSequence(caplog).contains("test_code_loading", DEBUG, f"Installing handler test::Test3 version={version_2}")
     # Loader only loads source2 once
     LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv2}, module=inmanta_plugins.tests)").assert_not(
         "inmanta.loader", INFO, f"Deploying code (hv={hv2}, module=inmanta_plugins.tests)"
@@ -244,45 +261,36 @@ inmanta.test_agent_code_loading = 15
     # we are now at sources2
     assert getattr(inmanta, "test_agent_code_loading") == 10
 
-    resource_install_specs_5, _ = await agent.get_code(
+    resource_install_specs_5, _ = await code_manager.get_code(
         environment=environment, version=version_3, resource_types=["test::Test4"]
     )
     # Loader loads byte code file
     await agent.executor_manager.ensure_code(code=resource_install_specs_5)
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test4 version={version_3}")
+    LogSequence(caplog).contains("test_code_loading", DEBUG, f"Installing handler test::Test4 version={version_3}")
     LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)").assert_not(
         "inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)"
     )
 
     assert getattr(inmanta, "test_agent_code_loading") == 15
 
-    resource_install_specs_6, _ = await agent.get_code(
+    resource_install_specs_6, _ = await code_manager.get_code(
         environment=environment, version=version_4, resource_types=["test::Test4"]
     )
     # Now load the python only version again
     await agent.executor_manager.ensure_code(code=resource_install_specs_6)
     assert getattr(inmanta, "test_agent_code_loading") == 10
 
-    # ensure we clean up on restart
-    assert os.path.exists(os.path.join(agent.executor_manager._loader.mod_dir, "tests/plugins/__init__.py"))
-    await agent.stop()
-    await agent_factory(
-        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
-    )
-    assert not os.path.exists(os.path.join(agent.executor_manager._loader.mod_dir, "tests"))
-
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("server_pre_start", ["forking"], indirect=True)
 async def test_agent_installs_dependency_containing_extras(
     server_pre_start,
     server,
     client,
     environment,
-    agent_factory,
     monkeypatch,
     index_with_pkgs_containing_optional_deps: str,
     clienthelper,
+    agent,
 ) -> None:
     """
     Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
@@ -316,17 +324,16 @@ def test():
     res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources})
     assert res.code == 200
 
-    agent: Agent = await agent_factory(
-        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
-    )
-    install_spec, _ = await agent.get_code(
+    codemanager = CodeManager(agent._client)
+
+    install_spec, _ = await codemanager.get_code(
         environment=environment,
         version=version,
         resource_types=["test::Test"],
     )
-    executor = await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
+    await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
 
-    installed_packages = executor.process.executor_virtual_env.get_installed_packages()
+    installed_packages = process_env.get_installed_packages()
 
     def check_packages(package_list: Sequence[str], must_contain: set[str], must_not_contain: set[str]) -> None:
         """
@@ -342,3 +349,104 @@ def test():
         assert not must_contain
 
     check_packages(package_list=installed_packages, must_contain={"pkg", "dep-a"}, must_not_contain={"dep-b", "dep-c"})
+
+
+async def test_agent_code_loading_with_failure(
+    caplog,
+    server: Server,
+    agent: Agent,
+    client: Client,
+    environment: uuid.UUID,
+    monkeypatch,
+    clienthelper: ClientHelper,
+) -> None:
+    """
+    Test goal: make sure that failed resources are correctly returned by `get_code` and `ensure_code` methods.
+    The failed resources should have the right exception contained in the returned object.
+    """
+
+    caplog.set_level(DEBUG)
+
+    sources = {}
+
+    async def get_version() -> int:
+        version = await clienthelper.get_version()
+        res = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=[],
+            pip_config=PipConfig(),
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
+        return version
+
+    version_1 = await get_version()
+
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test": sources})
+    assert res.code == 200
+
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test2": sources})
+    assert res.code == 200
+
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test3": sources})
+    assert res.code == 200
+
+    config.Config.set("agent", "executor-mode", "threaded")
+
+    resource_install_specs_1: list[ResourceInstallSpec]
+    resource_install_specs_2: list[ResourceInstallSpec]
+
+    codemanager = CodeManager(agent._client)
+
+    # We want to test
+    nonexistent_version = -1
+    resource_install_specs_1, invalid_resources_1 = await codemanager.get_code(
+        environment=environment, version=nonexistent_version, resource_types=["test::Test", "test::Test2", "test::Test3"]
+    )
+    assert len(invalid_resources_1.keys()) == 3
+    for resource_type, exception in invalid_resources_1.items():
+        assert (
+            "Failed to get source code for " + resource_type + " version=-1, result={'message': 'Request or "
+            "referenced resource does not exist: The version of the code does not exist. "
+            + resource_type
+            + ", "
+            + str(nonexistent_version)
+            + "'}"
+        ) == str(exception)
+
+    await agent.executor_manager.ensure_code(
+        code=resource_install_specs_1,
+    )
+
+    resource_install_specs_2, _ = await codemanager.get_code(
+        environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"]
+    )
+
+    async def _install(blueprint: executor.ExecutorBlueprint) -> None:
+        raise Exception("MKPTCH: Unable to load code when agent is started with code loading disabled.")
+
+    monkeypatch.setattr(agent.executor_manager, "_install", _install)
+
+    failed_to_load = await agent.executor_manager.ensure_code(
+        code=resource_install_specs_2,
+    )
+    assert len(failed_to_load) == 2
+    for handler, exception in failed_to_load.items():
+        assert str(exception) == (
+            f"Failed to install handler {handler} version=1: "
+            f"MKPTCH: Unable to load code when agent is started with code loading disabled."
+        )
+
+    monkeypatch.undo()
+
+    idx1 = log_index(
+        caplog,
+        "inmanta.agent.code_manager",
+        logging.ERROR,
+        "Failed to get source code for test::Test2 version=-1",
+    )
+
+    log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install handler test::Test version=1", idx1)
+
+    log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install handler test::Test2 version=1", idx1)

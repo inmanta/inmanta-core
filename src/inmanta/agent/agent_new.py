@@ -36,7 +36,7 @@ from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.types import Apireturn
 from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, Scheduler, TaskMethod, TaskSchedule, join_threadpools
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("inmanta.scheduler")
 
 
 class Agent(SessionEndpoint):
@@ -215,6 +215,9 @@ class Agent(SessionEndpoint):
         # Not used here
         pass
 
+    # TODO h
+    LOGGER.info("Scheduler started for environment %s", self.environment)
+    LOGGER.info("Scheduler stopped for environment %s", self.environment)
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
         if agent == AGENT_SCHEDULER_ID:
@@ -250,6 +253,7 @@ class Agent(SessionEndpoint):
             LOGGER.warning("could not get state from the server")
 
     async def on_disconnect(self) -> None:
+        LOGGER.warning("Connection to server lost, stopping scheduler in environment %s", self.environment)
         await self.stop_working()
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
