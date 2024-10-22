@@ -2025,16 +2025,6 @@ def disable_version_and_agent_cleanup_job():
     orchestrationservice.PERFORM_CLEANUP = old_perform_cleanup
 
 
-@pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
-def configure_logfire():
-    """Configure logfire to ensure all the instrumentation works correctly and does not provide warnings. This does not
-    setup tracing for tests"""
-    logfire.configure(
-        send_to_logfire=False,
-        console=False,
-    )
-
-
 ResourceContainer = namedtuple(
     "ResourceContainer", ["Provider", "waiter", "wait_for_done_with_waiters", "wait_for_condition_with_waiters"]
 )
