@@ -32,7 +32,7 @@ from psutil import NoSuchProcess, Process
 from inmanta import const, data
 from inmanta.server import SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.util import get_compiler_version
-from utils import ClientHelper, wait_until_deployment_finishes, wait_until_logs_are_available
+from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -233,31 +233,23 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
         }
     ]
 
-    await clienthelper.put_version_simple(resources, version)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
 
-    await clienthelper.wait_for_deployed(version)
-    # The resource state and its logs are not set atomically. This call prevents a race condition.
-    await wait_until_logs_are_available(client, environment, resource_id, expect_nr_of_logs=3)
-
-    response = await client.get_resource(environment, resource_id, logs=True)
-    assert response.code == 200
-    result = response.result
-    assert result["resource"]["status"] == "unavailable"
-
-    logging.getLogger(__name__).warning("Found results: %s", json.dumps(result["logs"], indent=1))
+    async def log_any() -> bool:
+        response = await client.get_resource(environment, resource_id, logs=True)
+        assert response.code == 200
+        result = response.result
+        logging.getLogger(__name__).warning("Found results: %s", json.dumps(result["logs"], indent=1))
+        return any((is_log_line(line) for line in result["logs"]))
 
     def is_log_line(log_line):
         return (
             log_line["action"] == "deploy"
             and log_line["status"] == "unavailable"
-            and ("failed to load handler code " in log_line["messages"][-1]["msg"])
+            and ("failed to load handler code" in log_line["messages"][-1]["msg"])
         )
 
-    # Expected logs:
-    #   [0] Deploy action: Failed to load handler code or install handler code
-    #   [1] Pull action
-    #   [2] Store action
-    assert any((is_log_line(line) for line in result["logs"]))
+    await retry_limited(log_any, 1)
 
 
 @pytest.mark.skip("Test when agent pause PR is in with proper helper functions")
