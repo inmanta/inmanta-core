@@ -1,0 +1,3 @@
+description: Use opentelemetry module only when logfire is enabled.
+change-type: patch
+destination-branches: [master, iso7]
