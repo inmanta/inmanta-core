@@ -22,7 +22,7 @@ from inmanta import resources
 from inmanta.agent.handler import provider, CRUDHandler, HandlerContext, ResourcePurged
 
 
-@resources.resource("minimalv2waitingmodule::Sleep", agent="agent", id_attribute="name")
+@resources.resource("minimalwaitingmodule::Sleep", agent="agent", id_attribute="name")
 class SleepResource(resources.PurgeableResource):
     """
     This class represents a service on a system.
@@ -35,7 +35,7 @@ class SleepResource(resources.PurgeableResource):
     fields = ("name", "agent", "time_to_sleep")
 
 
-@provider("minimalv2waitingmodule::Sleep", name="mysleephandler")
+@provider("minimalwaitingmodule::Sleep", name="mysleephandler")
 class SleepHandler(CRUDHandler):
     def read_resource(self, ctx: HandlerContext, resource: SleepResource) -> None:
         raise ResourcePurged()

@@ -129,8 +129,8 @@ class TaskRunner:
     async def run(self) -> None:
         """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
         allowed to run."""
-        paused_status = await data.Agent.retrieve_paused_status(environment=self._scheduler.environment, endpoint=self.endpoint)
-        self.status = AgentStatus.STARTED if not paused_status else AgentStatus.STOPPED
+        await data.Agent.insert_if_not_exist(environment=self._scheduler.environment, endpoint=self.endpoint)
+        self.status = AgentStatus.STARTED if self._scheduler.should_be_running(endpoint=self.endpoint) else AgentStatus.STOPPED
 
         while self._scheduler._running and self.status == AgentStatus.STARTED:
             task: Task = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
@@ -413,11 +413,10 @@ class ResourceScheduler(TaskManager):
                 # time too many, which is not so bad.
                 self._work.delete_resource(resource)
 
-    def _create_agent(self, agent: str, should_start: bool = True) -> None:
+    def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
         self._workers[agent] = TaskRunner(endpoint=agent, scheduler=self)
-        if should_start:
-            self._workers[agent].start()
+        self._workers[agent].start()
 
     async def should_be_running(self, endpoint: str) -> bool:
         """
@@ -447,8 +446,7 @@ class ResourceScheduler(TaskManager):
 
         requested_agent = await data.Agent.get(env=self.environment, endpoint=name)
         if requested_agent:
-            self._create_agent(agent=requested_agent.name, should_start=not requested_agent.paused)
-            return
+            self._create_agent(agent=requested_agent.name)
 
         if name not in self._workers and requested_agent is None:
             raise LookupError(f"The agent `{name}` does not exist!")
