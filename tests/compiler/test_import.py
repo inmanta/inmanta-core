@@ -37,11 +37,11 @@ def test_1480_1767_invalid_repo(snippetcompiler_clean):
     snippetcompiler_clean.repo = "some_invalid_url"
     snippetcompiler_clean.setup_for_error(
         """
-
+        import net
         """,
-        "Failed to load module std (reported in import std (__internal__:1:1))"
+        "Failed to load module net (reported in import net ({dir}/main.cf:2))"
         "\ncaused by:"
-        "\n  Could not find module std. Please make sure to add any module v2 requirements with `inmanta module add --v2` and"
+        "\n  Could not find module net. Please make sure to add any module v2 requirements with `inmanta module add --v2` and"
         " to install all the project's dependencies with `inmanta project install`.",
         autostd=True,
     )

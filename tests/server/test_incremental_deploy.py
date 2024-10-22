@@ -419,7 +419,9 @@ async def test_deploy_scenarios_removed_req_by_increment2(server, environment, c
     assert_no_warning(caplog)
 
 
-async def test_deploy_scenarios_added_by_send_event(server, agent, environment, caplog):
+async def test_deploy_scenarios_added_by_send_event(server, null_agent, environment, caplog):
+    agent = null_agent
+
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
@@ -468,7 +470,9 @@ async def test_deploy_scenarios_added_by_send_event_cad(server, null_agent, envi
     assert_no_warning(caplog)
 
 
-async def test_deploy_cad_double(server, agent, environment, caplog, client, clienthelper):
+async def test_deploy_cad_double(server, null_agent, environment, caplog, client, clienthelper):
+    agent = null_agent
+
     # resource has CAD with send_events B requires A
     # do full deploy
     # then produce a change on A
