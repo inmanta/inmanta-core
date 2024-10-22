@@ -56,6 +56,9 @@ class StateUpdateManager(abc.ABC):
 
 
 class ToServerUpdateManager(StateUpdateManager):
+    """
+    This is a temporary structure to help refactoring
+    """
 
     def __init__(self, client: Client, environment: UUID) -> None:
         self.client = client
@@ -92,31 +95,33 @@ class ToDbUpdateManager(StateUpdateManager):
 
     def __init__(self, environment: UUID) -> None:
         self.environment = environment
-        # FIXME: We may want to move this to be 100% scheduler side at some point
+        # FIXME: We may want to move the writing of the log to the scheduler side as well,
+        #  when all uses of this logger are moved
         self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
 
     async def send_in_progress(
         self, action_id: UUID, resource_id: ResourceVersionIdStr
     ) -> dict[ResourceIdStr, const.ResourceState]:
-        # Cleanup for typign
         resource_id_str = resource_id
-        resource_id = Id.parse_id(resource_id_str)
+        resource_id_parsed = Id.parse_id(resource_id_str)
 
         async with data.Resource.get_connection() as connection:
             async with connection.transaction():
-                # FIXME: do we needs this check?
+                # This check is made in an overabundance of caution and can probably be dropped
                 resource = await data.Resource.get_one(
                     connection=connection,
                     environment=self.environment,
-                    resource_id=resource_id.resource_str(),
-                    model=resource_id.version,
+                    resource_id=resource_id_parsed.resource_str(),
+                    model=resource_id_parsed.version,
                     lock=data.RowLockMode.FOR_UPDATE,
                 )
-                assert resource is not None, f"Resource {resource_id} does not exists in the database, this should not happen"
+                assert (
+                    resource is not None
+                ), f"Resource {resource_id_parsed} does not exists in the database, this should not happen"
 
                 resource_action = data.ResourceAction(
                     environment=self.environment,
-                    version=resource_id.version,
+                    version=resource_id_parsed.version,
                     resource_version_ids=[resource_id_str],
                     action_id=action_id,
                     action=const.ResourceAction.deploy,
@@ -125,7 +130,7 @@ class ToDbUpdateManager(StateUpdateManager):
                         data.LogLine.log(
                             logging.INFO,
                             "Resource deploy started on agent %(agent)s, setting status to deploying",
-                            agent=resource_id.agent_name,
+                            agent=resource_id_parsed.agent_name,
                         )
                     ],
                     status=const.ResourceState.deploying,
@@ -133,7 +138,6 @@ class ToDbUpdateManager(StateUpdateManager):
                 try:
                     await resource_action.insert(connection=connection)
                 except UniqueViolationError:
-                    # TODO: why do we have this, which exception do we want
                     raise Conflict(message=f"A resource action with id {action_id} already exists.")
 
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
@@ -141,7 +145,7 @@ class ToDbUpdateManager(StateUpdateManager):
 
             # FIXME: shortcut to use scheduler state
             result = await data.Resource.get_last_non_deploying_state_for_dependencies(
-                environment=self.environment, resource_version_id=resource_id, connection=connection
+                environment=self.environment, resource_version_id=resource_id_parsed, connection=connection
             )
 
             return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.items()}
@@ -157,7 +161,7 @@ class ToDbUpdateManager(StateUpdateManager):
             raise BadRequest(message)
 
         resource_id_str = result.rvid
-        resource_id = Id.parse_id(resource_id_str)
+        resource_id_parsed = Id.parse_id(resource_id_str)
 
         action_id = result.action_id
 
@@ -167,7 +171,7 @@ class ToDbUpdateManager(StateUpdateManager):
 
         finished = datetime.datetime.now().astimezone()
 
-        changes_with_rvid = {
+        changes_with_rvid: dict[ResourceVersionIdStr, dict[str, object]] = {
             resource_id_str: {attr_name: attr_change.model_dump()} for attr_name, attr_change in result.changes.items()
         }
 
@@ -192,8 +196,8 @@ class ToDbUpdateManager(StateUpdateManager):
                 resource = await data.Resource.get_one(
                     connection=connection,
                     environment=self.environment,
-                    resource_id=resource_id.resource_str(),
-                    model=resource_id.version,
+                    resource_id=resource_id_parsed.resource_str(),
+                    model=resource_id_parsed.version,
                     # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
                     # cascading deletes
                     lock=data.RowLockMode.FOR_UPDATE,
@@ -223,7 +227,7 @@ class ToDbUpdateManager(StateUpdateManager):
                         self.environment,
                         [resource_id_str],
                         log.log_level.to_int,
-                        log._data["timestamp"],
+                        log.timestamp,
                         log.msg,
                     )
 
@@ -231,7 +235,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     messages=[
                         {
                             **log.to_dict(),
-                            "timestamp": log._data["timestamp"].astimezone().isoformat(timespec="microseconds"),
+                            "timestamp": log.timestamp.astimezone().isoformat(timespec="microseconds"),
                         }
                         for log in messages
                     ],
@@ -258,7 +262,7 @@ class ToDbUpdateManager(StateUpdateManager):
                 )
                 await resource.update_persistent_state(
                     last_deploy=finished,
-                    last_deployed_version=resource_id.version,
+                    last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
                     **extra_fields,

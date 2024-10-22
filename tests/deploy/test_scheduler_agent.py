@@ -46,6 +46,7 @@ from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import BlockedStatus
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol.common import custom_json_encoder
+from inmanta.resources import Id
 from inmanta.util import retry_limited
 
 FAIL_DEPLOY: str = "fail_deploy"
@@ -193,15 +194,46 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
 
+state_translation_table = {
+    const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ResourceStatus.UNDEFINED),
+    const.ResourceState.skipped: (None, state.BlockedStatus.YES, None),
+    const.ResourceState.dry: (None, None, None),  # don't care
+    const.ResourceState.deployed: (state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO, None),
+    const.ResourceState.failed: (state.DeploymentResult.FAILED, state.BlockedStatus.NO, None),
+    const.ResourceState.deploying: (None, state.BlockedStatus.NO, None),
+    const.ResourceState.available: (None, state.BlockedStatus.NO, state.ResourceStatus.HAS_UPDATE),
+    const.ResourceState.undefined: (None, state.BlockedStatus.NO, state.ResourceStatus.UNDEFINED),
+    const.ResourceState.skipped_for_undefined: (None, state.BlockedStatus.YES, state.ResourceStatus.UNDEFINED),
+}
+
+
 class DummyStateManager(StateUpdateManager):
+
+    def __init__(self):
+        self.state: dict[ResourceIdStr, const.ResourceState] = {}
 
     async def send_in_progress(
         self, action_id: UUID, resource_id: ResourceVersionIdStr
     ) -> dict[ResourceIdStr, const.ResourceState]:
-        pass
+        self.state[Id.parse_id(resource_id).resource_str()] = const.ResourceState.deploying
 
     async def send_deploy_done(self, result: DeployResult) -> None:
-        pass
+        self.state[Id.parse_id(result.rvid).resource_str()] = result.status
+
+    def check_with_scheduler(self, scheduler: ResourceScheduler) -> None:
+        assert self.state
+        for resource, cstate in self.state.items():
+            deploy_result, blocked, status = state_translation_table[cstate]
+            if deploy_result:
+                assert scheduler._state.resource_state[resource].deployment_result == deploy_result
+            if blocked:
+                assert scheduler._state.resource_state[resource].blocked == blocked
+            if status:
+                assert scheduler._state.resource_state[resource].status == status
+
+
+def state_manager_check(agent: "TestAgent"):
+    agent.scheduler._state_update_delegate.check_with_scheduler(agent.scheduler)
 
 
 async def pass_method():
@@ -381,17 +413,19 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
                 return False
         return True
 
-    await retry_limited_fast(lambda: rid1 in executor1.deploys, 50)
+    await retry_limited_fast(lambda: rid1 in executor1.deploys)
     executor1.deploys[rid1].set_result(const.ResourceState.deployed)
-    await retry_limited_fast(lambda: rid2 in executor2.deploys, 50)
+    await retry_limited_fast(lambda: rid2 in executor2.deploys)
     executor2.deploys[rid2].set_result(const.ResourceState.deployed)
 
-    await retry_limited_fast(done, 50)
+    await retry_limited_fast(done)
 
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 1
     assert agent.executor_manager.executors["agent3"].execute_count == 1
     assert rid2 not in executor2.deploys, f"deploy for {rid2} should have finished"
+
+    state_manager_check(agent)
 
     ###################################################################
     # Verify deploy behavior when everything is in a known good state #
@@ -405,6 +439,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+    state_manager_check(agent)
 
     ############################################################
     # Verify deploy behavior when a task is in known bad state #
@@ -433,6 +468,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+    state_manager_check(agent)
 
     ######################################################################################################
     # Verify deploy behavior when a task is in known bad state but a deploy is already scheduled/running #
@@ -459,6 +495,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work._waiting) == 1
     assert len(agent.scheduler._work.agent_queues) == 0
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
+    state_manager_check(agent)
 
     # redeploy again, but r3 is already scheduled
     await agent.scheduler.deploy()
@@ -468,6 +505,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work._waiting) == 1
     assert len(agent.scheduler._work.agent_queues) == 0
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
+    state_manager_check(agent)
 
     # release change for r2
     resources = make_resources(version=4, r1_value=0, r2_value=2, r3_value=1)
@@ -480,6 +518,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work._waiting) == 1
     assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid2)}  # one task scheduled
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]  # and one running
+    state_manager_check(agent)
 
     # finish up
     # finish r2 deploy, failing it once more, twice
@@ -496,6 +535,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+    state_manager_check(agent)
 
     #####################################################################
     # Verify repair behavior when a deploy is already scheduled/running #
@@ -520,6 +560,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     # finish deploy
     executor2.deploys[rid2].set_result(const.ResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent3"].execute_count == 1)
+    state_manager_check(agent)
 
     ################################################
     # Verify deferring when requires are scheduled #
@@ -540,6 +581,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work._waiting) == 0
     assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid2)}
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
+    state_manager_check(agent)
 
     # release a change to r1
     resources = make_resources(version=9, r1_value=1, r2_value=5, r3_value=2)
@@ -583,6 +625,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+    state_manager_check(agent)
 
     ################################################################
     # Verify scheduler behavior when requires are added or removed #
@@ -630,6 +673,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     # assert that r2 has become blocked again
     assert agent.scheduler._work._waiting.keys() == {rid2}
     assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid1)}
+    state_manager_check(agent)
 
     # finish up: finish all waiting deploys
     executor1.deploys[rid1].set_result(const.ResourceState.deployed)
@@ -649,6 +693,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+    state_manager_check(agent)
 
     ##########################################################
     # Verify scheduler behavior when a stale deploy finishes #
@@ -714,6 +759,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         blocked=BlockedStatus.NO,
     )
     assert rid1 not in agent.scheduler._state.dirty
+    state_manager_check(agent)
 
     #######################################################################
     # Verify scheduler behavior when a resource is dropped from the model #

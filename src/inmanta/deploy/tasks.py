@@ -185,6 +185,12 @@ class Deploy(Task):
                 )
                 success = deploy_result.status == const.ResourceState.deployed
             except Exception as e:
+                # This should not happen
+
+                # We log both to scheduler log as well as the DB and the resource_action_log
+                # FIXME: can be logging be unified without losing the ability to have this warning prior to writing to DB?
+                # Such that we can have it if the DB is not there
+                LOGGER.error("Failure during executor execution for resource %s", self.resource, exc_info=True)
                 log_line = data.LogLine.log(
                     logging.ERROR,
                     "Failure during executor execution for resource %(res)s",

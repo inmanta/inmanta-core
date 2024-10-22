@@ -32,7 +32,7 @@ from inmanta.agent.executor import DeployResult
 from inmanta.data import ConfigurationModel
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
-from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager, ToServerUpdateManager
+from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
