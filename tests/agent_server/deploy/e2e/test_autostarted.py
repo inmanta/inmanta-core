@@ -751,6 +751,7 @@ async def test_agent_paused_scheduler_crash(
     no_agent_backoff,
     auto_start_agent: bool,
     async_finalizer,
+    agent,
 ):
     """
     Verify that the new scheduler does not alter the state of agent after a restart:
@@ -849,13 +850,22 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     for children in current_children_children_after_restart.values():
         assert children.is_running()
 
+    async def wait_for_db_update_from_scheduler():
+        """
+        Wait for DB update that the Scheduler should do once it restarts for inconsistent resources: resources in invalid
+            states -> "deploying" state
+        """
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        return summary["by_state"]["available"] == 1
+
+    await retry_limited(wait_for_db_update_from_scheduler, 10)
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
     assert summary["total"] == 1, f"Unexpected summary: {summary}"
-    # FIXME this should be fixed -> old resource is still in deploying state, should be available
-    # Uncomment this once fixed, see https://github.com/inmanta/inmanta-core/issues/8216
-    # assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
 
 
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
