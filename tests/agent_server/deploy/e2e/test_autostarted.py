@@ -985,24 +985,22 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert expected_agents_status["agent1"]
     assert expected_agents_status[const.AGENT_SCHEDULER_ID]
 
+    await retry_limited(
+        wait_for_terminated_status,
+        timeout=const.EXECUTOR_GRACE_HARD + 2,
+        current_children=current_children_after_deployment.values(),
+        expected_terminated_process=3
+    )
+
     # Let's recheck the number of processes after pausing the environment
     halted_children = get_process_state(current_pid)
     assert len(halted_children) == 1
     assert len(halted_children.values()) == 1
     current_halted_children = filter_relevant_processes(halted_children)
 
-    await retry_limited(
-        wait_for_terminated_status,
-        timeout=const.EXECUTOR_GRACE_HARD + 2,
-        current_children=current_children_after_deployment.values(),
+    assert len(current_halted_children) == 0, (
+        "The Scheduler and the fork server and the agent created by the scheduler should have been killed!"
     )
-
-    assert len(current_halted_children) == len(current_children_after_deployment) - 1, (
-        "These processes should be present: The Scheduler and the fork server. "
-        "The agent created by the scheduler should have been killed!"
-    )
-    for children in current_halted_children.values():
-        assert children.is_running()
 
     await client.resume_environment(environment)
 
@@ -1013,7 +1011,6 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["total"] == 3, f"Unexpected summary: {summary}"
     assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
-
     result = await client.list_agents(tid=environment)
     assert result.code == 200
     assert len(result.result["agents"]) == 2
@@ -1027,9 +1024,9 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert len(resumed_children.values()) == 1
     current_resumed_children = filter_relevant_processes(resumed_children)
 
-    assert len(current_halted_children) == len(current_resumed_children), (
-        "These processes should be present: Pg_ctl, the Server, the Scheduler and the fork server. "
-        "The agent created by the scheduler should have been killed!"
+    assert len(current_resumed_children) == 1, (
+        "This process should be present: the Scheduler. "
+        "The fork server and the agent created by the scheduler should have been killed and the agent is still paused!"
     )
     for children in current_resumed_children.values():
         assert children.is_running()

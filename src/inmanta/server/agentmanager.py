@@ -313,6 +313,10 @@ class AgentManager(ServerSlice, SessionListener):
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
             if opt.server_use_resource_scheduler.get():
+                # We should not start the scheduler here as the environment is still paused
+                if endpoint is None or endpoint == const.AGENT_SCHEDULER_ID:
+                    return
+
                 key = (env.id, const.AGENT_SCHEDULER_ID)
                 live_session = self.tid_endpoint_to_session.get(key)
                 if not live_session:
@@ -328,7 +332,7 @@ class AgentManager(ServerSlice, SessionListener):
                     await live_session.get_client().set_state(endpoint, enabled=True)
                 elif endpoint is None:
                     # We need to update information in the DB
-                    endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, live_session.id))
+                    endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, live_session.id))  # TODO h wrong
                     await data.Agent.update_primary(
                         env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
                     )
@@ -1092,19 +1096,18 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 )
                 if agent_client is None:
                     return
-                await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=False)
                 del self._agent_manager.tid_endpoint_to_session[(env.id, const.AGENT_SCHEDULER_ID)]
-            else:
-                if env.id in self._agent_procs:
-                    subproc = self._agent_procs[env.id]
-                    self._stop_process(subproc)
-                    await self._wait_for_proc_bounded([subproc])
-                    del self._agent_procs[env.id]
-                if delete_venv:
-                    self._remove_venv_for_agent_in_env(env.id)
+                await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=False)
+            if env.id in self._agent_procs:
+                subproc = self._agent_procs[env.id]
+                self._stop_process(subproc)
+                await self._wait_for_proc_bounded([subproc])
+                del self._agent_procs[env.id]
+            if delete_venv:
+                self._remove_venv_for_agent_in_env(env.id)
 
-                LOGGER.debug("Expiring all sessions for %s", env.id)
-                await self._agent_manager.expire_all_sessions_for_environment(env.id)
+            LOGGER.debug("Expiring all sessions for %s", env.id)
+            await self._agent_manager.expire_all_sessions_for_environment(env.id)
 
     async def _stop_autostarted_agents(
         self,

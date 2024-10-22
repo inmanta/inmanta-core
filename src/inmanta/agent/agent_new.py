@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import asyncio
 import datetime
 import logging
 import os
@@ -181,7 +181,8 @@ class Agent(SessionEndpoint):
         self.thread_pool.shutdown(wait=False)
 
         await join_threadpools(threadpools_to_join)
-        await super().stop()
+        # We need to shield to avoid CancelledTask exception
+        await asyncio.shield(super().stop())
 
     async def start_connected(self) -> None:
         """
@@ -223,7 +224,7 @@ class Agent(SessionEndpoint):
             if should_be_running:
                 await self.start_working()
             else:
-                await self.stop_working(timeout=const.EXECUTOR_GRACE_HARD)
+                await self.stop()
         else:
             try:
                 await self.scheduler.refresh_agent_state_from_db(name=agent)
