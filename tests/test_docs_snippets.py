@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+import functools
+
 """
 Tests to verify correctness/compatibility of code snippets in the docs.
 """
@@ -30,7 +32,7 @@ import pytest
 
 from inmanta import data
 from inmanta.data import model
-from utils import v1_module_from_template, wait_until_deployment_finishes
+from utils import retry_limited, v1_module_from_template, wait_until_deployment_finishes
 
 DOCS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "docs")
 
@@ -184,7 +186,7 @@ async def test_docs_snippets_unmanaged_resources_basic(
 
 @pytest.mark.slowtest
 async def test_docs_snippets_unmanaged_resources_shared_attributes(
-    tmpdir: py.path.local, snippetcompiler, modules_dir: str, server, client, environment: str, agent
+    tmpdir: py.path.local, snippetcompiler, modules_dir: str, server, client, environment: str, agent, clienthelper
 ) -> None:
     """
     Test the shared_attributes_example code snippets used in the documentation to explain the usage of unmanaged_resources.
@@ -233,6 +235,8 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
     )
     snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
+
+    await clienthelper.wait_for_released(version)
 
     await wait_until_deployment_finishes(client, environment, version=1)
 
