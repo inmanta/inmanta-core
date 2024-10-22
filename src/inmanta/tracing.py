@@ -21,8 +21,6 @@ import logging
 import os
 from typing import Any, Callable, ContextManager, Literal, LiteralString, Mapping, ParamSpec, Sequence, TypeVar
 
-from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
-
 LOGGER = logging.getLogger("inmanta")
 
 # We need this early to make @instrument work
@@ -32,10 +30,13 @@ try:
     import logfire.integrations
     import logfire.integrations.pydantic
     import logfire.propagate
+    from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
 
     # Make sure we don't get warnings when it is off
     logfire._internal.config.GLOBAL_CONFIG.ignore_no_config = True
     enabled = os.getenv("LOGFIRE_TOKEN", None) is not None
+
+
 except (ModuleNotFoundError, Exception):
     enabled = False
 
