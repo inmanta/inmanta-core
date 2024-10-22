@@ -1305,8 +1305,10 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
     # The tasks are consumed in the priority order
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
     assert isinstance(first_task, tasks.Deploy)
+    assert first_task.reason == "A new version has been released"
     second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
     assert isinstance(second_task, tasks.DryRun)
+    assert second_task.reason == "Resource is being dry-run"
 
     # The same is true if a task with lesser priority is added first
     # Add a fact refresh task to the queue
@@ -1319,8 +1321,10 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
     # The tasks are consumed in the priority order
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
     assert isinstance(first_task, tasks.Deploy)
+    assert first_task.reason == "Deploy is being triggered by interval"
     second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
     assert isinstance(second_task, tasks.RefreshFact)
+    assert second_task.reason == "Facts are being refreshed"
     # Assert that all tasks were consumed
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
     assert len(queue) == 0
@@ -1345,8 +1349,10 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
 
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
     assert isinstance(first_task, tasks.Deploy)
+    assert first_task.reason == "User has requested a deploy"
     second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
     assert isinstance(second_task, tasks.DryRun)
+    assert second_task.reason == "Resource is being dry-run"
 
     # Interval deploy is still in the queue but marked as deleted
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
@@ -1378,8 +1384,10 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
     # The order is unaffected, the interval deploy was essentially ignored
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
     assert isinstance(first_task, tasks.Deploy)
+    assert first_task.reason == "User has requested a deploy"
     second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
     assert isinstance(second_task, tasks.DryRun)
+    assert second_task.reason == "Resource is being dry-run"
 
     # All tasks were consumed
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
