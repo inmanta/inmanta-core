@@ -126,7 +126,6 @@ import inmanta.compiler.config
 import inmanta.main
 import inmanta.server.agentmanager as agentmanager
 import inmanta.user_setup
-import logfire
 from deploy.scheduler_test_util import DummyCodeManager
 from inmanta import config, const, data, env, loader, protocol, resources
 from inmanta.agent import handler

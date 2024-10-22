@@ -51,7 +51,6 @@ src/inmanta/protocol/ipc_light.py:0: error: Item "None" of "Transport | None" ha
 src/inmanta/protocol/ipc_light.py:0: error: Item "None" of "Transport | None" has no attribute "write"  [union-attr]
 src/inmanta/protocol/ipc_light.py:0: error: Invalid index type "UUID | None" for "dict[UUID, Future[object]]"; expected type "UUID"  [index]
 src/inmanta/tracing.py:0: error: Call to untyped function "AsyncPGInstrumentor" in typed context  [no-untyped-call]
-src/inmanta/tracing.py:0: error: Incompatible return value type (got "NoopSpan", expected "LogfireSpan")  [return-value]
 src/inmanta/types.py:0: error: "type" has no attribute "__supertype__"  [attr-defined]
 src/inmanta/execute/dataflow/__init__.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]
 src/inmanta/execute/dataflow/__init__.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]
