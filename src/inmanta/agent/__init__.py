@@ -17,5 +17,4 @@
 """
 
 # flake8: noqa: F401
-from inmanta.agent.agent import Agent
 from inmanta.agent.reporting import collect_report

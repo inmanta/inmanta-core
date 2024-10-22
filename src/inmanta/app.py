@@ -122,27 +122,6 @@ def start_server(options: argparse.Namespace) -> None:
         exit(EXIT_START_FAILED)
 
 
-@command("agent", help_msg="Start the inmanta agent")
-def start_agent(options: argparse.Namespace) -> None:
-    from inmanta.agent import agent
-
-    # The call to configure() should be done as soon as possible.
-    # If an AsyncHTTPClient is started before this call, the max_client
-    # will not be taken into account.
-    max_clients: Optional[int] = Config.get("agent_rest_transport", "max_clients", None)
-    if max_clients:
-        AsyncHTTPClient.configure(None, max_clients=max_clients)
-
-    tracing.configure_logfire("agent")
-    util.ensure_event_loop()
-    a = agent.Agent()
-
-    setup_signal_handlers(a.stop)
-    IOLoop.current().add_callback(a.start)
-    IOLoop.current().start()
-    LOGGER.info("Agent Shutdown complete")
-
-
 @command("scheduler", help_msg="Start the resource scheduler")
 def start_scheduler(options: argparse.Namespace) -> None:
     """
