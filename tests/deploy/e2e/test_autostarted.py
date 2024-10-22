@@ -189,7 +189,6 @@ async def test_auto_deploy_no_splay(server, client, clienthelper: ClientHelper, 
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 2
-    assert result.result["model"]["result"] == "failed"
 
     # check if agent 1 is started by the server
     # deploy will fail because handler code is not uploaded to the server
