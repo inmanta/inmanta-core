@@ -1,0 +1,3 @@
+description: Add reason field on Task.
+change-type: minor
+destination-branches: [master]
