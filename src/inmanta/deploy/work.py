@@ -311,7 +311,6 @@ class ScheduledWork:
         resources: Set[ResourceIdStr],
         *,
         priority: TaskPriority,
-        reason: str,
         deploying: Optional[Set[ResourceIdStr]] = None,
         added_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
         dropped_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
@@ -324,7 +323,6 @@ class ScheduledWork:
         :param resources: Set of resources that should be deployed. Adds a deploy task to the scheduled work for each
             of these, unless it is already scheduled.
         :param priority: The priority of this deploy.
-        :param priority: The reason of this deploy.
         :param deploying: Set of resources for which a non-stale deploy is in progress, i.e. the scheduler does not need to
             take action to deploy the latest intent for any of these resources because that deploy is already in progress
             (it will still ensure they are scheduled if they have gotten new dependencies).
@@ -347,14 +345,7 @@ class ScheduledWork:
         for resourceId in queued:
             if resourceId in resources:
                 task = tasks.Deploy(resource=resourceId)
-                if self.agent_queues._in_progress[task] > priority:
-                    self.agent_queues._in_progress[task] = priority
-                    task.set_reason(reason=reason)
-                elif self.agent_queues._in_progress[task] < priority:
-                    # We don't need to do anything in that particular case, the lowest priority is already set
-                    pass
-                else:
-                    raise RuntimeError(f"Current task is equals to 2 different priorities: `{task}` - `{priority}`")
+                self.agent_queues._in_progress[task] = min(self.agent_queues._in_progress[task], priority)
 
         # First drop all dropped requires so that we work on the smallest possible set for this operation.
         for resource, dropped in dropped_requires.items():
@@ -426,7 +417,7 @@ class ScheduledWork:
 
         # ensure desired resource deploys are scheduled
         for resource in resources:
-            prioritized_task = PrioritizedTask(task=tasks.Deploy(resource=resource, reason=reason), priority=priority)
+            prioritized_task = PrioritizedTask(task=tasks.Deploy(resource=resource), priority=priority)
             if is_scheduled(resource):
                 # Deploy is already scheduled / running. Check to see if this task has a higher priority than the one already
                 # scheduled. If it has, update the priority. If any of its dependencies are to be

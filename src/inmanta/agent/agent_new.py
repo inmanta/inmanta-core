@@ -133,21 +133,21 @@ class Agent(SessionEndpoint):
                 return True
             return False
 
-        async def deploy_action() -> None:
+        async def interval_deploy() -> None:
             await self.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
 
-        async def repair_action() -> None:
+        async def interval_repair() -> None:
             await self.scheduler.repair(TaskPriority.INTERVAL_REPAIR)
 
         periodic_schedule(
             "deploy",
-            deploy_action,
+            interval_deploy,
             self._deploy_interval,
             self._deploy_splay_value,
         )
         periodic_schedule(
             "repair",
-            repair_action,
+            interval_repair,
             self._repair_interval,
             self._repair_splay_value,
         )

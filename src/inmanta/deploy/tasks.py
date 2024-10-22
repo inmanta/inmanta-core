@@ -21,7 +21,6 @@ import dataclasses
 import datetime
 import logging
 import traceback
-import typing
 import uuid
 from dataclasses import dataclass
 
@@ -46,16 +45,12 @@ class Task(abc.ABC):
     """
 
     resource: ResourceIdStr
+
     id: resources.Id = dataclasses.field(init=False, compare=False, hash=False)
-    reason: typing.Optional[str] = dataclasses.field(compare=False, hash=False, default=None)
 
     def __post_init__(self) -> None:
         # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
         object.__setattr__(self, "id", resources.Id.parse_id(self.resource))
-
-    def set_reason(self, reason: str) -> None:
-        # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
-        object.__setattr__(self, "reason", reason)
 
     @abc.abstractmethod
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
@@ -155,11 +150,9 @@ class Deploy(Task):
         else:
             try:
                 gid = uuid.uuid4()
-                assert self.reason is not None
+                # FIXME: reason argument is not used
                 deploy_result: const.ResourceState = await my_executor.execute(
-                    gid=gid,
-                    resource_details=executor_resource_details,
-                    reason=self.reason,
+                    gid, executor_resource_details, "New Scheduler initiated action"
                 )
                 success = deploy_result == const.ResourceState.deployed
             except Exception as e:
