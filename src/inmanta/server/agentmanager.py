@@ -31,7 +31,6 @@ from typing import Any, Optional, Union, cast
 from uuid import UUID
 
 import asyncpg.connection
-import psutil
 
 import inmanta.config
 import inmanta.server.services.environmentlistener
@@ -1487,16 +1486,6 @@ password={opt.db_password.get()}
                     proc.pid,
                     ",".join(sorted(expected_agents_in_up_state - actual_agents_in_up_state)),
                 )
-
-                def get_process_state(current_pid: int) -> None:
-                    """
-                    Retrieves the current list of processes running under this process
-
-                    :param current_pid: The PID of this process
-                    """
-                    a = [process for process in psutil.process_iter() if process.pid == current_pid][0].cmdline()
-                    # breakpoint()
-                get_process_state(proc.pid)
 
                 raise asyncio.TimeoutError()
             if now - last_log > AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL:

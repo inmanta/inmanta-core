@@ -240,7 +240,7 @@ class Agent(SessionEndpoint):
             enabled = await self.scheduler.is_agent_running(name=agent)
             return 200, f"{agent} has been {'started' if enabled else 'stopped'}"
         else:
-            return 200, f"All agents have been notified!"
+            return 200, "All agents have been notified!"
 
     async def on_reconnect(self) -> None:
         result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)

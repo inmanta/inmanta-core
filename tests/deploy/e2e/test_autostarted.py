@@ -1085,4 +1085,3 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     )
     for children in current_resumed_children.values():
         assert children.is_running()
-
