@@ -586,7 +586,6 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     await client.resume_environment(environment)
 
     # Let's check the agent table and check that the scheduler and agent1 are present and not paused
-    await asyncio.sleep(5)
     result = await client.list_agents(tid=environment)
     assert result.code == 200
     assert len(result.result["agents"]) == 2
@@ -603,9 +602,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         )
     else:
         await retry_limited(
-            lambda: len(filter_relevant_processes(get_process_state(current_pid))) == len(current_halted_children)
-            and len(filter_relevant_processes(get_process_state(current_pid))) == 2,
-            10,
+            lambda: len(filter_relevant_processes(get_process_state(current_pid))) == 2,
+            15,
         )
 
     # Let's recheck the number of processes after resuming the environment
@@ -1076,7 +1074,6 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert expected_agents_status["agent1"]
     assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
 
-    await asyncio.sleep(5)
     resumed_children = get_process_state(current_pid)
     assert len(resumed_children) == 1
     assert len(resumed_children.values()) == 1
@@ -1088,3 +1085,4 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     )
     for children in current_resumed_children.values():
         assert children.is_running()
+

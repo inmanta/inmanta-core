@@ -319,20 +319,17 @@ class AgentManager(ServerSlice, SessionListener):
     ) -> None:
         LOGGER.debug("Restarting Scheduler after resuming environment %s", env.id)
 
+        await self._autostarted_agent_manager.restart_scheduler(env)
+        live_session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
+        assert live_session
         async with self.session_lock:
             key = (env.id, const.AGENT_SCHEDULER_ID)
-            live_session = self.tid_endpoint_to_session.get(key)
-            if not live_session:
-                a = await self._autostarted_agent_manager._ensure_scheduler(env.id)
-                assert a
-                live_session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
-                assert live_session
-                self.tid_endpoint_to_session[key] = live_session
+            self.tid_endpoint_to_session[key] = live_session
 
-            # We need to update information in the DB
-            await data.Agent.update_primary(
-                env.id, [(const.AGENT_SCHEDULER_ID, live_session.id)], now=datetime.now().astimezone(), connection=connection
-            )
+        # We need to update information in the DB
+        await data.Agent.update_primary(
+            env.id, [(const.AGENT_SCHEDULER_ID, live_session.id)], now=datetime.now().astimezone(), connection=connection
+        )
 
     async def _set_unpause_on_resume(
         self,
@@ -1501,7 +1498,7 @@ password={opt.db_password.get()}
                     :param current_pid: The PID of this process
                     """
                     a = [process for process in psutil.process_iter() if process.pid == current_pid][0].cmdline()
-                    breakpoint()
+                    # breakpoint()
                 get_process_state(proc.pid)
 
                 raise asyncio.TimeoutError()
