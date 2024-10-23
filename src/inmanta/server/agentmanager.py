@@ -225,6 +225,7 @@ class AgentManager(ServerSlice, SessionListener):
         Resumes after halting. Unpauses all agents that had been paused by halting.
         """
         to_unpause: list[str] = await data.Agent.persist_on_resume(env=env.id, connection=connection)
+        # We cannot do this at once. Otherwise, we would need a lock
         for agent in to_unpause:
             await data.Agent.pause(env=env.id, endpoint=agent, paused=False, connection=connection)
 
@@ -1480,7 +1481,7 @@ password={opt.db_password.get()}
         while len(expected_agents_in_up_state) != len(actual_agents_in_up_state):
             await asyncio.sleep(0.1)
             now = int(time.time())
-            if now - last_new_agent_seen > AUTO_STARTED_AGENT_WAIT + 10:
+            if now - last_new_agent_seen > AUTO_STARTED_AGENT_WAIT:
                 LOGGER.warning(
                     "Timeout: agent with PID %s took too long to start: still waiting for agent instances %s",
                     proc.pid,

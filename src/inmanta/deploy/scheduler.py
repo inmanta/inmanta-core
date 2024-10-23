@@ -209,7 +209,6 @@ class ResourceScheduler(TaskManager):
         self._state.reset()
         self._work.reset()
 
-    # TODO h scheduler should be killed
     async def start(self) -> None:
         self.reset()
         self._running = True
