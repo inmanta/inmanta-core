@@ -79,4 +79,4 @@ def test_context_changes():
 
 
 def test_entrypoint_for_handler_typing():
-    from inmanta.agent.agent import AgentInstance
+    from inmanta.agent.agent import AgentInstance  # noqa: F401
