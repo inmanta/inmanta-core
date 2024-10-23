@@ -432,8 +432,9 @@ class ResourceScheduler(TaskManager):
                         task = Deploy(resource=resource)
                         assert task in self._work.agent_queues.in_progress
                         priority = self._work.agent_queues.in_progress[task]
-                        task_with_reason = [e for e in self._work.agent_queues.in_progress.keys() if e == task][0]
-                        assert task_with_reason.reason is not None, (
+                        task_with_reason = self._work.agent_queues.retrieve_task_in_progress(task)
+                        assert task_with_reason, "The task retrieved from the queue should exist"
+                        assert task_with_reason.reason, (
                             "Every scheduled task should have a reason " "(linked to a given priority)!"
                         )
                         self._work.deploy_with_context(
