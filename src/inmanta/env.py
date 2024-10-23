@@ -1089,6 +1089,8 @@ class CommandRunner:
         # We use close_fds here to avoid
         # the bug https://github.com/python/cpython/issues/103911#issuecomment-2333963137
         # We attempt to get on the code path that uses _posix_spawn instead of _fork_exec
+        # Subprocess shell did not work to prevent it
+        # Improved escaping (shlex.quote) to prevent `>` from leaking did not help
         process = await asyncio.create_subprocess_exec(
             *cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env_vars, close_fds=False
         )
