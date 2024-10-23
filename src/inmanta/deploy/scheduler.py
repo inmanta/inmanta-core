@@ -106,7 +106,7 @@ class TaskRunner:
 
     async def _start(self) -> None:
         self.status = AgentStatus.STARTED
-        self._task = asyncio.create_task(self.run())
+        self._task = asyncio.create_task(self._run())
 
     async def _stop(self) -> None:
         self.status = AgentStatus.STOPPING
@@ -132,7 +132,7 @@ class TaskRunner:
         """
         self._notify_task = asyncio.create_task(self.notify())
 
-    async def run(self) -> None:
+    async def _run(self) -> None:
         """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
         allowed to run."""
         while self._scheduler._running and self.status == AgentStatus.STARTED:

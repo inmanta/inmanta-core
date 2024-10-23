@@ -21,7 +21,6 @@
 import asyncio
 import hashlib
 import json
-import logging
 import typing
 import uuid
 from collections.abc import Callable
@@ -40,7 +39,6 @@ from inmanta.data import ResourceIdStr
 from inmanta.deploy import state, tasks
 from inmanta.deploy.scheduler import ResourceScheduler, TaskRunner
 from inmanta.deploy.state import AgentStatus, BlockedStatus
-from inmanta.deploy.tasks import Task
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
@@ -191,27 +189,23 @@ class TestScheduler(ResourceScheduler):
     def _create_agent(self, agent: str, should_start: bool = True) -> None:
         """Start processing for the given agent"""
         self._workers[agent] = TestTaskRunner(endpoint=agent, scheduler=self)
-        self._workers[agent].start()
+        self._workers[agent].notify_sync()
 
 
 class TestTaskRunner(TaskRunner):
-    async def run(self) -> None:
-        """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
-        allowed to run."""
-        self.status = AgentStatus.STARTED
+    async def notify(self) -> None:
+        """
+        Method to notify the runner that something has changed in the DB. This method will fetch the new information
+        regarding the environment and the information related to the runner (agent). Depending on the desired state of the
+        agent, it will either stop / start the agent or do nothing
+        """
+        should_be_running = await self._scheduler.should_be_running(self.endpoint)
 
-        while self._scheduler._running and self.status == AgentStatus.STARTED:
-            task: Task = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
-            try:
-                await task.execute(self._scheduler, self.endpoint)
-            except Exception:
-                logging.exception(
-                    "Task %s for agent %s has failed and the exception was not properly handled", task, self.endpoint
-                )
-
-            self._scheduler._work.agent_queues.task_done(self.endpoint, task)
-
-        self.status = AgentStatus.STOPPED
+        match self.status:
+            case AgentStatus.STARTED if not should_be_running:
+                await self._stop()
+            case AgentStatus.STOPPING | AgentStatus.STOPPED if should_be_running:
+                await self._start()
 
 
 class TestAgent(Agent):

@@ -24,7 +24,7 @@ import sys
 import time
 import uuid
 from asyncio import queues, subprocess
-from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence, Set
+from collections.abc import Iterable, Iterator, Mapping, Sequence, Set
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, Union, cast
@@ -993,6 +993,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         self.environment_service = cast(environmentservice.EnvironmentService, server.get_slice(SLICE_ENVIRONMENT))
         self.environment_service.register_listener(self, inmanta.server.services.environmentlistener.EnvironmentAction.created)
+        self.environment_service.register_listener(self, inmanta.server.services.environmentlistener.EnvironmentAction.cleared)
 
     async def start(self) -> None:
         await super().start()
@@ -1030,7 +1031,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
         )
         if agent_client is None:
-            await self._ensure_scheduler(env.id)
+            assert await self._ensure_scheduler(env.id)
             agent_client = self._agent_manager.get_agent_client(
                 tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
             )
@@ -1127,88 +1128,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             LOGGER.debug("Expiring all sessions")
             await self._agent_manager.expire_all_sessions()
 
-    # Start/stop agents
-    async def _ensure_agents(
-        self,
-        env: data.Environment,
-        agents: Collection[str],
-        *,
-        restart: bool = False,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> bool:
-        """
-        Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
-
-        :param env: The environment to start the agents for
-        :param agents: A list of agent names that should be running in this environment. Waits for the agents that are both in
-            this list and in the agent map to be active before returning.
-        :param restart: Restart all agents even if the list of agents is up to date.
-        :param connection: The database connection to use. Must not be in a transaction context.
-
-        :return: True iff a new agent process was started.
-        """
-        if self._stopping:
-            raise ShutdownInProgress()
-
-        if connection is not None and connection.is_in_transaction():
-            # Should not be called in a transaction context because it has (immediate) side effects outside of the database
-            # that are tied to the database state. Several inconsistency issues could occur if this runs in a transaction
-            # context:
-            #   - side effects based on oncommitted reads (may even need to be rolled back)
-            #   - race condition with similar side effect flows due to stale reads (e.g. other flow pauses agent and kills
-            #       process, this one brings it back because it reads the agent as unpaused)
-            raise Exception("_ensure_agents should not be called in a transaction context")
-
-        async with data.Agent.get_connection(connection) as connection:
-            agent_map: Mapping[str, str] = cast(
-                Mapping[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
-            )  # we know the type of this map
-
-            autostart_agents: Set[str] = set(agents) & agent_map.keys()
-            if len(autostart_agents) == 0:
-                return False
-
-            async with self.agent_lock:
-                # silently ignore requests if this environment is halted
-                refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
-                if refreshed_env is None:
-                    raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
-                env = refreshed_env
-                if env.halted:
-                    return False
-
-                if not restart and await self._agent_manager.are_agents_active(env.id, autostart_agents):
-                    # do not start a new agent process if the agents are already active, regardless of whether their session
-                    # is with an autostarted process or not.
-                    return False
-
-                start_new_process: bool
-                if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is not None:
-                    # Start new process if none is currently running for this environment.
-                    # Otherwise trust that it tracks any changes to the agent map.
-                    LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_agents)
-                    start_new_process = True
-                elif restart:
-                    LOGGER.info(
-                        "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
-                        autostart_agents,
-                        self._agent_procs[env.id],
-                    )
-                    await self._stop_autostarted_agents(env, connection=connection)
-                    start_new_process = True
-                else:
-                    start_new_process = False
-
-                if start_new_process:
-                    self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
-
-                # Wait for all agents to start
-                try:
-                    await self._wait_for_agents(env, autostart_agents, connection=connection)
-                except asyncio.TimeoutError:
-                    LOGGER.warning("Not all agent instances started successfully")
-                return start_new_process
-
     # Start/Restart scheduler
     async def _ensure_scheduler(
         self,
@@ -1262,6 +1181,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     # Otherwise trust that it tracks any changes to the agent map.
                     LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_scheduler)
                     start_new_process = True
+                    LOGGER.info("AAAAAAAAAAAAA")
                 elif restart:
                     LOGGER.info(
                         "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
@@ -1275,10 +1195,14 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
                 if start_new_process:
                     self._agent_procs[env] = await self.__do_start_agent(refreshed_env, connection=connection)
+                LOGGER.info("FAAAAAAAAA")
 
                 # Wait for all agents to start
                 try:
                     await self._wait_for_agents(refreshed_env, autostart_scheduler, connection=connection)
+                    LOGGER.info("AFTER WAIT")
+                    LOGGER.info(f"SESSIONs {self._agent_manager.sessions}")
+                    LOGGER.info(f"TID SESSION {self._agent_manager.tid_endpoint_to_session}")
                 except asyncio.TimeoutError:
                     LOGGER.warning("Not all agent instances started successfully")
                 return start_new_process
@@ -1542,10 +1466,22 @@ password={opt.db_password.get()}
         :param env: The new environment
         """
         env_db = await data.Environment.get_by_id(env.id)
+        assert env_db
         # We need to make sure that the AGENT_SCHEDULER is registered to be up and running
         await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
         if not (assert_no_start_scheduler or no_start_scheduler):
             await self._ensure_scheduler(env.id)
+
+    async def environment_action_cleared(self, env: model.Environment) -> None:
+        """
+        Will be called when a new environment is created to create a scheduler agent
+
+        :param env: The new environment
+        """
+        env_db = await data.Environment.get_by_id(env.id)
+        assert env_db
+        # We need to make sure that the AGENT_SCHEDULER is registered to be up and running
+        await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
 
 
 # For testing only

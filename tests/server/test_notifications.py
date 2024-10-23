@@ -334,8 +334,8 @@ async def test_notifications_deleted_when_env_deleted(environment_with_notificat
     assert len(notifications_in_db) == 0
 
 
-@pytest.mark.parametrize("no_agent", [True])
-async def test_notifications_deleted_when_env_cleared(environment_with_notifications, client) -> None:
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_notifications_deleted_when_env_cleared(environment_with_notifications, client, auto_start_agent: bool) -> None:
     environment = environment_with_notifications
 
     result = await client.list_notifications(environment)
@@ -414,8 +414,8 @@ async def test_notification_cleanup_on_start(init_dataclasses_and_load_schema, a
 
 
 @pytest.mark.parametrize("halted", [True, False])
-@pytest.mark.parametrize("no_agent", [True])
-async def test_cleanup_notifications(server, client, halted_env_with_old_notifications, halted):
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_cleanup_notifications(server, client, halted_env_with_old_notifications, halted, auto_start_agent):
     # test that the notifications are only cleaned up if the env is not halted
     env_id = halted_env_with_old_notifications
     result = await client.list_notifications(env_id)
