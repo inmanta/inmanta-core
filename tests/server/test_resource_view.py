@@ -24,7 +24,7 @@ from inmanta import const, data
 
 
 async def test_consistent_resource_state_reporting(
-    server, agent, environment, resource_container, clienthelper, client, no_agent_backoff
+    server, agent, environment, resource_container, clienthelper, client
 ) -> None:
     """Doesn't work for new scheduler, as every release is a deploy"""
     env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -71,7 +71,7 @@ async def test_consistent_resource_state_reporting(
 
     result = await client.release_version(environment, version1, push=True)
     assert result.code == 200
-    await utils._wait_until_deployment_finishes(client, environment, version1)
+    await utils.wait_until_deployment_finishes(client, environment, version1)
 
     result = await client.release_version(environment, version2, push=False)
     assert result.code == 200
