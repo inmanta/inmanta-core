@@ -31,7 +31,7 @@ from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
-from inmanta.deploy.scheduler import ResourceScheduler
+from inmanta.deploy import scheduler
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.types import Apireturn
@@ -68,7 +68,7 @@ class Agent(SessionEndpoint):
         assert self._env_id is not None
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
-        self.scheduler = ResourceScheduler(self._env_id, self.executor_manager, self._client)
+        self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
 
         self._sched = Scheduler("new agent endpoint")

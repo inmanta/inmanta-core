@@ -31,7 +31,6 @@ from typing import Mapping, Optional, Sequence
 import pytest
 
 import inmanta.types
-from deploy.scheduler_test_util import DummyCodeManager, make_requires
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
@@ -46,6 +45,7 @@ from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.util import retry_limited
+from utils import DummyCodeManager, make_requires
 
 FAIL_DEPLOY: str = "fail_deploy"
 
