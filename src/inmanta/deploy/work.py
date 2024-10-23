@@ -371,9 +371,9 @@ class ScheduledWork:
                     pass
                 else:
                     raise RuntimeError(
-                        f"Current task is equals to 2 different priorities: currently stored `{actual_task}` "
-                        f"- `{self.agent_queues._in_progress[task]}` | new priority `{reason}` - "
-                        f"`{priority}"
+                        f"Two different priorities with the same weight have been associated with the current task: "
+                        f"Old priority -> (`{self.agent_queues._in_progress[task]}`, reason: {actual_task.reason}) "
+                        f"- New priority -> (`{priority}`, reason: {reason})"
                     )
 
         # First drop all dropped requires so that we work on the smallest possible set for this operation.

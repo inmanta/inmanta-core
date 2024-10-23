@@ -434,9 +434,9 @@ class ResourceScheduler(TaskManager):
                         priority = self._work.agent_queues.in_progress[task]
                         task_with_reason = self._work.agent_queues.retrieve_task_in_progress(task)
                         assert task_with_reason, "The task retrieved from the queue should exist"
-                        assert task_with_reason.reason, (
-                            "Every scheduled task should have a reason " "(linked to a given priority)!"
-                        )
+                        assert (
+                            task_with_reason.reason
+                        ), "Every scheduled task should have a reason (linked to a given priority)!"
                         self._work.deploy_with_context(
                             event_listeners, priority=priority, deploying=set(), reason=task_with_reason.reason
                         )
