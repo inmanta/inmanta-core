@@ -314,9 +314,6 @@ class AgentManager(ServerSlice, SessionListener):
     async def update_scheduler_endpoint(
         self, env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
-        LOGGER.debug("Restarting Scheduler after resuming environment %s", env.id)
-
-        await self._autostarted_agent_manager.restart_scheduler(env)
         live_session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
         assert live_session
         async with self.session_lock:
@@ -327,6 +324,7 @@ class AgentManager(ServerSlice, SessionListener):
         await data.Agent.update_primary(
             env.id, [(const.AGENT_SCHEDULER_ID, live_session.id)], now=datetime.now().astimezone(), connection=connection
         )
+        LOGGER.debug("Scheduler has been resumed in environment %s", env.id)
 
     async def _set_unpause_on_resume(
         self,
@@ -1181,7 +1179,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     # Otherwise trust that it tracks any changes to the agent map.
                     LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_scheduler)
                     start_new_process = True
-                    LOGGER.info("AAAAAAAAAAAAA")
                 elif restart:
                     LOGGER.info(
                         "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
@@ -1195,14 +1192,10 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
                 if start_new_process:
                     self._agent_procs[env] = await self.__do_start_agent(refreshed_env, connection=connection)
-                LOGGER.info("FAAAAAAAAA")
 
                 # Wait for all agents to start
                 try:
                     await self._wait_for_agents(refreshed_env, autostart_scheduler, connection=connection)
-                    LOGGER.info("AFTER WAIT")
-                    LOGGER.info(f"SESSIONs {self._agent_manager.sessions}")
-                    LOGGER.info(f"TID SESSION {self._agent_manager.tid_endpoint_to_session}")
                 except asyncio.TimeoutError:
                     LOGGER.warning("Not all agent instances started successfully")
                 return start_new_process

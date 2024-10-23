@@ -117,7 +117,6 @@ class TaskRunner:
         regarding the environment and the information related to the runner (agent). Depending on the desired state of the
         agent, it will either stop / start the agent or do nothing
         """
-        await data.Agent.insert_if_not_exist(environment=self._scheduler.environment, endpoint=self.endpoint)
         should_be_running = await self._scheduler.should_be_running(self.endpoint)
 
         match self.status:
@@ -130,6 +129,7 @@ class TaskRunner:
         """
         Method to notify the runner that something has changed in the DB in a synchronous manner.
         """
+        # We save it to be sure that the task will not be GC
         self._notify_task = asyncio.create_task(self.notify())
 
     async def _run(self) -> None:
@@ -413,9 +413,8 @@ class ResourceScheduler(TaskManager):
         """
         current_environment = await Environment.get_by_id(self.environment)
         assert current_environment
+        await data.Agent.insert_if_not_exist(environment=self.environment, endpoint=endpoint)
         current_agent = await data.Agent.get(env=self.environment, endpoint=endpoint)
-        if current_agent is None:
-            return False
         return not (current_environment.halted or current_agent.paused)
 
     async def refresh_agent_state_from_db(self, name: Optional[str]) -> None:

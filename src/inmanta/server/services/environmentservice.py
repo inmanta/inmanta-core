@@ -278,6 +278,7 @@ class EnvironmentService(protocol.ServerSlice):
 
             # We need this part to be part of another transaction otherwise, the environment will still be halted and it would
             # not be possible to start the scheduler
+            await self.autostarted_agent_manager.restart_scheduler(env)
             async with con.transaction():
                 await self.agent_manager.update_scheduler_endpoint(refreshed_env, connection=con)
         await self.server_slice.compiler.resume_environment(refreshed_env.id)
