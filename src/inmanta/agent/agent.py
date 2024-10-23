@@ -17,6 +17,7 @@
 """
 
 # This file is kept for backward compatibility
+from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import AgentInstance
 
-__all__ = ["AgentInstance"]
+__all__ = ["AgentInstance", "Agent"]
