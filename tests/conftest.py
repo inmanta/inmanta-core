@@ -126,7 +126,6 @@ import inmanta.compiler.config
 import inmanta.main
 import inmanta.server.agentmanager as agentmanager
 import inmanta.user_setup
-from deploy.scheduler_test_util import DummyCodeManager
 from inmanta import config, const, data, env, loader, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent_new import Agent
@@ -150,7 +149,7 @@ from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
 from pytest_postgresql import factories
-from utils import ClientHelper, NullAgent
+from utils import ClientHelper, DummyCodeManager, NullAgent
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
