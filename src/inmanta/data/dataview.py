@@ -96,7 +96,28 @@ T_DTO = TypeVar("T_DTO", bound=BaseModel)
 
 
 class RequestedPagingBoundaries:
-    """Represents the lower and upper bounds that the user requested for the paging boundaries, if any."""
+    """
+    Represents the lower and upper bounds that the user requested for the paging boundaries, if any.
+
+    Boundary values represent min and max values, regardless of sorting direction (ASC or DESC), i.e.
+                  |        prev             |                current page                    |    next
+     -------------|-------------------------|------------------------------------------------|----------------------
+     ASC sorting  | [  ...  ] (99 c)        | [ (100 d) ( 100 e) ... (10 000 r) (10 000 s) ] | (10 001 t) [ ...   ]
+                  |            end = 99     |     start = 100          end = 10 000          |     start = 10 001
+                  |            last_id = c  |     first_id = d         last_id = s           |     first_id = t
+                  |
+     DESC sorting | [  ...  ] (10 001 t)    | [ (10 000 s) (10 000 r) ... (100 d) ( 100 c) ] |  (99 b) [ ...   ]
+                  |          start = 10 001 |         end = 10000          start = 100       |     end = 99
+                  |          first_id = t   |         last_id = s          first_id = c      |     last_id = b
+
+    So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "lowest" and
+    "highest".
+
+    :param start: min boundary value (exclusive) for the requested page for the primary sort column.
+    :param end: max boundary value (exclusive) for the requested page for the primary sort column.
+    :param first_id: min boundary value (exclusive) for requested the page for the secondary sort column, if there is one.
+    :param last_id: max boundary value (exclusive) for requested the page for the secondary sort column, if there is one.
+    """
 
     def __init__(
         self,
@@ -138,6 +159,24 @@ class RequestedPagingBoundaries:
 
     def has_end(self) -> bool:
         return (self.end is not None) or (self.last_id is not None)
+
+    def get_empty_page_boundaries(self) -> PagingBoundaries:
+        """
+        Return the virtual paging boundaries that corresponds to the boundaries of an empty page response for this request.
+
+        Concretely, this means swapping start and end, because the semantics of PagingBoundaries are opposite those of this
+        class: PagingBoundaries represents "current page" while this class represents "requested page";
+        max of current page = min of requested page and vice versa.
+
+        Known-issue: This method contains a potential off-by-one error here because both classes are exclusive of the boundary
+        values. Issue: https://github.com/inmanta/inmanta-core/issues/7898#issuecomment-2404322678
+        """
+        return PagingBoundaries(
+            start=self.end,
+            first_id=self.last_id,
+            end=self.start,
+            last_id=self.first_id,
+        )
 
 
 class PagingMetadata:
@@ -199,7 +238,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         return {}
 
-    async def get_data(self) -> tuple[Sequence[T_DTO], Optional[PagingBoundaries]]:
+    async def get_data(self) -> tuple[Sequence[T_DTO], PagingBoundaries]:
         query_builder = self.get_base_query()
 
         # In this method, we use `data.Resource`
@@ -218,9 +257,11 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         records = await data.Resource.select_query(sql_query, values, no_obj=True)
         dtos = self.construct_dtos(records)
 
-        paging_boundaries = None
-        if dtos:
-            paging_boundaries = self.order.get_paging_boundaries(dict(records[0]), dict(records[-1]))
+        paging_boundaries = (
+            self.order.get_paging_boundaries(dict(records[0]), dict(records[-1]))
+            if dtos
+            else self.requested_page_boundaries.get_empty_page_boundaries()
+        )
         return dtos, paging_boundaries
 
     @abc.abstractmethod
@@ -290,14 +331,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         :return: Complete API ReturnValueWithMeta ready to go out
         """
         try:
-            dtos, paging_boundaries_in = await self.get_data()
-            paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
-            if paging_boundaries_in:
-                paging_boundaries = paging_boundaries_in
-            else:
-                # nothing found now, use the current page boundaries to determine if something exists before us
-                paging_boundaries = self.requested_page_boundaries
-
+            dtos, paging_boundaries = await self.get_data()
             metadata = await self._get_page_count(paging_boundaries)
             links = await self.prepare_paging_links(dtos, paging_boundaries, metadata)
             return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata.to_dict())
@@ -398,48 +432,45 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
                 url_query_params[f"filter.{key}"] = value
 
         url_query_params.update(self.get_extra_url_parameters())
+        base_url = self.get_base_url()
 
+        def value_to_string(value: Union[str, int, UUID, datetime]) -> str:
+            if isinstance(value, datetime):
+                # Accross API boundaries, all naive datetime instances are assumed UTC.
+                # Returns ISO timestamp.
+                return datetime_iso_format(value, tz_aware=opt.server_tz_aware_timestamps.get())
+            return str(value)
+
+        def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:
+            params = url_query_params.copy()
+            params.update({k: value_to_string(v) for k, v in args.items() if v is not None})
+            return f"{base_url}?{urllib.parse.urlencode(params, doseq=True)}"
+
+        link_with_end = make_link(
+            end=paging_boundaries.end,
+            last_id=paging_boundaries.last_id,
+        )
+        link_with_start = make_link(
+            start=paging_boundaries.start,
+            first_id=paging_boundaries.first_id,
+        )
+
+        if meta.after > 0:
+            if self.order.get_order() == "DESC":
+                links["next"] = link_with_end
+            else:
+                links["next"] = link_with_start
+
+        if meta.before > 0:
+            if self.order.get_order() == "DESC":
+                links["prev"] = link_with_start
+            else:
+                links["prev"] = link_with_end
+            # First page
+            links["first"] = make_link()
+
+        # Same page
         if dtos:
-            base_url = self.get_base_url()
-
-            def value_to_string(value: Union[str, int, UUID, datetime]) -> str:
-                if isinstance(value, datetime):
-                    # Accross API boundaries, all naive datetime instances are assumed UTC.
-                    # Returns ISO timestamp.
-                    return datetime_iso_format(value, tz_aware=opt.server_tz_aware_timestamps.get())
-                return str(value)
-
-            def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:
-                params = url_query_params.copy()
-                params.update({k: value_to_string(v) for k, v in args.items() if v is not None})
-                return f"{base_url}?{urllib.parse.urlencode(params, doseq=True)}"
-
-            link_with_end = make_link(
-                end=paging_boundaries.end,
-                last_id=paging_boundaries.last_id,
-            )
-            link_with_start = make_link(
-                start=paging_boundaries.start,
-                first_id=paging_boundaries.first_id,
-            )
-
-            has_next = meta.after > 0
-            if has_next:
-                if self.order.get_order() == "DESC":
-                    links["next"] = link_with_end
-                else:
-                    links["next"] = link_with_start
-
-            has_prev = meta.before > 0
-            if has_prev:
-                if self.order.get_order() == "DESC":
-                    links["prev"] = link_with_start
-                else:
-                    links["prev"] = link_with_end
-                # First page
-                links["first"] = make_link()
-
-            # Same page
             links["self"] = make_link(
                 first_id=self.requested_page_boundaries.first_id,
                 start=self.requested_page_boundaries.start,
