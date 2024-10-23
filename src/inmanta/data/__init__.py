@@ -3895,7 +3895,7 @@ class Compile(BaseDocument):
             environment_variables=(
                 json.loads(requested_compile["used_environment_variables"])
                 if requested_compile["used_environment_variables"] is not None
-                else None
+                else {}
             ),
             requested_environment_variables=(json.loads(requested_compile["requested_environment_variables"])),
             mergeable_environment_variables=(json.loads(requested_compile["mergeable_environment_variables"])),
