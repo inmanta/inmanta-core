@@ -228,9 +228,6 @@ class AgentManager(ServerSlice, SessionListener):
         to_unpause: list[str] = await data.Agent.persist_on_resume(env=env.id, connection=connection)
         for agent in to_unpause:
             await data.Agent.pause(env=env.id, endpoint=agent, paused=False, connection=connection)
-        # await asyncio.gather(
-        #     *[data.Agent.pause(env=env.id, endpoint=agent, paused=False, connection=connection) for agent in to_unpause]
-        # )
 
     @handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:

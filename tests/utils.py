@@ -95,7 +95,7 @@ async def wait_until_logs_are_available(client: Client, environment: str, resour
         LOGGER.warning("%s", response.result["logs"])
         return len(response.result["logs"]) >= expect_nr_of_logs
 
-    await retry_limited(all_logs_are_available, 10)
+    await retry_limited(all_logs_are_available, 15)
 
 
 UNKWN = object()

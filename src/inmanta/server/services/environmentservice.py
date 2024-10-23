@@ -276,7 +276,8 @@ class EnvironmentService(protocol.ServerSlice):
                 await refreshed_env.update_fields(halted=False, connection=con)
                 await self.agent_manager.resume_agents(refreshed_env, connection=con)
 
-        async with data.Environment.get_connection(connection) as con:
+            # We need this part to be part of another transaction otherwise, the environment will still be halted and it would
+            # not be possible to start the scheduler
             async with con.transaction():
                 await self.agent_manager.update_scheduler_endpoint(refreshed_env, connection=con)
         await self.server_slice.compiler.resume_environment(refreshed_env.id)
