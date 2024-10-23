@@ -738,8 +738,8 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("no_agent", [True])
-async def test_server_recompile(server, client, environment, monkeypatch):
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_server_recompile(server, client, environment, monkeypatch, auto_start_agent: bool):
     """
     Test a recompile on the server and verify recompile triggers
     """
