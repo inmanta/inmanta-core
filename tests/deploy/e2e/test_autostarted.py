@@ -36,7 +36,7 @@ from inmanta.const import AgentAction
 from inmanta.server import SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
-from utils import ClientHelper, retry_limited, wait_until_deployment_finishes, wait_until_logs_are_available
+from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
