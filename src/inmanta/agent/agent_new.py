@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import datetime
 import logging
@@ -198,6 +199,7 @@ class Agent(SessionEndpoint):
         await self.executor_manager.start()
         await self.scheduler.start()
         self._enable_time_triggers()
+        LOGGER.info("Scheduler started for environment %s", self.environment)
 
     async def stop_working(self, timeout: float = 0.0) -> None:
         """Stop working, connection lost"""
@@ -209,15 +211,13 @@ class Agent(SessionEndpoint):
         await self.executor_manager.stop()
         await self.executor_manager.join([], timeout=timeout)
         await self.scheduler.join()
+        LOGGER.info("Scheduler stopped for environment %s", self.environment)
 
     @protocol.handle(methods_v2.update_agent_map)
     async def update_agent_map(self, agent_map: dict[str, str]) -> None:
         # Not used here
         pass
 
-    # TODO h
-    LOGGER.info("Scheduler started for environment %s", self.environment)
-    LOGGER.info("Scheduler stopped for environment %s", self.environment)
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
         if agent == AGENT_SCHEDULER_ID:
@@ -227,16 +227,20 @@ class Agent(SessionEndpoint):
             if should_be_running:
                 await self.start_working()
             else:
-                await self.stop()
+                # We want the request to not end in a 500 error:
+                # if the scheduler is being shut down, it cannot respond to the request
+                await self.stop_working(timeout=const.EXECUTOR_GRACE_HARD)
         else:
             try:
                 await self.scheduler.refresh_agent_state_from_db(name=agent)
             except LookupError:
                 return 404, f"No such agent: {agent}"
 
+        if agent is not None:
             enabled = await self.scheduler.is_agent_running(name=agent)
-
-        return 200, f"{agent} has been {'started' if enabled else 'stopped'}"
+            return 200, f"{agent} has been {'started' if enabled else 'stopped'}"
+        else:
+            return 200, f"All agents have been notified!"
 
     async def on_reconnect(self) -> None:
         result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)
