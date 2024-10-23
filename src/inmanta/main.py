@@ -699,7 +699,6 @@ def param_set(client: Client, environment: str, name: str, value: str) -> None:
     )
 
     param = {"source": "user", "metadata": {}} if param_data is None else param_data
-    assert isinstance(param, dict)  # Make mypy happy
     param_return = client.get_dict(
         "set_param",
         "parameter",
