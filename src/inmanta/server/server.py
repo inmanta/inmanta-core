@@ -19,12 +19,13 @@
 import asyncio
 import json
 import logging
+import pathlib
 import uuid
 from typing import TYPE_CHECKING, Optional, Union, cast
 
 from tornado import routing, web
 
-from inmanta import config, data
+from inmanta import config, const, data
 from inmanta.const import ApiDocsFormat
 from inmanta.data.model import FeatureStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, handle, methods, methods_v2
@@ -81,6 +82,11 @@ class Server(protocol.ServerSlice):
         """
 
         state_dir = config.state_dir.get()
+
+        # Add marker file to indicate we are using the new disk layout
+        path = pathlib.Path(state_dir) / const.INMANTA_USE_NEW_DISK_LAYOUT_FILENAME
+        path.touch()
+
         dir_map = {
             "server": ensure_directory_exist(state_dir, "server"),
             "logs": ensure_directory_exist(config.log_dir.get()),
