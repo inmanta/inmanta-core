@@ -130,7 +130,7 @@ async def test_docs_snippet_partial_compile(
 
 @pytest.mark.slowtest
 async def test_docs_snippets_unmanaged_resources_basic(
-    tmpdir: py.path.local, snippetcompiler, modules_dir: str, server, client, environment: str, agent
+    tmpdir: py.path.local, snippetcompiler, modules_dir: str, server, client, environment: str, agent, clienthelper
 ) -> None:
     """
     Test the basic_example code snippets used in the documentation to explain the usage of unmanaged_resources.
@@ -173,6 +173,7 @@ async def test_docs_snippets_unmanaged_resources_basic(
     snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True, autostd=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 
+    await clienthelper.wait_for_released(version)
     await wait_until_deployment_finishes(client, environment, version=1)
 
     result = await client.discovered_resources_get_batch(tid=environment)
