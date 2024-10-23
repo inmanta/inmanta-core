@@ -26,9 +26,15 @@ from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffS
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_DATABASE, SLICE_DRYRUN, SLICE_TRANSPORT
-from inmanta.server import config as opt
-from inmanta.server import diff, protocol
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_DATABASE,
+    SLICE_DRYRUN,
+    SLICE_TRANSPORT,
+    diff,
+    protocol,
+)
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.types import Apireturn, JsonType
 
@@ -73,12 +79,8 @@ class DyrunService(protocol.ServerSlice):
         # Create a dryrun document
         dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
 
-        if opt.server_use_resource_scheduler.get():
-            agents = [const.AGENT_SCHEDULER_ID]
-            await self.autostarted_agent_manager._ensure_scheduler(env)
-        else:
-            agents = await data.ConfigurationModel.get_agents(env.id, version_id)
-            await self.autostarted_agent_manager._ensure_agents(env, agents)
+        agents = [const.AGENT_SCHEDULER_ID]
+        await self.autostarted_agent_manager._ensure_scheduler(env.id)
 
         agents_down = []
         for agent in agents:

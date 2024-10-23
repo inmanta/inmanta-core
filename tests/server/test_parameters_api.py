@@ -26,6 +26,7 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
+from inmanta.const import ParameterSource
 from inmanta.server.config import get_bind_port
 from inmanta.util import parse_timestamp
 
@@ -241,3 +242,19 @@ async def test_filter_validation(server, client, env_with_parameters):
     for filter, expected_status in filter_status_map:
         result = await client.get_parameters(env, filter=filter)
         assert result.code == expected_status
+
+
+async def test_get_set_param(environment, client, server):
+    """
+    Test getting and setting params
+    """
+
+    result = await client.set_param(tid=environment, id="key10", value="value10", source=ParameterSource.user)
+    assert result.code == 200
+
+    result = await client.get_param(tid=environment, id="key10")
+    assert result.code == 200
+    assert result.result["parameter"]["value"] == "value10"
+
+    result = await client.delete_param(tid=environment, id="key10")
+    assert result.code == 200

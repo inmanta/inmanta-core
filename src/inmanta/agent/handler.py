@@ -41,7 +41,6 @@ from inmanta.types import SimpleTypes
 from inmanta.util import hash_file
 
 if typing.TYPE_CHECKING:
-    import inmanta.agent.agent
     import inmanta.agent.executor
 
 

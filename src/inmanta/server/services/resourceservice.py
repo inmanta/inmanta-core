@@ -281,8 +281,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             "resource_types": list(ResourceType),  # ALL the types for this model version
         }
         """
-        if not self.agentmanager_service.is_primary(env, sid, agent):
-            return 409, {"message": f"This agent is not currently the primary for the endpoint {agent} (sid: {sid})"}
         if incremental_deploy:
             if version is not None:
                 return 500, {"message": "Cannot request increment for a specific version"}
