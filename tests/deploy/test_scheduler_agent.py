@@ -30,6 +30,7 @@ from typing import Mapping, Optional, Sequence
 import pytest
 
 import inmanta.types
+import utils
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
@@ -37,7 +38,6 @@ from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.data import ResourceIdStr
 from inmanta.deploy import state, tasks
-from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import BlockedStatus
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol.common import custom_json_encoder
@@ -62,6 +62,13 @@ async def retry_limited_fast(
 
 
 class DummyExecutor(executor.Executor):
+    """
+    A dummy executor:
+        * It doesn't actually do any deploys, but instead keeps track of the actions
+          (execute, dryrun, get_facts, etc.) that were requested on it.
+        * It reports a deploy as failed if the resource has an attribute with the value of the `FAIL_DEPLOY` variable.
+          Otherwise, the deploy is reported as successful.
+    """
 
     def __init__(self):
         self.execute_count = 0
@@ -134,6 +141,9 @@ class ManagedExecutor(DummyExecutor):
 
 
 class DummyManager(executor.ExecutorManager[executor.Executor]):
+    """
+    An ExecutorManager that allows you to set a custom (mocked) executor for a certain agent.
+    """
 
     def __init__(self):
         self.executors = {}
@@ -167,10 +177,25 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
 
 
 async def pass_method():
+    """
+    A dummy method that does nothing at all.
+    """
     pass
 
 
 class TestAgent(Agent):
+    """
+    An agent (scheduler) that mock everything:
+
+    * It uses a mocked ExecutorManager.
+    * A dummy code CodeManager.
+    * It mock the methods that interact with the database.
+
+    This allows you to:
+       * Test the interactions between the scheduler and the executor, without the overhead of any other components,
+         like the Inmanta server.
+       * The mocked components allow inspection of the deploy actions done by the executor.
+    """
 
     def __init__(
         self,
@@ -182,6 +207,7 @@ class TestAgent(Agent):
         self.scheduler.code_manager = DummyCodeManager(self._client)
         # Bypass DB
         self.scheduler.read_version = pass_method
+        self.scheduler._initialize = pass_method
         self.scheduler.mock_versions = {}
 
         async def build_resource_mappings_from_db(version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:
@@ -245,20 +271,6 @@ def make_resource_minimal(environment):
     return make_resource_minimal
 
 
-async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:
-    """
-    Return True iff the given agent has finished executing all its tasks.
-
-    :param scheduler: The resource scheduler that hands out work to the agent for which the done status has to be checked.
-    :param agent_name: The name of the agent for which the done status has to be checked.
-    """
-    agent_queue = scheduler._work.agent_queues._agent_queues.get(agent_name)
-    if not agent_queue:
-        # Agent queue doesn't exist -> Tasks have not been queued yet
-        return False
-    return agent_queue._unfinished_tasks == 0
-
-
 async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
     """
     Ensure the simples deploy scenario works: 2 dependant resources
@@ -272,7 +284,7 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
     }
 
     await agent.scheduler._new_version(5, resources, make_requires(resources))
-    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
 
     assert agent.executor_manager.executors["agent1"].execute_count == 2
 
@@ -780,7 +792,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
 
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     executor2.deploys[rid2].set_result(const.ResourceState.deployed)
-    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent3")
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent3")
 
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 1
@@ -1105,7 +1117,7 @@ async def test_dryrun(agent: TestAgent, make_resource_minimal, monkeypatch):
 
     dryrun = uuid.uuid4()
     await agent.scheduler.dryrun(dryrun, 5)
-    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
 
     assert agent.executor_manager.executors["agent1"].dry_run_count == 2
 
@@ -1126,7 +1138,7 @@ async def test_get_facts(agent: TestAgent, make_resource_minimal):
 
     await agent.scheduler.get_facts({"id": rid1})
 
-    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
 
     assert agent.executor_manager.executors["agent1"].facts_count == 1
 
@@ -1175,7 +1187,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         rid7: make_resource_minimal(rid=rid7, values={"value": "a"}, requires=[]),
     }
     await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
-    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
 
@@ -1209,7 +1221,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         rid=rid3, values={"value": "a"}, requires=[rid5, rid6], status=const.ResourceState.skipped_for_undefined
     )
     await agent.scheduler._new_version(version=2, resources=resources, requires=make_requires(resources))
-    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
 
     # rid1: transitively blocked on rid5 and rid6
@@ -1233,7 +1245,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         rid=rid2, values={"value": "b"}, requires=[rid5], status=const.ResourceState.available
     )
     await agent.scheduler._new_version(version=3, resources=resources, requires=make_requires(resources))
-    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
 
     # rid1: transitively blocked on rid6
@@ -1259,7 +1271,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         rid9: make_resource_minimal(rid=rid9, values={"value": "a"}, requires=[rid8], status=const.ResourceState.undefined),
     }
     await agent.scheduler._new_version(version=4, resources=resources, requires=make_requires(resources))
-    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 2
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
 
@@ -1270,7 +1282,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     resources[rid8] = make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[], status=const.ResourceState.available)
 
     await agent.scheduler._new_version(version=5, resources=resources, requires=make_requires(resources))
-    await retry_limited(is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 2
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
 
