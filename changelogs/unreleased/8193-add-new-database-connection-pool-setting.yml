@@ -1,0 +1,10 @@
+description: Add distinct database pool connection settings for server and scheduler.
+issue-nr: 8193
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: "TODO"
+  deprecation-note: >
+    The ``config.connection-pool-max-size`` setting is deprecated. Set the database pool size
+    for the server via the ``server.connection-pool-max-size`` configuration setting and for
+    each scheduler, on a per-environment basis, via the ``TBD`` environment setting.
