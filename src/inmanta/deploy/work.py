@@ -17,14 +17,12 @@
 """
 
 import asyncio
-import dataclasses
 import functools
-import itertools
 import typing
-from collections.abc import Iterator, Mapping, Set
+from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Callable, Generic, Optional, TypeVar
+from typing import Callable, Optional, TypeVar
 
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import tasks
@@ -209,10 +207,7 @@ class AgentQueues:
         """
         insert_order: int = priority_tiebreaker if priority_tiebreaker is not None else self._entry_count
         already_queued: Optional[TaskQueueItem] = self._queue_item_for_task(task)
-        if (
-            already_queued is not None
-            and (already_queued.priority, already_queued.insert_order) <= (priority, insert_order)
-        ):
+        if already_queued is not None and (already_queued.priority, already_queued.insert_order) <= (priority, insert_order):
             # task is already queued with equal or higher priority
             return
         # reschedule with new priority, no need to explicitly remove, this is achieved by setting self._tasks_by_resource
@@ -413,7 +408,7 @@ class ScheduledWork:
                 #   - queued @ higher (less urgent) priority & early insert order => eventually requeued at new priority and new
                 #       insert order
                 # -> test insert order by initially having one before and one after, then check new position
-                if discarded is not None and discarded[1] <= new_priority:
+                if discarded is not None and discarded[1] <= priority:
                     # currently scheduled task has same or lower priority (more urgent) than new one
                     # => keep priority and tiebreaker
                     new_priority, new_tiebreaker = discarded
@@ -443,9 +438,9 @@ class ScheduledWork:
                     # simply add it again, the queue will make sure only the highest priority is kept
                     self.agent_queues.queue_put_nowait(task, priority=priority)
                 if resource in self._waiting and priority < self._waiting[resource].priority:
-                        # TODO: test case (may already exist) + test that tiebreaker is reset
-                        self._waiting[resource].priority = priority
-                        self._waiting[resource].priority_tiebreaker = None
+                    # TODO: test case (may already exist) + test that tiebreaker is reset
+                    self._waiting[resource].priority = priority
+                    self._waiting[resource].priority_tiebreaker = None
                 continue
             # task is not yet scheduled, schedule it now
             blocked_on: set[ResourceIdStr] = {
