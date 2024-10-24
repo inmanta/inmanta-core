@@ -32,7 +32,7 @@ from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT, InvalidSort
+from inmanta.data import APILIMIT, InvalidSort, model
 from inmanta.data.dataview import (
     DiscoveredResourceView,
     ResourceHistoryView,
@@ -63,9 +63,10 @@ from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, Forbidden, NotFound, ServerError
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
 from inmanta.server import config as opt
 from inmanta.server import extensions, protocol
+from inmanta.server.services.environmentlistener import EnvironmentAction, EnvironmentListener
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 from inmanta.util import parse_timestamp
@@ -111,7 +112,7 @@ class ResourceActionLogLine(logging.LogRecord):
         self.relativeCreated = (self.created - logging._startTime) * 1000
 
 
-class ResourceService(protocol.ServerSlice):
+class ResourceService(protocol.ServerSlice, EnvironmentListener):
     """Resource Manager service"""
 
     agentmanager_service: "agentmanager.AgentManager"
@@ -148,6 +149,11 @@ class ResourceService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.agentmanager_service = cast("agentmanager.AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
+        # This is difficult to type without import loop
+        # The type is EnvironmentService
+        server.get_slice(SLICE_ENVIRONMENT).register_listener_for_multiple_actions(
+            self, [EnvironmentAction.deleted, EnvironmentAction.cleared]
+        )
 
     async def start(self) -> None:
         self.schedule(
@@ -158,9 +164,23 @@ class ResourceService(protocol.ServerSlice):
     async def stop(self) -> None:
         await super().stop()
 
-    def clear_env_cache(self, env: data.Environment) -> None:
+    def clear_env_cache(self, env: data.Environment | model.Environment) -> None:
         LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env.id)
         self._increment_cache[env.id] = None
+
+    async def environment_action_cleared(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is cleared
+        :param env: The environment that is cleared
+        """
+        self.clear_env_cache(env)
+
+    async def environment_action_deleted(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is deleted
+        :param env: The environment that is deleted
+        """
+        self.clear_env_cache(env)
 
     def get_resource_action_logger(self, environment: uuid.UUID) -> logging.Logger:
         """Get the resource action logger for the given environment.
@@ -261,8 +281,6 @@ class ResourceService(protocol.ServerSlice):
             "resource_types": list(ResourceType),  # ALL the types for this model version
         }
         """
-        if not self.agentmanager_service.is_primary(env, sid, agent):
-            return 409, {"message": f"This agent is not currently the primary for the endpoint {agent} (sid: {sid})"}
         if incremental_deploy:
             if version is not None:
                 return 500, {"message": "Cannot request increment for a specific version"}

@@ -30,13 +30,13 @@ from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
-from inmanta.deploy.scheduler import ResourceScheduler
+from inmanta.deploy import scheduler
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.types import Apireturn
 from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, Scheduler, TaskMethod, TaskSchedule, join_threadpools
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("inmanta.scheduler")
 
 
 class Agent(SessionEndpoint):
@@ -67,7 +67,7 @@ class Agent(SessionEndpoint):
         assert self._env_id is not None
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
-        self.scheduler = ResourceScheduler(self._env_id, self.executor_manager, self._client)
+        self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
 
         self._sched = Scheduler("new agent endpoint")
@@ -216,6 +216,7 @@ class Agent(SessionEndpoint):
         if name != AGENT_SCHEDULER_ID:
             return 404, "No such agent"
 
+        LOGGER.info("Scheduler started for environment %s", self.environment)
         await self.start_working()
         return 200
 
@@ -223,6 +224,7 @@ class Agent(SessionEndpoint):
         if name != AGENT_SCHEDULER_ID:
             return 404, "No such agent"
 
+        LOGGER.info("Scheduler stopped for environment %s", self.environment)
         await self.stop_working()
         return 200
 
@@ -246,6 +248,7 @@ class Agent(SessionEndpoint):
             LOGGER.warning("could not get state from the server")
 
     async def on_disconnect(self) -> None:
+        LOGGER.warning("Connection to server lost, stopping scheduler in environment %s", self.environment)
         await self.stop_working()
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
