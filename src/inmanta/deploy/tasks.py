@@ -190,7 +190,29 @@ class DryRun(Task):
             my_executor: executor.Executor = await self.get_executor(
                 task_manager, agent, executor_resource_details.id.entity_type, self.version
             )
-            await my_executor.dry_run([executor_resource_details], self.dry_run_id)
+
+            dryrun_results: list[executor.DryrunResult] = await my_executor.dry_run(
+                [executor_resource_details], self.dry_run_id
+            )
+            for dryrun_result in dryrun_results:
+                await task_manager._state_update_delegate.dryrun_update(
+                    environment=task_manager.environment,
+                    dryrun_id=dryrun_result.action_id,
+                    resource=dryrun_result.rvid,
+                    changes=dryrun_result.changes,
+                )
+                # Can we do this in bulk?
+                await task_manager._state_update_delegate.resource_action_update(
+                    env=task_manager.environment,
+                    resource_ids=[dryrun_result.rvid],
+                    action_id=dryrun_result.action_id,
+                    action=const.ResourceAction.dryrun,
+                    started=dryrun_result.started,
+                    finished=dryrun_result.finished,
+                    messages=dryrun_result.messages,
+                    status=const.ResourceState.dry,
+                )
+
         except Exception:
             # FIXME: seems weird to conclude undeployable state from generic Exception on either of two method calls
             logger_for_agent(agent).error(
@@ -198,9 +220,9 @@ class DryRun(Task):
                 executor_resource_details.rvid,
                 exc_info=True,
             )
-            await task_manager.client.dryrun_update(
-                tid=task_manager.environment,
-                id=self.dry_run_id,
+            await task_manager.dryrun_update(
+                environment=task_manager.environment,
+                dryrun_id=self.dry_run_id,
                 resource=executor_resource_details.rvid,
                 changes={"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}},
             )

@@ -28,7 +28,7 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import FailedResources, ResourceDetails
+from inmanta.agent.executor import DryrunResult, FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
@@ -307,24 +307,36 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self,
         resources: Sequence[ResourceDetails],
         dry_run_id: uuid.UUID,
-    ) -> None:
+    ) -> list[DryrunResult]:
         """
         Perform a dryrun for the given resources
 
         :param resources: Sequence of resources for which to perform a dryrun.
         :param dry_run_id: id for this dryrun
         """
+        dryrun_results: list[DryrunResult] = []
         async with self.activity_lock:
             with self._cache:
                 for resource in resources:
+                    started = datetime.datetime.now().astimezone()
                     try:
                         resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
                     except Exception:
-                        await self.client.dryrun_update(tid=self.environment, id=dry_run_id, resource=resource.rvid, changes={})
+                        changes = {}
+                        changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
+                        dryrun_results.append(
+                            DryrunResult(
+                                rvid=resource.rvid,
+                                action_id=dry_run_id,
+                                changes=changes,
+                                started=started,
+                                finished=datetime.datetime.now().astimezone(),
+                                messages=[],
+                            )
+                        )
                         continue
                     assert resource_obj is not None
                     ctx = handler.HandlerContext(resource_obj, True)
-                    started = datetime.datetime.now().astimezone()
                     provider = None
 
                     resource_id: ResourceVersionIdStr = resource.rvid
@@ -340,11 +352,15 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 resource_id=resource_id,
                                 exception=str(e),
                             )
-                            await self.client.dryrun_update(
-                                tid=self.environment,
-                                id=dry_run_id,
-                                resource=resource_id,
-                                changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
+                            dryrun_results.append(
+                                DryrunResult(
+                                    rvid=resource_id,
+                                    action_id=dry_run_id,
+                                    changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
+                                    started=started,
+                                    finished=datetime.datetime.now().astimezone(),
+                                    messages=ctx.logs,
+                                )
                             )
                         else:
                             try:
@@ -357,8 +373,15 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                     changes = {}
                                 if ctx.status == const.ResourceState.failed:
                                     changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                                await self.client.dryrun_update(
-                                    tid=self.environment, id=dry_run_id, resource=resource_id, changes=changes
+                                dryrun_results.append(
+                                    DryrunResult(
+                                        rvid=resource_id,
+                                        action_id=dry_run_id,
+                                        changes=changes,
+                                        started=started,
+                                        finished=datetime.datetime.now().astimezone(),
+                                        messages=ctx.logs,
+                                    )
                                 )
                             except Exception as e:
                                 ctx.exception(
@@ -370,32 +393,39 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 if changes is None:
                                     changes = {}
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                                await self.client.dryrun_update(
-                                    tid=self.environment, id=dry_run_id, resource=resource_id, changes=changes
+                                dryrun_results.append(
+                                    DryrunResult(
+                                        rvid=resource_id,
+                                        action_id=dry_run_id,
+                                        changes=changes,
+                                        started=started,
+                                        finished=datetime.datetime.now().astimezone(),
+                                        messages=ctx.logs,
+                                    )
                                 )
 
-                    except Exception:
-                        ctx.exception("Unable to process resource for dryrun.")
+                    except Exception as e:
+                        ctx.exception(
+                            "Unable to process resource %(resource_id)s for dryrun (exception: %(exception)s",
+                            resource_id=resource.rvid,
+                            exception=str(e),
+                        )
                         changes = {}
                         changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
-                        await self.client.dryrun_update(
-                            tid=self.environment, id=dry_run_id, resource=resource_id, changes=changes
+                        dryrun_results.append(
+                            DryrunResult(
+                                rvid=resource_id,
+                                action_id=dry_run_id,
+                                changes=changes,
+                                started=started,
+                                finished=datetime.datetime.now().astimezone(),
+                                messages=ctx.logs,
+                            )
                         )
                     finally:
                         if provider is not None:
                             provider.close()
-
-                        finished = datetime.datetime.now().astimezone()
-                        await self.client.resource_action_update(
-                            tid=self.environment,
-                            resource_ids=[resource_id],
-                            action_id=ctx.action_id,
-                            action=const.ResourceAction.dryrun,
-                            started=started,
-                            finished=finished,
-                            messages=ctx.logs,
-                            status=const.ResourceState.dry,
-                        )
+                return dryrun_results
 
     async def get_facts(self, resource: ResourceDetails) -> Apireturn:
         """

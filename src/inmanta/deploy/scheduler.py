@@ -18,28 +18,32 @@
 
 import abc
 import asyncio
+import datetime
 import logging
 import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
-from typing import Optional
+from typing import Any, Optional, Union
 
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import ConfigurationModel
-from inmanta.data.model import ResourceIdStr, ResourceType
+from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 from inmanta.deploy import work
+from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
+from inmanta.types import Apireturn
 
 LOGGER = logging.getLogger(__name__)
 
 
-class TaskManager(abc.ABC):
+class TaskManager(StateUpdateManager, abc.ABC):
     """
     Interface for communication with tasks (deploy.task.Task). Offers methods to inspect intent and to report task results.
     """
@@ -144,6 +148,7 @@ class ResourceScheduler(TaskManager):
         self.client = client
         self.code_manager = CodeManager(client)
         self.executor_manager = executor_manager
+        self._state_update_delegate = ToDbUpdateManager(environment)
 
     def reset(self) -> None:
         """
@@ -426,3 +431,48 @@ class ResourceScheduler(TaskManager):
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
+
+    async def send_in_progress(
+        self, action_id: uuid.UUID, resource_id: ResourceVersionIdStr
+    ) -> dict[ResourceIdStr, const.ResourceState]:
+        return await self._state_update_delegate.send_in_progress(action_id, resource_id)
+
+    async def resource_action_update(
+        self,
+        env: data.Environment,
+        resource_ids: list[ResourceVersionIdStr],
+        action_id: uuid.UUID,
+        action: const.ResourceAction,
+        started: datetime.datetime,
+        finished: datetime.datetime,
+        status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
+        messages: list[dict[str, Any]],
+        changes: dict[str, Any],
+        change: const.Change,
+        send_events: bool,
+        keep_increment_cache: bool = False,
+        is_increment_notification: bool = False,
+        only_update_from_states: Optional[set[const.ResourceState]] = None,
+        *,
+        connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
+    ) -> Apireturn:
+        return await self._state_update_delegate.resource_action_update(
+            env,
+            resource_ids,
+            action_id,
+            action,
+            started,
+            finished,
+            status,
+            messages,
+            changes,
+            change,
+            send_events,
+            keep_increment_cache,
+            is_increment_notification,
+            only_update_from_states,
+            connection=connection,
+        )
+
+    async def dryrun_update(self, environment, dryrun_id, resource, changes) -> dict[ResourceIdStr, const.ResourceState]:
+        return await self._state_update_delegate.dryrun_update(environment, dryrun_id, resource, changes)

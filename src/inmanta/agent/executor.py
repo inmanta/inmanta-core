@@ -41,7 +41,8 @@ from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
 from inmanta.const import ResourceState
-from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.data import LogLine
+from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
@@ -62,6 +63,16 @@ class AgentInstance(abc.ABC):
     @abc.abstractmethod
     def is_stopped(self) -> bool:
         pass
+
+
+@dataclass
+class DryrunResult:
+    rvid: ResourceVersionIdStr
+    action_id: uuid.UUID
+    changes: dict[str, AttributeStateChange]
+    started: datetime.datetime
+    finished: datetime.datetime
+    messages: list[LogLine]
 
 
 class ResourceDetails:
@@ -504,7 +515,7 @@ class Executor(abc.ABC):
         self,
         resources: Sequence[ResourceDetails],
         dry_run_id: uuid.UUID,
-    ) -> None:
+    ) -> list[DryrunResult]:
         """
         Perform a dryrun for the given resources
 
