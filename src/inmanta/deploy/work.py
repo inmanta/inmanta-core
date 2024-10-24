@@ -35,20 +35,6 @@ Type alias for the union of all task types. Allows exhaustive case matches.
 T = TypeVar("T", bound=tasks.Task, covariant=True)
 
 
-@dataclass(frozen=True, kw_only=True)
-class PrioritizedTask(Generic[T]):
-    """
-    Resource action task with a priority attached. Lower values represent a higher priority. Negative priorities are reserved
-    for internal use.
-
-    This is a stateless representation of a task with a priority attached, unlike TaskQueueItem, which is a stateful element
-    in the task queue.
-    """
-
-    task: T
-    priority: tuple[int, Optional[int]]
-
-
 @functools.total_ordering
 @dataclass(kw_only=True)
 class TaskQueueItem:
@@ -76,7 +62,7 @@ class TaskQueueItem:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
             return NotImplemented
-        return (self.priority, self.insert_order, self.deleted) == (other.priority, other.insert_order, self.deleted)
+        return (self.priority, self.insert_order, self.deleted) == (other.priority, other.insert_order, other.deleted)
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
@@ -84,7 +70,6 @@ class TaskQueueItem:
         return (self.priority, self.insert_order, not self.deleted) < (other.priority, other.insert_order, not other.deleted)
 
 
-# TODO: instead of Mapping, simply add property `queued: Set[tasks.Task]`
 class AgentQueues:
     """
     Per-agent priority queue for ready-to-execute tasks. Clients must not interact with the underlying priority queues directly,
