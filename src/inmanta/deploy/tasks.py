@@ -202,13 +202,13 @@ class Deploy(Task):
                 success = False
         finally:
             if deploy_result is not None:
-                # We ignaled start, so we signal end
+                # We signaled start, so we signal end
                 try:
                     await task_manager.send_deploy_done(deploy_result)
                 except Exception:
                     success = False
                     LOGGER.error(
-                        "Failed to report the start of the deployment to the server for %s",
+                        "Failed to report the end of the deployment to the server for %s",
                         resource_details.resource_id,
                         exc_info=True,
                     )

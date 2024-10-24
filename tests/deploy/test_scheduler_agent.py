@@ -97,10 +97,10 @@ class DummyExecutor(executor.Executor):
         return DeployResult(
             resource_details.rvid,
             action_id,
-            result,
-            [],
-            {},
-            Change.nochange,
+            status=result,
+            messages=[],
+            changes={},
+            change=Change.nochange,
         )
 
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
@@ -158,7 +158,7 @@ class ManagedExecutor(DummyExecutor):
         del self._deploys[resource_details.rid]
         self.execute_count += 1
 
-        return DeployResult(resource_details.rvid, action_id, result, [], {}, Change.nochange)
+        return DeployResult(resource_details.rvid, action_id, status=result, messages=[], changes={}, change=Change.nochange)
 
 
 class DummyManager(executor.ExecutorManager[executor.Executor]):
