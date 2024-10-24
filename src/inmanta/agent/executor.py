@@ -485,10 +485,14 @@ class DeployResult:
 
     @classmethod
     def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployResult":
+        if ctx.status is None:
+            ctx.warning("Deploy status field is None, failing!")
+            ctx.set_status(ResourceState.failed)
+
         return DeployResult(
             rvid=rvid,
             action_id=ctx.action_id,
-            status=ctx.status or ResourceState.failed,  # Todo: HANDLE
+            status=ctx.status or ResourceState.failed,
             messages=ctx.logs,
             changes=ctx.changes,
             change=ctx.change,
