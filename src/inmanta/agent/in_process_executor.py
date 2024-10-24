@@ -496,7 +496,9 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             await child.stop()
 
     async def start(self) -> None:
-        pass
+        assert all(e.is_stopped() for e in self.executors.values())
+        await self.join(thread_pool_finalizer=[], timeout=const.SHUTDOWN_GRACE_IOLOOP * 0.9)
+        self.executors.clear()
 
     async def stop_for_agent(self, agent_name: str) -> list[InProcessExecutor]:
         if agent_name in self.executors:

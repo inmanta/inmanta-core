@@ -184,6 +184,23 @@ class ModelState:
         self.resource_state.clear()
         self.types_per_agent.clear()
 
+    def add_up_to_date_resource(self, resource: ResourceIdStr, details: ResourceDetails) -> None:
+        """
+        Add a resource to this ModelState for which the desired state was successfully deployed before, has an up-to-date
+        desired state and for which the deployment isn't blocked at the moment.
+        """
+        self.resources[resource] = details
+        if resource in self.resource_state:
+            self.resource_state[resource].status = ResourceStatus.UP_TO_DATE
+            self.resource_state[resource].deployment_result = DeploymentResult.DEPLOYED
+            self.resource_state[resource].blocked = BlockedStatus.NO
+        else:
+            self.resource_state[resource] = ResourceState(
+                status=ResourceStatus.UP_TO_DATE, deployment_result=DeploymentResult.DEPLOYED, blocked=BlockedStatus.NO
+            )
+            self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
+        self.dirty.discard(resource)
+
     def block_resource(self, resource: ResourceIdStr, details: ResourceDetails, transient: bool) -> None:
         """
         Mark the given resource as blocked, i.e. it's not deployable. This method updates the resource details
