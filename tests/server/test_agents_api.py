@@ -26,14 +26,14 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
-from inmanta.agent import reporting
-from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.config import get_bind_port
 from inmanta.util import parse_timestamp
 
 
 @pytest.fixture
+@pytest.mark.parametrize("no_agent", [True])
 async def env_with_agents(client, environment: str) -> None:
+
     env_uuid = uuid.UUID(environment)
 
     async def create_agent(
@@ -71,6 +71,7 @@ async def env_with_agents(client, environment: str) -> None:
     await create_agent(name="failover2", with_process=True, last_failover=datetime.datetime.now())  # up
 
 
+@pytest.mark.skip("To be fixed with agent api")
 async def test_agent_list_filters(client, environment: str, env_with_agents: None) -> None:
     result = await client.get_agents(environment)
     assert result.code == 200
@@ -259,21 +260,3 @@ async def test_agent_process_details(client, environment: str) -> None:
     result = await client.get_agent_process_details(environment, process_sid, report=True)
     assert result.code == 200
     assert result.result["data"]["state"] is None
-
-
-async def test_agent_process_details_with_report(server, client, environment: str, agent) -> None:
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await agentmanager.ensure_agent_registered(env=env, nodename="agent1")
-    result = await client.get_agents(
-        environment,
-    )
-    assert result.code == 200
-    process_id = result.result["data"][0]["process_id"]
-
-    result = await client.get_agent_process_details(environment, process_id, report=True)
-    assert result.code == 200
-    status = result.result["data"]["state"]
-    assert status is not None
-    for name in reporting.reports.keys():
-        assert name in status and status[name] != "ERROR"

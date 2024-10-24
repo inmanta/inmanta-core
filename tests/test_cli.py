@@ -174,6 +174,7 @@ async def test_agent(server, client, environment, cli):
 
 
 @pytest.mark.parametrize("push_method", [([]), (["-p"]), (["-p", "--full"])])
+@pytest.mark.parametrize("auto_start_agent", [True])  # Allow autostart
 async def test_version(server, client, clienthelper, environment, cli, push_method):
     version = str(await clienthelper.get_version())
     resources = [

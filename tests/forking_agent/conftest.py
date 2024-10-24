@@ -24,13 +24,6 @@ import uuid
 
 import pytest
 
-import inmanta.agent
-import inmanta.agent.executor
-import inmanta.config
-import inmanta.data
-import inmanta.loader
-import inmanta.protocol.ipc_light
-import inmanta.util
 import utils
 from inmanta import const
 from inmanta.agent.forking_executor import MPManager
@@ -69,7 +62,7 @@ async def mp_manager_factory(tmp_path) -> typing.Iterator[typing.Callable[[uuid.
 
 
 @pytest.fixture
-async def mpmanager(mp_manager_factory, agent: inmanta.agent.Agent) -> MPManager:
+async def mpmanager(mp_manager_factory, agent) -> MPManager:
     return mp_manager_factory(agent.sessionid)
 
 

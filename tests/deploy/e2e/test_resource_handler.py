@@ -24,10 +24,10 @@ from typing import TypeVar
 import pytest
 
 from inmanta import const
-from inmanta.agent import Agent
 from inmanta.agent.handler import ResourceHandler
 from inmanta.protocol import SessionClient, VersionMatch, common
-from utils import _wait_until_deployment_finishes, log_contains, make_random_file
+from inmanta.util import get_compiler_version
+from utils import _deploy_resources, log_contains, make_random_file, wait_until_deployment_finishes
 
 T = TypeVar("T")
 
@@ -106,12 +106,12 @@ async def test_logging_error(resource_container, environment, client, agent, cli
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await _wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment, version)
     result = await client.get_resource(tid=environment, id=res_id_1, logs=False, status=True)
     assert result.code == 200
     assert result.result["status"] == "failed"
 
-    log_contains(caplog, "inmanta.agent", logging.ERROR, "Failed to serialize argument for log message")
+    log_contains(caplog, "conftest.agent1", logging.ERROR, "Failed to serialize argument for log message")
 
 
 @pytest.mark.parametrize(
@@ -119,7 +119,7 @@ async def test_logging_error(resource_container, environment, client, agent, cli
     ["test::FailFast", "test::FailFastCRUD", "test::BadPost", "test::BadPostCRUD"],
 )
 async def test_formatting_exception_messages(
-    resource_container, environment: str, client, agent: Agent, clienthelper, resource_type: str
+    resource_container, environment: str, client, agent, clienthelper, resource_type: str
 ) -> None:
     """
     Ensure that exception raised in the Handler are correctly formatted in the resource action log.
@@ -143,7 +143,7 @@ async def test_formatting_exception_messages(
     await clienthelper.put_version_simple(resources, version)
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    await _wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment, version)
 
     result = await client.get_resource_actions(
         tid=environment,
@@ -157,3 +157,96 @@ async def test_formatting_exception_messages(
     error_messages = [msg for msg in result.result["data"][0]["messages"] if msg["level"] == const.LogLevel.ERROR.value]
     assert len(error_messages) == 1, error_messages
     assert "(exception: Exception('An\nError\tMessage')" in error_messages[0]["msg"]
+
+
+async def test_format_token_in_logline(server, agent, client, environment, resource_container, caplog):
+    """Deploy a resource that logs a line that after formatting on the agent contains an invalid formatting character."""
+    version = (await client.reserve_version(environment)).result["data"]
+    resource_container.Provider.set("agent1", "key1", "incorrect_value")
+
+    resource = {
+        "key": "key1",
+        "value": "Test value %T",
+        "id": "test::Resource[agent1,key=key1],v=%d" % version,
+        "send_event": False,
+        "receive_events": False,
+        "purged": False,
+        "requires": [],
+    }
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[resource],
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+
+    assert result.code == 200
+
+    # do a deploy
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+    await wait_until_deployment_finishes(client, environment, version)
+
+    result = await client.get_version(environment, version)
+    assert result.result["model"]["done"] == 1
+
+    log_string = "Set key '%(key)s' to value '%(value)s'" % dict(key=resource["key"], value=resource["value"])
+    assert log_string in caplog.text
+
+
+async def test_deploy_handler_method(server, client, environment, agent, clienthelper, resource_container):
+    """
+    Test whether the resource states are set correctly when the deploy() method is overridden.
+    """
+
+    async def deploy_resource(set_state_to_deployed_in_handler: bool = False) -> const.ResourceState:
+        version = await clienthelper.get_version()
+        rvid = f"test::Deploy[agent1,key=key1],v={version}"
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "set_state_to_deployed": set_state_to_deployed_in_handler,
+                "id": rvid,
+                "send_event": False,
+                "receive_events": False,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+
+        await _deploy_resources(client, environment, resources, version, push=True)
+        await clienthelper.wait_for_released(version)
+        await wait_until_deployment_finishes(client, environment, version=version)
+
+        result = await client.get_resource(
+            tid=environment,
+            id=rvid,
+            status=True,
+        )
+        assert result.code == 200
+        return result.result["status"]
+
+    # No exception raise + no state set explicitly via Handler Context -> deployed state
+    assert const.ResourceState.deployed == await deploy_resource(set_state_to_deployed_in_handler=False)
+
+    # State is set explicitly via HandlerContext to deployed
+    assert const.ResourceState.deployed == await deploy_resource(set_state_to_deployed_in_handler=True)
+
+    # SkipResource exception is raised by handler
+    resource_container.Provider.set_skip("agent1", "key1", 1)
+    assert const.ResourceState.skipped == await deploy_resource()
+
+    # Exception is raised by handler
+    resource_container.Provider.set_fail("agent1", "key1", 1)
+    assert const.ResourceState.failed == await deploy_resource()

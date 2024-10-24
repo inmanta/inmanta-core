@@ -826,3 +826,23 @@ def test_attribute_value_of_id_has_str_type(snippetcompiler):
     id_attribute_value = resources[0].id.attribute_value
     assert isinstance(id_attribute_value, str)
     assert id_attribute_value == "123"
+
+
+async def test_export_duplicate(resource_container, snippetcompiler):
+    """
+    The exported should provide a compilation error when a resource is defined twice in a model
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        import test
+
+        test::Resource(key="test", value="foo")
+        test::Resource(key="test", value="bar")
+    """,
+        autostd=True,
+    )
+
+    with pytest.raises(CompilerException) as exc:
+        snippetcompiler.do_export()
+
+    assert "exists more than once in the configuration model" in str(exc.value)
