@@ -356,7 +356,9 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 DryrunResult(
                                     rvid=resource_id,
                                     action_id=dry_run_id,
-                                    changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
+                                    changes={
+                                        "handler": AttributeStateChange(current="FAILED", desired="Unable to find a handler")
+                                    },
                                     started=started,
                                     finished=datetime.datetime.now().astimezone(),
                                     messages=ctx.logs,

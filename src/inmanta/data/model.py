@@ -24,7 +24,7 @@ from collections import abc
 from collections.abc import Sequence
 from enum import Enum
 from itertools import chain
-from typing import ClassVar, NewType, Optional, Self, Union
+from typing import ClassVar, NewType, Optional, Self, TypeAlias, Union
 
 import pydantic
 import pydantic.schema

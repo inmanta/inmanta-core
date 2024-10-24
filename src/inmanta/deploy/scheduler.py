@@ -29,7 +29,7 @@ from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import ConfigurationModel
-from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 from inmanta.deploy import work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
@@ -474,5 +474,11 @@ class ResourceScheduler(TaskManager):
             connection=connection,
         )
 
-    async def dryrun_update(self, environment, dryrun_id, resource, changes) -> dict[ResourceIdStr, const.ResourceState]:
-        return await self._state_update_delegate.dryrun_update(environment, dryrun_id, resource, changes)
+    async def dryrun_update(
+        self,
+        env: uuid.UUID,
+        dryrun_id: uuid.UUID,
+        resource: ResourceVersionIdStr,
+        changes: dict[str, AttributeStateChange],
+    ) -> None:
+        await self._state_update_delegate.dryrun_update(env, dryrun_id, resource, changes)

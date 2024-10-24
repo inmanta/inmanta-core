@@ -26,7 +26,7 @@ from dataclasses import dataclass
 
 from inmanta import const, data, resources
 from inmanta.agent import executor
-from inmanta.data.model import ResourceIdStr, ResourceType
+from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType
 from inmanta.deploy import scheduler, state
 
 LOGGER = logging.getLogger(__name__)
@@ -221,10 +221,10 @@ class DryRun(Task):
                 exc_info=True,
             )
             await task_manager.dryrun_update(
-                environment=task_manager.environment,
+                env=task_manager.environment,
                 dryrun_id=self.dry_run_id,
                 resource=executor_resource_details.rvid,
-                changes={"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}},
+                changes={"handler": AttributeStateChange(current="FAILED", desired="Resource is in an undeployable state")},
             )
 
 

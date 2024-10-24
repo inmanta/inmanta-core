@@ -25,7 +25,7 @@ from uuid import UUID
 
 from inmanta import const, data
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change
-from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 from inmanta.protocol import Client
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
@@ -75,7 +75,9 @@ class StateUpdateManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def dryrun_update(self, environment, dryrun_id, resource, changes) -> None:
+    async def dryrun_update(
+        self, env: UUID, dryrun_id: UUID, resource: ResourceVersionIdStr, changes: dict[str, AttributeStateChange]
+    ) -> None:
         pass
 
 
@@ -100,9 +102,11 @@ class ToServerUpdateManager(StateUpdateManager):
             raise Exception("Failed to report the start of the deployment to the server")
         return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.result["data"].items()}
 
-    async def dryrun_update(self, environment, dryrun_id, resource, changes) -> None:
+    async def dryrun_update(
+        self, env: UUID, dryrun_id: UUID, resource: ResourceVersionIdStr, changes: dict[str, AttributeStateChange]
+    ) -> None:
         await self.client.dryrun_update(
-            tid=environment,
+            tid=env,
             id=dryrun_id,
             resource=resource,
             changes=changes,
@@ -127,7 +131,7 @@ class ToServerUpdateManager(StateUpdateManager):
         *,
         connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
     ) -> Apireturn:
-        await self.client.resource_action_update(
+        return await self.client.resource_action_update(
             tid=env,
             resource_ids=resource_ids,
             action_id=action_id,
@@ -210,7 +214,9 @@ class ToDbUpdateManager(StateUpdateManager, TaskHandler[None]):
         LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env)
         self._increment_cache[env] = None
 
-    async def dryrun_update(self, environment, dryrun_id, resource, changes):
+    async def dryrun_update(
+        self, env: UUID, dryrun_id: UUID, resource: ResourceVersionIdStr, changes: dict[str, AttributeStateChange]
+    ) -> None:
         # async with self.dryrun_lock: Should this class have this lock or one of the child classes?
         payload = {"changes": changes, "id_fields": Id.parse_id(resource).to_dict(), "id": resource}
         await data.DryRun.update_resource(dryrun_id, resource, payload)
@@ -492,3 +498,4 @@ class ToDbUpdateManager(StateUpdateManager, TaskHandler[None]):
                         )
 
             connection.call_after_tx(post_deploy_update)
+        return 200
