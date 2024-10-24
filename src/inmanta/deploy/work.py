@@ -185,7 +185,7 @@ class AgentQueues:
     ########################################
 
     # TODO: docstring
-    def queue_put_nowait(self, task: tasks.Task, *, priority: int, priority_tiebreaker: Optional[int] = None) -> None:
+    def queue_put_nowait(self, task: tasks.Task, *, priority: TaskPriority, priority_tiebreaker: Optional[int] = None) -> None:
         """
         Add a new task to the associated agent's queue.
         """
@@ -213,7 +213,6 @@ class AgentQueues:
         """
         poison_pill = TaskQueueItem(
             task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")),
-            task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")),
             priority=TaskPriority.TERMINATED,
             insert_order=0,
         )
@@ -234,7 +233,7 @@ class AgentQueues:
             # remove from the queue since it's been picked up
             self.discard(item.task)
             # add the item to _in_progress with the correct priority
-            self._in_progress[item.task.task] = item.task.priority
+            self._in_progress[item.task] = item.priority
             return item.task
 
     def task_done(self, agent: str, task: tasks.Task) -> None:
@@ -259,8 +258,8 @@ class BlockedDeploy:
 
     task: tasks.Deploy
     blocked_on: set[ResourceIdStr]
-    priority: int
-    priority_tiebreaker: Optional[int] = None
+    priority: TaskPriority
+    priority_tiebreaker: Optional[Tiebreaker] = None
 
 
 class ScheduledWork:
