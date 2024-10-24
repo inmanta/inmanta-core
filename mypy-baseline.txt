@@ -51,7 +51,6 @@ src/inmanta/protocol/ipc_light.py:0: error: Item "None" of "Transport | None" ha
 src/inmanta/protocol/ipc_light.py:0: error: Item "None" of "Transport | None" has no attribute "write"  [union-attr]
 src/inmanta/protocol/ipc_light.py:0: error: Invalid index type "UUID | None" for "dict[UUID, Future[object]]"; expected type "UUID"  [index]
 src/inmanta/tracing.py:0: error: Call to untyped function "AsyncPGInstrumentor" in typed context  [no-untyped-call]
-src/inmanta/tracing.py:0: error: Incompatible return value type (got "NoopSpan", expected "LogfireSpan")  [return-value]
 src/inmanta/types.py:0: error: "type" has no attribute "__supertype__"  [attr-defined]
 src/inmanta/execute/dataflow/__init__.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]
 src/inmanta/execute/dataflow/__init__.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]
@@ -895,7 +894,6 @@ src/inmanta/execute/scheduler.py:0: error: "<subclass of "DelayedResultVariable"
 src/inmanta/execute/scheduler.py:0: error: "<subclass of "DelayedResultVariable" and "RelationAttributeVariable">" has no attribute "attribute"  [attr-defined]
 src/inmanta/execute/scheduler.py:0: error: "<subclass of "DelayedResultVariable" and "RelationAttributeVariable">" has no attribute "attribute"  [attr-defined]
 src/inmanta/env.py:0: error: Argument 1 to "parse_requirements" has incompatible type "Sequence[CanonicalRequirement]"; expected "Sequence[str]"  [arg-type]
-src/inmanta/env.py:0: error: "type[WorkingSet]" has no attribute "_build_master"  [attr-defined]
 src/inmanta/env.py:0: error: Incompatible return value type (got "tuple[str | None, Loader | None] | None", expected "tuple[str | None, Loader] | None")  [return-value]
 src/inmanta/env.py:0: error: Item "None" of "ModuleSpec | None" has no attribute "submodule_search_locations"  [union-attr]
 src/inmanta/env.py:0: error: Item "None" of "ModuleSpec | None" has no attribute "submodule_search_locations"  [union-attr]
@@ -956,7 +954,6 @@ src/inmanta/app.py:0: error: Missing type parameters for generic type "Future"  
 src/inmanta/app.py:0: error: Argument 2 to "safe_shutdown" has incompatible type "Callable[[int | None], Coroutine[Any, Any, None]]"; expected "Callable[[], None]"  [arg-type]
 src/inmanta/app.py:0: error: Argument 2 to "safe_shutdown" has incompatible type "Callable[[int | None], Coroutine[Any, Any, None]]"; expected "Callable[[], None]"  [arg-type]
 src/inmanta/app.py:0: error: Incompatible types in assignment (expression has type "str | None", variable has type "int | None")  [assignment]
-src/inmanta/app.py:0: error: Incompatible types in assignment (expression has type "str | None", variable has type "int | None")  [assignment]
 src/inmanta/app.py:0: error: Argument 1 to "run" of "Exporter" has incompatible type "dict[str, Type]"; expected "dict[str, Entity] | None"  [arg-type]
 src/inmanta/app.py:0: error: No overload variant of "print" matches argument types "str", "TextIO | Any", "dict[str, object]"  [call-overload]
 src/inmanta/app.py:0: note: Possible overload variants:
@@ -983,7 +980,6 @@ src/inmanta/deploy/scheduler.py:0: error: "object" has no attribute "__iter__"; 
 src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/agent/forking_executor.py:0: note: This violates the Liskov substitution principle
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
-src/inmanta/agent/agent.py:0: error: Cannot determine type of "ratelimiter"  [has-type]
 src/inmanta/validation_type.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "Mapping[str, object] | None")  [assignment]
 src/inmanta/server/validate_filter.py:0: error: Incompatible return value type (got "Callable[[object], list[tuple[RangeOperator, int]] | None]", expected "Callable[[object, object], list[tuple[RangeOperator, int]] | None]")  [return-value]
 src/inmanta/server/validate_filter.py:0: error: Incompatible return value type (got "Callable[[object], list[tuple[RangeOperator, datetime]] | None]", expected "Callable[[object, object], list[tuple[RangeOperator, datetime]] | None]")  [return-value]
@@ -1047,7 +1043,6 @@ src/inmanta/model.py:0: error: Call to untyped function "ReferenceValue" in type
 src/inmanta/model.py:0: error: "Value" has no attribute "to_dict"  [attr-defined]
 src/inmanta/model.py:0: error: "Value" has no attribute "to_dict"  [attr-defined]
 src/inmanta/main.py:0: error: Returning Any from function declared to return "dict[str, Any] | None"  [no-any-return]
-src/inmanta/main.py:0: error: Value of type "object" is not indexable  [index]
 src/inmanta/main.py:0: error: Invalid index type "str" for "str"; expected type "SupportsIndex | slice"  [index]
 src/inmanta/main.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/main.py:0: error: Need type annotation for "bar"  [var-annotated]
@@ -1133,6 +1128,7 @@ src/inmanta/server/server.py:0: error: Argument 1 to "get_global_url_map" of "RE
 src/inmanta/server/services/resourceservice.py:0: error: Argument "args" to "__init__" of "LogRecord" has incompatible type "list[Never]"; expected "tuple[object, ...] | Mapping[str, object] | None"  [arg-type]
 src/inmanta/server/services/resourceservice.py:0: error: Module has no attribute "_startTime"  [attr-defined]
 src/inmanta/server/services/resourceservice.py:0: error: Missing type parameters for generic type "Feature"  [type-arg]
+src/inmanta/server/services/resourceservice.py:0: error: "ServerSlice" has no attribute "register_listener_for_multiple_actions"  [attr-defined]
 src/inmanta/server/services/resourceservice.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/server/services/resourceservice.py:0: error: Argument "changes" to "set_and_save" of "ResourceAction" has incompatible type "dict[ResourceVersionIdStr, dict[str, dict[str, Any]]]"; expected "dict[str, object]"  [arg-type]
 src/inmanta/server/services/resourceservice.py:0: error: Value of type variable "FuncT" of "__call__" of "handle" cannot be "Callable[[ResourceService, Environment, Id, UUID], Coroutine[Any, Any, dict[ResourceVersionIdStr, ResourceState]]]"  [type-var]
@@ -1151,7 +1147,6 @@ src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument "agents" to "_trigger_auto_deploy" of "OrchestrationService" has incompatible type "Collection[str]"; expected "Sequence[str] | None"  [arg-type]
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible return value type (got "ReturnValueWithMeta[Sequence[DesiredStateVersion]]", expected "ReturnValue[list[DesiredStateVersion]]")  [return-value]
 src/inmanta/server/agentmanager.py:0: error: Argument 1 to "ensure_agent_registered" of "AgentManager" has incompatible type "Environment | None"; expected "Environment"  [arg-type]
-src/inmanta/server/agentmanager.py:0: error: Argument 1 to "_ensure_scheduler" of "AutostartedAgentManager" has incompatible type "Environment | None"; expected "Environment"  [arg-type]
 src/inmanta/server/services/compilerservice.py:0: error: Incompatible types in assignment (expression has type "bool | int | float | str | dict[str, str | int | bool]", variable has type "int")  [assignment]
 src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for + ("None" and "timedelta")  [operator]
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"

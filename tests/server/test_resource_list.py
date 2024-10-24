@@ -558,15 +558,11 @@ async def test_deploy_summary(server, client, env_with_resources):
 
 
 @pytest.fixture
-async def very_big_env(server, client, environment, clienthelper, agent_factory, instances: int) -> int:
+async def very_big_env(server, client, environment, clienthelper, null_agent, instances: int) -> int:
+    agent = null_agent
     env_obj = await data.Environment.get_by_id(environment)
     await env_obj.set(data.AUTO_DEPLOY, True)
 
-    agent = await agent_factory(
-        environment=environment,
-        agent_map={f"agent{tenant_index}": "local:" for tenant_index in range(50)},
-        agent_names=[f"agent{tenant_index}" for tenant_index in range(50)],
-    )
     deploy_counter = 0
     # The mix:
     # 100 versions -> increments , all hashes change after 50 steps

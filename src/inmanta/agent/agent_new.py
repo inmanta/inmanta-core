@@ -30,12 +30,13 @@ from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
-from inmanta.deploy.scheduler import ResourceScheduler
+from inmanta.deploy import scheduler
+from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.types import Apireturn
 from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, Scheduler, TaskMethod, TaskSchedule, join_threadpools
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("inmanta.scheduler")
 
 
 class Agent(SessionEndpoint):
@@ -66,7 +67,7 @@ class Agent(SessionEndpoint):
         assert self._env_id is not None
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
-        self.scheduler = ResourceScheduler(self._env_id, self.executor_manager, self._client)
+        self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
 
         self._sched = Scheduler("new agent endpoint")
@@ -132,8 +133,24 @@ class Agent(SessionEndpoint):
                 return True
             return False
 
-        periodic_schedule("deploy", self.scheduler.deploy, self._deploy_interval, self._deploy_splay_value)
-        periodic_schedule("repair", self.scheduler.repair, self._repair_interval, self._repair_splay_value)
+        async def interval_deploy() -> None:
+            await self.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
+
+        async def interval_repair() -> None:
+            await self.scheduler.repair(TaskPriority.INTERVAL_REPAIR)
+
+        periodic_schedule(
+            "deploy",
+            interval_deploy,
+            self._deploy_interval,
+            self._deploy_splay_value,
+        )
+        periodic_schedule(
+            "repair",
+            interval_repair,
+            self._repair_interval,
+            self._repair_splay_value,
+        )
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self._sched.add_action(action, schedule)
@@ -199,6 +216,7 @@ class Agent(SessionEndpoint):
         if name != AGENT_SCHEDULER_ID:
             return 404, "No such agent"
 
+        LOGGER.info("Scheduler started for environment %s", self.environment)
         await self.start_working()
         return 200
 
@@ -206,6 +224,7 @@ class Agent(SessionEndpoint):
         if name != AGENT_SCHEDULER_ID:
             return 404, "No such agent"
 
+        LOGGER.info("Scheduler stopped for environment %s", self.environment)
         await self.stop_working()
         return 200
 
@@ -229,6 +248,7 @@ class Agent(SessionEndpoint):
             LOGGER.warning("could not get state from the server")
 
     async def on_disconnect(self) -> None:
+        LOGGER.warning("Connection to server lost, stopping scheduler in environment %s", self.environment)
         await self.stop_working()
 
     @protocol.handle(methods.trigger, env="tid", agent="id")

@@ -44,7 +44,6 @@ from inmanta.data.model import ResourceIdStr
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
-from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -865,23 +864,14 @@ class AgentManager(ServerSlice, SessionListener):
                 )
                 return 503, {"message": "The resource is in an undeployable state."}
 
-            rid: Id = Id.parse_id(res.resource_version_id)
-            version: int = rid.version
-
             # only request facts of a resource every _fact_resource_block time
             now = time.time()
             if (
                 resource_id not in self._fact_resource_block_set
                 or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now
             ):
-                if opt.server_use_resource_scheduler.get():
-                    await self._autostarted_agent_manager._ensure_scheduler(env)
-                    agent = const.AGENT_SCHEDULER_ID
-                else:
-                    agents = await data.ConfigurationModel.get_agents(env.id, version)
-                    await self._autostarted_agent_manager._ensure_agents(env, agents)
-                    agent = res.agent
-
+                await self._autostarted_agent_manager._ensure_scheduler(env_id)
+                agent = const.AGENT_SCHEDULER_ID
                 client = self.get_agent_client(env_id, agent)
                 if client is not None:
                     await client.get_parameter(str(env_id), agent, res.to_dict())
@@ -997,22 +987,11 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             autostart = await env.get(data.AUTOSTART_ON_START)
             if not autostart:
                 continue
-
-            if opt.server_use_resource_scheduler.get():
-                await self._ensure_scheduler(env)
-            else:
-                agents = await data.Agent.get_list(environment=env.id)
-                agent_list = {a.name for a in agents}
-                await self._ensure_agents(env, agent_list)
+            await self._ensure_scheduler(env.id)
 
     async def restart_agents(self, env: data.Environment) -> None:
         LOGGER.debug("Restarting agents in environment %s", env.id)
-        if opt.server_use_resource_scheduler.get():
-            await self._ensure_scheduler(env)
-        else:
-            agents = await data.Agent.get_list(environment=env.id)
-            agent_list = [a.name for a in agents]
-            await self._ensure_agents(env, agent_list, restart=True)
+        await self._ensure_scheduler(env.id)
 
     async def stop_agents(
         self,
@@ -1182,7 +1161,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
     # Start/Restart scheduler
     async def _ensure_scheduler(
         self,
-        env: data.Environment,
+        env: uuid.UUID,
         *,
         restart: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -1196,6 +1175,8 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         :return: True iff a new agent process was started.
         """
+        if no_start_scheduler:
+            return False
         if self._stopping:
             raise ShutdownInProgress()
 
@@ -1212,20 +1193,20 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         async with data.Agent.get_connection(connection) as connection:
             async with self.agent_lock:
                 # silently ignore requests if this environment is halted
-                refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+                refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env, connection=connection)
                 if refreshed_env is None:
-                    raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
-                env = refreshed_env
-                if env.halted:
+                    raise Exception("Can't ensure agent: environment %s does not exist" % env)
+                if refreshed_env.halted:
                     return False
 
-                if not restart and await self._agent_manager.are_agents_active(env.id, autostart_scheduler):
+                are_active = await self._agent_manager.are_agents_active(env, autostart_scheduler)
+                if not restart and are_active:
                     # do not start a new agent process if the agents are already active, regardless of whether their session
                     # is with an autostarted process or not.
                     return False
 
                 start_new_process: bool
-                if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is not None:
+                if env not in self._agent_procs or self._agent_procs[env].returncode is not None:
                     # Start new process if none is currently running for this environment.
                     # Otherwise trust that it tracks any changes to the agent map.
                     LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_scheduler)
@@ -1234,19 +1215,19 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     LOGGER.info(
                         "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
                         autostart_scheduler,
-                        self._agent_procs[env.id],
+                        self._agent_procs[env],
                     )
-                    await self._stop_autostarted_agents(env, connection=connection)
+                    await self._stop_autostarted_agents(refreshed_env, connection=connection)
                     start_new_process = True
                 else:
                     start_new_process = False
 
                 if start_new_process:
-                    self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
+                    self._agent_procs[env] = await self.__do_start_agent(refreshed_env, connection=connection)
 
                 # Wait for all agents to start
                 try:
-                    await self._wait_for_agents(env, autostart_scheduler, connection=connection)
+                    await self._wait_for_agents(refreshed_env, autostart_scheduler, connection=connection)
                 except asyncio.TimeoutError:
                     LOGGER.warning("Not all agent instances started successfully")
                 return start_new_process
@@ -1257,11 +1238,9 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         Start an autostarted agent process for the given environment. Should only be called if none is running yet.
         """
-        assert not no_auto_start_scheduler
+        assert not assert_no_start_scheduler
 
-        use_resource_scheduler: bool = opt.server_use_resource_scheduler.get()
-
-        config: str = await self._make_agent_config(env, connection=connection, scheduler=use_resource_scheduler)
+        config: str = await self._make_agent_config(env, connection=connection)
 
         config_dir = os.path.join(self._server_storage["agents"], str(env.id))
         if not os.path.exists(config_dir):
@@ -1287,7 +1266,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 Config._config_dir if Config._config_dir is not None else "",
                 "--log-file",
                 agent_log,
-                "scheduler" if use_resource_scheduler else "agent",
+                "scheduler",
             ],
             out,
             err,
@@ -1301,7 +1280,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         env: data.Environment,
         *,
         connection: Optional[asyncpg.connection.Connection],
-        scheduler: bool = False,
     ) -> str:
         """
         Generate the config file for the process that hosts the autostarted agents
@@ -1379,8 +1357,7 @@ ssl_ca_cert_file=%s
             config += """
 ssl=True
     """
-        if scheduler:
-            config += f"""
+        config += f"""
 [database]
 wait_time={opt.db_wait_time.get()}
 host={opt.db_host.get()}
@@ -1512,14 +1489,15 @@ password={opt.db_password.get()}
 
         :param env: The new environment
         """
-        if not opt.server_use_resource_scheduler.get():
-            return
-
         env_db = await data.Environment.get_by_id(env.id)
         # We need to make sure that the AGENT_SCHEDULER is registered to be up and running
         await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
-        if not no_auto_start_scheduler:
-            await self._ensure_scheduler(env_db)
+        if not (assert_no_start_scheduler or no_start_scheduler):
+            await self._ensure_scheduler(env.id)
 
 
-no_auto_start_scheduler = False
+# For testing only
+# Assert the scheduler will not be started (i.e. agent mock setup is correct)
+assert_no_start_scheduler = False
+# Ensure the scheduler is not started
+no_start_scheduler = False
