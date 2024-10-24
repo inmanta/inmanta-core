@@ -1097,7 +1097,6 @@ src/inmanta/model.py:0: error: Call to untyped function "ReferenceValue" in type
 src/inmanta/model.py:0: error: "Value" has no attribute "to_dict"  [attr-defined]
 src/inmanta/model.py:0: error: "Value" has no attribute "to_dict"  [attr-defined]
 src/inmanta/main.py:0: error: Returning Any from function declared to return "dict[str, Any] | None"  [no-any-return]
-src/inmanta/main.py:0: error: Value of type "object" is not indexable  [index]
 src/inmanta/main.py:0: error: Invalid index type "str" for "str"; expected type "SupportsIndex | slice"  [index]
 src/inmanta/main.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/main.py:0: error: Need type annotation for "bar"  [var-annotated]
@@ -1179,6 +1178,7 @@ src/inmanta/data/dataview.py:0: error: Return type "Sequence[dict[str, str]]" of
 src/inmanta/data/dataview.py:0: error: Argument "discovered_resource_id" to "DiscoveredResource" has incompatible type "object"; expected "ResourceIdStr"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument 1 to "loads" has incompatible type "object"; expected "str | bytes | bytearray"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument "discovery_resource_id" to "DiscoveredResource" has incompatible type "object"; expected "ResourceIdStr | None"  [arg-type]
+src/inmanta/server/services/compilerservice.py:0: error: Incompatible types in assignment (expression has type "bool | int | float | str | dict[str, str | int | bool]", variable has type "int")  [assignment]
 src/inmanta/server/server.py:0: error: Argument 1 to "get_global_url_map" of "RESTServer" has incompatible type "dict_values[str, ServerSlice]"; expected "list[CallTarget]"  [arg-type]
 src/inmanta/server/services/resourceservice.py:0: error: Argument "args" to "__init__" of "LogRecord" has incompatible type "list[Never]"; expected "tuple[object, ...] | Mapping[str, object] | None"  [arg-type]
 src/inmanta/server/services/resourceservice.py:0: error: Module has no attribute "_startTime"  [attr-defined]
@@ -1191,6 +1191,10 @@ src/inmanta/server/services/resourceservice.py:0: error: Value of type variable 
 src/inmanta/server/services/resourceservice.py:0: error: Unsupported target for indexed assignment ("Mapping[str, BaseModel | UUID | bool | int | float | datetime | str | Sequence[BaseModel | UUID | bool | int | float | datetime | str] | Mapping[str, BaseModel | UUID | bool | int | float | datetime | str]] | None")  [index]
 src/inmanta/server/services/resourceservice.py:0: error: Incompatible return value type (got "dict[ResourceIdStr, ResourceState]", expected "dict[str, ResourceState]")  [return-value]
 src/inmanta/server/services/resourceservice.py:0: error: Module "inmanta.server.protocol" does not explicitly export attribute "handle"  [attr-defined]
+src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for + ("None" and "timedelta")  [operator]
+src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"
+src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for > ("timedelta" and "datetime")  [operator]
+src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | timedelta"
 src/inmanta/server/services/orchestrationservice.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument 1 to "append" of "list" has incompatible type "Resource"; expected "dict[str, Any]"  [arg-type]
 src/inmanta/server/services/orchestrationservice.py:0: error: Unsupported target for indexed assignment ("Resource")  [index]
@@ -1201,8 +1205,3 @@ src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types in assignment (expression has type "set[str | None]", variable has type "set[str]")  [assignment]
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument "agents" to "_trigger_auto_deploy" of "OrchestrationService" has incompatible type "Collection[str]"; expected "Sequence[str] | None"  [arg-type]
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible return value type (got "ReturnValueWithMeta[Sequence[DesiredStateVersion]]", expected "ReturnValue[list[DesiredStateVersion]]")  [return-value]
-src/inmanta/server/services/compilerservice.py:0: error: Incompatible types in assignment (expression has type "bool | int | float | str | dict[str, str | int | bool]", variable has type "int")  [assignment]
-src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for + ("None" and "timedelta")  [operator]
-src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"
-src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for > ("timedelta" and "datetime")  [operator]
-src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | timedelta"
