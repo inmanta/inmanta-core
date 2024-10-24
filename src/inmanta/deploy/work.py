@@ -24,7 +24,7 @@ import typing
 from collections.abc import Iterator, Mapping, Set
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Callable, Generic, Optional, Self, TypeVar
+from typing import Callable, Generic, Optional, TypeVar
 
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import tasks
@@ -67,14 +67,10 @@ class TaskQueueItem:
 
     task: tasks.Task
     priority: TaskPriority
-    insert_order: int
+    insert_order: Tiebreaker
 
     # Mutable state
     deleted: bool = False
-
-    # TODO: this is not used?
-    def copy(self: Self) -> Self:
-        return dataclasses.replace(self, deleted=False)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
@@ -145,7 +141,6 @@ class AgentQueues:
         """
         return set(self._tasks_by_resource.get(resource, {}).keys())
 
-    # TODO: docstring
     def remove(self, task: tasks.Task) -> tuple[TaskPriority, Tiebreaker]:
         """
         Removes the given task from its associated agent queue. Raises KeyError if it is not in the queue.
@@ -159,7 +154,6 @@ class AgentQueues:
             del self._tasks_by_resource[task.resource]
         return queue_item.priority, queue_item.insert_order
 
-    # TODO: docstring
     def discard(self, task: tasks.Task) -> Optional[tuple[TaskPriority, Tiebreaker]]:
         """
         Removes the given task from its associated agent queue if it is present.
@@ -185,9 +179,14 @@ class AgentQueues:
     ########################################
 
     # TODO: docstring
-    def queue_put_nowait(self, task: tasks.Task, *, priority: TaskPriority, priority_tiebreaker: Optional[int] = None) -> None:
+    def queue_put_nowait(
+        self, task: tasks.Task, *, priority: TaskPriority, priority_tiebreaker: Optional[Tiebreaker] = None
+    ) -> None:
         """
         Add a new task to the associated agent's queue.
+
+        :param task: The task to queue.
+        :param priority: The priority to queue the task at.
         """
         insert_order: int = priority_tiebreaker if priority_tiebreaker is not None else self._entry_count
         already_queued: Optional[TaskQueueItem] = self._queue_item_for_task(task)
