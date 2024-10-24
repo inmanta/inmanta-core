@@ -19,7 +19,7 @@
 import abc
 import datetime
 import logging
-from typing import Any, Sequence
+from typing import Any
 from uuid import UUID
 
 from asyncpg import UniqueViolationError
@@ -225,7 +225,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     # All other data is stored in the database. The msg was already formatted at the client side.
                     self.log_resource_action(
                         self.environment,
-                        [resource_id_str],
+                        resource_id_str,
                         log.log_level.to_int,
                         log.timestamp,
                         log.msg,
@@ -275,16 +275,11 @@ class ToDbUpdateManager(StateUpdateManager):
                     )
 
     def log_resource_action(
-        self, env: UUID, resource_ids: Sequence[str], log_level: int, ts: datetime.datetime, message: str
+        self, env: UUID, resource_id: ResourceVersionIdStr, log_level: int, ts: datetime.datetime, message: str
     ) -> None:
         """Write the given log to the correct resource action logger"""
         logger = self.get_resource_action_logger(env)
-        if len(resource_ids) == 0:
-            message = "no resources: " + message
-        elif len(resource_ids) > 1:
-            message = "multiple resources: " + message
-        else:
-            message = resource_ids[0] + ": " + message
+        message = resource_id + ": " + message
         log_record = ResourceActionLogLine(logger.name, log_level, message, ts)
         logger.handle(log_record)
 

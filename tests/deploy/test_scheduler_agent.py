@@ -25,7 +25,7 @@ import typing
 import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, Optional, Sequence, Tuple
 from uuid import UUID
 
 import pytest
@@ -194,7 +194,9 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
 
-state_translation_table = {
+state_translation_table: dict[const.ResourceState, Tuple[state.DeploymentResult, state.BlockedStatus, state.ResourceStatus]] = {
+    # A table to translate the old states into the new states
+    # None means don't care, mostly used for values we can't derive from the old state
     const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ResourceStatus.UNDEFINED),
     const.ResourceState.skipped: (None, state.BlockedStatus.YES, None),
     const.ResourceState.dry: (None, None, None),  # don't care
@@ -221,6 +223,7 @@ class DummyStateManager(StateUpdateManager):
         self.state[Id.parse_id(result.rvid).resource_str()] = result.status
 
     def check_with_scheduler(self, scheduler: ResourceScheduler) -> None:
+        """Verify that the state we collected corresponds to the state as known by the scheduler"""
         assert self.state
         for resource, cstate in self.state.items():
             deploy_result, blocked, status = state_translation_table[cstate]
