@@ -31,7 +31,7 @@ from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVers
 from inmanta.protocol import Client
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
-from inmanta.server.services.resourceservice import ResourceActionLogLine
+from inmanta.server.services import resourceservice
 
 LOGGER = logging.getLogger(__name__)
 
@@ -280,7 +280,7 @@ class ToDbUpdateManager(StateUpdateManager):
         """Write the given log to the correct resource action logger"""
         logger = self.get_resource_action_logger(env)
         message = resource_id + ": " + message
-        log_record = ResourceActionLogLine(logger.name, log_level, message, ts)
+        log_record = resourceservice.ResourceActionLogLine(logger.name, log_level, message, ts)
         logger.handle(log_record)
 
     def get_resource_action_logger(self, environment: UUID) -> logging.Logger:
