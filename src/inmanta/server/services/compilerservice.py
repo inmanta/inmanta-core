@@ -258,7 +258,7 @@ class CompileRun:
 
             if not os.path.exists(project_dir):
                 await self._info(f"Creating project directory for environment {environment_id} at {project_dir}")
-                os.mkdir(project_dir)
+                os.makedirs(project_dir)
 
             # Use a separate venv to compile the project to prevent that packages are installed in the
             # venv of the Inmanta server.
@@ -518,7 +518,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
     2. find all unhandled but complete jobs and run _notify_listeners on them
     """
 
-    _env_folder: str
+    _server_state_dir: str
     environment_service: "environmentservice.EnvironmentService"
 
     def __init__(self) -> None:
@@ -558,8 +558,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
     async def prestart(self, server: server.protocol.Server) -> None:
         await super().prestart(server)
         state_dir: str = config.state_dir.get()
-        server_state_dir = ensure_directory_exist(state_dir, "server")
-        self._env_folder = ensure_directory_exist(server_state_dir, "environments")
+        self._server_state_dir = ensure_directory_exist(state_dir, "server")
 
     async def start(self) -> None:
         await super().start()
@@ -946,7 +945,9 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             if not c.id == compile.id and CompilerService._compile_merge_key(c) == compile_merge_key
         ]
 
-        runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
+        runner = self._get_compile_runner(
+            compile, project_dir=os.path.join(self._server_state_dir, str(compile.environment), "compiler")
+        )
 
         merged_env_vars = dict(compile.mergeable_environment_variables)
         for merge_candidate in merge_candidates:

@@ -21,6 +21,7 @@ import base64
 import hashlib
 import logging
 import os
+import pathlib
 import py_compile
 import tempfile
 import uuid
@@ -55,7 +56,14 @@ async def agent(server, environment, deactive_venv):
     a = Agent(environment)
 
     executor = InProcessExecutorManager(
-        environment, a._client, asyncio.get_event_loop(), LOGGER, a.thread_pool, a._storage["code"], a._storage["env"], True
+        environment,
+        a._client,
+        asyncio.get_event_loop(),
+        LOGGER,
+        a.thread_pool,
+        str(pathlib.Path(a._storage["executors"]) / "code"),
+        str(pathlib.Path(a._storage["executors"]) / "venvs"),
+        True,
     )
     a.executor_manager = executor
     a.scheduler.executor_manager = executor

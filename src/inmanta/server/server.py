@@ -19,13 +19,13 @@
 import asyncio
 import json
 import logging
-import os
+import pathlib
 import uuid
 from typing import TYPE_CHECKING, Optional, Union, cast
 
 from tornado import routing, web
 
-from inmanta import config, data
+from inmanta import config, const, data
 from inmanta.const import ApiDocsFormat
 from inmanta.data.model import FeatureStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, handle, methods, methods_v2
@@ -34,6 +34,7 @@ from inmanta.protocol.openapi.converter import OpenApiConverter
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT, protocol
 from inmanta.types import Apireturn, JsonType, Warnings
+from inmanta.util import ensure_directory_exist
 
 LOGGER = logging.getLogger(__name__)
 
@@ -80,18 +81,16 @@ class Server(protocol.ServerSlice):
         Check if the server storage is configured and ready to use.
         """
 
-        def _ensure_directory_exist(directory: str, *subdirs: str) -> str:
-            directory = os.path.join(directory, *subdirs)
-            if not os.path.exists(directory):
-                os.mkdir(directory)
-            return directory
-
         state_dir = config.state_dir.get()
-        server_state_dir = os.path.join(state_dir, "server")
-        dir_map = {"server": _ensure_directory_exist(state_dir, "server")}
-        dir_map["environments"] = _ensure_directory_exist(server_state_dir, "environments")
-        dir_map["agents"] = _ensure_directory_exist(server_state_dir, "agents")
-        dir_map["logs"] = _ensure_directory_exist(config.log_dir.get())
+
+        # Add marker file to indicate we are using the new disk layout
+        path = pathlib.Path(state_dir) / const.INMANTA_USE_NEW_DISK_LAYOUT_FILENAME
+        path.touch()
+
+        dir_map = {
+            "server": ensure_directory_exist(state_dir, "server"),
+            "logs": ensure_directory_exist(config.log_dir.get()),
+        }
         return dir_map
 
     @handle(methods.notify_change_get, env="id")

@@ -239,7 +239,7 @@ function __inmanta_workon_environments_dir {
 
     declare result
     result=$(
-        "$INMANTA_WORKON_PYTHON" -c 'import os; from inmanta.config import state_dir; print(os.path.join(state_dir.get(), "server", "environments"));' 2> /dev/null
+        "$INMANTA_WORKON_PYTHON" -c 'import os; from inmanta.config import state_dir; print(os.path.join(state_dir.get(), "server"));' 2> /dev/null
     )
 
     if [ ! "$?" -eq 0 ]; then
@@ -308,19 +308,20 @@ function __inmanta_workon_activate {
 
     declare env_name="$1"
     declare env_id="$2"
-    declare envs_dir="$3"
+    declare server_dir="$3"
+    declare compiler_dir="$server_dir/$env_id/compiler"
 
-    if [ ! -d "$envs_dir/$env_id" ]; then
-        echo "ERROR: Directory '$envs_dir/$env_id' does not exist. This may mean the environment has never started a compile." >&2
+    if [ ! -d "$compiler_dir" ]; then
+        echo "ERROR: Directory '$compiler_dir' does not exist. This may mean the environment has never started a compile." >&2
         return 1
     fi
 
     # change directory
-    command cd "$envs_dir/$env_id"
+    command cd "$compiler_dir"
 
-    activate="$envs_dir/$env_id/.env/bin/activate"
+    activate="$compiler_dir/.env/bin/activate"
     if [ ! -f "$activate" ]; then
-        echo "ERROR: Environment '$envs_dir/$env_id' does not contain a venv. This may mean it has never started a compile." >&2
+        echo "ERROR: Environment '$compiler_dir' does not contain a venv. This may mean it has never started a compile." >&2
         return 1
     fi
 
