@@ -220,7 +220,7 @@ class DryRun(Task):
                 executor_resource_details.rvid,
                 exc_info=True,
             )
-            await task_manager.dryrun_update(
+            await task_manager._state_update_delegate.dryrun_update(
                 env=task_manager.environment,
                 dryrun_id=self.dry_run_id,
                 resource=executor_resource_details.rvid,
