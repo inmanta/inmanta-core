@@ -20,12 +20,13 @@ import asyncio
 import logging
 from functools import partial
 
+import pytest
+
+import utils
 from inmanta import config, const
 from inmanta.agent.agent_new import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
-import pytest
-import utils
 
 
 @pytest.fixture
