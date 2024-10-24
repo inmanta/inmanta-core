@@ -2361,6 +2361,9 @@ NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
 RECOMPILE_BACKOFF = "recompile_backoff"
 ENVIRONMENT_METRICS_RETENTION = "environment_metrics_retention"
+SCHEDULER_DB_CONNECTION_POOL_MIN_SIZE = "scheduler_db_connection_pool_min_size"
+SCHEDULER_DB_CONNECTION_POOL_MAX_SIZE = "scheduler_db_connection_pool_max_size"
+SCHEDULER_DB_CONNECTION_TIMEOUT = "scheduler_db_connection_timeout"
 
 
 class Setting:
@@ -2643,6 +2646,29 @@ class Environment(BaseDocument):
             doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
             "Default=336 hours (2 weeks). Set to 0 to disable automatic cleanups.",
             validator=convert_int,
+        ),
+        SCHEDULER_DB_CONNECTION_POOL_MIN_SIZE: Setting(
+            name=SCHEDULER_DB_CONNECTION_POOL_MIN_SIZE,
+            typ="int",
+            default=1,
+            doc="The database connection pool will be initialized with this number of connections for"
+                "the resource scheduler in this environment.",
+            validator=convert_int,
+        ),
+        SCHEDULER_DB_CONNECTION_POOL_MAX_SIZE: Setting(
+            name=SCHEDULER_DB_CONNECTION_POOL_MAX_SIZE,
+            typ="int",
+            default=5,
+            doc="Limit the size of the database connection pool to this number of connections for"
+                "the resource scheduler in this environment.",
+            validator=convert_int,
+        ),
+        SCHEDULER_DB_CONNECTION_TIMEOUT: Setting(
+            name=SCHEDULER_DB_CONNECTION_TIMEOUT,
+            typ="float",
+            default=60.0,
+            doc="Database connection timeout in seconds.",
+            validator=convert_positive_float,
         ),
     }
 

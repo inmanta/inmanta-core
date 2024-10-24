@@ -44,13 +44,15 @@ db_port = Option("database", "port", 5432, "The port of the postgresql server", 
 db_name = Option("database", "name", "inmanta", "The name of the database on the postgresql server", is_str)
 db_username = Option("database", "username", "postgres", "The username to access the database in the PostgreSQL server", is_str)
 db_password = Option("database", "password", None, "The password that belong to the database user", is_str)
+
 db_connection_pool_min_size = Option(
-    "database", "connection_pool_min_size", 10, "Number of connections the pool will be initialized with", is_int
+    "database", "connection_pool_min_size", 5, "Number of connections the database connection pool will be initialized with", is_int
 )
 db_connection_pool_max_size = Option(
-    "database", "connection_pool_max_size", 70, "Max number of connections in the pool", is_int
+    "database", "connection_pool_max_size", 35, "Max number of connections in the database connection pool", is_int
 )
 db_connection_timeout = Option("database", "connection_timeout", 60, "Connection timeout in seconds", is_float)
+
 
 #############################
 # server_rest_transport

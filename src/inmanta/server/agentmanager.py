@@ -1298,6 +1298,10 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         agent_repair_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME, connection=connection))
         agent_repair_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection))
 
+        db_connection_pool_min_size: int = cast(int, await env.get(data.SCHEDULER_DB_CONNECTION_POOL_MIN_SIZE, connection=connection))
+        db_connection_pool_max_size: int = cast(int, await env.get(data.SCHEDULER_DB_CONNECTION_POOL_MAX_SIZE, connection=connection))
+        db_connection_timeout: float = cast(float, await env.get(data.SCHEDULER_DB_CONNECTION_TIMEOUT, connection=connection))
+
         # generate config file
         config = f"""[config]
 state-dir=%(statedir)s
@@ -1365,9 +1369,11 @@ port={opt.db_port.get()}
 name={opt.db_name.get()}
 username={opt.db_username.get()}
 password={opt.db_password.get()}
+connection_pool_min_size={db_connection_pool_min_size}
+connection_pool_max_size={db_connection_pool_max_size}
+connection_timeout={db_connection_timeout}
 
             """
-        # TODO: connection pool
         return config
 
     async def _fork_inmanta(
