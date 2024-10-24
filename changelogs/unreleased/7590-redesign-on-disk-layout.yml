@@ -1,4 +1,10 @@
-description: Refactor agent/server on-disk layout.
+description: >
+  Redesign the server on-disk layout. The server will now store its state in the ``<state-dir>/server``
+  directory.
 change-type: major
 destination-branches: [master]
-
+sections:
+  minor-improvement: "{{description}}"
+  upgrade-note: >
+    Any remaining file or directory part of the 'old' disk layout can safely be removed.
+    i.e. all files/directories in ``<state-dir>`` besides the ``server`` directory.
