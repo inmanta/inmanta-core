@@ -138,6 +138,7 @@ class AgentCache:
 
         # Time-based eviction mechanism
         # Keep track of when is the next earliest cache item expiry time.
+        # TODO: sys.maxsize is proabbly not appropriate
         self.next_action: float = sys.maxsize
         # Heap queue of cache items, used for efficient retrieval of the cache
         # item that expires the soonest. should only be mutated via the heapq API.
