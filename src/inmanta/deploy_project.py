@@ -286,16 +286,12 @@ host=localhost
         self._environment_id = env_id
 
         # link the project into the server environment
-        env_dir = os.path.join(self._data_path, "state", "server", self._environment_id, "compiler")
-        symlink_name = os.path.join(env_dir, "compiler")
-        if not os.path.exists(env_dir):
-            os.makedirs(env_dir, exist_ok=True)
         project_path = os.path.abspath(self._project_path)
-        # Create a symbolic link pointing to src=project_path named dst= symlink_name.
-        if not os.path.islink(symlink_name) or os.readlink(symlink_name) != project_path:
-            if os.path.exists(symlink_name):
-                os.unlink(symlink_name)
-            os.symlink(src=project_path, dst=symlink_name)
+        env_dir = os.path.join(self._data_path, "state", "server", self._environment_id, "compiler")
+        if not os.path.islink(env_dir) or os.readlink(env_dir) != project_path:
+            if os.path.exists(env_dir):
+                os.unlink(env_dir)
+            os.symlink(src=project_path, dst=env_dir)
 
         return True
 
