@@ -68,7 +68,7 @@ class AgentInstance(abc.ABC):
 @dataclass
 class DryrunResult:
     rvid: ResourceVersionIdStr
-    action_id: uuid.UUID
+    dryrun_id: uuid.UUID
     changes: dict[str, AttributeStateChange]
     started: datetime.datetime
     finished: datetime.datetime
@@ -513,13 +513,13 @@ class Executor(abc.ABC):
     @abc.abstractmethod
     async def dry_run(
         self,
-        resources: Sequence[ResourceDetails],
+        resource: ResourceDetails,
         dry_run_id: uuid.UUID,
-    ) -> list[DryrunResult]:
+    ) -> DryrunResult:
         """
         Perform a dryrun for the given resources
 
-        :param resources: Sequence of resources for which to perform a dryrun.
+        :param resource: Resource to perform a dryrun.
         :param dry_run_id: id for this dryrun
         """
         pass

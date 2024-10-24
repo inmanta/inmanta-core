@@ -469,15 +469,15 @@ class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, execut
     def __init__(
         self,
         agent_name: str,
-        resources: typing.Sequence["inmanta.agent.executor.ResourceDetails"],
+        resource: "inmanta.agent.executor.ResourceDetails",
         dry_run_id: uuid.UUID,
     ) -> None:
         self.agent_name = agent_name
-        self.resources = resources
+        self.resource = resource
         self.dry_run_id = dry_run_id
 
-    async def call(self, context: ExecutorContext) -> list[executor.DryrunResult]:
-        return await context.get(self.agent_name).dry_run(self.resources, self.dry_run_id)
+    async def call(self, context: ExecutorContext) -> executor.DryrunResult:
+        return await context.get(self.agent_name).dry_run(self.resource, self.dry_run_id)
 
 
 class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, const.ResourceState]):
@@ -793,10 +793,10 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
 
     async def dry_run(
         self,
-        resources: typing.Sequence["inmanta.agent.executor.ResourceDetails"],
+        resource: "inmanta.agent.executor.ResourceDetails",
         dry_run_id: uuid.UUID,
-    ) -> list[executor.DryrunResult]:
-        return await self.call(DryRunCommand(self.id.agent_name, resources, dry_run_id))
+    ) -> executor.DryrunResult:
+        return await self.call(DryRunCommand(self.id.agent_name, resource, dry_run_id))
 
     async def execute(
         self,

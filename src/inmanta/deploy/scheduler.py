@@ -32,7 +32,7 @@ from inmanta.data import ConfigurationModel
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 from inmanta.deploy import work
-from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
+from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager, ToServerUpdateManager
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
@@ -148,7 +148,7 @@ class ResourceScheduler(TaskManager):
         self.client = client
         self.code_manager = CodeManager(client)
         self.executor_manager = executor_manager
-        self._state_update_delegate = ToDbUpdateManager(environment)
+        self._state_update_delegate = ToServerUpdateManager(client, environment)
 
     def reset(self) -> None:
         """
@@ -437,48 +437,5 @@ class ResourceScheduler(TaskManager):
     ) -> dict[ResourceIdStr, const.ResourceState]:
         return await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
-    async def resource_action_update(
-        self,
-        env: data.Environment,
-        resource_ids: list[ResourceVersionIdStr],
-        action_id: uuid.UUID,
-        action: const.ResourceAction,
-        started: datetime.datetime,
-        finished: datetime.datetime,
-        status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
-        messages: list[dict[str, Any]],
-        changes: dict[str, Any],
-        change: const.Change,
-        send_events: bool,
-        keep_increment_cache: bool = False,
-        is_increment_notification: bool = False,
-        only_update_from_states: Optional[set[const.ResourceState]] = None,
-        *,
-        connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
-    ) -> Apireturn:
-        return await self._state_update_delegate.resource_action_update(
-            env,
-            resource_ids,
-            action_id,
-            action,
-            started,
-            finished,
-            status,
-            messages,
-            changes,
-            change,
-            send_events,
-            keep_increment_cache,
-            is_increment_notification,
-            only_update_from_states,
-            connection=connection,
-        )
-
-    async def dryrun_update(
-        self,
-        env: uuid.UUID,
-        dryrun_id: uuid.UUID,
-        resource: ResourceVersionIdStr,
-        changes: dict[str, AttributeStateChange],
-    ) -> None:
-        await self._state_update_delegate.dryrun_update(env, dryrun_id, resource, changes)
+    async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
+        await self._state_update_delegate.dryrun_update(env, dryrun_result)
