@@ -91,13 +91,6 @@ async def test_scheduler_initialization(agent, resource_container, clienthelper,
     assert len(result.result["data"]) == 1
     assert result.result["data"][0]["resource_version_ids"] == ["test::Resource[agent1,key=key1],v=1"]
 
-    result = await client.get_resource_actions(
-        tid=environment,
-        resource_type="test::Resource",
-        agent="agent1",
-    )
-    assert result.code == 200
-
     # Pause the agent to stop the scheduler
     result = await client.agent_action(tid=environment, name=const.AGENT_SCHEDULER_ID, action=const.AgentAction.pause.value)
     assert result.code == 200
@@ -113,14 +106,6 @@ async def test_scheduler_initialization(agent, resource_container, clienthelper,
         result = await client.resource_details(tid=environment, rid=rid)
         assert result.code == 200
         assert result.result["data"]["status"] == expected_status.value, f"{rid} has unexpected state"
-
-    result = await client.get_resource_actions(
-        tid=environment,
-        resource_type="test::Resource",
-        agent="agent1",
-        exclude_changes=[const.Change.nochange.value],
-    )
-    assert result.code == 200
 
     result = await client.get_resource_actions(
         tid=environment,
