@@ -2652,7 +2652,7 @@ class Environment(BaseDocument):
             typ="int",
             default=1,
             doc="The database connection pool will be initialized with this number of connections for"
-                "the resource scheduler in this environment.",
+            "the resource scheduler in this environment.",
             validator=convert_int,
         ),
         SCHEDULER_DB_CONNECTION_POOL_MAX_SIZE: Setting(
@@ -2660,7 +2660,7 @@ class Environment(BaseDocument):
             typ="int",
             default=5,
             doc="Limit the size of the database connection pool to this number of connections for"
-                "the resource scheduler in this environment.",
+            "the resource scheduler in this environment.",
             validator=convert_int,
         ),
         SCHEDULER_DB_CONNECTION_TIMEOUT: Setting(

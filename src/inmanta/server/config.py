@@ -46,7 +46,11 @@ db_username = Option("database", "username", "postgres", "The username to access
 db_password = Option("database", "password", None, "The password that belong to the database user", is_str)
 
 db_connection_pool_min_size = Option(
-    "database", "connection_pool_min_size", 5, "Number of connections the database connection pool will be initialized with", is_int
+    "database",
+    "connection_pool_min_size",
+    5,
+    "Number of connections the database connection pool will be initialized with",
+    is_int,
 )
 db_connection_pool_max_size = Option(
     "database", "connection_pool_max_size", 35, "Max number of connections in the database connection pool", is_int
