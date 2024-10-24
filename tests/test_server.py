@@ -1953,7 +1953,7 @@ async def test_set_param_v2(server, client, environment):
     assert len(parameters) == 2
 
 
-async def test_delete_active_version(client, clienthelper, server, environment, agent):
+async def test_delete_active_version(client, clienthelper, server, environment, null_agent):
     """
     Test that the active version cannot be deleted
     """
