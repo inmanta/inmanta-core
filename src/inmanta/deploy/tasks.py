@@ -21,6 +21,7 @@ import dataclasses
 import datetime
 import logging
 import traceback
+import typing
 import uuid
 from dataclasses import dataclass
 
@@ -45,12 +46,20 @@ class Task(abc.ABC):
     """
 
     resource: ResourceIdStr
-
     id: resources.Id = dataclasses.field(init=False, compare=False, hash=False)
+    # This field is optional because task are sometimes solely created to see if an entry exists in different structure
+    # In these cases, we don't know the reason of the temporary "task"
+    reason: typing.Optional[str] = dataclasses.field(compare=False, hash=False, default=None)
 
     def __post_init__(self) -> None:
         # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
         object.__setattr__(self, "id", resources.Id.parse_id(self.resource))
+
+    def set_reason(self, reason: str) -> None:
+        # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
+        # This does not impact the __hash__ method of the dataclass because this field is not taken into consideration when
+        # computing the hash of the object (see dataclass field attributes)
+        object.__setattr__(self, "reason", reason)
 
     @abc.abstractmethod
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
@@ -150,9 +159,11 @@ class Deploy(Task):
         else:
             try:
                 gid = uuid.uuid4()
-                # FIXME: reason argument is not used
+                assert self.reason is not None, "A reason should be provided to deploy the task"
                 deploy_result: const.ResourceState = await my_executor.execute(
-                    gid, executor_resource_details, "New Scheduler initiated action"
+                    gid=gid,
+                    resource_details=executor_resource_details,
+                    reason=self.reason,
                 )
                 success = deploy_result == const.ResourceState.deployed
             except Exception as e:
