@@ -40,6 +40,7 @@ from inmanta.deploy import state, tasks
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import BlockedStatus
 from inmanta.deploy.work import TaskPriority
+from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.util import retry_limited
 from utils import DummyCodeManager, make_requires
@@ -170,6 +171,22 @@ async def pass_method():
     pass
 
 
+class TestScheduler(ResourceScheduler):
+    def __init__(self, environment: uuid.UUID, executor_manager: executor.ExecutorManager[executor.Executor], client: Client):
+        super().__init__(environment, executor_manager, client)
+        self.executor_manager = self.executor_manager
+        self.code_manager = DummyCodeManager(client)
+        self.mock_versions = {}
+        # Bypass DB
+        self.read_version = pass_method
+
+    async def should_be_running(self, endpoint: str) -> bool:
+        return True
+
+    async def _build_resource_mappings_from_db(self, version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:
+        return self.mock_versions[version]
+
+
 class TestAgent(Agent):
 
     def __init__(
@@ -178,16 +195,7 @@ class TestAgent(Agent):
     ):
         super().__init__(environment)
         self.executor_manager = DummyManager()
-        self.scheduler.executor_manager = self.executor_manager
-        self.scheduler.code_manager = DummyCodeManager(self._client)
-        # Bypass DB
-        self.scheduler.read_version = pass_method
-        self.scheduler.mock_versions = {}
-
-        async def build_resource_mappings_from_db(version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:
-            return self.scheduler.mock_versions[version]
-
-        self.scheduler._build_resource_mappings_from_db = build_resource_mappings_from_db
+        self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
 
 
 @pytest.fixture
