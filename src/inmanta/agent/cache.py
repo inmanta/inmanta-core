@@ -138,8 +138,7 @@ class AgentCache:
 
         # Time-based eviction mechanism
         # Keep track of when is the next earliest cache item expiry time.
-        # TODO: sys.maxsize is proabbly not appropriate
-        self.next_action: float = sys.maxsize
+        self.next_action: Optional[float] = None
         # Heap queue of cache items, used for efficient retrieval of the cache
         # item that expires the soonest. should only be mutated via the heapq API.
         self.timer_queue: list[CacheItem] = []
@@ -172,7 +171,7 @@ class AgentCache:
         """
         Cleanly terminate the cache
         """
-        self.next_action = sys.maxsize
+        self.next_action = None
         for key in list(self.cache.keys()):
             self._evict_item(key)
         self.timer_queue.clear()
@@ -194,13 +193,13 @@ class AgentCache:
         Remove stale entries from the cache.
         """
         now = time.time()
-        while now > self.next_action and len(self.timer_queue) > 0:
+        while self.next_action is not None and now > self.next_action and len(self.timer_queue) > 0:
             item = heapq.heappop(self.timer_queue)
             self._evict_item(item.key)
             if len(self.timer_queue) > 0:
                 self.next_action = self.timer_queue[0].expiry_time
             else:
-                self.next_action = sys.maxsize
+                self.next_action = None
 
     def _get(self, key: str) -> CacheItem:
         """
@@ -229,7 +228,7 @@ class AgentCache:
         if item.refresh_after_access:
             self.used_items_to_refresh.add(item)
 
-        if item.expiry_time < self.next_action:
+        if self.next_action is None or item.expiry_time < self.next_action:
             self.next_action = item.expiry_time
 
     def _get_key(self, key: str, resource: Optional[Resource]) -> str:
