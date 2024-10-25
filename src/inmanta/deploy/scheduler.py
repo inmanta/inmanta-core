@@ -390,7 +390,7 @@ class ResourceScheduler(TaskManager):
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
-                transitively_blocked_resources: set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
+                transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 for resource in unblocked_resources:
                     self._state.mark_as_defined(resource)
                 # Update set of in-progress non-stale deploys by trimming resources with new state
