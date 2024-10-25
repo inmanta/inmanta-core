@@ -63,7 +63,7 @@ db_connection_timeout = Option(
     "database",
     "connection_timeout",
     60,
-    "Connection timeout in seconds",
+    "Connection timeout in seconds when the server communicates with the database",
     is_float,
 )
 
