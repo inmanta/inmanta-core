@@ -425,7 +425,7 @@ class HandlerContext(LoggerABC):
         if exc_info:
             kwargs["traceback"] = traceback.format_exc()
 
-        def clean_arg_value(v: object) -> object:
+        def clean_arg_value(k: str, v: object) -> object:
             try:
                 # make sure we have clean dict
                 return json.loads(json_encode(v))
@@ -439,8 +439,7 @@ class HandlerContext(LoggerABC):
             except Exception as e:
                 raise Exception("Exception during serializing log message arguments") from e
 
-
-        packaged_kwargs = {k: clean_arg_value(v) for k, v in kwargs.items()}
+        packaged_kwargs = {k: clean_arg_value(k, v) for k, v in kwargs.items()}
 
         log = data.LogLine.log(level, msg, **packaged_kwargs)
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
