@@ -149,7 +149,7 @@ class ResourceScheduler(TaskManager):
         self.client = client
         self.code_manager = CodeManager(client)
         self.executor_manager = executor_manager
-        self._state_update_delegate = ToDbUpdateManager(client, environment)
+        self._state_update_delegate = ToDbUpdateManager(environment)
 
     def reset(self) -> None:
         """
