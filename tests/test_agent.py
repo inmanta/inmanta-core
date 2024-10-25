@@ -76,3 +76,7 @@ def test_context_changes():
 
     with pytest.raises(InvalidOperation):
         ctx.update_changes({"value": "test"})
+
+
+def test_entrypoint_for_handler_typing():
+    from inmanta.agent.agent import AgentInstance  # noqa: F401

@@ -33,7 +33,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timezone
 from logging import LogRecord
-from typing import Any, Optional, TypeVar, Union
+from typing import Any, Collection, Mapping, Optional, Set, TypeVar, Union
 
 import pytest
 import yaml
@@ -46,9 +46,14 @@ import packaging.version
 from _pytest.mark import MarkDecorator
 from inmanta import config, const, data, env, module, protocol, util
 from inmanta.agent import config as cfg
+from inmanta.agent import executor
+from inmanta.agent.code_manager import CodeManager
+from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data import ResourceIdStr
-from inmanta.data.model import AttributeStateChange, PipConfig, ResourceVersionIdStr
+from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceType, ResourceVersionIdStr
+from inmanta.deploy.scheduler import ResourceScheduler
+from inmanta.deploy.state import ResourceDetails
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
 from inmanta.server.bootloader import InmantaBootloader
@@ -967,3 +972,39 @@ class NullAgent(SessionEndpoint):
     @protocol.handle(methods.get_status)
     async def get_status(self) -> Apireturn:
         return 200, {}
+
+
+def make_requires(resources: Mapping[ResourceIdStr, ResourceDetails]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
+    """Convert resources from the scheduler input format to its requires format"""
+    return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
+
+
+dummyblueprint = ExecutorBlueprint(
+    pip_config=LEGACY_PIP_DEFAULT,
+    requirements=[],
+    python_version=(3, 11),
+    sources=[],
+)
+
+
+class DummyCodeManager(CodeManager):
+    """Code manager that prentend no code is ever needed"""
+
+    async def get_code(
+        self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
+    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
+        return ([ResourceInstallSpec(rt, version, dummyblueprint) for rt in resource_types], {})
+
+
+async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:
+    """
+    Return True iff the given agent has finished executing all its tasks.
+
+    :param scheduler: The resource scheduler that hands out work to the agent for which the done status has to be checked.
+    :param agent_name: The name of the agent for which the done status has to be checked.
+    """
+    agent_queue = scheduler._work.agent_queues._agent_queues.get(agent_name)
+    if not agent_queue:
+        # Agent queue doesn't exist -> Tasks have not been queued yet
+        return False
+    return agent_queue._unfinished_tasks == 0

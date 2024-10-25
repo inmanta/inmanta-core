@@ -226,6 +226,7 @@ async def test_deploy_handler_method(server, client, environment, agent, clienth
         ]
 
         await _deploy_resources(client, environment, resources, version, push=True)
+        await clienthelper.wait_for_released(version)
         await wait_until_deployment_finishes(client, environment, version=version)
 
         result = await client.get_resource(

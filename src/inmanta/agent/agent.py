@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2024 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
     Contact: code@inmanta.com
 """
 
+# This file is kept for backward compatibility
 from inmanta.agent.agent_new import Agent
+from inmanta.agent.executor import AgentInstance
 
-# flake8: noqa: F401
-# Backward compatibility
-from inmanta.agent.reporting import collect_report
+__all__ = ["AgentInstance", "Agent"]

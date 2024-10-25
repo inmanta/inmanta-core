@@ -30,7 +30,6 @@ from logging import DEBUG, INFO
 import pytest
 
 import inmanta
-from deploy.scheduler_test_util import DummyCodeManager
 from inmanta import config
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
@@ -43,7 +42,7 @@ from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
 from inmanta.util import get_compiler_version
-from utils import ClientHelper, LogSequence, log_index, retry_limited
+from utils import ClientHelper, DummyCodeManager, LogSequence, log_index, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 

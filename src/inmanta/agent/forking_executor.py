@@ -94,8 +94,9 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
+from inmanta.agent.executor import DeployResult
 from inmanta.agent.resourcepool import PoolManager, PoolMember
-from inmanta.data.model import ResourceType
+from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
     IPCMethod,
@@ -480,23 +481,29 @@ class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, execut
         return await context.get(self.agent_name).dry_run(self.resource, self.dry_run_id)
 
 
-class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, const.ResourceState]):
+class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, DeployResult]):
     """Run a deploy in an executor"""
 
     def __init__(
         self,
         agent_name: str,
+        action_id: uuid.UUID,
         gid: uuid.UUID,
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
+        requires: dict[ResourceIdStr, const.ResourceState],
     ) -> None:
         self.agent_name = agent_name
         self.gid = gid
         self.resource_details = resource_details
         self.reason = reason
+        self.action_id = action_id
+        self.requires = requires
 
-    async def call(self, context: ExecutorContext) -> const.ResourceState:
-        return await context.get(self.agent_name).execute(self.gid, self.resource_details, self.reason)
+    async def call(self, context: ExecutorContext) -> DeployResult:
+        return await context.get(self.agent_name).execute(
+            self.action_id, self.gid, self.resource_details, self.reason, self.requires
+        )
 
 
 class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta.types.Apireturn]):
@@ -800,11 +807,13 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
 
     async def execute(
         self,
+        action_id: uuid.UUID,
         gid: uuid.UUID,
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
-    ) -> const.ResourceState:
-        return await self.call(ExecuteCommand(self.id.agent_name, gid, resource_details, reason))
+        requires: dict[ResourceIdStr, const.ResourceState],
+    ) -> DeployResult:
+        return await self.call(ExecuteCommand(self.id.agent_name, action_id, gid, resource_details, reason, requires))
 
     async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> inmanta.types.Apireturn:
         return await self.call(FactsCommand(self.id.agent_name, resource))
