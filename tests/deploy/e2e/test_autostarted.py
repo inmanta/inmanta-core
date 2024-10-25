@@ -630,16 +630,15 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    async def are_resources_deployed(deployed_resources: int = 1) -> bool:
+    async def check_resource_in_state(expected_resources: int = 1, state: str = "deployed") -> bool:
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
-        deployed = summary["by_state"]["deployed"]
-        return deployed == deployed_resources
+        nr_res_desired_state = summary["by_state"][state]
+        return nr_res_desired_state == expected_resources
 
     # Wait for at least one resource to be deployed
-    # TODO h: How if we want to test the real thing? -> use noprmal agent fixture OR make wait 0.5
-    await retry_limited(are_resources_deployed, timeout=10)
+    await retry_limited(check_resource_in_state, timeout=10)
 
     # Retrieve the current processes, we should have more processes than `start_children`
     children_after_deployment = construct_mapping_relevant_processes(current_pid)
@@ -668,7 +667,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
 
     # Let's also check if the state of resources are consistent with what we expect: one resource still needs to be
     # deployed
-    await retry_limited(are_resources_deployed, timeout=6, deployed_resources=2)
+    await retry_limited(check_resource_in_state, timeout=6, expected_resources=2)
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
@@ -677,13 +676,8 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
     # Let's wait for the executor to die
-    # TODO h remove this just check resource list
-    await retry_limited(wait_for_terminated_status, timeout=6, interval=1, current_children=children_after_deployment.values())
-
-    # Let's recheck the number of processes after pausing the agent
-    halted_children = construct_mapping_relevant_processes(current_pid)
-    # We should have lost one process in the "process"
-    assert len(halted_children) == len(children_after_deployment) - 1
+    with pytest.raises(AssertionError):
+        await retry_limited(check_resource_in_state, state="deploying", timeout=1, interval=0.3)
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.unpause.value)
     assert result.code == 200
@@ -702,22 +696,11 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
     # Let's wait for the new executor to kick in
-    async def wait_for_new_executor() -> bool:
+    def wait_for_new_executor() -> bool:
         resumed_children = construct_mapping_relevant_processes(current_pid)
-        logger.warning(f"CURRENT CHILD {len(resumed_children)} = {resumed_children}")
-        result = await client.resource_list(environment, deploy_summary=True)
-        assert result.code == 200
-        summary = result.result["metadata"]["deploy_summary"]
-        logger.warning(f"SUMMARY = {summary}")
-        assert summary["total"] == 3, f"Unexpected summary: {summary}"
-        assert (summary["by_state"]["available"] == 1 and summary["by_state"]["deploying"] == 0) or (
-            summary["by_state"]["available"] == 0 and summary["by_state"]["deploying"] == 1
-        ), f"Unexpected summary: {summary}"
-        assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
-
         return len(resumed_children) == 3
 
-    await retry_limited(wait_for_new_executor, 15)
+    await retry_limited(wait_for_new_executor, 5)
     resumed_children = construct_mapping_relevant_processes(current_pid)
     # All expected processes are back online
     assert (

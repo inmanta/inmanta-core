@@ -786,8 +786,8 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     assert len(session_manager._sessions) == 0
 
 
-@pytest.mark.parametrize("auto_start_agent", [True])
-async def test_agent_actions(server, client, async_finalizer, auto_start_agent: bool):
+@pytest.mark.parametrize("no_agent", [True])
+async def test_agent_actions(server, client, async_finalizer, no_agent: bool):
     """
     Test the agent_action() and the all_agents_action() API call.
     """

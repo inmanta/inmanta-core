@@ -738,8 +738,8 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent", [True])
-async def test_server_recompile(server, client, environment, monkeypatch, auto_start_agent: bool):
+@pytest.mark.parametrize("no_agent", [True])
+async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
     """
@@ -1255,10 +1255,9 @@ async def test_compileservice_queue_with_env_var_merging(
     assert t2.request.used_environment_variables == {"my_var": "1", "v1": "a C", "v2": "b"}
 
 
-@pytest.mark.parametrize("auto_start_agent", [True])
-# TODO h will depend on the context here it should not depend too much on the scheduler so make it work in no agent (try catch)
+@pytest.mark.parametrize("no_agent", [True])
 async def test_compilerservice_halt(
-    mocked_compiler_service_block, server, client, environment: uuid.UUID, auto_start_agent: bool
+    mocked_compiler_service_block, server, client, environment: uuid.UUID, no_agent: bool
 ) -> None:
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
@@ -1282,7 +1281,6 @@ async def test_compilerservice_halt(
     assert result.code == 204
 
     await client.resume_environment(environment)
-    # TODO REVIEW: mock scheduler but then what do we really test?
     result = await client.is_compiling(environment)
     assert result.code == 200
 
@@ -1908,7 +1906,7 @@ async def test_status_compilerservice_task_queue(
     mocked_compiler_service_block,
     only_clear_environment: bool,
     compile_is_running: bool,
-    auto_start_agent: bool,
+    no_agent: bool,
 ) -> None:
     """
     Verify that the size of the compiler queue, reported by the /serverstatus API endpoint, is correctly

@@ -212,8 +212,8 @@ async def test_delete_protected_environment(server, client):
     await assert_env_deletion(env_id, deletion_succeeds=True)
 
 
-@pytest.mark.parametrize("auto_start_agent", [True])
-async def test_clear_protected_environment(server, client, auto_start_agent: bool):
+@pytest.mark.parametrize("no_agent", [True])
+async def test_clear_protected_environment(server, client):
     result = await client.create_project("env-test")
     assert result.code == 200
     project_id = result.result["project"]["id"]

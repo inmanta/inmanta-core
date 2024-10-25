@@ -218,13 +218,10 @@ class Agent(SessionEndpoint):
         # Not used here
         pass
 
-    # TODO h but what should we return then ? "Scheduler / agent notified"
-    #  weird
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
         if agent == AGENT_SCHEDULER_ID:
             should_be_running = await self.scheduler.should_be_running(agent)
-            enabled = should_be_running
 
             if should_be_running:
                 if self.working != should_be_running:
@@ -234,22 +231,23 @@ class Agent(SessionEndpoint):
                     # In that case, the Scheduler may have missed some event, but it would get a start after a start.
                     # Therefore, we need to refresh everything (Scheduler side) to make sure we are up to date
                     await self.scheduler.read_version()
-                    await self.scheduler.refresh_agent_state_from_db(name=None)
+                    await self.scheduler.refresh_all_agent_states_from_db()
             else:
                 # We want the request to not end in a 500 error:
                 # if the scheduler is being shut down, it cannot respond to the request
                 await self.stop_working(timeout=const.EXECUTOR_GRACE_HARD)
-        else:
-            try:
-                await self.scheduler.refresh_agent_state_from_db(name=agent)
-            except LookupError:
-                return 404, f"No such agent: {agent}"
 
-        if agent is not None:
-            enabled = await self.scheduler.is_agent_running(name=agent)
-            return 200, f"{agent} has been {'started' if enabled else 'stopped'}"
+            return 200, "Scheduler has been notified!"
         else:
-            return 200, "All agents have been notified!"
+            if agent is None:
+                await self.scheduler.refresh_all_agent_states_from_db()
+                return 200, "All agents have been notified!"
+            else:
+                try:
+                    await self.scheduler.refresh_agent_state_from_db(name=agent)
+                    return 200, f"Agent `{agent}` has been notified!"
+                except LookupError:
+                    return 404, f"No such agent: {agent}"
 
     async def on_reconnect(self) -> None:
         result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)

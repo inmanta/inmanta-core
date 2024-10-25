@@ -429,7 +429,7 @@ class ResourceScheduler(TaskManager):
         current_agent = await data.Agent.get(env=self.environment, endpoint=endpoint)
         return not (current_environment.halted or current_agent.paused)
 
-    async def refresh_agent_state_from_db(self, name: Optional[str]) -> None:
+    async def refresh_agent_state_from_db(self, name: str) -> None:
         """
         Refresh from the DB (authoritative entity) the actual state of the agent.
             - If the agent is not paused: It will make sure that the agent is running.
@@ -437,29 +437,33 @@ class ResourceScheduler(TaskManager):
 
         :param name: The name of the agent
         """
-        # TODO REVIEW goal is readability but it feels strange to respond 200 when dealing with unknowns agent
-        if name is not None:
-            if name in self._workers:
-                await self._workers[name].notify()
-                return
+        if name in self._workers:
+            await self._workers[name].notify()
+            return
 
-            requested_agent = await data.Agent.get(env=self.environment, endpoint=name)
-            if requested_agent:
-                self._create_agent(agent=requested_agent.name)
+        requested_agent = await data.Agent.get(env=self.environment, endpoint=name)
+        if requested_agent:
+            self._create_agent(agent=requested_agent.name)
 
-            if name not in self._workers and requested_agent is None:
-                raise LookupError(f"The agent `{name}` does not exist!")
-        else:
-            # The None represent the all agents action
-            agents_to_wake_up = await data.Agent.get_list(environment=self.environment)
-            for agent in agents_to_wake_up:
-                if agent.name == const.AGENT_SCHEDULER_ID:
-                    continue
+        if name not in self._workers and requested_agent is None:
+            raise LookupError(f"The agent `{name}` does not exist!")
 
-                if agent.name in self._workers:
-                    await self._workers[agent.name].notify()
-                else:
-                    self._create_agent(agent=agent.name)
+    async def refresh_all_agent_states_from_db(self) -> None:
+        """
+        Refresh from the DB (authoritative entity) the actual state of all agents.
+            - If an agent is not paused: It will make sure that the agent is running.
+            - If an agent is paused: Stop a particular agent.
+        """
+        # The None represent the all agents action
+        agents_to_wake_up = await data.Agent.get_list(environment=self.environment)
+        for agent in agents_to_wake_up:
+            if agent.name == const.AGENT_SCHEDULER_ID:
+                continue
+
+            if agent.name in self._workers:
+                await self._workers[agent.name].notify()
+            else:
+                self._create_agent(agent=agent.name)
 
     async def is_agent_running(self, name: str) -> bool:
         """
