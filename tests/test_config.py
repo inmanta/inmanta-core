@@ -108,7 +108,7 @@ log-dir=/log
 host=host1
 name=db1
 port=1234
-db_service_connection_pool_max_size=2
+service_connection_pool_max_size=2
 username=non-default-name-0
 [influxdb]
 host=host1
@@ -163,7 +163,7 @@ tags=tag2=value2
             """
 [database]
 username=non-default-name-2
-db_service_connection_pool_max_size=3
+service_connection_pool_max_size=3
         """
         )
 
@@ -171,7 +171,7 @@ db_service_connection_pool_max_size=3
         f.write(
             """
 [database]
-db_service_connection_pool_max_size=5
+service_connection_pool_max_size=5
         """
         )
 
@@ -186,7 +186,7 @@ db_service_connection_pool_max_size=5
     assert Config.get("influxdb", "interval") == 20
     assert Config.get("influxdb", "tags")["tag2"] == "value2"
     assert Config.get("database", "username") == "non-default-name-2"
-    assert Config.get("database", "db_service_connection_pool_max_size") == 5
+    assert Config.get("database", "service_connection_pool_max_size") == 5
     assert Config.get("server", "auth")
     assert Config.get("server", "agent-timeout") == 60
 
