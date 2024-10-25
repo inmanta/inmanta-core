@@ -27,8 +27,7 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import DryrunResult, FailedResources, ResourceDetails
-from inmanta.agent.executor import DeployResult, FailedResources, ResourceDetails
+from inmanta.agent.executor import DeployResult, DryrunResult, FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.const import ParameterSource
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr

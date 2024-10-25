@@ -27,7 +27,6 @@ from dataclasses import dataclass
 from inmanta import const, data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployResult
-from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType
 from inmanta.deploy import scheduler, state
 
@@ -245,7 +244,7 @@ class DryRun(Task):
             )
 
             dryrun_result: executor.DryrunResult = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
-            await task_manager._state_update_delegate.dryrun_update(
+            await task_manager.dryrun_update(
                 env=task_manager.environment,
                 dryrun_result=dryrun_result,
             )
@@ -265,7 +264,7 @@ class DryRun(Task):
                 finished=datetime.datetime.now().astimezone(),
                 messages=[],
             )
-            await task_manager._state_update_delegate.dryrun_update(env=task_manager.environment, dryrun_result=result)
+            await task_manager.dryrun_update(env=task_manager.environment, dryrun_result=result)
 
 
 class RefreshFact(Task):

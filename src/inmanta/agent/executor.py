@@ -45,9 +45,6 @@ from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change, ResourceState
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
-from inmanta.const import ResourceState
-from inmanta.data import LogLine
-from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id

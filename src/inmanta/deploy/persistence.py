@@ -20,26 +20,19 @@ import abc
 import datetime
 import logging
 from typing import Any
-from typing import Any, Optional, Union
 from uuid import UUID
 
 from asyncpg import UniqueViolationError
 
 from inmanta import const, data
-from inmanta.agent.executor import DeployResult
+from inmanta.agent.executor import DeployResult, DryrunResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
-from inmanta.agent.executor import DryrunResult
-from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 from inmanta.protocol import Client
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
-from inmanta.protocol.exceptions import BadRequest
 from inmanta.resources import Id
 from inmanta.server.services import resourceservice
-from inmanta.server.services.resourceservice import ResourceActionLogLine
-from inmanta.types import Apireturn
-from inmanta.util import TaskHandler, parse_timestamp
+from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,6 +58,7 @@ class StateUpdateManager(abc.ABC):
     @abc.abstractmethod
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
         pass
+
 
 class ToServerUpdateManager(StateUpdateManager):
     """
@@ -118,6 +112,8 @@ class ToServerUpdateManager(StateUpdateManager):
             messages=dryrun_result.messages,
             status=const.ResourceState.dry,
         )
+
+
 class ToDbUpdateManager(StateUpdateManager):
 
     def __init__(self, environment: UUID) -> None:
@@ -134,6 +130,7 @@ class ToDbUpdateManager(StateUpdateManager):
         ctx = ",".join([f"{k}: {v}" for k, v in context.items()])
         LOGGER.error("%s %s", message, ctx)
         raise BadRequest(message)
+
     async def send_in_progress(
         self, action_id: UUID, resource_id: ResourceVersionIdStr
     ) -> dict[ResourceIdStr, const.ResourceState]:
@@ -194,6 +191,7 @@ class ToDbUpdateManager(StateUpdateManager):
             ctx = ",".join([f"{k}: {v}" for k, v in context.items()])
             LOGGER.error("%s %s", message, ctx)
             raise BadRequest(message)
+
         resource_id_str = result.rvid
         resource_id_parsed = Id.parse_id(resource_id_str)
 
