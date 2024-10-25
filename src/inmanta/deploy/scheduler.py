@@ -381,14 +381,14 @@ class ResourceScheduler(TaskManager):
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in blocked_resources:
-                    self._state.block_resource(resource, details, transient=False)
+                    self._state.block_resource(resource, details, is_transitive=False)
                 for resource in new_desired_state:
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
                 transitively_blocked_resources: set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 for resource in unblocked_resources:
-                    self._state.unblock_resource(resource)
+                    self._state.mark_as_defined(resource)
                 # Update set of in-progress non-stale deploys by trimming resources with new state
                 self._deploying_latest.difference_update(
                     new_desired_state, deleted_resources, blocked_resources, transitively_blocked_resources

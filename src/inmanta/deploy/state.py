@@ -23,7 +23,7 @@ from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from queue import SimpleQueue
+import itertools
 
 from inmanta import const
 from inmanta.data.model import ResourceIdStr, ResourceType
@@ -37,41 +37,6 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
 
     def provides_view(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
         return self.reverse_mapping()
-
-    def get_all_provides_transitively(self, resource: ResourceIdStr | Set[ResourceIdStr]) -> list[ResourceIdStr]:
-        """
-        This method returns all the provides (transitively) of the given resource. The returned list will be sorted as such
-        that all the requires of an elements in the list appear before that element in the list. The result will not include
-        any resource ids from the input, even if there exists a provides edge between them.
-
-        :param resource: The resource or set of resources for which the provides have to be resolved transitively.
-        """
-        # Use a dict here to not lose the order of the elements.
-        result: dict[ResourceIdStr, None] = {}
-
-        def append_to_result(res: ResourceIdStr) -> None:
-            """
-            Add `res` to the `result` dictionary. If `res` already exists in `result`, make sure that `res` appears
-            last when executing `result.keys()`.
-            """
-            result.pop(res, None)
-            result[res] = None
-
-        input_set = {resource} if isinstance(resource, str) else set(resource)
-        work: SimpleQueue[ResourceIdStr] = SimpleQueue()
-        for elem in input_set:
-            work.put_nowait(elem)
-        provides_mapping = self.provides_view()
-        while not work.empty():
-            current_resource = work.get()
-            append_to_result(current_resource)
-            provides = provides_mapping.get(current_resource, set())
-            for elem in provides:
-                # We may queue an element multiple times here. This is required to properly sort the result.
-                work.put_nowait(elem)
-        for elem in input_set:
-            result.pop(elem, None)
-        return list(result.keys())
 
 
 @dataclass(frozen=True)
@@ -201,30 +166,30 @@ class ModelState:
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
 
-    def block_resource(self, resource: ResourceIdStr, details: ResourceDetails, transient: bool) -> None:
+    def block_resource(self, resource: ResourceIdStr, details: ResourceDetails, is_transitive: bool) -> None:
         """
         Mark the given resource as blocked, i.e. it's not deployable. This method updates the resource details
         and the resource_status.
 
         :param resource: The resource that should be blocked.
         :param details: The details of the resource that should be blocked.
-        :param transient: True iff the given resource is blocked transitively. It's blocked because one of its dependencies
-                          is blocked.
+        :param is_transitive: True iff the given resource is blocked transitively. It's blocked because one of its dependencies
+                              is blocked. If False, the resource is blocked because it's undefined.
         """
         self.resources[resource] = details
         if resource in self.resource_state:
-            if not transient:
+            if not is_transitive:
                 self.resource_state[resource].status = ResourceStatus.UNDEFINED
             self.resource_state[resource].blocked = BlockedStatus.YES
         else:
-            resource_status = ResourceStatus.UNDEFINED if not transient else ResourceStatus.HAS_UPDATE
+            resource_status = ResourceStatus.UNDEFINED if not is_transitive else ResourceStatus.HAS_UPDATE
             self.resource_state[resource] = ResourceState(
                 status=resource_status, deployment_result=DeploymentResult.NEW, blocked=BlockedStatus.YES
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
 
-    def block_provides(self, resources: Set[ResourceIdStr]) -> set[ResourceIdStr]:
+    def block_provides(self, resources: Set[ResourceIdStr]) -> Set[ResourceIdStr]:
         """
         Marks the provides of the given resources as blocked.
 
@@ -234,38 +199,60 @@ class ModelState:
         :param resources: The set of resources for which the provides have to be blocked.
         :return: The set of dependent resources that were marked as blocked (transitively).
         """
-        result = set()
-        for dependent_resource in self.requires.get_all_provides_transitively(resources):
-            self.block_resource(dependent_resource, self.resources[dependent_resource], transient=True)
-            result.add(dependent_resource)
+        result: set[ResourceIdStr] = set()
+        provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.provides_view()
+        todo: list[ResourceIdStr] = list(itertools.chain.from_iterable(provides_view.get(r, set()) for r in resources))
+        while todo:
+            resource_id: ResourceIdStr = todo.pop()
+            if self.resource_state[resource_id].blocked.is_blocked():
+                # Resource is already blocked. All provides will be blocked as well.
+                continue
+            else:
+                # Block resource and its provides.
+                self.block_resource(resource_id, self.resources[resource_id], is_transitive=True)
+                result.add(resource_id)
+                todo.extend(provides_view.get(resource_id, set()))
         return result
 
-    def unblock_resource(self, resource: ResourceIdStr) -> None:
+    def mark_as_defined(self, resource: ResourceIdStr) -> None:
         """
-        Mark the given resource no longer as blocked. Also mark the provides of the given resource as unblocked (transitively)
-        if they become unblocked because of this.
+        Mark the given resource as defined. If the given resource or any of its provides became unblocked, because of this,
+        this method also updates the blocked status.
 
         Must be called under the scheduler lock. This method assumes that all the resources of the model version
         are populated in the resources dictionary.
 
-        :param resource: The resource that has to be unblocked and potentially any of its provides as a consequence of
-                         `resource` being unblocked.
+        :param resource: The resource that became defined.
         """
 
-        def _unblock(resource: ResourceIdStr) -> None:
-            self.resource_state[resource].blocked = BlockedStatus.NO
+        def update_blocked_status(resource: ResourceIdStr) -> bool:
+            """
+            Check if the deployment of the given resource is still blocked and mark it as unblocked if it is.
+
+            :return: True iff the given resource was unblocked.
+            """
             if self.resource_state[resource].status is ResourceStatus.UNDEFINED:
-                self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
+                # The resource is undefined.
+                return False
+            if any(
+                self.resource_state[r].blocked.is_blocked() for r in self.requires.get(resource, set())
+            ):
+                # Resource is blocked, because a dependency is blocked.
+                return False
+            # Unblock resource
+            self.resource_state[resource].blocked = BlockedStatus.NO
             if self.resource_state[resource].status is ResourceStatus.HAS_UPDATE:
                 self.dirty.add(resource)
+            return True
 
-        _unblock(resource)
-        for res in self.requires.get_all_provides_transitively(resource):
-            is_blocked = self.resource_state[res].status is ResourceStatus.UNDEFINED or any(
-                self.resource_state[r].blocked.is_blocked() for r in self.requires.get(res, set())
-            )
-            if not is_blocked:
-                _unblock(res)
+        provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.provides_view()
+        self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
+        todo: list[ResourceIdStr] = [resource]
+        while todo:
+            resource_id: ResourceIdStr = todo.pop()
+            resource_was_unblocked: bool = update_blocked_status(resource_id)
+            if resource_was_unblocked:
+                todo.extend(provides_view.get(resource_id, set()))
 
     def update_desired_state(
         self,
