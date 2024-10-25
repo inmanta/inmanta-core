@@ -17,7 +17,7 @@ import datetime
 import logging
 import typing
 import uuid
-from asyncio import Lock, InvalidStateError
+from asyncio import InvalidStateError, Lock
 from collections import defaultdict
 from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
