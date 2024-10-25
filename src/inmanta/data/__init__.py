@@ -1420,7 +1420,7 @@ class BaseDocument(metaclass=DocumentMeta):
         if not cls._connection_pool:
             return
         try:
-            await asyncio.wait_for(cls._connection_pool.close(), config.db_service_connection_timeout.get())
+            await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
         except asyncio.TimeoutError:
             cls._connection_pool.terminate()
             # Don't propagate this exception but just write a log message. This way:

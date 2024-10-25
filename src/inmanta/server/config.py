@@ -63,10 +63,9 @@ db_connection_timeout = Option(
     "database",
     "connection_timeout",
     60,
-    "[DEPRECATED USE :inmanta.config:option:`database.service_connection_timeout`] Connection timeout in seconds",
+    "Connection timeout in seconds",
     is_float,
 )
-
 
 db_service_connection_pool_min_size = Option(
     "database",
@@ -78,7 +77,6 @@ db_service_connection_pool_min_size = Option(
 db_service_connection_pool_max_size = Option(
     "database", "service_connection_pool_max_size", 35, "Max number of connections in the database connection pool", is_int
 )
-db_service_connection_timeout = Option("database", "service_connection_timeout", 60, "Connection timeout in seconds", is_float)
 
 #############################
 # server_rest_transport
