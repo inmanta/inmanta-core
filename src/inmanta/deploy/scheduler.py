@@ -106,6 +106,9 @@ class TaskRunner:
 
     async def _start(self) -> None:
         self.status = AgentStatus.STARTED
+        assert (
+            self._task is None or self._task.done()
+        ), f"Task Runner {self.endpoint} is trying to start twice, tis should not happen"
         self._task = asyncio.create_task(self._run())
 
     async def _stop(self) -> None:
@@ -122,8 +125,10 @@ class TaskRunner:
         match self.status:
             case AgentStatus.STARTED if not should_be_running:
                 await self._stop()
-            case AgentStatus.STOPPING | AgentStatus.STOPPED if should_be_running:
+            case AgentStatus.STOPPED if should_be_running:
                 await self._start()
+            case AgentStatus.STOPPING if should_be_running:
+                self.status = AgentStatus.STARTED
 
     def notify_sync(self) -> None:
         """
@@ -147,6 +152,14 @@ class TaskRunner:
             self._scheduler._work.agent_queues.task_done(self.endpoint, task)
 
         self.status = AgentStatus.STOPPED
+
+    def is_running(self) -> bool:
+        return self.status == AgentStatus.STARTED
+
+    async def join(self) -> None:
+        if self._task is None or self._task.done():
+            return
+        await self._task
 
 
 class ResourceScheduler(TaskManager):
@@ -219,8 +232,7 @@ class ResourceScheduler(TaskManager):
         self._work.agent_queues.send_shutdown()
 
     async def join(self) -> None:
-        worker_tasks = [worker._task for worker in self._workers.values() if worker._task is not None]
-        await asyncio.gather(*worker_tasks)
+        await asyncio.gather(*[worker.join() for worker in self._workers.values()])
 
     async def deploy(self, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
         """
@@ -425,6 +437,7 @@ class ResourceScheduler(TaskManager):
 
         :param name: The name of the agent
         """
+        # TODO REVIEW goal is readability but it feels strange to respond 200 when dealing with unknowns agent
         if name is not None:
             if name in self._workers:
                 await self._workers[name].notify()
@@ -454,7 +467,7 @@ class ResourceScheduler(TaskManager):
 
         :param name: The name of the agent
         """
-        return name in self._workers and self._workers[name].status == AgentStatus.STARTED
+        return name in self._workers and self._workers[name].is_running()
 
     # TaskManager interface
 

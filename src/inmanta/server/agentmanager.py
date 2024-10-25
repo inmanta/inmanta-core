@@ -209,6 +209,7 @@ class AgentManager(ServerSlice, SessionListener):
         Halts all agents for an environment. Persists prior paused state.
         """
         await data.Agent.persist_on_halt(env.id, connection=connection)
+        # TODO REVIEW: none is pausing all agents, which is what we want? + Because refreshed env is not yet written?
         await data.Agent.pause(env=env.id, endpoint=None, paused=True, connection=connection)
         key = (env.id, const.AGENT_SCHEDULER_ID)
         live_session = self.tid_endpoint_to_session.get(key)
@@ -225,7 +226,8 @@ class AgentManager(ServerSlice, SessionListener):
         Resumes after halting. Unpauses all agents that had been paused by halting.
         """
         to_unpause: list[str] = await data.Agent.persist_on_resume(env=env.id, connection=connection)
-        # We cannot do this at once. Otherwise, we would need a lock
+        # TODO REVIEW: not sure to see ?
+        # We cannot do this at once (all tasks in a gather). Otherwise, we would need a lock
         for agent in to_unpause:
             await data.Agent.pause(env=env.id, endpoint=agent, paused=False, connection=connection)
 
@@ -287,6 +289,7 @@ class AgentManager(ServerSlice, SessionListener):
                 aware of the executors created by the Scheduler -> It does not need to maintain this information
         """
         async with self.session_lock:
+            # TODO h inccorect scheduler
             await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
             key = (env.id, const.AGENT_SCHEDULER_ID)
             live_session = self.tid_endpoint_to_session.get(key)
@@ -299,6 +302,7 @@ class AgentManager(ServerSlice, SessionListener):
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         async with self.session_lock:
+            # TODO h inccorect scheduler
             await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
 
             key = (env.id, const.AGENT_SCHEDULER_ID)
@@ -307,7 +311,6 @@ class AgentManager(ServerSlice, SessionListener):
                 await self._autostarted_agent_manager._ensure_scheduler(env.id)
                 live_session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
                 assert live_session
-                self.tid_endpoint_to_session[key] = live_session
 
             await live_session.get_client().set_state(endpoint, enabled=True)
 
@@ -326,6 +329,7 @@ class AgentManager(ServerSlice, SessionListener):
         )
         LOGGER.debug("Scheduler has been resumed in environment %s", env.id)
 
+# TODO h make sure it looks like the old behaviour slightly changed for scheduler
     async def _set_unpause_on_resume(
         self,
         env: data.Environment,

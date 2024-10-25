@@ -218,6 +218,8 @@ class Agent(SessionEndpoint):
         # Not used here
         pass
 
+    # TODO h but what should we return then ? "Scheduler / agent notified"
+    #  weird
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
         if agent == AGENT_SCHEDULER_ID:
@@ -225,7 +227,14 @@ class Agent(SessionEndpoint):
             enabled = should_be_running
 
             if should_be_running:
-                await self.start_working()
+                if self.working != should_be_running:
+                    await self.start_working()
+                else:
+                    # Special cast that the server considers us disconnected, but the Scheduler thinks we are still connected.
+                    # In that case, the Scheduler may have missed some event, but it would get a start after a start.
+                    # Therefore, we need to refresh everything (Scheduler side) to make sure we are up to date
+                    await self.scheduler.start()
+                    await self.scheduler.refresh_agent_state_from_db(name=None)
             else:
                 # We want the request to not end in a 500 error:
                 # if the scheduler is being shut down, it cannot respond to the request
@@ -250,7 +259,7 @@ class Agent(SessionEndpoint):
                 if state["enabled"]:
                     await self.start_working()
                 else:
-                    await self.stop_working()
+                    assert not self.working
             else:
                 LOGGER.warning("Server reported invalid state %s" % (repr(state)))
         else:

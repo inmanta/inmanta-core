@@ -378,14 +378,12 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     return versions.result
 
 
-async def wait_until_deployment_finishes(client: Client, environment: str, version: int = -1, timeout: int = 10) -> None:
+async def wait_until_deployment_finishes(client: Client, environment: str, timeout: int = 10) -> None:
 
     async def done():
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
-        # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
-        #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
         print(summary)
         available = summary["by_state"]["available"]
         deploying = summary["by_state"]["deploying"]
@@ -401,7 +399,7 @@ async def wait_until_deployment_finishes(client: Client, environment: str, versi
             == summary["total"]
         )
 
-    await retry_limited(done, 10)
+    await retry_limited(done, timeout)
 
 
 async def wait_for_resource_actions(
@@ -466,10 +464,10 @@ class ClientHelper:
         lookup = {v["version"]: v["released"] for v in versions.result["versions"]}
         return lookup[version]
 
-    async def wait_for_deployed(self, version: int = -1) -> None:
+    async def wait_for_deployed(self, version: int = -1, timeout=10) -> None:
         if version != -1:
             await self.wait_for_released(version)
-        await wait_until_deployment_finishes(self.client, self.environment)
+        await wait_until_deployment_finishes(self.client, str(self.environment), timeout)
 
     async def wait_full_success(self, environment: str) -> None:
         await wait_full_success(self.client, environment)

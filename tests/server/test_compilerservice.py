@@ -1256,6 +1256,7 @@ async def test_compileservice_queue_with_env_var_merging(
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
+# TODO h will depend on the context here it should not depend too much on the scheduler so make it work in no agent (try catch)
 async def test_compilerservice_halt(
     mocked_compiler_service_block, server, client, environment: uuid.UUID, auto_start_agent: bool
 ) -> None:
@@ -1281,6 +1282,7 @@ async def test_compilerservice_halt(
     assert result.code == 204
 
     await client.resume_environment(environment)
+    # TODO REVIEW: mock scheduler but then what do we really test?
     result = await client.is_compiling(environment)
     assert result.code == 200
 
@@ -1898,7 +1900,7 @@ def {exporter_name}(exporter: Exporter) -> None:
 
 @pytest.mark.parametrize("only_clear_environment", [True, False])
 @pytest.mark.parametrize("compile_is_running", [True, False])
-@pytest.mark.parametrize("auto_start_agent", [True])
+@pytest.mark.parametrize("no_agent", [True])
 async def test_status_compilerservice_task_queue(
     server,
     client,

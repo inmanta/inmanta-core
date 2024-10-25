@@ -36,6 +36,7 @@ from inmanta.const import AgentAction
 from inmanta.server import SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
+from typing_extensions import Optional
 from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.server_agent")
@@ -356,52 +357,83 @@ def wait_for_terminated_status(current_children: list[psutil.Process], expected_
     return len(terminated_process) == expected_terminated_process
 
 
-def get_process_state(current_pid: int) -> dict[str, list[Process]]:
-    """
-    Retrieves the current list of processes running under this process
+def construct_mapping_relevant_processes(current_pid: int) -> dict[str, Process]:
+    def get_process_state(current_pid: int) -> list[Process]:
+        """
+        Retrieves the current list of processes running under this process
 
-    :param current_pid: The PID of this process
-    """
-    return {
-        " ".join(process.cmdline()): process.children(recursive=True)
-        for process in psutil.process_iter()
-        if process.pid == current_pid
-    }
+        :param current_pid: The PID of this process
+        """
+        for process in psutil.process_iter():
+            if process.pid == current_pid:
+                return process.children(recursive=True)
 
+    def find_latest_scheduler(children: list[Process]) -> Optional[Process]:
+        """
+        Find and return the most recent Scheduler (based on the creation time)
 
-def filter_relevant_processes(processes: dict[str, list[Process]]) -> dict[str, Process]:
-    """
-    Filter the list of processes by removing processes not relevant with the Scheduler. The only processes that interest us are:
-        - inmanta: multiprocessing fork server (if it was started by the Scheduler and not the old agent)
-        - inmanta: executor process
-        - The actual Scheduler
-    """
-    relevant_processes = {}
-    children = list(processes.values())[0]
+        :param children: The list of processes that are currently running
+        """
+        latest_scheduler = None
 
-    # We sort it to make sure that the Scheduler (if it exists) will be present in the dict Before
-    # `inmanta: multiprocessing fork server`. This will allow us to see if it was started by the Scheduler and
-    # thus relevant
-    children.sort(key=lambda x: x.name(), reverse=True)
-    for child in children:
-        match child.name():
-            case "inmanta: multiprocessing fork server":
-                if "scheduler" in relevant_processes and child.create_time() >= relevant_processes["scheduler"].create_time():
+        for child in children:
+            match child.name():
+                case "python" | "python3":
+                    cmd_line_process = " ".join(child.cmdline())
+                    if "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
+                        assert latest_scheduler is None
+                        latest_scheduler = child
+                case _:
+                    continue
+        return latest_scheduler
+
+    def filter_relevant_processes(children: list[Process]) -> dict[str, Process]:
+        """
+        Filter the list of processes by removing processes not relevant with the Scheduler. The only processes that interest
+        us are:
+            - inmanta: multiprocessing fork server (if it was started by the Scheduler and not the old agent)
+            - inmanta: executor process
+        """
+        relevant_processes = dict()
+
+        # We sort it to make sure that the Scheduler (if it exists) will be present in the dict Before
+        # `inmanta: multiprocessing fork server`. This will allow us to see if it was started by the Scheduler and
+        # thus relevant
+        children.sort(key=lambda x: x.name(), reverse=True)
+        for child in children:
+            match child.name():
+                case "inmanta: multiprocessing fork server":
                     relevant_processes["inmanta: multiprocessing fork server"] = child
-            case executor if "inmanta: executor process" in executor:
-                relevant_processes["inmanta: executor process"] = child
-            case "python":
-                cmd_line_process = " ".join(child.cmdline())
-                resource_tracker_import = "from multiprocessing.resource_tracker"
-                if resource_tracker_import in cmd_line_process:
-                    pass
-                elif "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
-                    relevant_processes["scheduler"] = child
-            case "pg_ctl":
-                pass
-            case _:
-                assert False
-    return relevant_processes
+                case executor if "inmanta: executor process" in executor:
+                    relevant_processes["inmanta: executor process"] = child
+                case "python" | "python3":
+                    cmd_line_process = " ".join(child.cmdline())
+                    resource_tracker_import = "from multiprocessing.resource_tracker"
+                    if resource_tracker_import in cmd_line_process:
+                        continue
+                case _ as e:
+                    assert False, f"Unexpected process: {e}"
+        return relevant_processes
+
+    children = get_process_state(current_pid)
+    latest_scheduler = find_latest_scheduler(children)
+    if latest_scheduler is None:
+        return {}
+
+    scheduler_processes = filter_relevant_processes(latest_scheduler.children(recursive=True))
+    # TODO h use something else to type these things
+    scheduler_processes["scheduler"] = latest_scheduler
+    return scheduler_processes
+
+
+async def assert_is_paused(client, environment: str, expected_agents: dict[str, bool]) -> None:
+    """
+    Assert that the provided agents are in the same state to the server
+    """
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+    assert len(result.result["agents"]) == len(expected_agents)
+    assert {e["name"]: e["paused"] for e in result.result["agents"]} == expected_agents
 
 
 @pytest.mark.parametrize(
@@ -435,11 +467,8 @@ async def test_halt_deploy(
     config.Config.set("config", "environment", environment)
 
     # Retrieve the actual processes before deploying anything
-    start_children = get_process_state(current_pid)
-    assert len(start_children) == 1
-    assert len(start_children.values()) == 1
-    current_children = filter_relevant_processes(start_children)
-    for child in current_children.values():
+    start_children = construct_mapping_relevant_processes(current_pid)
+    for child in start_children.values():
         assert child.is_running()
 
     snippetcompiler.setup_for_snippet(
@@ -467,33 +496,11 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     await retry_limited(are_resources_being_deployed, timeout=5)
 
     # Let's check the agent table and check that agent1 is present and not paused
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    assert len(result.result["agents"]) == 2
-    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
-    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
-    assert not expected_agents_status["agent1"]
-
-    async def _wait_until_deployment_finishes(client, environment: str, version: int = -1, timeout: int = 10) -> None:
-        """Interface kept for backward compat"""
-
-        async def done():
-            result = await client.resource_list(environment, deploy_summary=True)
-            assert result.code == 200
-            summary = result.result["metadata"]["deploy_summary"]
-            # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
-            #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
-            print(summary)
-            available = summary["by_state"]["available"]
-            deploying = summary["by_state"]["deploying"]
-            return available + deploying == 0
-
-        await retry_limited(done, 10)
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
     # Wait for something to be deployed
     try:
-        await _wait_until_deployment_finishes(client, environment, version)
+        await clienthelper.wait_for_deployed(timeout=5)
         assert not should_time_out, f"This was supposed to time out with a deployment sleep set to {time_to_sleep}!"
     except (asyncio.TimeoutError, AssertionError):
         result = await client.list_agents(tid=environment)
@@ -501,18 +508,13 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         assert should_time_out, f"This wasn't supposed to time out with a deployment sleep set to {time_to_sleep}!"
     finally:
         # Retrieve the current processes, we should have more processes than `start_children`
-        children_after_deployment = get_process_state(current_pid)
-
-    assert len(children_after_deployment) == 1
-    assert len(children_after_deployment.values()) == 1
-    current_children_after_deployment = filter_relevant_processes(children_after_deployment)
+        children_after_deployment = construct_mapping_relevant_processes(current_pid)
 
     expected_additional_children_after_deployment = 3
-    assert len(current_children_after_deployment) == expected_additional_children_after_deployment, (
-        "These processes should be present: The Scheduler, the fork server and the actual agent! "
-        f"Actual state: {current_children_after_deployment}"
+    assert len(children_after_deployment) == expected_additional_children_after_deployment, (
+        "These processes should be present: The fork server and the actual agent! " f"Actual state: {children_after_deployment}"
     )
-    for child in current_children_after_deployment.values():
+    for child in children_after_deployment.values():
         assert child.is_running()
 
     # The number of resources for this version should match
@@ -522,13 +524,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     assert result.result["versions"][0]["total"] == 1
 
     # Let's check the agent table and check that agent1 is present and not paused
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    assert len(result.result["agents"]) == 2
-    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
-    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
-    assert not expected_agents_status["agent1"]
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
     # Now let's halt the environment
     result = await client.halt_environment(tid=environment)
@@ -547,71 +543,46 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     assert result.code == 200
 
     # Let's recheck the agent table and check that the scheduler and agent1 are present and paused
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    assert len(result.result["agents"]) == 2
-    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
-    assert expected_agents_status[const.AGENT_SCHEDULER_ID]
-    assert expected_agents_status["agent1"]
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: True, "agent1": True})
 
     # Let's wait for the executor to die (
     await retry_limited(
         wait_for_terminated_status,
         timeout=const.EXECUTOR_GRACE_HARD + 2,
-        current_children=current_children_after_deployment.values(),
+        current_children=children_after_deployment.values(),
         expected_terminated_process=3,
     )
 
     # Let's recheck the number of processes after pausing the environment
-    halted_children = get_process_state(current_pid)
-    assert len(halted_children) == 1
-    assert len(halted_children.values()) == 1
-    current_halted_children = filter_relevant_processes(halted_children)
+    halted_children = construct_mapping_relevant_processes(current_pid)
 
     assert (
-        len(current_halted_children) == 0
+        len(halted_children) == 0
     ), "The Scheduler and the fork server and the agent created by the scheduler should have been killed!"
-    for child in current_halted_children.values():
+    for child in halted_children.values():
         assert child.is_running()
 
     await client.resume_environment(environment)
 
     # Let's check the agent table and check that the scheduler and agent1 are present and not paused
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    assert len(result.result["agents"]) == 2
-    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
-    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
-    assert not expected_agents_status["agent1"]
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
     if should_time_out:
         # Wait for at least one resource to be in deploying
         await retry_limited(are_resources_being_deployed, timeout=5)
         await retry_limited(
-            lambda: len(filter_relevant_processes(get_process_state(current_pid))) == len(current_children_after_deployment), 10
+            lambda: len(construct_mapping_relevant_processes(current_pid)) == len(children_after_deployment), 10
         )
     else:
         await retry_limited(
-            lambda: len(filter_relevant_processes(get_process_state(current_pid))) == 2,
+            lambda: len(construct_mapping_relevant_processes(current_pid)) == 2,
             15,
         )
 
     # Let's recheck the number of processes after resuming the environment
-    resumed_children = get_process_state(current_pid)
-    assert len(resumed_children) == 1
-    assert len(resumed_children.values()) == 1
-    current_resumed_children = filter_relevant_processes(resumed_children)
-
-    await retry_limited(lambda: all([child.is_running() for child in current_resumed_children.values()]), 10)
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    assert len(result.result["agents"]) == 2
-    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
-    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
-    assert not expected_agents_status["agent1"]
+    resumed_children = construct_mapping_relevant_processes(current_pid)
+    await retry_limited(lambda: all([child.is_running() for child in resumed_children.values()]), 10)
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
 
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
@@ -639,12 +610,8 @@ async def test_pause_agent_deploy(
     config.Config.set("config", "environment", environment)
 
     # Retrieve the actual processes before deploying anything
-    start_children = get_process_state(current_pid)
-    assert len(start_children) == 1
-    assert len(start_children.values()) == 1
-    current_children = filter_relevant_processes(start_children)
-
-    for children in current_children.values():
+    start_children = construct_mapping_relevant_processes(current_pid)
+    for children in start_children.values():
         assert children.is_running()
 
     snippetcompiler.setup_for_snippet(
@@ -671,19 +638,16 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         return deployed == deployed_resources
 
     # Wait for at least one resource to be deployed
+    # TODO h: How if we want to test the real thing? -> use noprmal agent fixture OR make wait 0.5
     await retry_limited(are_resources_deployed, timeout=10)
 
     # Retrieve the current processes, we should have more processes than `start_children`
-    children_after_deployment = get_process_state(current_pid)
-    assert len(children_after_deployment) == 1
-    assert len(children_after_deployment.values()) == 1
-    current_children_after_deployment = filter_relevant_processes(children_after_deployment)
-
+    children_after_deployment = construct_mapping_relevant_processes(current_pid)
     expected_additional_children_after_deployment = 3
     assert (
-        len(current_children_after_deployment) == expected_additional_children_after_deployment
+        len(children_after_deployment) == expected_additional_children_after_deployment
     ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
-    for children in current_children_after_deployment.values():
+    for children in children_after_deployment.values():
         assert children.is_running()
 
     # The number of resources for this version should match
@@ -693,26 +657,14 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert result.result["versions"][0]["total"] == 3
 
     # Let's check the agent table and check that agent1 is present and not paused
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    assert len(result.result["agents"]) == 2
-    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
-    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
-    assert not expected_agents_status["agent1"]
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
     # Now let's pause agent1
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     assert result.code == 200
 
     # Let's recheck the agent table and check that agent1 is present and paused
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    assert len(result.result["agents"]) == 2
-    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
-    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
-    assert expected_agents_status["agent1"]
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
 
     # Let's also check if the state of resources are consistent with what we expect: one resource still needs to be
     # deployed
@@ -725,30 +677,19 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
     # Let's wait for the executor to die
-    await retry_limited(
-        wait_for_terminated_status, timeout=6, interval=1, current_children=current_children_after_deployment.values()
-    )
+    # TODO h remove this just check resource list
+    await retry_limited(wait_for_terminated_status, timeout=6, interval=1, current_children=children_after_deployment.values())
 
     # Let's recheck the number of processes after pausing the agent
-    halted_children = get_process_state(current_pid)
-    assert len(halted_children) == 1
-    assert len(halted_children.values()) == 1
-    current_halted_children = filter_relevant_processes(halted_children)
-
+    halted_children = construct_mapping_relevant_processes(current_pid)
     # We should have lost one process in the "process"
-    assert len(current_halted_children) == len(current_children_after_deployment) - 1
+    assert len(halted_children) == len(children_after_deployment) - 1
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.unpause.value)
     assert result.code == 200
 
     # Everything should be back online
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    assert len(result.result["agents"]) == 2
-    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
-    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
-    assert not expected_agents_status["agent1"]
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
     # Nothing should have changed concerning the state of our resources, yet!
     result = await client.resource_list(environment, deploy_summary=True)
@@ -762,23 +703,16 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
 
     # Let's wait for the new executor to kick in
     def wait_for_new_executor() -> bool:
-        resumed_children = get_process_state(current_pid)
-        assert len(resumed_children) == 1
-        assert len(resumed_children.values()) == 1
-        current_resumed_children = filter_relevant_processes(resumed_children)
-        return len(current_resumed_children) == 3
+        resumed_children = construct_mapping_relevant_processes(current_pid)
+        return len(resumed_children) == 3
 
     await retry_limited(wait_for_new_executor, 5)
-    resumed_children = get_process_state(current_pid)
-    assert len(resumed_children) == 1
-    assert len(resumed_children.values()) == 1
-    current_resumed_children = filter_relevant_processes(resumed_children)
-
+    resumed_children = construct_mapping_relevant_processes(current_pid)
     # All expected processes are back online
     assert (
-        len(current_resumed_children) == expected_additional_children_after_deployment
+        len(resumed_children) == expected_additional_children_after_deployment
     ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
-    for children in current_resumed_children.values():
+    for children in resumed_children.values():
         assert children.is_running()
 
     # Let's make sure that we cannot interact directly with the Scheduler agent!
@@ -817,12 +751,8 @@ async def test_agent_paused_scheduler_crash(
     config.Config.set("config", "environment", environment)
 
     # Retrieve the actual processes before deploying anything
-    start_children = get_process_state(current_pid)
-    assert len(start_children) == 1
-    assert len(start_children.values()) == 1
-    current_children = filter_relevant_processes(start_children)
-
-    for children in current_children.values():
+    start_children = construct_mapping_relevant_processes(current_pid)
+    for children in start_children.values():
         assert children.is_running()
 
     snippetcompiler.setup_for_snippet(
@@ -850,10 +780,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     await retry_limited(are_resources_deploying, 5)
 
     # Retrieve the current processes, we should have more processes than `start_children`
-    children_after_deployment = get_process_state(current_pid)
-    assert len(children_after_deployment) == 1
-    assert len(children_after_deployment.values()) == 1
-    current_children_after_deployment = filter_relevant_processes(children_after_deployment)
+    children_after_deployment = construct_mapping_relevant_processes(current_pid)
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     assert result.code == 200
@@ -866,35 +793,21 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     await ibl.start()
 
     async def wait_for_scheduler() -> bool:
-        current_children_mapping = get_process_state(current_pid)
-        assert len(current_children_mapping) == 1
-        assert len(current_children_mapping.values()) == 1
-        current_children = filter_relevant_processes(current_children_mapping)
-        # Only the Scheduler should be there as no agent will be recreated given that it's paused
-        return len(current_children) == 1
+        current_children_mapping = construct_mapping_relevant_processes(current_pid)
+        return len(current_children_mapping) == 1
 
     # Wait for the scheduler
     await retry_limited(wait_for_scheduler, 5)
 
     # Everything should be consistent in DB: the agent should still be paused
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    assert len(result.result["agents"]) == 2
-    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
-    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
-    assert expected_agents_status["agent1"]
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
 
     # Let's recheck the number of processes after restarting the server
-    children_after_restart = get_process_state(current_pid)
-    assert len(children_after_restart) == 1
-    assert len(children_after_restart.values()) == 1
-    current_children_children_after_restart = filter_relevant_processes(children_after_restart)
-
+    children_after_restart = construct_mapping_relevant_processes(current_pid)
     assert (
-        len(current_children_children_after_restart) == len(current_children_after_deployment) - 2
+        len(children_after_restart) == len(children_after_deployment) - 2
     ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
-    for children in current_children_children_after_restart.values():
+    for children in children_after_restart.values():
         assert children.is_running()
 
     result = await client.resource_list(environment, deploy_summary=True)
@@ -930,12 +843,8 @@ async def test_agent_paused_should_remain_paused_after_environment_resume(
     config.Config.set("config", "environment", environment)
 
     # Retrieve the actual processes before deploying anything
-    start_children = get_process_state(current_pid)
-    assert len(start_children) == 1
-    assert len(start_children.values()) == 1
-    current_children = filter_relevant_processes(start_children)
-
-    for children in current_children.values():
+    start_children = construct_mapping_relevant_processes(current_pid)
+    for children in start_children.values():
         assert children.is_running()
 
     snippetcompiler.setup_for_snippet(
@@ -965,16 +874,12 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     await retry_limited(are_resources_deployed, timeout=10)
 
     # Retrieve the current processes, we should have more processes than `start_children`
-    children_after_deployment = get_process_state(current_pid)
-    assert len(children_after_deployment) == 1
-    assert len(children_after_deployment.values()) == 1
-    current_children_after_deployment = filter_relevant_processes(children_after_deployment)
-
+    children_after_deployment = construct_mapping_relevant_processes(current_pid)
     expected_additional_children_after_deployment = 3
     assert (
-        len(current_children_after_deployment) == expected_additional_children_after_deployment
+        len(children_after_deployment) == expected_additional_children_after_deployment
     ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
-    for children in current_children_after_deployment.values():
+    for children in children_after_deployment.values():
         assert children.is_running()
 
     result = await client.list_versions(tid=environment)
@@ -983,25 +888,13 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert result.result["versions"][0]["total"] == 3
 
     # Let's check the agent table and check that agent1 is present and not paused
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    assert len(result.result["agents"]) == 2
-    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
-    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
-    assert not expected_agents_status["agent1"]
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     assert result.code == 200
 
     # Let's check the agent table and check that agent1 is present and paused
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    assert len(result.result["agents"]) == 2
-    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
-    assert expected_agents_status["agent1"]
-    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
 
     # Wait for the current deployment of the agent to end
     await retry_limited(are_resources_deployed, timeout=6, interval=1, deployed_resources=2)
@@ -1015,7 +908,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
     # Let's wait for the executor to die
-    await retry_limited(wait_for_terminated_status, timeout=10, current_children=current_children_after_deployment.values())
+    await retry_limited(wait_for_terminated_status, timeout=10, current_children=children_after_deployment.values())
 
     # Let's halt the environment to be able to set `keep_paused_on_resume` flag on agent1
     result = await client.halt_environment(tid=environment)
@@ -1024,29 +917,19 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     result = await client.agent_action(environment, name="agent1", action=AgentAction.keep_paused_on_resume.value)
     assert result.code == 200
 
-    result = await client.list_agents(tid=environment)
-    assert result.code == 200
-    assert len(result.result["agents"]) == 2
-    expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
-    assert expected_agents_status["agent1"]
-    assert expected_agents_status[const.AGENT_SCHEDULER_ID]
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: True, "agent1": True})
 
     await retry_limited(
         wait_for_terminated_status,
         timeout=const.EXECUTOR_GRACE_HARD + 2,
-        current_children=current_children_after_deployment.values(),
+        current_children=children_after_deployment.values(),
         expected_terminated_process=3,
     )
 
     # Let's recheck the number of processes after pausing the environment
-    halted_children = get_process_state(current_pid)
-    assert len(halted_children) == 1
-    assert len(halted_children.values()) == 1
-    current_halted_children = filter_relevant_processes(halted_children)
-
+    halted_children = construct_mapping_relevant_processes(current_pid)
     assert (
-        len(current_halted_children) == 0
+        len(halted_children) == 0
     ), "The Scheduler and the fork server and the agent created by the scheduler should have been killed!"
 
     await client.resume_environment(environment)
@@ -1066,14 +949,10 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert expected_agents_status["agent1"]
     assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
 
-    resumed_children = get_process_state(current_pid)
-    assert len(resumed_children) == 1
-    assert len(resumed_children.values()) == 1
-    current_resumed_children = filter_relevant_processes(resumed_children)
-
-    assert len(current_resumed_children) == 1, (
+    resumed_children = construct_mapping_relevant_processes(current_pid)
+    assert len(resumed_children) == 1, (
         "This process should be present: the Scheduler. "
         "The fork server and the agent created by the scheduler should have been killed and the agent is still paused!"
     )
-    for children in current_resumed_children.values():
+    for children in resumed_children.values():
         assert children.is_running()
