@@ -19,11 +19,11 @@
 import contextlib
 import dataclasses
 import enum
+import itertools
 from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-import itertools
 
 from inmanta import const
 from inmanta.data.model import ResourceIdStr, ResourceType
@@ -234,9 +234,7 @@ class ModelState:
             if self.resource_state[resource].status is ResourceStatus.UNDEFINED:
                 # The resource is undefined.
                 return False
-            if any(
-                self.resource_state[r].blocked.is_blocked() for r in self.requires.get(resource, set())
-            ):
+            if any(self.resource_state[r].blocked.is_blocked() for r in self.requires.get(resource, set())):
                 # Resource is blocked, because a dependency is blocked.
                 return False
             # Unblock resource
