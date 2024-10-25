@@ -246,7 +246,7 @@ class DummyStateManager(StateUpdateManager):
                 assert scheduler._state.resource_state[resource].status == status
 
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
-        pass
+        self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
 
 
 def state_manager_check(agent: "TestAgent"):
