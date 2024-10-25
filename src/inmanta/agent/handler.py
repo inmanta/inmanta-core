@@ -18,6 +18,7 @@
 
 import base64
 import inspect
+import json
 import logging
 import traceback
 import typing
@@ -424,20 +425,24 @@ class HandlerContext(LoggerABC):
         if exc_info:
             kwargs["traceback"] = traceback.format_exc()
 
-        for k, v in kwargs.items():
+        def clean_arg_value(v: object) -> object:
             try:
-                json_encode(v)
+                # make sure we have clean dict
+                return json.loads(json_encode(v))
             except TypeError:
                 if inmanta.RUNNING_TESTS:
                     # Fail the test when the value is not serializable
                     raise Exception(f"Failed to serialize argument for log message {k}={v}")
                 else:
                     # In production, try to cast the non-serializable value to str to prevent the handler from failing.
-                    kwargs[k] = str(v)
-
+                    return str(v)
             except Exception as e:
                 raise Exception("Exception during serializing log message arguments") from e
-        log = data.LogLine.log(level, msg, **kwargs)
+
+
+        packaged_kwargs = {k: clean_arg_value(v) for k, v in kwargs.items()}
+
+        log = data.LogLine.log(level, msg, **packaged_kwargs)
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
 
