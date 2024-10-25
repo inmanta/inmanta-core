@@ -18,27 +18,24 @@
 
 import abc
 import asyncio
-import datetime
 import logging
 import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
-from typing import Any, Optional, Union
+from typing import Optional
 
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import ConfigurationModel
-from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType, ResourceVersionIdStr
-from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
+from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
-from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager, ToServerUpdateManager
+from inmanta.deploy.persistence import StateUpdateManager, ToServerUpdateManager
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
-from inmanta.types import Apireturn
 
 LOGGER = logging.getLogger(__name__)
 

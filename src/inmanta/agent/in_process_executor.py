@@ -19,7 +19,6 @@ import typing
 import uuid
 from asyncio import Lock
 from collections import defaultdict
-from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Optional
 

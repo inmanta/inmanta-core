@@ -17,21 +17,18 @@
 """
 
 import abc
-import asyncio
 import datetime
 import logging
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Optional, Union
 from uuid import UUID
 
 from inmanta import const, data
 from inmanta.agent.executor import DryrunResult
-from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change
-from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 from inmanta.protocol import Client
-from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest
 from inmanta.resources import Id
-from inmanta.server.protocol import ReturnClient, Session
 from inmanta.server.services.resourceservice import ResourceActionLogLine
 from inmanta.types import Apireturn
 from inmanta.util import TaskHandler, parse_timestamp
