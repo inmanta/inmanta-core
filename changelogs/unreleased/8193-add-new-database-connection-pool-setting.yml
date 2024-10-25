@@ -3,8 +3,11 @@ issue-nr: 8193
 change-type: major
 destination-branches: [master]
 sections:
-  upgrade-note: "TODO"
+  upgrade-note: >
+    The new resource scheduler uses a database connection pool of its own.
+    Please review the following connection pool environment settings and make sure they fit your
+    needs for each of your active environments: [SCHEDULER_DB_CONNECTION_POOL_MIN_SIZE,SCHEDULER_DB_CONNECTION_POOL_MAX_SIZE,SCHEDULER_DB_CONNECTION_TIMEOUT]
   deprecation-note: >
-    The ``config.connection-pool-max-size`` setting is deprecated. Set the database pool size
-    for the server via the ``server.connection-pool-max-size`` configuration setting and for
-    each scheduler, on a per-environment basis, via the ``TBD`` environment setting.
+    The following settings are being deprecated: [``database.connection_pool_max_size``, ``database.connection_pool_min_size``, ``database.connection_timeout``].
+    Please use their respective new counterparts [``database.service_connection_pool_max_size``, ``database.service_connection_pool_min_size``, ``database.service_connection_timeout``]
+    to set the database pool size for the server.
