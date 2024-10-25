@@ -1,4 +1,4 @@
-description: Attempt to bypass python bug
+description: Ensure serialization safety
 change-type: patch
 destination-branches: [master]
 
