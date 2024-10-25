@@ -2665,7 +2665,7 @@ class Environment(BaseDocument):
         ),
         SCHEDULER_DB_CONNECTION_TIMEOUT: Setting(
             name=SCHEDULER_DB_CONNECTION_TIMEOUT,
-            typ="float",
+            typ="positive_float",
             default=60.0,
             doc="Database connection timeout in seconds.",
             validator=convert_positive_float,
