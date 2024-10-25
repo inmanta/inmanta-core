@@ -430,7 +430,7 @@ class HandlerContext(LoggerABC):
             Make sure we have a clean dict.
 
             These values will be pickled and json serialized later down the stream.
-            As such we have to make sure both thigns are possible.
+            As such we have to make sure both things are possible.
 
             Clean json is both json serializable and (safely) pickleable
 
