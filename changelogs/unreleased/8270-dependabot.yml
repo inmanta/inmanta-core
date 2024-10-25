@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-setuptools from 75.2.0.20241019 to 75.2.0.20241025
+destination-branches:
+- master
+sections: {}
