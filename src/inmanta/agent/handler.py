@@ -426,8 +426,18 @@ class HandlerContext(LoggerABC):
             kwargs["traceback"] = traceback.format_exc()
 
         def clean_arg_value(k: str, v: object) -> object:
+            """
+            Make sure we have a clean dict.
+
+            These values will be pickled and json serialized later down the stream.
+            As such we have to make sure both thigns are possible.
+
+            Clean json is both json serializable and (safely) pickleable
+
+            Also, the data will only be accessed via json endpoints,
+            so anything not picked up by the json serializer will be lost anyways.
+            """
             try:
-                # make sure we have clean dict
                 return json.loads(json_encode(v))
             except TypeError:
                 if inmanta.RUNNING_TESTS:
@@ -798,7 +808,9 @@ class ResourceHandler(HandlerAPI[TResource]):
                 ctx.set_status(const.ResourceState.dry)
         except SkipResource as e:
             ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
+            )
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception(
@@ -812,7 +824,7 @@ class ResourceHandler(HandlerAPI[TResource]):
             except Exception as e:
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
+                    resource_id=resource.id.resource_str(),
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
@@ -837,7 +849,7 @@ class ResourceHandler(HandlerAPI[TResource]):
             except Exception as e:
                 ctx.exception(
                     "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
+                    resource_id=resource.id.resource_str(),
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
@@ -961,13 +973,15 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
 
         except SkipResource as e:
             ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
+            )
 
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                resource_id=resource.id,
+                resource_id=resource.id.resource_str(),
                 exception=f"{e.__class__.__name__}('{e}')",
                 traceback=traceback.format_exc(),
             )
@@ -977,7 +991,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             except Exception as e:
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
+                    resource_id=resource.id.resource_str(),
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
@@ -1054,12 +1068,14 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                 ctx.set_status(const.ResourceState.deployed)
         except SkipResource as e:
             ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
+            )
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                resource_id=resource.id,
+                resource_id=resource.id.resource_str(),
                 exception=f"{e.__class__.__name__}('{e}')",
                 traceback=traceback.format_exc(),
             )
@@ -1069,7 +1085,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
             except Exception as e:
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
+                    resource_id=resource.id.resource_str(),
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
