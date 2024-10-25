@@ -122,15 +122,6 @@ class ToDbUpdateManager(StateUpdateManager):
         #  when all uses of this logger are moved
         self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
 
-    def error_and_log(self, message: str, **context: Any) -> None:
-        """
-        :param message: message to return both to logger and to remote caller
-        :param context: additional context to attach to log
-        """
-        ctx = ",".join([f"{k}: {v}" for k, v in context.items()])
-        LOGGER.error("%s %s", message, ctx)
-        raise BadRequest(message)
-
     async def send_in_progress(
         self, action_id: UUID, resource_id: ResourceVersionIdStr
     ) -> dict[ResourceIdStr, const.ResourceState]:
