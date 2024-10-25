@@ -17,7 +17,7 @@ import datetime
 import logging
 import typing
 import uuid
-from asyncio import Lock
+from asyncio import Lock, InvalidStateError
 from collections import defaultdict
 from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -442,6 +442,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         self._loader: CodeLoader | None = None
         self._env: env.VirtualEnv | None = None
+        self._running = False
 
         if code_loader:
             self._env = env.VirtualEnv(env_dir)
@@ -455,6 +456,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             self._resource_loader_lock: NamedLock = NamedLock()
 
     async def stop(self) -> None:
+        self._running = False
         for child in self.executors.values():
             await child.stop()
 
@@ -462,6 +464,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         assert all(e.is_stopped() for e in self.executors.values())
         await self.join(thread_pool_finalizer=[], timeout=const.SHUTDOWN_GRACE_IOLOOP * 0.9)
         self.executors.clear()
+        self._running = True
 
     async def stop_for_agent(self, agent_name: str) -> list[InProcessExecutor]:
         if agent_name in self.executors:
@@ -471,6 +474,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         return []
 
     async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
+        assert not self._running
         await asyncio.gather(*(child.join() for child in self.executors.values()))
 
     async def get_executor(
@@ -487,6 +491,8 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             handler code in its venv.
         :return: An Executor instance
         """
+        if not self._running:
+            raise InvalidStateError("This executor manager is not running")
         if agent_name in self.executors:
             out = self.executors[agent_name]
         else:
