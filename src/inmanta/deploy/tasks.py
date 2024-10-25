@@ -25,7 +25,7 @@ from dataclasses import dataclass
 
 from inmanta import const, data, resources
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployResult
+from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import scheduler, state
 
@@ -276,4 +276,9 @@ class RefreshFact(Task):
             )
             return
 
-        await my_executor.get_facts(executor_resource_details)
+        fact_result = await my_executor.get_facts(executor_resource_details)
+        if fact_result is None:
+            raise Exception
+        await task_manager.set_parameters(
+            fact_result=fact_result,
+        )

@@ -30,11 +30,11 @@ import asyncpg
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import DeployResult
+from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.data import ConfigurationModel
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
-from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
+from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager, ToServerUpdateManager
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
@@ -99,6 +99,10 @@ class TaskManager(StateUpdateManager, abc.ABC):
         :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
         """
 
+    @abc.abstractmethod
+    async def set_parameters(self, fact_result: FactResult) -> None:
+        pass
+
 
 class ResourceScheduler(TaskManager):
     """
@@ -149,7 +153,7 @@ class ResourceScheduler(TaskManager):
         self.client = client
         self.code_manager = CodeManager(client)
         self.executor_manager = executor_manager
-        self._state_update_delegate = ToDbUpdateManager(environment)
+        self._state_update_delegate = ToServerUpdateManager(client, environment)
 
     def reset(self) -> None:
         """
@@ -509,3 +513,6 @@ class ResourceScheduler(TaskManager):
 
     async def send_deploy_done(self, result: DeployResult) -> None:
         return await self._state_update_delegate.send_deploy_done(result)
+
+    async def set_parameters(self, fact_result: FactResult) -> None:
+        await self._state_update_delegate.set_parameters(fact_result)

@@ -28,13 +28,12 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import DeployResult, FailedResources, ResourceDetails
+from inmanta.agent.executor import DeployResult, FactResult, FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.const import ParameterSource
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader
 from inmanta.resources import Resource
-from inmanta.types import Apireturn
 from inmanta.util import NamedLock, join_threadpools
 
 
@@ -355,7 +354,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                             status=const.ResourceState.dry,
                         )
 
-    async def get_facts(self, resource: ResourceDetails) -> Apireturn:
+    async def get_facts(self, resource: ResourceDetails) -> Optional[FactResult]:
         """
         Get facts for a given resource
         :param resource: The resource for which to get facts.
@@ -365,7 +364,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             try:
                 resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.getfact)
             except Exception:
-                return 500
+                return None
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
             async with self.activity_lock:
@@ -389,13 +388,12 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         # Add facts set via the set_fact() method of the HandlerContext
                         parameters.extend(ctx.facts)
 
-                    await self.client.set_parameters(tid=self.environment, parameters=parameters)
                     finished = datetime.datetime.now().astimezone()
-                    await self.client.resource_action_update(
-                        tid=self.environment,
-                        resource_ids=[resource.rvid],
+
+                    return FactResult(
+                        resource_id=resource.rvid,
                         action_id=ctx.action_id,
-                        action=const.ResourceAction.getfact,
+                        parameters=parameters,
                         started=started,
                         finished=finished,
                         messages=ctx.logs,
@@ -406,11 +404,10 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         except Exception:
             self.logger.exception("Unable to find a handler for %s", resource.id)
-            return 500
         finally:
             if provider is not None:
                 provider.close()
-        return 200
+        return None
 
 
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):

@@ -25,7 +25,7 @@ from uuid import UUID
 from asyncpg import UniqueViolationError
 
 from inmanta import const, data
-from inmanta.agent.executor import DeployResult
+from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.protocol import Client
@@ -52,6 +52,10 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def send_deploy_done(self, result: DeployResult) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def set_parameters(self, fact_result: FactResult) -> None:
         pass
 
 
@@ -89,6 +93,18 @@ class ToServerUpdateManager(StateUpdateManager):
         )
         if response.code != 200:
             LOGGER.error("Resource status update failed %s for %s ", response.result, result.rvid)
+
+    async def set_parameters(self, fact_result: FactResult) -> None:
+        await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
+        await self.client.resource_action_update(
+            tid=self.environment,
+            resource_ids=[fact_result.resource_id],
+            action_id=fact_result.action_id,
+            action=const.ResourceAction.getfact,
+            started=fact_result.started,
+            finished=fact_result.finished,
+            messages=fact_result.messages,
+        )
 
 
 class ToDbUpdateManager(StateUpdateManager):
@@ -289,3 +305,6 @@ class ToDbUpdateManager(StateUpdateManager):
         :return: The logger for the given environment.
         """
         return self._resource_action_logger.getChild(str(environment))
+
+    async def set_parameters(self, fact_result: FactResult) -> None:
+        pass

@@ -462,6 +462,16 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
 
 
 @dataclass
+class FactResult:
+    resource_id: ResourceVersionIdStr
+    action_id: uuid.UUID
+    parameters: list[dict[str, Any]]
+    started: datetime.datetime
+    finished: datetime.datetime
+    messages: list[LogLine]
+
+
+@dataclass
 class DeployResult:
     rvid: ResourceVersionIdStr
     action_id: uuid.UUID
@@ -542,7 +552,7 @@ class Executor(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
+    async def get_facts(self, resource: ResourceDetails) -> Optional[FactResult]:
         """
         Get facts for a given resource
         :param resource: The resource for which to get facts.

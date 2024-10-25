@@ -35,7 +35,7 @@ import utils
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import DeployResult, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployResult, FactResult, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.const import Change
 from inmanta.data import ResourceIdStr
@@ -114,8 +114,9 @@ class DummyExecutor(executor.Executor):
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
         self.dry_run_count += 1
 
-    async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
+    async def get_facts(self, resource: ResourceDetails) -> Optional[FactResult]:
         self.facts_count += 1
+        return
 
     async def open_version(self, version: int) -> None:
         pass
@@ -244,6 +245,9 @@ class DummyStateManager(StateUpdateManager):
                 assert scheduler._state.resource_state[resource].blocked == blocked
             if status:
                 assert scheduler._state.resource_state[resource].status == status
+
+    def set_parameters(self, fact_result: FactResult) -> None:
+        self.state[Id.parse_id(fact_result.resource_id).resource_str()] = const.ResourceState.deploying
 
 
 def state_manager_check(agent: "TestAgent"):
