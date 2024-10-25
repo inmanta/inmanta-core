@@ -323,7 +323,7 @@ async def test_dryrun_code_loading_failure(server, client, resource_container, e
 
     await clienthelper.put_version_simple(resources, version)
 
-    await wait_until_deployment_finishes(client, environment, version, timeout=10)
+    await wait_until_deployment_finishes(client, environment, timeout=10)
 
     result = await client.dryrun_trigger(environment, version)
     assert result.code == 200

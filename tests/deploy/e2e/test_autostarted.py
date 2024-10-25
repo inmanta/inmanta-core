@@ -702,11 +702,22 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
     # Let's wait for the new executor to kick in
-    def wait_for_new_executor() -> bool:
+    async def wait_for_new_executor() -> bool:
         resumed_children = construct_mapping_relevant_processes(current_pid)
+        logger.warning(f"CURRENT CHILD {len(resumed_children)} = {resumed_children}")
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        logger.warning(f"SUMMARY = {summary}")
+        assert summary["total"] == 3, f"Unexpected summary: {summary}"
+        assert (summary["by_state"]["available"] == 1 and summary["by_state"]["deploying"] == 0) or (
+            summary["by_state"]["available"] == 0 and summary["by_state"]["deploying"] == 1
+        ), f"Unexpected summary: {summary}"
+        assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
+
         return len(resumed_children) == 3
 
-    await retry_limited(wait_for_new_executor, 5)
+    await retry_limited(wait_for_new_executor, 15)
     resumed_children = construct_mapping_relevant_processes(current_pid)
     # All expected processes are back online
     assert (

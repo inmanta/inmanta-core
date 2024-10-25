@@ -451,7 +451,7 @@ class ResourceScheduler(TaskManager):
                 raise LookupError(f"The agent `{name}` does not exist!")
         else:
             # The None represent the all agents action
-            agents_to_wake_up = await data.Agent.get_list(env=self.environment)
+            agents_to_wake_up = await data.Agent.get_list(environment=self.environment)
             for agent in agents_to_wake_up:
                 if agent.name == const.AGENT_SCHEDULER_ID:
                     continue

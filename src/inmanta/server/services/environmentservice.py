@@ -168,7 +168,7 @@ class EnvironmentService(protocol.ServerSlice):
                 self.add_background_task(self.autostarted_agent_manager.notify_agent_about_agent_map_update(env))
             else:
                 LOGGER.info("Environment setting %s changed. Restarting agents.", key)
-                self.add_background_task(self.autostarted_agent_manager.restart_scheduler(env))
+                self.add_background_task(self.autostarted_agent_manager.restart_agents(env))
 
         self.add_background_task(self._enable_schedules(env, setting))
 
@@ -249,8 +249,8 @@ class EnvironmentService(protocol.ServerSlice):
                     return
 
                 await refreshed_env.update_fields(halted=True, connection=con)
-                await self.agent_manager.halt_scheduler(refreshed_env, connection=con)
-        await self.autostarted_agent_manager.stop_scheduler(refreshed_env, delete_venv=delete_agent_venv)
+                await self.agent_manager.halt_agents(refreshed_env, connection=con)
+        await self.autostarted_agent_manager.stop_agents(refreshed_env, delete_venv=delete_agent_venv)
 
     @handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
@@ -262,9 +262,8 @@ class EnvironmentService(protocol.ServerSlice):
         Internal helper to resume an environment. This method must be called under the self.environment_state_operation_lock.
         """
         async with data.Environment.get_connection(connection) as con:
-            refreshed_env: Optional[data.Environment]
             async with con.transaction():
-                refreshed_env = await data.Environment.get_by_id(env.id, connection=con)
+                refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=con)
                 if refreshed_env is None:
                     raise NotFound("Environment %s does not exist" % env.id)
                 if refreshed_env.is_marked_for_deletion:
@@ -275,13 +274,7 @@ class EnvironmentService(protocol.ServerSlice):
 
                 await refreshed_env.update_fields(halted=False, connection=con)
                 await self.agent_manager.resume_agents(refreshed_env, connection=con)
-
-            # We need this part to be part of another transaction otherwise, the environment will still be halted and it would
-            # not be possible to start the scheduler
-            await self.autostarted_agent_manager.restart_scheduler(env)
-            async with con.transaction():
-                # TODO REVIEW: where needs this update to happen?
-                await self.agent_manager.update_scheduler_endpoint(refreshed_env, connection=con)
+        await self.autostarted_agent_manager.restart_agents(refreshed_env)
         await self.server_slice.compiler.resume_environment(refreshed_env.id)
 
     @handle(methods.clear_environment, env="id")

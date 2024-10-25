@@ -233,7 +233,7 @@ class Agent(SessionEndpoint):
                     # Special cast that the server considers us disconnected, but the Scheduler thinks we are still connected.
                     # In that case, the Scheduler may have missed some event, but it would get a start after a start.
                     # Therefore, we need to refresh everything (Scheduler side) to make sure we are up to date
-                    await self.scheduler.start()
+                    await self.scheduler.read_version()
                     await self.scheduler.refresh_agent_state_from_db(name=None)
             else:
                 # We want the request to not end in a 500 error:
