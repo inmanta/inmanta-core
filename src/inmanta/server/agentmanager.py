@@ -1047,7 +1047,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         Return the state dir to be used by the auto-started agent in the given environment.
         """
         state_dir: str = inmanta.config.state_dir.get()
-        return os.path.join(state_dir, str(env_id))
+        return os.path.join(state_dir, "server", str(env_id))
 
     def _remove_venv_for_agent_in_env(self, env_id: uuid.UUID) -> None:
         """
@@ -1242,11 +1242,13 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         config: str = await self._make_agent_config(env, connection=connection)
 
-        config_dir = os.path.join(self._server_storage["agents"], str(env.id))
+        root_dir: str = self._server_storage["server"]
+        config_dir = os.path.join(root_dir, str(env.id))
+
         if not os.path.exists(config_dir):
             os.mkdir(config_dir)
 
-        config_path = os.path.join(config_dir, "agent.cfg")
+        config_path = os.path.join(config_dir, "scheduler.cfg")
         with open(config_path, "w+", encoding="utf-8") as fd:
             fd.write(config)
 

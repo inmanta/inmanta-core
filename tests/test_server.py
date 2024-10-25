@@ -585,7 +585,7 @@ async def test_clear_environment(client, server, clienthelper, environment):
 
     # Wait for env directory to appear
     slice = server.get_slice(SLICE_SERVER)
-    env_dir = os.path.join(slice._server_storage["environments"], environment)
+    env_dir = os.path.join(slice._server_storage["server"], environment, "compiler")
 
     while not os.path.exists(env_dir):
         await asyncio.sleep(0.1)
@@ -1953,7 +1953,7 @@ async def test_set_param_v2(server, client, environment):
     assert len(parameters) == 2
 
 
-async def test_delete_active_version(client, clienthelper, server, environment, agent):
+async def test_delete_active_version(client, clienthelper, server, environment, null_agent):
     """
     Test that the active version cannot be deleted
     """
