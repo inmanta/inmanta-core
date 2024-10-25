@@ -48,15 +48,27 @@ db_password = Option("database", "password", None, "The password that belong to 
 db_connection_pool_min_size = Option(
     "database",
     "connection_pool_min_size",
+    10,
+    "[DEPRECATED USE :inmanta.config:option:`database.service_connection_pool_min_size`] Number of connections the database connection pool will be initialized with",
+    is_int,
+)
+db_connection_pool_max_size = Option(
+    "database", "connection_pool_max_size", 70, "[DEPRECATED USE :inmanta.config:option:`database.service_connection_pool_max_size`] Max number of connections in the database connection pool", is_int
+)
+db_connection_timeout = Option("database", "connection_timeout", 60, "[DEPRECATED USE :inmanta.config:option:`database.service_connection_timeout`] Connection timeout in seconds", is_float)
+
+
+db_service_connection_pool_min_size = Option(
+    "database",
+    "service_connection_pool_min_size",
     5,
     "Number of connections the database connection pool will be initialized with",
     is_int,
 )
-db_connection_pool_max_size = Option(
-    "database", "connection_pool_max_size", 35, "Max number of connections in the database connection pool", is_int
+db_service_connection_pool_max_size = Option(
+    "database", "service_connection_pool_max_size", 35, "Max number of connections in the database connection pool", is_int
 )
-db_connection_timeout = Option("database", "connection_timeout", 60, "Connection timeout in seconds", is_float)
-
+db_service_connection_timeout = Option("database", "service_connection_timeout", 60, "Connection timeout in seconds", is_float)
 
 #############################
 # server_rest_transport

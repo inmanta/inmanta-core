@@ -138,9 +138,9 @@ async def server_db_connect() -> asyncpg.pool.Pool:
     database_port = opt.db_port.get()
     database_username = opt.db_username.get()
     database_password = opt.db_password.get()
-    connection_pool_min_size = opt.db_connection_pool_min_size.get()
-    connection_pool_max_size = opt.db_connection_pool_max_size.get()
-    connection_timeout = opt.db_connection_timeout.get()
+    connection_pool_min_size = opt.db_service_connection_pool_min_size.get()
+    connection_pool_max_size = opt.db_service_connection_pool_max_size.get()
+    connection_timeout = opt.db_service_connection_timeout.get()
     out = await data.connect(
         database_host,
         database_port,

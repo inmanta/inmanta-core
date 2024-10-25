@@ -1373,9 +1373,9 @@ port={opt.db_port.get()}
 name={opt.db_name.get()}
 username={opt.db_username.get()}
 password={opt.db_password.get()}
-connection_pool_min_size={db_connection_pool_min_size}
-connection_pool_max_size={db_connection_pool_max_size}
-connection_timeout={db_connection_timeout}
+service_connection_pool_min_size={db_connection_pool_min_size}
+service_connection_pool_max_size={db_connection_pool_max_size}
+service_connection_timeout={db_connection_timeout}
 
             """
         return config
