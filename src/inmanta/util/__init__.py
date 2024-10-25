@@ -392,6 +392,25 @@ class Scheduler:
         self._scheduled[task_spec] = handle
         return task_spec
 
+    def schedule(
+        self,
+        call: TaskMethod,
+        interval: float = 60,
+        initial_delay: Optional[float] = None,
+        cancel_on_stop: bool = True,
+        quiet_mode: bool = False,
+    ) -> Optional[ScheduledTask]:
+        """
+        Schedule a task repeatedly with a given interval. Tasks with the same call and the same schedule are considered the
+        same. Clients that wish to be able to delete tasks should make sure to use a unique `call` function.
+
+        :param interval: The interval between executions of the task.
+        :param initial_delay: The delay to execute the task for the first time. If not set, interval is used.
+        :quiet_mode: Set to true to disable logging the recurring notification that the action is being called. Use this to
+        avoid polluting the server log for very frequent actions.
+        """
+        return self.add_action(call, IntervalSchedule(interval, initial_delay), cancel_on_stop, quiet_mode)
+
     @stable_api
     def remove(self, task: ScheduledTask) -> None:
         """
@@ -850,6 +869,7 @@ class ExhaustedPoolWatcher:
 
     def __init__(self, pool: asyncpg.pool.Pool) -> None:
         self._exhausted_pool_events_count: int = 0
+        self._last_report: int = 0
         self._pool: asyncpg.pool.Pool = pool
 
     def report_and_reset(self, logger: logging.Logger) -> None:
@@ -857,9 +877,10 @@ class ExhaustedPoolWatcher:
         Log how many exhausted pool events were recorded since the last time the counter
         was reset, if any, and reset the counter.
         """
-        if self._exhausted_pool_events_count > 0:
-            logger.warning("Database pool was exhausted %d times in the past 24h.", self._exhausted_pool_events_count)
-            self._reset_counter()
+        since_last = self._exhausted_pool_events_count - self._last_report
+        if since_last > 0:
+            logger.warning("Database pool was exhausted %d times in the past 24h.", since_last)
+            self._last_report = self._exhausted_pool_events_count
 
     def check_for_pool_exhaustion(self) -> None:
         """
@@ -868,9 +889,6 @@ class ExhaustedPoolWatcher:
         pool_exhausted: bool = self._pool.get_size() == self._pool.get_max_size() and self._pool.get_idle_size() == 0
         if pool_exhausted:
             self._exhausted_pool_events_count += 1
-
-    def _reset_counter(self) -> None:
-        self._exhausted_pool_events_count = 0
 
 
 def remove_comment_part_from_specifier(to_clean: str) -> str:
