@@ -3458,20 +3458,6 @@ class Agent(BaseDocument):
         return sorted([r["name"] for r in result])
 
     @classmethod
-    async def pause_all_except_scheduler(
-        cls, env: uuid.UUID, paused: bool, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> list[str]:
-        """
-        Pause all agents in an environment except the scheduler.
-
-        :return A list of agent names that have been paused/unpaused by this method.
-        """
-        query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name<>$3 RETURNING name"
-        values = [cls._get_value(paused), cls._get_value(env), cls._get_value(const.AGENT_SCHEDULER_ID)]
-        result = await cls._fetch_query(query, *values, connection=connection)
-        return sorted([str(r["name"]) for r in result])
-
-    @classmethod
     async def set_unpause_on_resume(
         cls,
         env: uuid.UUID,
@@ -3483,12 +3469,8 @@ class Agent(BaseDocument):
         Set the unpause_on_resume field of a specific agent or all agents in an environment when endpoint is set to None.
         """
         if endpoint is None:
-            query = f"UPDATE {cls.table_name()} SET unpause_on_resume=$1 WHERE environment=$2 AND name<>$3"
-            values = [
-                cls._get_value(should_be_unpaused_on_resume),
-                cls._get_value(env),
-                cls._get_value(const.AGENT_SCHEDULER_ID),
-            ]
+            query = f"UPDATE {cls.table_name()} SET unpause_on_resume=$1 WHERE environment=$2"
+            values = [cls._get_value(should_be_unpaused_on_resume), cls._get_value(env)]
         else:
             query = f"UPDATE {cls.table_name()} SET unpause_on_resume=$1 WHERE environment=$2 AND name=$3"
             values = [cls._get_value(should_be_unpaused_on_resume), cls._get_value(env), cls._get_value(endpoint)]

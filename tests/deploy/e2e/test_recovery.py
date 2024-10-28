@@ -120,6 +120,8 @@ async def test_scheduler_initialization(agent, resource_container, clienthelper,
     assert result.result["data"][0]["resource_version_ids"] == ["test::Resource[agent1,key=key1],v=1"]
 
     # Pause the agent to stop the scheduler
+    # We cannot call halt_environment / resume_environment as it will try to create the scheduler but will fail
+    # because auto_start_agent is not set to `True`
     await data.Agent.pause(env=uuid.UUID(environment), endpoint=const.AGENT_SCHEDULER_ID, paused=True)
     result, _ = await agent.set_state(const.AGENT_SCHEDULER_ID, enabled=False)
     assert result == 200
