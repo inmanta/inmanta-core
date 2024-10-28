@@ -425,13 +425,13 @@ class ResourceScheduler(TaskManager):
     async def _run_for_agent(self, agent: str) -> None:
         """Main loop for one agent"""
         while self._running:
-            task: Task = await self._work.agent_queues.queue_get(agent)
+            task: PrioritizedTask = await self._work.agent_queues.queue_get(agent)
             try:
-                await task.execute(self, agent)
+                await task.task.execute(self, agent, task.reason)
             except Exception:
                 LOGGER.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
 
-            self._work.agent_queues.task_done(agent, task)
+            self._work.agent_queues.task_done(agent, task.task)
 
     # TaskManager interface
 

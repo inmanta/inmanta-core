@@ -59,6 +59,7 @@ class PrioritizedTask(Generic[T]):
 
     task: T
     priority: TaskPriority
+    reason: str | None = None
 
 
 @functools.total_ordering
@@ -219,7 +220,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         for queue in self._agent_queues.values():
             queue.put_nowait(poison_pill)
 
-    async def queue_get(self, agent: str) -> tasks.Task:
+    async def queue_get(self, agent: str) -> PrioritizedTask:
         """
         Consume a task from an agent's queue. If the queue is empty, blocks until a task becomes available.
         """
@@ -234,7 +235,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
             self.discard(item.task.task)
             # add the item to _in_progress with the correct priority
             self._in_progress[item.task.task] = item.task.priority
-            return item.task.task
+            return item.task
 
     def task_done(self, agent: str, task: tasks.Task) -> None:
         """
