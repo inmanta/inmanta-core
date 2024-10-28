@@ -33,6 +33,7 @@ from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, cast
+from uuid import UUID
 
 import inmanta.types
 import inmanta.util
@@ -40,8 +41,10 @@ import packaging.requirements
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
-from inmanta.const import ResourceState
-from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.agent.handler import HandlerContext
+from inmanta.const import Change, ResourceState
+from inmanta.data import LogLine
+from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
@@ -356,19 +359,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         os.makedirs(self.env_path)
 
 
-def initialize_envs_directory() -> str:
-    """
-    Initializes the base directory for storing virtual environments. If the directory
-    does not exist, it is created.
-
-    :return: The path to the environments directory.
-    """
-    state_dir = cfg.state_dir.get()
-    env_dir = os.path.join(state_dir, "envs")
-    os.makedirs(env_dir, exist_ok=True)
-    return env_dir
-
-
 class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, str, ExecutorVirtualEnvironment]):
     """
     Manages virtual environments to ensure efficient reuse.
@@ -430,11 +420,11 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         This method must execute under the self._locks.get(<blueprint-hash>) lock to ensure thread-safe operations for each
         unique blueprint.
 
-        :param blueprint: The blueprint specifying the configuration for the new virtual environment.
+        :param member_id: The blueprint specifying the configuration for the new virtual environment.
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
         """
-        interal_id = member_id.blueprint_hash()
-        env_dir_name: str = interal_id
+        internal_id = member_id.blueprint_hash()
+        env_dir_name: str = internal_id
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
         # Check if the directory already exists and create it if not
@@ -446,7 +436,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
                 "Found existing venv for content %s at %s, content hash: %s",
                 str(member_id),
                 env_dir,
-                interal_id,
+                internal_id,
             )
             is_new = False  # Returning the path and False for existing directory
 
@@ -459,16 +449,52 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
                 "Venv is already present but it was not correctly initialized. Re-creating it for content %s, "
                 "content hash: %s located in %s",
                 str(member_id),
-                interal_id,
+                internal_id,
                 env_dir,
             )
             await loop.run_in_executor(self.thread_pool, process_environment.reset)
             is_new = True
 
         if is_new:
-            LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), interal_id)
+            LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), internal_id)
             await process_environment.create_and_install_environment(member_id)
         return process_environment
+
+
+@dataclass
+class DeployResult:
+    rvid: ResourceVersionIdStr
+    action_id: uuid.UUID
+    status: ResourceState
+    messages: list[LogLine]
+    changes: dict[str, AttributeStateChange]
+    change: Optional[Change]
+
+    @classmethod
+    def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployResult":
+        if ctx.status is None:
+            ctx.warning("Deploy status field is None, failing!")
+            ctx.set_status(ResourceState.failed)
+
+        return DeployResult(
+            rvid=rvid,
+            action_id=ctx.action_id,
+            status=ctx.status or ResourceState.failed,
+            messages=ctx.logs,
+            changes=ctx.changes,
+            change=ctx.change,
+        )
+
+    @classmethod
+    def undeployable(self, rvid: ResourceVersionIdStr, action_id: UUID, message: LogLine) -> "DeployResult":
+        return DeployResult(
+            rvid=rvid,
+            action_id=action_id,
+            status=ResourceState.unavailable,
+            messages=[message],
+            changes={},
+            change=Change.nochange,
+        )
 
 
 class Executor(abc.ABC):
@@ -486,10 +512,12 @@ class Executor(abc.ABC):
     @abc.abstractmethod
     async def execute(
         self,
+        action_id: uuid.UUID,
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-    ) -> ResourceState:
+        requires: dict[ResourceIdStr, const.ResourceState],
+    ) -> DeployResult:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
 

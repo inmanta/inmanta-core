@@ -31,14 +31,7 @@ import pydantic
 import inmanta.util
 from inmanta import const, data, tracing
 from inmanta.const import ResourceState
-from inmanta.data import (
-    APILIMIT,
-    AVAILABLE_VERSIONS_TO_KEEP,
-    ENVIRONMENT_AGENT_TRIGGER_METHOD,
-    InvalidSort,
-    ResourcePersistentState,
-    RowLockMode,
-)
+from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
@@ -820,10 +813,8 @@ class OrchestrationService(protocol.ServerSlice):
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
             all_agents: abc.Set[str]
-            if opt.server_use_resource_scheduler.get():
-                all_agents = {const.AGENT_SCHEDULER_ID}
-            else:
-                all_agents = {res.agent for res in rid_to_resource.values()}
+
+            all_agents = {const.AGENT_SCHEDULER_ID}
 
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
@@ -1198,46 +1189,19 @@ class OrchestrationService(protocol.ServerSlice):
                 await model.mark_done(connection=connection)
                 return 200, {"model": model}
 
-            # New code relying on the ResourceScheduler
-            if opt.server_use_resource_scheduler.get():
-                if connection.is_in_transaction():
-                    raise RuntimeError(
-                        "The release of a new version cannot be in a transaction! "
-                        "The agent would not see the data that as committed"
-                    )
-                await self.autostarted_agent_manager._ensure_scheduler(env)
-                agent = const.AGENT_SCHEDULER_ID
+            if connection.is_in_transaction():
+                raise RuntimeError(
+                    "The release of a new version cannot be in a transaction! "
+                    "The agent would not see the data that as committed"
+                )
+            await self.autostarted_agent_manager._ensure_scheduler(env.id)
+            agent = const.AGENT_SCHEDULER_ID
 
-                client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
-                if client is not None:
-                    self.add_background_task(client.trigger_read_version(env.id))
-                else:
-                    LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)
-            # Old code
-            elif push:
-                # We can't be in a transaction here, or the agent will not see the data that as committed
-                # This assert prevents anyone from wrapping this method in a transaction by accident
-                assert not connection.is_in_transaction()
-
-                if agents is None:
-                    # fetch all resource in this cm and create a list of distinct agents
-                    agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
-                await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
-
-                assert agents is not None
-                for agent in agents:
-                    client = self.agentmanager_service.get_agent_client(env.id, agent)
-                    if client is not None:
-                        if not agent_trigger_method:
-                            env_agent_trigger_method = await env.get(ENVIRONMENT_AGENT_TRIGGER_METHOD, connection=connection)
-                            incremental_deploy = env_agent_trigger_method == const.AgentTriggerMethod.push_incremental_deploy
-                        else:
-                            incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
-                        self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
-                    else:
-                        LOGGER.warning(
-                            "Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id
-                        )
+            client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+            if client is not None:
+                self.add_background_task(client.trigger_read_version(env.id))
+            else:
+                LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)
 
             return 200, {"model": model}
 
@@ -1270,12 +1234,8 @@ class OrchestrationService(protocol.ServerSlice):
         if not allagents:
             return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
 
-        is_using_new_scheduler = opt.server_use_resource_scheduler.get()
-        if is_using_new_scheduler:
-            await self.autostarted_agent_manager._ensure_scheduler(env)
-            allagents = [const.AGENT_SCHEDULER_ID]
-        else:
-            await self.autostarted_agent_manager._ensure_agents(env, allagents)
+        await self.autostarted_agent_manager._ensure_scheduler(env.id)
+        allagents = [const.AGENT_SCHEDULER_ID]
 
         present = set()
         absent = set()

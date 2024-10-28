@@ -24,7 +24,7 @@ import sys
 import time
 import uuid
 from asyncio import queues, subprocess
-from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence, Set
+from collections.abc import Iterable, Iterator, Mapping, Sequence, Set
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, Union, cast
@@ -44,7 +44,6 @@ from inmanta.data.model import ResourceIdStr
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
-from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -210,14 +209,14 @@ class AgentManager(ServerSlice, SessionListener):
         Halts all agents for an environment. Persists prior paused state.
         """
         await data.Agent.persist_on_halt(env.id, connection=connection)
-        await self._stop_agent(env, connection=connection)
+        await self._pause_agent(env, connection=connection)
 
     async def resume_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Resumes after halting. Unpauses all agents that had been paused by halting.
         """
-        to_unpause: list[str] = await data.Agent.persist_on_resume(env=env.id, connection=connection)
-        await asyncio.gather(*[self._start_agent(env=env, endpoint=agent, connection=connection) for agent in to_unpause])
+        to_unpause: list[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
+        await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
 
     @handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:
@@ -226,9 +225,9 @@ class AgentManager(ServerSlice, SessionListener):
         if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
             raise Forbidden("Cannot set on_resume state of agents when the environment is not halted.")
         if action is AgentAction.pause:
-            await self._stop_agent(env)
+            await self._pause_agent(env=env)
         elif action is AgentAction.unpause:
-            await self._start_agent(env)
+            await self._unpause_agent(env=env)
         elif action is AgentAction.keep_paused_on_resume:
             await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False)
         elif action is AgentAction.unpause_on_resume:
@@ -246,9 +245,9 @@ class AgentManager(ServerSlice, SessionListener):
         if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
             raise Forbidden("Cannot set on_resume state of agents when the environment is not halted.")
         if action is AgentAction.pause:
-            await self._stop_agent(env, name)
+            await self._pause_agent(env, name)
         elif action is AgentAction.unpause:
-            await self._start_agent(env, name)
+            await self._unpause_agent(env, name)
         elif action is AgentAction.keep_paused_on_resume:
             await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False, endpoint=name)
         elif action is AgentAction.unpause_on_resume:
@@ -256,96 +255,31 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             raise BadRequest(f"Unknown agent action: {action.name}")
 
-    async def _stop_agent(
+    async def _pause_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         """
         Pause a logical agent by pausing an active agent instance if it exists, and removing the logical agent's primary.
-
-        When the Scheduler is used, this method can either halt an environment or pause a particular agent. The main difference
-        between these would be the following:
-            - The endpoint is not provided -> We want to halt the environment
-            - The endpoint is provided -> We want to pause an agent
-        The things that will differ in the logic will be:
-            - The number of agent that are set to "paused" in the agent table:
-                - Only one if an agent is paused or all of them if the environment is halted
-            - The request that will be sent to the Scheduler to pause an agent:
-                - This will be only sent if we stop a particular agent
-                - If we want to pause the environment we cannot send the request here as this is part of a big DB transaction,
-                    so this one needs to go through before being able to send the request to the Scheduler to halt everything
-            - The update of the primary will be only be taken care of when we deal with the Scheduler as the Server is not
-                aware of the executors created by the Scheduler -> It does not need to maintain this information
         """
-        endpoints_with_new_primary = []
+
         async with self.session_lock:
-            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
-            if opt.server_use_resource_scheduler.get():
-                key = (env.id, const.AGENT_SCHEDULER_ID)
-                live_session = self.tid_endpoint_to_session.get(key)
-                if not live_session:
-                    return
+            await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
+            key = (env.id, const.AGENT_SCHEDULER_ID)
+            live_session = self.tid_endpoint_to_session.get(key)
+            if live_session:
+                await live_session.get_client().set_state(endpoint, enabled=False)
 
-                if endpoint is not None:
-                    await live_session.get_client().set_state(endpoint, enabled=False)
-                elif endpoint is None:
-                    # We need to update information in the DB
-                    endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, None))
-                    await data.Agent.update_primary(
-                        env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
-                    )
-            else:
-                for agent_name in agents:
-                    key = (env.id, agent_name)
-                    live_session = self.tid_endpoint_to_session.get(key)
-                    if live_session:
-                        # The agent has an active agent instance that has to be paused
-                        del self.tid_endpoint_to_session[key]
-                        await live_session.get_client().set_state(agent_name, enabled=False)
-                        endpoints_with_new_primary.append((agent_name, None))
-                await data.Agent.update_primary(
-                    env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
-                )
-
-    async def _start_agent(
+    async def _unpause_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
-        endpoints_with_new_primary = []
         async with self.session_lock:
-            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
-            if opt.server_use_resource_scheduler.get():
-                key = (env.id, const.AGENT_SCHEDULER_ID)
-                live_session = self.tid_endpoint_to_session.get(key)
-                if not live_session:
-                    await self._autostarted_agent_manager._ensure_scheduler(env)
-                    live_session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
-                    assert live_session
-                    self.tid_endpoint_to_session[key] = live_session
-
-                if endpoint is not None:
-                    # We don't need to do this when the environment is resumed because the scheduler will need to have updated
-                    # information related to agents (being unpaused) and in order to have that, this transaction needs to
-                    # finish first
-                    await live_session.get_client().set_state(endpoint, enabled=True)
-                elif endpoint is None:
-                    # We need to update information in the DB
-                    endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, live_session.id))
-                    await data.Agent.update_primary(
-                        env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
-                    )
-            else:
-                for agent_name in agents:
-                    key = (env.id, agent_name)
-                    live_session = self.tid_endpoint_to_session.get(key)
-                    # If the agent has a live_session, the agent wasn't paused
-                    if not live_session:
-                        session = self.get_session_for(tid=env.id, endpoint=agent_name)
-                        if session:
-                            self.tid_endpoint_to_session[key] = session
-                            await session.get_client().set_state(agent_name, enabled=True)
-                            endpoints_with_new_primary.append((agent_name, session.id))
-                await data.Agent.update_primary(
-                    env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
-                )
+            await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
+            key = (env.id, const.AGENT_SCHEDULER_ID)
+            live_session = self.tid_endpoint_to_session.get(key)
+            if not live_session:
+                session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
+                if session:
+                    await session.get_client().set_state(endpoint, enabled=True)
 
     async def _set_unpause_on_resume(
         self,
@@ -917,23 +851,14 @@ class AgentManager(ServerSlice, SessionListener):
                 )
                 return 503, {"message": "The resource is in an undeployable state."}
 
-            rid: Id = Id.parse_id(res.resource_version_id)
-            version: int = rid.version
-
             # only request facts of a resource every _fact_resource_block time
             now = time.time()
             if (
                 resource_id not in self._fact_resource_block_set
                 or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now
             ):
-                if opt.server_use_resource_scheduler.get():
-                    await self._autostarted_agent_manager._ensure_scheduler(env)
-                    agent = const.AGENT_SCHEDULER_ID
-                else:
-                    agents = await data.ConfigurationModel.get_agents(env.id, version)
-                    await self._autostarted_agent_manager._ensure_agents(env, agents)
-                    agent = res.agent
-
+                await self._autostarted_agent_manager._ensure_scheduler(env_id)
+                agent = const.AGENT_SCHEDULER_ID
                 client = self.get_agent_client(env_id, agent)
                 if client is not None:
                     await client.get_parameter(str(env_id), agent, res.to_dict())
@@ -1021,6 +946,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         self.environment_service = cast(environmentservice.EnvironmentService, server.get_slice(SLICE_ENVIRONMENT))
         self.environment_service.register_listener(self, inmanta.server.services.environmentlistener.EnvironmentAction.created)
+        self.environment_service.register_listener(self, inmanta.server.services.environmentlistener.EnvironmentAction.cleared)
 
     async def start(self) -> None:
         await super().start()
@@ -1049,31 +975,11 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             autostart = await env.get(data.AUTOSTART_ON_START)
             if not autostart:
                 continue
-
-            if opt.server_use_resource_scheduler.get():
-                await self._ensure_scheduler(env)
-            else:
-                agents = await data.Agent.get_list(environment=env.id)
-                agent_list = {a.name for a in agents}
-                await self._ensure_agents(env, agent_list)
+            await self._ensure_scheduler(env.id)
 
     async def restart_agents(self, env: data.Environment) -> None:
-        LOGGER.debug("Restarting agents in environment %s", env.id)
-        if opt.server_use_resource_scheduler.get():
-            agent_client = self._agent_manager.get_agent_client(
-                tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
-            )
-            if agent_client is None:
-                await self._ensure_scheduler(env)
-                agent_client = self._agent_manager.get_agent_client(
-                    tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
-                )
-                assert agent_client is not None, "The client towards the scheduler should not be down!"
-            await agent_client.set_state(const.AGENT_SCHEDULER_ID, enabled=True)
-        else:
-            agents = await data.Agent.get_list(environment=env.id)
-            agent_list = [a.name for a in agents]
-            await self._ensure_agents(env, agent_list, restart=True)
+        LOGGER.debug("Restarting Scheduler in environment %s", env.id)
+        await self._ensure_scheduler(env.id)
 
     async def stop_agents(
         self,
@@ -1086,25 +992,16 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         async with self.agent_lock:
             LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
-            if opt.server_use_resource_scheduler.get():
-                agent_client = self._agent_manager.get_agent_client(
-                    tid=env.id, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=False
-                )
-                if agent_client is None:
-                    return
-                await agent_client.set_state(agent=const.AGENT_SCHEDULER_ID, enabled=False)
-                del self._agent_manager.tid_endpoint_to_session[(env.id, const.AGENT_SCHEDULER_ID)]
-            else:
-                if env.id in self._agent_procs:
-                    subproc = self._agent_procs[env.id]
-                    self._stop_process(subproc)
-                    await self._wait_for_proc_bounded([subproc])
-                    del self._agent_procs[env.id]
-                if delete_venv:
-                    self._remove_venv_for_agent_in_env(env.id)
+            if env.id in self._agent_procs:
+                subproc = self._agent_procs[env.id]
+                self._stop_process(subproc)
+                await self._wait_for_proc_bounded([subproc])
+                del self._agent_procs[env.id]
+            if delete_venv:
+                self._remove_venv_for_agent_in_env(env.id)
 
-                LOGGER.debug("Expiring all sessions for %s", env.id)
-                await self._agent_manager.expire_all_sessions_for_environment(env.id)
+            LOGGER.debug("Expiring all sessions for %s", env.id)
+            await self._agent_manager.expire_all_sessions_for_environment(env.id)
 
     async def _stop_autostarted_agents(
         self,
@@ -1138,7 +1035,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         Return the state dir to be used by the auto-started agent in the given environment.
         """
         state_dir: str = inmanta.config.state_dir.get()
-        return os.path.join(state_dir, str(env_id))
+        return os.path.join(state_dir, "server", str(env_id))
 
     def _remove_venv_for_agent_in_env(self, env_id: uuid.UUID) -> None:
         """
@@ -1167,92 +1064,10 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             LOGGER.debug("Expiring all sessions")
             await self._agent_manager.expire_all_sessions()
 
-    # Start/stop agents
-    async def _ensure_agents(
-        self,
-        env: data.Environment,
-        agents: Collection[str],
-        *,
-        restart: bool = False,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> bool:
-        """
-        Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
-
-        :param env: The environment to start the agents for
-        :param agents: A list of agent names that should be running in this environment. Waits for the agents that are both in
-            this list and in the agent map to be active before returning.
-        :param restart: Restart all agents even if the list of agents is up to date.
-        :param connection: The database connection to use. Must not be in a transaction context.
-
-        :return: True iff a new agent process was started.
-        """
-        if self._stopping:
-            raise ShutdownInProgress()
-
-        if connection is not None and connection.is_in_transaction():
-            # Should not be called in a transaction context because it has (immediate) side effects outside of the database
-            # that are tied to the database state. Several inconsistency issues could occur if this runs in a transaction
-            # context:
-            #   - side effects based on oncommitted reads (may even need to be rolled back)
-            #   - race condition with similar side effect flows due to stale reads (e.g. other flow pauses agent and kills
-            #       process, this one brings it back because it reads the agent as unpaused)
-            raise Exception("_ensure_agents should not be called in a transaction context")
-
-        async with data.Agent.get_connection(connection) as connection:
-            agent_map: Mapping[str, str] = cast(
-                Mapping[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
-            )  # we know the type of this map
-
-            autostart_agents: Set[str] = set(agents) & agent_map.keys()
-            if len(autostart_agents) == 0:
-                return False
-
-            async with self.agent_lock:
-                # silently ignore requests if this environment is halted
-                refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
-                if refreshed_env is None:
-                    raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
-                env = refreshed_env
-                if env.halted:
-                    return False
-
-                if not restart and await self._agent_manager.are_agents_active(env.id, autostart_agents):
-                    # do not start a new agent process if the agents are already active, regardless of whether their session
-                    # is with an autostarted process or not.
-                    return False
-
-                start_new_process: bool
-                if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is not None:
-                    # Start new process if none is currently running for this environment.
-                    # Otherwise trust that it tracks any changes to the agent map.
-                    LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_agents)
-                    start_new_process = True
-                elif restart:
-                    LOGGER.info(
-                        "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
-                        autostart_agents,
-                        self._agent_procs[env.id],
-                    )
-                    await self._stop_autostarted_agents(env, connection=connection)
-                    start_new_process = True
-                else:
-                    start_new_process = False
-
-                if start_new_process:
-                    self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
-
-                # Wait for all agents to start
-                try:
-                    await self._wait_for_agents(env, autostart_agents, connection=connection)
-                except asyncio.TimeoutError:
-                    LOGGER.warning("Not all agent instances started successfully")
-                return start_new_process
-
     # Start/Restart scheduler
     async def _ensure_scheduler(
         self,
-        env: data.Environment,
+        env: uuid.UUID,
         *,
         restart: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -1266,6 +1081,8 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         :return: True iff a new agent process was started.
         """
+        if no_start_scheduler:
+            return False
         if self._stopping:
             raise ShutdownInProgress()
 
@@ -1282,20 +1099,20 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         async with data.Agent.get_connection(connection) as connection:
             async with self.agent_lock:
                 # silently ignore requests if this environment is halted
-                refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+                refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env, connection=connection)
                 if refreshed_env is None:
-                    raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
-                env = refreshed_env
-                if env.halted:
+                    raise Exception("Can't ensure agent: environment %s does not exist" % env)
+                if refreshed_env.halted:
                     return False
 
-                if not restart and await self._agent_manager.are_agents_active(env.id, autostart_scheduler):
+                are_active = await self._agent_manager.are_agents_active(env, autostart_scheduler)
+                if not restart and are_active:
                     # do not start a new agent process if the agents are already active, regardless of whether their session
                     # is with an autostarted process or not.
                     return False
 
                 start_new_process: bool
-                if env.id not in self._agent_procs or self._agent_procs[env.id].returncode is not None:
+                if env not in self._agent_procs or self._agent_procs[env].returncode is not None:
                     # Start new process if none is currently running for this environment.
                     # Otherwise trust that it tracks any changes to the agent map.
                     LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_scheduler)
@@ -1304,19 +1121,19 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     LOGGER.info(
                         "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
                         autostart_scheduler,
-                        self._agent_procs[env.id],
+                        self._agent_procs[env],
                     )
-                    await self._stop_autostarted_agents(env, connection=connection)
+                    await self._stop_autostarted_agents(refreshed_env, connection=connection)
                     start_new_process = True
                 else:
                     start_new_process = False
 
                 if start_new_process:
-                    self._agent_procs[env.id] = await self.__do_start_agent(env, connection=connection)
+                    self._agent_procs[env] = await self.__do_start_agent(refreshed_env, connection=connection)
 
                 # Wait for all agents to start
                 try:
-                    await self._wait_for_agents(env, autostart_scheduler, connection=connection)
+                    await self._wait_for_agents(refreshed_env, autostart_scheduler, connection=connection)
                 except asyncio.TimeoutError:
                     LOGGER.warning("Not all agent instances started successfully")
                 return start_new_process
@@ -1327,17 +1144,17 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         Start an autostarted agent process for the given environment. Should only be called if none is running yet.
         """
-        assert not no_auto_start_scheduler
+        assert not assert_no_start_scheduler
 
-        use_resource_scheduler: bool = opt.server_use_resource_scheduler.get()
+        config: str = await self._make_agent_config(env, connection=connection)
 
-        config: str = await self._make_agent_config(env, connection=connection, scheduler=use_resource_scheduler)
+        root_dir: str = self._server_storage["server"]
+        config_dir = os.path.join(root_dir, str(env.id))
 
-        config_dir = os.path.join(self._server_storage["agents"], str(env.id))
         if not os.path.exists(config_dir):
             os.mkdir(config_dir)
 
-        config_path = os.path.join(config_dir, "agent.cfg")
+        config_path = os.path.join(config_dir, "scheduler.cfg")
         with open(config_path, "w+", encoding="utf-8") as fd:
             fd.write(config)
 
@@ -1357,7 +1174,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 Config._config_dir if Config._config_dir is not None else "",
                 "--log-file",
                 agent_log,
-                "scheduler" if use_resource_scheduler else "agent",
+                "scheduler",
             ],
             out,
             err,
@@ -1371,7 +1188,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         env: data.Environment,
         *,
         connection: Optional[asyncpg.connection.Connection],
-        scheduler: bool = False,
     ) -> str:
         """
         Generate the config file for the process that hosts the autostarted agents
@@ -1449,8 +1265,7 @@ ssl_ca_cert_file=%s
             config += """
 ssl=True
     """
-        if scheduler:
-            config += f"""
+        config += f"""
 [database]
 wait_time={opt.db_wait_time.get()}
 host={opt.db_host.get()}
@@ -1529,6 +1344,7 @@ password={opt.db_password.get()}
                     proc.pid,
                     ",".join(sorted(expected_agents_in_up_state - actual_agents_in_up_state)),
                 )
+
                 raise asyncio.TimeoutError()
             if now - last_log > AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL:
                 last_log = now
@@ -1582,14 +1398,27 @@ password={opt.db_password.get()}
 
         :param env: The new environment
         """
-        if not opt.server_use_resource_scheduler.get():
-            return
-
         env_db = await data.Environment.get_by_id(env.id)
+        assert env_db
         # We need to make sure that the AGENT_SCHEDULER is registered to be up and running
         await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
-        if not no_auto_start_scheduler:
-            await self._ensure_scheduler(env_db)
+        if not (assert_no_start_scheduler or no_start_scheduler):
+            await self._ensure_scheduler(env.id)
+
+    async def environment_action_cleared(self, env: model.Environment) -> None:
+        """
+        Will be called when a new environment is created to create a scheduler agent
+
+        :param env: The new environment
+        """
+        env_db = await data.Environment.get_by_id(env.id)
+        assert env_db
+        # We need to make sure that the AGENT_SCHEDULER is registered to be up and running
+        await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
 
 
-no_auto_start_scheduler = False
+# For testing only
+# Assert the scheduler will not be started (i.e. agent mock setup is correct)
+assert_no_start_scheduler = False
+# Ensure the scheduler is not started
+no_start_scheduler = False

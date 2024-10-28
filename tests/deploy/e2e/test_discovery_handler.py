@@ -22,7 +22,6 @@ from urllib import parse
 
 import pytest
 
-from agent_server.conftest import wait_for_n_deployed_resources
 from inmanta import const, data, util
 from inmanta.agent.handler import DiscoveryHandler, HandlerContext, provider
 from inmanta.data import ResourceIdStr
@@ -30,6 +29,7 @@ from inmanta.data.model import BaseModel
 from inmanta.resources import DiscoveryResource, Id, resource
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import retry_limited
+from utils import wait_for_n_deployed_resources
 
 
 @pytest.fixture
@@ -76,8 +76,7 @@ async def test_discovery_resource_handler_basic_test(
     client,
     clienthelper,
     environment,
-    no_agent_backoff,
-    agent_factory,
+    agent,
     discovery_resource_and_handler,
     all_values: list[str],
 ):
@@ -86,12 +85,6 @@ async def test_discovery_resource_handler_basic_test(
     Is also verifies that executing a dry-run or a get-fact request on a DiscoveryResource doesn't fail
     and doesn't do anything by default.
     """
-
-    await agent_factory(
-        environment=environment,
-        agent_map={"discovery_agent": "localhost"},
-        hostname="discovery_agent",
-    )
 
     version = await clienthelper.get_version()
     resource_id = "test::MyDiscoveryResource[discovery_agent,key=key1]"
@@ -195,11 +188,10 @@ async def test_discovery_resource_handler_basic_test(
 @pytest.mark.parametrize("direct_dependency_failed", [True, False])
 async def test_discovery_resource_requires_provides(
     server,
+    agent,
     client,
     clienthelper,
     environment,
-    no_agent_backoff,
-    agent_factory,
     discovery_resource_and_handler,
     all_values: list[str],
     direct_dependency_failed: bool,
@@ -207,13 +199,6 @@ async def test_discovery_resource_requires_provides(
     """
     This test verifies that the requires/provides relationships are taken into account for a DiscoveryResource.
     """
-
-    await agent_factory(
-        environment=environment,
-        agent_map={"host": "localhost"},
-        hostname="host",
-        agent_names=["discovery_agent", "agent1"],
-    )
 
     version = await clienthelper.get_version()
 

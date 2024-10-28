@@ -281,8 +281,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             "resource_types": list(ResourceType),  # ALL the types for this model version
         }
         """
-        if not self.agentmanager_service.is_primary(env, sid, agent):
-            return 409, {"message": f"This agent is not currently the primary for the endpoint {agent} (sid: {sid})"}
         if incremental_deploy:
             if version is not None:
                 return 500, {"message": "Cannot request increment for a specific version"}
@@ -687,7 +685,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
     ) -> None:
         resource_id_str = resource_id.resource_version_str()
         finished = datetime.datetime.now().astimezone()
-        changes_with_rvid = {
+        changes_with_rvid: dict[ResourceVersionIdStr, dict[str, object]] = {
             resource_id_str: {attr_name: attr_change.model_dump()} for attr_name, attr_change in changes.items()
         }
 
@@ -821,7 +819,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         finished: datetime.datetime,
         status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
         messages: list[dict[str, Any]],
-        changes: dict[str, Any],
+        changes: dict[ResourceVersionIdStr, dict[str, object]],
         change: const.Change,
         send_events: bool,
         keep_increment_cache: bool = False,
