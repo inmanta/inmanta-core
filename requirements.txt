@@ -12,7 +12,7 @@ importlib_metadata==8.5.0
 jinja2==3.1.4
 more-itertools==10.5.0
 packaging==24.1
-pip==24.2
+pip==24.3.1
 ply==3.11
 pydantic==2.9.1
 # held back due to pydantic/pydantic#10494. pydantic-core is not a direct dependency:
