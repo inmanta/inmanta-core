@@ -25,6 +25,7 @@ import logging
 import multiprocessing
 import os
 import uuid
+from dataclasses import dataclass, field
 from functools import partial
 
 import psutil
@@ -40,6 +41,32 @@ from typing_extensions import Optional
 from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.server_agent")
+
+
+@dataclass(frozen=True, kw_only=True)
+class SchedulerChildren:
+    scheduler: Optional[psutil.Process] = None
+    fork_server: Optional[psutil.Process] = None
+    executors: list[psutil.Process] = field(default_factory=list)
+
+    def __post_init__(self):
+        inconsistencies = (self.scheduler is None and self.fork_server != self.scheduler) or (
+            self.scheduler is None and len(self.executors) > 0
+        )
+
+        if inconsistencies:
+            raise TypeError(f"Some fields have been defined even though the Scheduler is not defined: {str(self)}!")
+
+    @property
+    def children(self) -> list[psutil.Process]:
+        children = []
+        if self.scheduler is not None:
+            children.append(self.scheduler)
+        if self.fork_server is not None:
+            children.append(self.fork_server)
+        children.extend(self.executors)
+
+        return children
 
 
 @pytest.fixture(scope="function")
@@ -354,7 +381,7 @@ def wait_for_terminated_status(current_children: list[psutil.Process], expected_
     return len(terminated_process) == expected_terminated_process
 
 
-def construct_mapping_relevant_processes(current_pid: int) -> dict[str, Process]:
+def construct_mapping_relevant_processes(current_pid: int) -> SchedulerChildren:
     def get_process_state(current_pid: int) -> list[Process]:
         """
         Retrieves the current list of processes running under this process
@@ -384,25 +411,22 @@ def construct_mapping_relevant_processes(current_pid: int) -> dict[str, Process]
                     continue
         return latest_scheduler
 
-    def filter_relevant_processes(children: list[Process]) -> dict[str, Process]:
+    def filter_relevant_processes(latest_scheduler: Process) -> SchedulerChildren:
         """
         Filter the list of processes by removing processes not relevant with the Scheduler. The only processes that interest
         us are:
             - inmanta: multiprocessing fork server (if it was started by the Scheduler and not the old agent)
             - inmanta: executor process
         """
-        relevant_processes = dict()
-
-        # We sort it to make sure that the Scheduler (if it exists) will be present in the dict Before
-        # `inmanta: multiprocessing fork server`. This will allow us to see if it was started by the Scheduler and
-        # thus relevant
-        children.sort(key=lambda x: x.name(), reverse=True)
-        for child in children:
+        fork_server = None
+        executors = []
+        for child in latest_scheduler.children(recursive=True):
             match child.name():
                 case "inmanta: multiprocessing fork server":
-                    relevant_processes["inmanta: multiprocessing fork server"] = child
+                    assert not fork_server
+                    fork_server = child
                 case executor if "inmanta: executor process" in executor:
-                    relevant_processes["inmanta: executor process"] = child
+                    executors.append(child)
                 case "python" | "python3":
                     cmd_line_process = " ".join(child.cmdline())
                     resource_tracker_import = "from multiprocessing.resource_tracker"
@@ -410,17 +434,23 @@ def construct_mapping_relevant_processes(current_pid: int) -> dict[str, Process]
                         continue
                 case _ as e:
                     assert False, f"Unexpected process: {e}"
-        return relevant_processes
+
+        return SchedulerChildren(
+            scheduler=latest_scheduler,
+            fork_server=fork_server,
+            executors=executors,
+        )
 
     children = get_process_state(current_pid)
     latest_scheduler = find_latest_scheduler(children)
     if latest_scheduler is None:
-        return {}
+        return SchedulerChildren(
+            scheduler=None,
+            fork_server=None,
+            executors=[],
+        )
 
-    scheduler_processes = filter_relevant_processes(latest_scheduler.children(recursive=True))
-    # TODO h use something else to type these things
-    scheduler_processes["scheduler"] = latest_scheduler
-    return scheduler_processes
+    return filter_relevant_processes(latest_scheduler)
 
 
 async def assert_is_paused(client, environment: str, expected_agents: dict[str, bool]) -> None:
@@ -464,8 +494,8 @@ async def test_halt_deploy(
     config.Config.set("config", "environment", environment)
 
     # Retrieve the actual processes before deploying anything
-    start_children = construct_mapping_relevant_processes(current_pid)
-    for child in start_children.values():
+    start_state = construct_mapping_relevant_processes(current_pid)
+    for child in start_state.children:
         assert child.is_running()
 
     snippetcompiler.setup_for_snippet(
@@ -505,13 +535,13 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         assert should_time_out, f"This wasn't supposed to time out with a deployment sleep set to {time_to_sleep}!"
     finally:
         # Retrieve the current processes, we should have more processes than `start_children`
-        children_after_deployment = construct_mapping_relevant_processes(current_pid)
+        state_after_deployment = construct_mapping_relevant_processes(current_pid)
 
     expected_additional_children_after_deployment = 3
-    assert len(children_after_deployment) == expected_additional_children_after_deployment, (
-        "These processes should be present: The fork server and the actual agent! " f"Actual state: {children_after_deployment}"
+    assert len(state_after_deployment.children) == expected_additional_children_after_deployment, (
+        "These processes should be present: The fork server and the actual agent! " f"Actual state: {state_after_deployment}"
     )
-    for child in children_after_deployment.values():
+    for child in state_after_deployment.children:
         assert child.is_running()
 
     # The number of resources for this version should match
@@ -546,17 +576,17 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     await retry_limited(
         wait_for_terminated_status,
         timeout=const.EXECUTOR_GRACE_HARD + 2,
-        current_children=children_after_deployment.values(),
+        current_children=state_after_deployment.children,
         expected_terminated_process=3,
     )
 
     # Let's recheck the number of processes after pausing the environment
-    halted_children = construct_mapping_relevant_processes(current_pid)
+    halted_state = construct_mapping_relevant_processes(current_pid)
 
     assert (
-        len(halted_children) == 0
+        len(halted_state.children) == 0
     ), "The Scheduler and the fork server and the agent created by the scheduler should have been killed!"
-    for child in halted_children.values():
+    for child in halted_state.children:
         assert child.is_running()
 
     await client.resume_environment(environment)
@@ -568,17 +598,18 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         # Wait for at least one resource to be in deploying
         await retry_limited(are_resources_being_deployed, timeout=5)
         await retry_limited(
-            lambda: len(construct_mapping_relevant_processes(current_pid)) == len(children_after_deployment), 10
+            lambda: len(construct_mapping_relevant_processes(current_pid).children) == len(state_after_deployment.children),
+            10,
         )
     else:
         await retry_limited(
-            lambda: len(construct_mapping_relevant_processes(current_pid)) == 2,
+            lambda: len(construct_mapping_relevant_processes(current_pid).children) == 2,
             15,
         )
 
     # Let's recheck the number of processes after resuming the environment
-    resumed_children = construct_mapping_relevant_processes(current_pid)
-    await retry_limited(lambda: all([child.is_running() for child in resumed_children.values()]), 10)
+    resumed_state = construct_mapping_relevant_processes(current_pid)
+    await retry_limited(lambda: all([child.is_running() for child in resumed_state.children]), 10)
     await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
 
@@ -607,8 +638,8 @@ async def test_pause_agent_deploy(
     config.Config.set("config", "environment", environment)
 
     # Retrieve the actual processes before deploying anything
-    start_children = construct_mapping_relevant_processes(current_pid)
-    for children in start_children.values():
+    start_state = construct_mapping_relevant_processes(current_pid)
+    for children in start_state.children:
         assert children.is_running()
 
     snippetcompiler.setup_for_snippet(
@@ -638,12 +669,12 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     await retry_limited(check_resource_in_state, timeout=10)
 
     # Retrieve the current processes, we should have more processes than `start_children`
-    children_after_deployment = construct_mapping_relevant_processes(current_pid)
+    state_after_deployment = construct_mapping_relevant_processes(current_pid)
     expected_additional_children_after_deployment = 3
     assert (
-        len(children_after_deployment) == expected_additional_children_after_deployment
+        len(state_after_deployment.children) == expected_additional_children_after_deployment
     ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
-    for children in children_after_deployment.values():
+    for children in state_after_deployment.children:
         assert children.is_running()
 
     # The number of resources for this version should match
@@ -695,15 +726,15 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     # Let's wait for the new executor to kick in
     def wait_for_new_executor() -> bool:
         resumed_children = construct_mapping_relevant_processes(current_pid)
-        return len(resumed_children) == 3
+        return len(resumed_children.children) == 3
 
     await retry_limited(wait_for_new_executor, 5)
-    resumed_children = construct_mapping_relevant_processes(current_pid)
+    resumed_state = construct_mapping_relevant_processes(current_pid)
     # All expected processes are back online
     assert (
-        len(resumed_children) == expected_additional_children_after_deployment
+        len(resumed_state.children) == expected_additional_children_after_deployment
     ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
-    for children in resumed_children.values():
+    for children in resumed_state.children:
         assert children.is_running()
 
     # Let's make sure that we cannot interact directly with the Scheduler agent!
@@ -742,8 +773,8 @@ async def test_agent_paused_scheduler_crash(
     config.Config.set("config", "environment", environment)
 
     # Retrieve the actual processes before deploying anything
-    start_children = construct_mapping_relevant_processes(current_pid)
-    for children in start_children.values():
+    start_state = construct_mapping_relevant_processes(current_pid)
+    for children in start_state.children:
         assert children.is_running()
 
     snippetcompiler.setup_for_snippet(
@@ -774,7 +805,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     # something is moving
     async def wait_for_actual_deployment() -> bool:
         current_children_mapping = construct_mapping_relevant_processes(current_pid)
-        return len(current_children_mapping) == 3
+        return len(current_children_mapping.children) == 3
 
     await retry_limited(wait_for_actual_deployment, 5)
 
@@ -793,7 +824,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
     async def wait_for_scheduler() -> bool:
         current_children_mapping = construct_mapping_relevant_processes(current_pid)
-        return len(current_children_mapping) == 1
+        return len(current_children_mapping.children) == 1
 
     # Wait for the scheduler
     await retry_limited(wait_for_scheduler, 5)
@@ -802,11 +833,11 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
 
     # Let's recheck the number of processes after restarting the server
-    children_after_restart = construct_mapping_relevant_processes(current_pid)
+    state_after_restart = construct_mapping_relevant_processes(current_pid)
     assert (
-        len(children_after_restart) == len(children_after_deployment) - 2
+        len(state_after_restart.children) == len(children_after_deployment.children) - 2
     ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
-    for children in children_after_restart.values():
+    for children in state_after_restart.children:
         assert children.is_running()
 
     result = await client.resource_list(environment, deploy_summary=True)
@@ -842,8 +873,8 @@ async def test_agent_paused_should_remain_paused_after_environment_resume(
     config.Config.set("config", "environment", environment)
 
     # Retrieve the actual processes before deploying anything
-    start_children = construct_mapping_relevant_processes(current_pid)
-    for children in start_children.values():
+    start_state = construct_mapping_relevant_processes(current_pid)
+    for children in start_state.children:
         assert children.is_running()
 
     snippetcompiler.setup_for_snippet(
@@ -873,12 +904,12 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     await retry_limited(are_resources_deployed, timeout=10)
 
     # Retrieve the current processes, we should have more processes than `start_children`
-    children_after_deployment = construct_mapping_relevant_processes(current_pid)
+    state_after_deployment = construct_mapping_relevant_processes(current_pid)
     expected_additional_children_after_deployment = 3
     assert (
-        len(children_after_deployment) == expected_additional_children_after_deployment
+        len(state_after_deployment.children) == expected_additional_children_after_deployment
     ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
-    for children in children_after_deployment.values():
+    for children in state_after_deployment.children:
         assert children.is_running()
 
     result = await client.list_versions(tid=environment)
@@ -907,7 +938,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
     # Let's wait for the executor to die
-    await retry_limited(wait_for_terminated_status, timeout=10, current_children=children_after_deployment.values())
+    await retry_limited(wait_for_terminated_status, timeout=10, current_children=state_after_deployment.children)
 
     # Let's halt the environment to be able to set `keep_paused_on_resume` flag on agent1
     result = await client.halt_environment(tid=environment)
@@ -921,14 +952,14 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     await retry_limited(
         wait_for_terminated_status,
         timeout=const.EXECUTOR_GRACE_HARD + 2,
-        current_children=children_after_deployment.values(),
+        current_children=state_after_deployment.children,
         expected_terminated_process=3,
     )
 
     # Let's recheck the number of processes after pausing the environment
-    halted_children = construct_mapping_relevant_processes(current_pid)
+    halted_state = construct_mapping_relevant_processes(current_pid)
     assert (
-        len(halted_children) == 0
+        len(halted_state.children) == 0
     ), "The Scheduler and the fork server and the agent created by the scheduler should have been killed!"
 
     await client.resume_environment(environment)
@@ -948,10 +979,115 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert expected_agents_status["agent1"]
     assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
 
-    resumed_children = construct_mapping_relevant_processes(current_pid)
-    assert len(resumed_children) == 1, (
+    resumed_state = construct_mapping_relevant_processes(current_pid)
+    assert len(resumed_state.children) == 1, (
         "This process should be present: the Scheduler. "
         "The fork server and the agent created by the scheduler should have been killed and the agent is still paused!"
     )
-    for children in resumed_children.values():
+    for children in resumed_state.children:
         assert children.is_running()
+
+
+@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_pause_unpause_all_agents_deploy(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    clienthelper,
+    environment,
+    auto_start_agent: bool,
+):
+    """
+    Verify that the new scheduler can pause running agent:
+        - It will make sure that the agent finishes its current task before being stopped
+        - And take the remaining tasks when this agent is resumed
+    """
+    current_pid = os.getpid()
+
+    # First, configure everything
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": "", "agent2": "", "agent3": ""})
+    await env.set(data.AUTOSTART_ON_START, True)
+    config.Config.set("config", "environment", environment)
+
+    # Retrieve the actual processes before deploying anything
+    start_state = construct_mapping_relevant_processes(current_pid)
+    for children in start_state.children:
+        assert children.is_running()
+
+    snippetcompiler.setup_for_snippet(
+        """
+import minimalwaitingmodule
+
+a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=5)
+b = minimalwaitingmodule::Sleep(name="test_sleep2", agent="agent2", time_to_sleep=5)
+c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_sleep=5)
+""",
+        autostd=True,
+    )
+
+    # Now, let's deploy some resources
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    async def check_resource_in_state(expected_resources: int = 1, state: str = "deployed") -> bool:
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        nr_res_desired_state = summary["by_state"][state]
+        return nr_res_desired_state == expected_resources
+
+    # Wait for at least one resource to be deployed
+    await retry_limited(check_resource_in_state, expected_resources=3, state="deploying", timeout=10)
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    # summary = result.result["metadata"]["deploy_summary"]
+
+    result = await client.list_agents(tid=environment)
+    assert result.code == 200
+
+    # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
+    # something is moving
+    async def wait_for_actual_deployment() -> bool:
+        current_children_mapping = construct_mapping_relevant_processes(current_pid)
+        return len(current_children_mapping.children) == 3
+
+    await retry_limited(wait_for_actual_deployment, 5)
+
+    # Retrieve the current processes, we should have more processes than `start_children`
+    state_after_deployment = construct_mapping_relevant_processes(current_pid)
+    expected_additional_children_after_deployment = 3
+    assert (
+        len(state_after_deployment.children) == expected_additional_children_after_deployment
+    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
+    # for children in children_after_deployment.values():
+    #     assert children.is_running()
+
+    # The number of resources for this version should match
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    assert len(result.result["versions"]) == 1
+    assert result.result["versions"][0]["total"] == 3
+
+    # Let's check the agent table and check that all agents are presents and not paused
+    await assert_is_paused(
+        client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False, "agent2": False, "agent3": False}
+    )
+
+    await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
+    assert result.code == 200
+
+    # Let's check the agent table and check that all agents are presents and paused
+    await assert_is_paused(
+        client, environment, {const.AGENT_SCHEDULER_ID: True, "agent1": True, "agent2": True, "agent3": True}
+    )
+
+    await client.all_agents_action(tid=environment, action=AgentAction.unpause.value)
+    assert result.code == 200
+
+    # Let's check the agent table and check that all agents are presents and not paused
+    await assert_is_paused(
+        client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False, "agent2": False, "agent3": False}
+    )

@@ -225,11 +225,9 @@ class AgentManager(ServerSlice, SessionListener):
         if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
             raise Forbidden("Cannot set on_resume state of agents when the environment is not halted.")
         if action is AgentAction.pause:
-            async with self.session_lock:
-                await data.Agent.pause_except_scheduler(env=env.id, paused=True)
+            await self._pause_agent(env=env)
         elif action is AgentAction.unpause:
-            async with self.session_lock:
-                await data.Agent.pause_except_scheduler(env=env.id, paused=False)
+            await self._unpause_agent(env=env)
         elif action is AgentAction.keep_paused_on_resume:
             await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False)
         elif action is AgentAction.unpause_on_resume:
@@ -265,49 +263,23 @@ class AgentManager(ServerSlice, SessionListener):
         """
 
         async with self.session_lock:
-            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
-            # FIXME do we need the following given that the scheduler will loose the connection
-            #  (so the primary should be updated)
+            await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
             key = (env.id, const.AGENT_SCHEDULER_ID)
-            for agent_name in agents:
-                if endpoint is None and agent_name != const.AGENT_SCHEDULER_ID:
-                    continue
-
-                live_session = self.tid_endpoint_to_session.get(key)
-                if live_session:
-                    # The agent has an active agent instance that has to be paused
-                    del self.tid_endpoint_to_session[key]
-                    await live_session.get_client().set_state(agent_name, enabled=False)
-            if endpoint is None:
-                await data.Agent.update_primary(
-                    env.id, [(const.AGENT_SCHEDULER_ID, None)], now=datetime.now().astimezone(), connection=connection
-                )
+            live_session = self.tid_endpoint_to_session.get(key)
+            if live_session:
+                await live_session.get_client().set_state(endpoint, enabled=False)
 
     async def _unpause_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         async with self.session_lock:
-            agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
-            endpoints_with_new_primary = []
-            # FIXME do we need the following given that the scheduler will register a new connection
-            #  (so the primary should be updated)
+            await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
             key = (env.id, const.AGENT_SCHEDULER_ID)
-            for agent_name in agents:
-                if endpoint is None and agent_name != const.AGENT_SCHEDULER_ID:
-                    continue
-
-                live_session = self.tid_endpoint_to_session.get(key)
-                # If the agent has a live_session, the agent wasn't paused
-                if not live_session:
-                    session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
-                    if session:
-                        self.tid_endpoint_to_session[key] = session
-                        await session.get_client().set_state(agent_name, enabled=True)
-                        endpoints_with_new_primary.append((const.AGENT_SCHEDULER_ID, session.id))
-            if endpoint is None:
-                await data.Agent.update_primary(
-                    env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
-                )
+            live_session = self.tid_endpoint_to_session.get(key)
+            if not live_session:
+                session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
+                if session:
+                    await session.get_client().set_state(endpoint, enabled=True)
 
     async def _set_unpause_on_resume(
         self,

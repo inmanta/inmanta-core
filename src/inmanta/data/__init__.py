@@ -3458,7 +3458,7 @@ class Agent(BaseDocument):
         return sorted([r["name"] for r in result])
 
     @classmethod
-    async def pause_except_scheduler(
+    async def pause_all_except_scheduler(
         cls, env: uuid.UUID, paused: bool, connection: Optional[asyncpg.connection.Connection] = None
     ) -> list[str]:
         """

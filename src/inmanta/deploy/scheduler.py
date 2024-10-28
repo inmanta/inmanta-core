@@ -492,14 +492,18 @@ class ResourceScheduler(TaskManager):
         self._workers[agent] = TaskRunner(endpoint=agent, scheduler=self)
         self._workers[agent].notify_sync()
 
-    async def should_be_running(self, endpoint: str) -> bool:
+    async def should_be_running(self, endpoint: Optional[str] = None) -> bool:
         """
         Check in the DB (authoritative entity) if the agent (or the Scheduler if endpoint == Scheduler id) should be running
             i.e. if it is not paused and its environment is not halted.
-        :param endpoint: The name of the agent
+
+        :param endpoint: The name of the agent. If set to None, we will only check the state of the environment
         """
         current_environment = await Environment.get_by_id(self.environment)
         assert current_environment
+        if endpoint is None:
+            return not current_environment.halted
+
         await data.Agent.insert_if_not_exist(environment=self.environment, endpoint=endpoint)
         current_agent = await data.Agent.get(env=self.environment, endpoint=endpoint)
         return not (current_environment.halted or current_agent.paused)
