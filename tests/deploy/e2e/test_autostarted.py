@@ -612,9 +612,11 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     if should_time_out:
         # Wait for at least one resource to be in deploying
         await retry_limited(are_resources_being_deployed, timeout=5)
+
         async def wait_for_old_state():
             current_state = construct_scheduler_children(current_pid).children
             return len(current_state) == len(state_after_deployment.children)
+
     else:
         with pytest.raises(AssertionError):  # Nothing should get deployed
             await retry_limited(are_resources_being_deployed, timeout=1)
@@ -759,6 +761,22 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert (
         result.result["message"] == "Invalid request: Particular action cannot be directed towards the Scheduler agent: pause"
     ), result.result
+
+    result = await client.get_agents(environment)
+    assert result.code == 200
+    actual_data = result.result["data"]
+    assert len(actual_data) == 1
+    expected_data = {
+        "environment": environment,
+        "last_failover": actual_data[0]["last_failover"],
+        "name": "agent1",
+        "paused": False,
+        "process_id": None,
+        "process_name": None,
+        "status": "up",
+        "unpause_on_resume": None,
+    }
+    assert actual_data[0] == expected_data
 
 
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!

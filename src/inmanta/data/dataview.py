@@ -28,7 +28,7 @@ from uuid import UUID
 from asyncpg import Record
 
 import inmanta.data
-from inmanta import data
+from inmanta import const, data
 from inmanta.data import (
     APILIMIT,
     PRIMITIVE_SQL_TYPES,
@@ -1210,34 +1210,20 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         return "/api/v2/agents"
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        if opt.server_use_resource_scheduler.get():
-            base = SimpleQueryBuilder(
-                select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
-                                                ap.hostname as process_name, ai.process as process_id,
-                                                (CASE WHEN paused THEN 'paused'
-                                                    WHEN id_primary IS NOT NULL THEN 'up'
-                                                    ELSE 'down'
-                                                END) as status""",
-                from_clause=f" FROM {Agent.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
-                " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
-                filter_statements=[" a.environment = $1 "],
-                values=[self.environment.id],
-            )
-        else:
-            base = SimpleQueryBuilder(
-                select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
-                                                ap.hostname as process_name, ai.process as process_id,
-                                                (CASE WHEN paused THEN 'paused'
-                                                    WHEN id_primary IS NOT NULL THEN 'up'
-                                                    ELSE 'down'
-                                                END) as status""",
-                from_clause=f" FROM {Agent.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
-                " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
-                filter_statements=[" a.environment = $1 "],
-                values=[self.environment.id],
-            )
+        base = SimpleQueryBuilder(
+            select_clause="""SELECT a.name, a.environment, a.last_failover, a.paused, a.unpause_on_resume,
+                                            (CASE WHEN a.paused THEN 'paused'
+                                                WHEN sched.paused THEN 'down'
+                                                ELSE 'up'
+                                            END) as status""",
+            from_clause=f" FROM  (SELECT sched.name, sched.paused FROM {Agent.table_name()} sched "
+            f"WHERE sched.name ='{const.AGENT_SCHEDULER_ID}') AS sched RIGHT JOIN {Agent.table_name()} a "
+            f"ON a.name <> sched.name",
+            filter_statements=[" a.environment = $1 ", " a.name <> sched.name "],
+            values=[self.environment.id],
+        )
         # wrap when using compound fields
-        virtual_fields = {"status", "process_name", "process_id"}
+        virtual_fields = {"status"}
         used_fields = set(self.filter.keys()).union({t[0] for t in self.order.get_order_elements(False)})
         if virtual_fields.intersection(used_fields):
             query, values = base.build()
@@ -1256,8 +1242,8 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                 last_failover=agent["last_failover"],
                 paused=agent["paused"],
                 unpause_on_resume=agent["unpause_on_resume"],
-                process_id=agent["process_id"],
-                process_name=agent["process_name"],
+                process_id=agent["process_id"] if "process_id" in agent else None,
+                process_name=agent["process_name"] if "process_name" in agent else None,
                 status=agent["status"],
             )
             for agent in records
