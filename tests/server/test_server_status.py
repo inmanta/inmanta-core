@@ -23,7 +23,7 @@ from inmanta.server.server import Server
 from inmanta.server.services.compilerservice import CompilerService
 
 
-async def test_server_status(server, client):
+async def test_server_status(server, client, agent):
     result = await client.get_server_status()
 
     assert result.code == 200

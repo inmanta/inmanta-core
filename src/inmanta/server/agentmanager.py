@@ -38,7 +38,7 @@ from inmanta import config as global_config
 from inmanta import const, data, tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
-from inmanta.const import UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
+from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, InvalidSort, model
 from inmanta.data.model import ResourceIdStr
 from inmanta.protocol import encode_token, handle, methods, methods_v2
@@ -203,6 +203,14 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def stop(self) -> None:
         await super().stop()
+
+    def get_all_schedulers(self) -> list[tuple[uuid.UUID, protocol.Session]]:
+        # Linear scan, but every item should be a hit
+        return [
+            (env_id, session)
+            for (env_id, agent_id), session in self.tid_endpoint_to_session.items()
+            if agent_id == AGENT_SCHEDULER_ID
+        ]
 
     async def halt_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """

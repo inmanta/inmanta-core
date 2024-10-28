@@ -16,44 +16,44 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
 import dataclasses
 import logging
-from typing import Optional
+import typing
+import uuid
+from typing import Optional, cast
 
 import asyncpg
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
 from inmanta import data, util
-from inmanta.server import SLICE_DATABASE
+from inmanta.data.model import DataBaseReport
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
+from inmanta.server.server import Server
 from inmanta.types import ArgumentTypes
 from inmanta.util import Scheduler
 
 LOGGER = logging.getLogger(__name__)
 
-
-@dataclasses.dataclass
-class DataBaseReport:
-
-    connected: bool
-    database: str
-    host: str
-    max_pool: int
-    open_connections: int
-    free_connections: int
-    pool_exhaustion_count: int
+if typing.TYPE_CHECKING:
+    from inmanta.server import agentmanager
 
 
 class DatabaseMonitor:
 
-    def __init__(self, pool: asyncpg.pool.Pool, db_name: str, db_host: str) -> None:
+    def __init__(
+        self, pool: asyncpg.pool.Pool, db_name: str, db_host: str, component: str, environment: str | None = None
+    ) -> None:
         self._pool = pool
         self._scheduler = Scheduler(f"Database monitor for {db_name}")
         self._db_pool_watcher = util.ExhaustedPoolWatcher(self._pool)
         self.dn_name = db_name
         self.db_host = db_host
+        self.component = component
+        self.environment = environment
 
     def start(self) -> None:
         self.start_monitor()
@@ -84,27 +84,42 @@ class DatabaseMonitor:
 
     def start_monitor(self) -> None:
         """Attach to monitoring system"""
+        suffix = f",component={self.component}"
+        if self.environment:
+            suffix += f",environment={self.environment}"
+
         gauge(
-            "db.connected",
+            "db.connected" + suffix,
             CallbackGauge(
                 callback=lambda: 1 if (self._pool is not None and not self._pool._closing and not self._pool._closed) else 0
             ),
         )
-        gauge("db.max_pool", CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0))
-        gauge("db.open_connections", CallbackGauge(callback=lambda: self._pool.get_size() if self._pool is not None else 0))
         gauge(
-            "db.free_connections", CallbackGauge(callback=lambda: self._pool.get_idle_size() if self._pool is not None else 0)
+            "db.max_pool" + suffix, CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0)
         )
-        gauge("db.pool_exhaustion_count", CallbackGauge(callback=lambda: self._db_pool_watcher._exhausted_pool_events_count))
+        gauge(
+            "db.open_connections" + suffix,
+            CallbackGauge(callback=lambda: self._pool.get_size() if self._pool is not None else 0),
+        )
+        gauge(
+            "db.free_connections" + suffix,
+            CallbackGauge(callback=lambda: self._pool.get_idle_size() if self._pool is not None else 0),
+        )
+        gauge(
+            "db.pool_exhaustion_count" + suffix,
+            CallbackGauge(callback=lambda: self._db_pool_watcher._exhausted_pool_events_count),
+        )
 
     def stop_monitor(self):
-        global_registry()._gauges.pop("db.connected", None)
-        global_registry()._gauges.pop("db.max_pool", None)
-        global_registry()._gauges.pop("db.open_connections", None)
-        global_registry()._gauges.pop("db.free_connections", None)
-        global_registry()._gauges.pop("db.pool_exhaustion_count", None)
-        # Add sub-tagging
-        # Tag
+        suffix = f",component={self.component}"
+        if self.environment:
+            suffix += f",environment={self.environment}"
+
+        global_registry()._gauges.pop("db.connected" + suffix, None)
+        global_registry()._gauges.pop("db.max_pool" + suffix, None)
+        global_registry()._gauges.pop("db.open_connections" + suffix, None)
+        global_registry()._gauges.pop("db.free_connections" + suffix, None)
+        global_registry()._gauges.pop("db.pool_exhaustion_count" + suffix, None)
 
     async def get_connection_status(self) -> bool:
         if self._pool is not None and not self._pool._closing and not self._pool._closed:
@@ -131,6 +146,16 @@ class DatabaseService(protocol.ServerSlice):
         super().__init__(SLICE_DATABASE)
         self._pool: Optional[asyncpg.pool.Pool] = None
         self._db_monitor: Optional[DatabaseMonitor] = None
+        self._server_handler: Server | None = None
+        self.agentmanager_service: "agentmanager.AgentManager"
+
+    async def prestart(self, server: Server) -> None:
+        """
+        Called by the RestServer host prior to start, can be used to collect references to other server slices
+        Dependencies are not up yet.
+        """
+        self._server_handler = server
+        await super().prestart(server)
 
     async def start(self) -> None:
         await super().start()
@@ -143,8 +168,10 @@ class DatabaseService(protocol.ServerSlice):
                 self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
             )
 
+        self.agentmanager_service = cast("agentmanager.AgentManager", self._server_handler.get_slice(SLICE_AGENT_MANAGER))
+
         assert self._pool is not None  # Make mypy happy
-        self._db_monitor = DatabaseMonitor(self._pool, opt.db_name.get(), opt.db_host.get())
+        self._db_monitor = DatabaseMonitor(self._pool, opt.db_name.get(), opt.db_host.get(), "server")
         self._db_monitor.start()
 
     async def stop(self) -> None:
@@ -172,7 +199,33 @@ class DatabaseService(protocol.ServerSlice):
 
     async def get_status(self) -> dict[str, ArgumentTypes]:
         """Get the status of the database connection"""
-        return dataclasses.asdict(await self._db_monitor.get_status())
+        schedulers = self.agentmanager_service.get_all_schedulers()
+
+        deadline = 0.9 * Server.GET_SERVER_STATUS_TIMEOUT
+
+        async def get_report(env: uuid.UUID, session: protocol.Session) -> tuple[uuid, DataBaseReport]:
+            result = await asyncio.wait_for(session.client.get_db_status(), deadline)
+            assert result.code == 200
+
+            return (env, DataBaseReport(**result.result["data"]))
+
+        self_status_job = asyncio.create_task(self._db_monitor.get_status())
+        results = await asyncio.gather(*[get_report(env, scheduler) for env, scheduler in schedulers], return_exceptions=True)
+
+        self_status = await self_status_job
+
+        total = self_status
+
+        for result in results:
+            if isinstance(result, Exception):
+                raise result
+            else:
+                total += result[1]
+
+        # Overall
+        # Server
+        # Scheduler
+        return (total).dict()
 
     async def _purge_agent_processes(self) -> None:
         # Move to agent manager
