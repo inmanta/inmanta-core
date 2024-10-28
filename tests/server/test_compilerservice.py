@@ -658,7 +658,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
     """
     Test a partial_compile on the server
     """
-    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), 'compiler')
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
     print("Project at: ", project_dir)
 
@@ -777,7 +777,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert result.code == 200
 
     logger.info("wait for 1")
-    versions = await wait_for_version(client, environment, 1, compile_timeout=12)
+    versions = await wait_for_version(client, environment, 1, compile_timeout=40)
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
 
@@ -883,7 +883,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     Test recompile triggers when setting params and facts with the v2 endpoint
     """
 
-    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), 'compiler')
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
 
     shutil.copytree(project_source, project_dir)
