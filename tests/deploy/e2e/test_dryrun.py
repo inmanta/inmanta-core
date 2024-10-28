@@ -160,7 +160,7 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)

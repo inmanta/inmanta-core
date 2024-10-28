@@ -91,7 +91,7 @@ async def setup_environment_with_agent(client, project_name):
     assert result.code == 200
 
     # check deploy
-    await wait_until_deployment_finishes(client, env_id, version)
+    await wait_until_deployment_finishes(client, env_id)
     result = await client.get_version(env_id, version)
     assert result.code == 200
     assert result.result["model"]["released"]
@@ -188,7 +188,7 @@ async def test_auto_deploy_no_splay(server, client, clienthelper: ClientHelper, 
     await clienthelper.wait_for_released(version)
 
     # check deploy
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.code == 200
@@ -305,7 +305,7 @@ async def test_autostart_clear_agent_venv_on_delete(
     )
 
     # check deploy
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
     venv_dir_agent1 = os.path.join(autostarted_agent_manager._get_state_dir_for_agent_in_env(uuid.UUID(environment)))
