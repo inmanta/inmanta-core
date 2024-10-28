@@ -4,9 +4,14 @@ change-type: major
 destination-branches: [master]
 sections:
   upgrade-note: >
-    The new resource scheduler uses a database connection pool of its own.
-    Please review the following connection pool environment settings and make sure they fit your
-    needs for each of your active environments: [``SCHEDULER_DB_CONNECTION_POOL_MIN_SIZE``, ``SCHEDULER_DB_CONNECTION_POOL_MAX_SIZE``, ``SCHEDULER_DB_CONNECTION_TIMEOUT``]
+    Previously, a single database connection pool was shared among the server and the agent configured
+    via the ``database.connection_pool_max_size`` and ``database.connection_pool_min_size`` options.
+    For each environment, the new resource scheduler uses a database connection pool of its own.
+    Please review the following connection pool options and make sure they fit your
+    needs for each of your active environments:
+      - For the scheduler: ["agent.db_connection_timeout", agent.db_connection_pool_max_size", agent.db_connection_pool_min_size"]
+      - For the server: [``database.service_connection_pool_max_size``, ``database.service_connection_pool_min_size``, ``database.connection_timeout``]
+
   deprecation-note: >
     The following settings are being deprecated: [``database.connection_pool_max_size``, ``database.connection_pool_min_size``].
     Please use their respective new counterparts [``database.service_connection_pool_max_size``, ``database.service_connection_pool_min_size``]
