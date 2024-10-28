@@ -25,7 +25,7 @@ from dataclasses import dataclass
 
 from inmanta import const, data, resources
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployResult, FactResult
+from inmanta.agent.executor import DeployResult
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.deploy import scheduler, state
 

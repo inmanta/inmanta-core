@@ -30,7 +30,6 @@ from uuid import UUID
 
 import pytest
 
-import inmanta.types
 import utils
 from inmanta import const, util
 from inmanta.agent import executor

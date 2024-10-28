@@ -35,8 +35,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, cast
 from uuid import UUID
 
-import inmanta.types
-import inmanta.util
 import packaging.requirements
 from inmanta import const
 from inmanta.agent import config as cfg
