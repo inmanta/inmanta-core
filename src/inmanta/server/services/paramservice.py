@@ -146,10 +146,10 @@ class ParameterService(protocol.ServerSlice):
         self,
         env: data.Environment,
         name: str,
-        value: str,
+        value: Optional[str],
         source: str,
         resource_id: Optional[str],
-        metadata: JsonType,
+        metadata: Optional[JsonType],
         recompile: bool = False,
         expires: Optional[bool] = None,
     ) -> bool:
@@ -273,7 +273,7 @@ class ParameterService(protocol.ServerSlice):
         updating_parameters: bool = False
         parameters_and_or_facts: str = "parameters"
 
-        params: list[tuple[str, ResourceIdStr]] = []
+        params: list[tuple[str, ResourceIdStr | None]] = []
 
         # Validate the full list of parameters before applying any changes
         for param in parameters:
@@ -287,7 +287,7 @@ class ParameterService(protocol.ServerSlice):
             name: str = param["id"]
             source = param["source"]
             value = param["value"] if "value" in param else None
-            resource_id: ResourceIdStr = param["resource_id"] if "resource_id" in param else None
+            resource_id: ResourceIdStr | None = param["resource_id"] if "resource_id" in param else None
             metadata = param["metadata"] if "metadata" in param else None
             expires = param["expires"] if "expires" in param else None
 

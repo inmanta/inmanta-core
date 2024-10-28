@@ -26,12 +26,11 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
 from inmanta.data.model import DesiredStateLabel, PromoteTriggerMethod
-from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.config import get_bind_port
 
 
 @pytest.fixture
-async def environments_with_versions(server, client) -> tuple[dict[str, uuid.UUID], list[datetime.datetime]]:
+async def environments_with_versions(server, client, null_agent) -> tuple[dict[str, uuid.UUID], list[datetime.datetime]]:
     project = data.Project(name="test")
     await project.insert()
 
@@ -341,10 +340,7 @@ async def test_promote_no_versions(server, client, environment: str):
     "trigger_method",
     [None, PromoteTriggerMethod.no_push, PromoteTriggerMethod.push_incremental_deploy, PromoteTriggerMethod.push_full_deploy],
 )
-async def test_promote_version(server, client, clienthelper, agent, environment: str, trigger_method):
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-    env_obj = await data.Environment.get_by_id(uuid.UUID(environment))
-    await agentmanager.ensure_agent_registered(env=env_obj, nodename="agent1")
+async def test_promote_version(server, client, clienthelper, environment: str, trigger_method, null_agent):
     version = await clienthelper.get_version()
     resource_id_wov = "test::Resource[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)

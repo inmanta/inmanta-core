@@ -1494,26 +1494,6 @@ class BaseDocument(metaclass=DocumentMeta):
         )
         await self._execute_query(query, *values, connection=connection)
 
-    async def insert_if_not_exist(
-        self, field_to_return: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Optional[typing.Any]:
-        """
-        Insert a new document based on the instance passed if it does not exist. Validation is done based on the defined fields.
-        """
-        (column_names, values) = self._get_column_names_and_values()
-        column_names_as_sql_string = ",".join(column_names)
-        values_as_parameterized_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
-        query = (
-            f"INSERT INTO {self.table_name()} "
-            f"({column_names_as_sql_string}) "
-            f"VALUES ({values_as_parameterized_sql_string}) "
-            "ON CONFLICT DO NOTHING "
-            f"RETURNING {field_to_return}"
-            if field_to_return is not None
-            else ""
-        )
-        return await self._fetchval(query, *values, connection=connection)
-
     async def insert_with_overwrite(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Insert a new document based on the instance passed. If the document already exists, overwrite it.
@@ -3415,6 +3395,19 @@ class Agent(BaseDocument):
         return obj
 
     @classmethod
+    async def insert_if_not_exist(
+        cls, environment: uuid.UUID, endpoint: str, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        query = """
+            INSERT INTO agent
+            (last_failover,paused,id_primary,unpause_on_resume,environment,name)
+            VALUES (now(),FALSE,NULL,NULL,$1,$2)
+            ON CONFLICT DO NOTHING
+        """
+        values = [cls._get_value(environment), cls._get_value(endpoint)]
+        await cls._execute_query(query, *values, connection=connection)
+
+    @classmethod
     async def persist_on_halt(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Persists paused state when halting all agents.
@@ -3913,7 +3906,7 @@ class Compile(BaseDocument):
             environment_variables=(
                 json.loads(requested_compile["used_environment_variables"])
                 if requested_compile["used_environment_variables"] is not None
-                else None
+                else {}
             ),
             requested_environment_variables=(json.loads(requested_compile["requested_environment_variables"])),
             mergeable_environment_variables=(json.loads(requested_compile["mergeable_environment_variables"])),
@@ -3988,6 +3981,10 @@ class LogLine(DataDocument):
         level: str = self._data["level"]
         return LogLevel[level]
 
+    @property
+    def timestamp(self) -> datetime.datetime:
+        return cast(datetime.datetime, self._data["timestamp"])
+
     def write_to_logger(self, logger: logging.Logger) -> None:
         logger.log(self.log_level.to_int, self.msg, *self.args)
 
@@ -4040,7 +4037,7 @@ class ResourceAction(BaseDocument):
 
     messages: Optional[list[dict[str, object]]] = None
     status: Optional[const.ResourceState] = None
-    changes: Optional[dict[m.ResourceIdStr, dict[str, object]]] = None
+    changes: Optional[dict[m.ResourceVersionIdStr, dict[str, object]]] = None
     change: Optional[const.Change] = None
 
     def __init__(self, from_postgres: bool = False, **kwargs: object) -> None:
@@ -4161,7 +4158,7 @@ class ResourceAction(BaseDocument):
             self._updates["messages"] = []
         self._updates["messages"] += messages
 
-    def add_changes(self, changes: dict[m.ResourceIdStr, dict[str, object]]) -> None:
+    def add_changes(self, changes: dict[m.ResourceVersionIdStr, dict[str, object]]) -> None:
         for resource, values in changes.items():
             for field, change in values.items():
                 if "changes" not in self._updates:
@@ -4173,7 +4170,7 @@ class ResourceAction(BaseDocument):
     async def set_and_save(
         self,
         messages: list[dict[str, object]],
-        changes: dict[str, object],
+        changes: dict[m.ResourceVersionIdStr, dict[str, object]],
         status: Optional[const.ResourceState],
         change: Optional[const.Change],
         finished: Optional[datetime.datetime],

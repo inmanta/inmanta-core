@@ -730,7 +730,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 force_update=compile["force_update"],
                 metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
                 environment_variables=(
-                    json.loads(compile["used_environment_variables"]) if compile["used_environment_variables"] else None
+                    json.loads(compile["used_environment_variables"]) if compile["used_environment_variables"] else {}
                 ),
                 requested_environment_variables=json.loads(compile["requested_environment_variables"]),
                 mergeable_environment_variables=json.loads(compile["mergeable_environment_variables"]),

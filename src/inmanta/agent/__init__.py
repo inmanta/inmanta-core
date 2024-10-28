@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+from inmanta.agent.agent_new import Agent
+
 # flake8: noqa: F401
-from inmanta.agent.agent import Agent
+# Backward compatibility
 from inmanta.agent.reporting import collect_report

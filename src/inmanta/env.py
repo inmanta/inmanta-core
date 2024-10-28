@@ -24,7 +24,6 @@ import json
 import logging
 import os
 import re
-import shlex
 import site
 import subprocess
 import sys
@@ -1086,11 +1085,13 @@ class CommandRunner:
         of the sub-process.
         """
         full_output = []
-        # We use shell here to avoid
+        # We use close_fds here to avoid
         # the bug https://github.com/python/cpython/issues/103911#issuecomment-2333963137
-        cmd_as_str = " ".join(shlex.quote(x) for x in cmd)
-        process = await asyncio.create_subprocess_shell(
-            cmd_as_str, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env_vars, cwd="/"
+        # We attempt to get on the code path that uses _posix_spawn instead of _fork_exec
+        # Subprocess shell did not work to prevent it
+        # Improved escaping (shlex.quote) to prevent `>` from leaking did not help
+        process = await asyncio.create_subprocess_exec(
+            *cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env_vars, close_fds=False
         )
         assert process.stdout is not None  # Make mypy happy
         async for line in process.stdout:

@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
 import datetime
 import logging
 import os
@@ -30,13 +31,22 @@ from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
-from inmanta.deploy.scheduler import ResourceScheduler
+from inmanta.deploy import scheduler
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.types import Apireturn
-from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, Scheduler, TaskMethod, TaskSchedule, join_threadpools
+from inmanta.util import (
+    CronSchedule,
+    IntervalSchedule,
+    ScheduledTask,
+    Scheduler,
+    TaskMethod,
+    TaskSchedule,
+    ensure_directory_exist,
+    join_threadpools,
+)
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("inmanta.scheduler")
 
 
 class Agent(SessionEndpoint):
@@ -67,7 +77,7 @@ class Agent(SessionEndpoint):
         assert self._env_id is not None
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
-        self.scheduler = ResourceScheduler(self._env_id, self.executor_manager, self._client)
+        self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
 
         self._sched = Scheduler("new agent endpoint")
@@ -168,7 +178,7 @@ class Agent(SessionEndpoint):
             self.sessionid,
             self._env_id,
             config.log_dir.get(),
-            self._storage["executor"],
+            self._storage["executors"],
             LOGGER.level,
             cli_log=False,
         )
@@ -181,7 +191,8 @@ class Agent(SessionEndpoint):
         self.thread_pool.shutdown(wait=False)
 
         await join_threadpools(threadpools_to_join)
-        await super().stop()
+        # We need to shield to avoid CancelledTask exception
+        await asyncio.shield(super().stop())
 
     async def start_connected(self) -> None:
         """
@@ -197,17 +208,19 @@ class Agent(SessionEndpoint):
         await self.executor_manager.start()
         await self.scheduler.start()
         self._enable_time_triggers()
+        LOGGER.info("Scheduler started for environment %s", self.environment)
 
-    async def stop_working(self, timeout: Optional[int] = None) -> None:
+    async def stop_working(self, timeout: float = 0.0) -> None:
         """Stop working, connection lost"""
         if not self.working:
             return
         self.working = False
         self._disable_time_triggers()
-        await self.executor_manager.stop()
-        if timeout is not None:
-            await self.executor_manager.join([], timeout=timeout)
         await self.scheduler.stop()
+        await self.executor_manager.stop()
+        await self.executor_manager.join([], timeout=timeout)
+        await self.scheduler.join()
+        LOGGER.info("Scheduler stopped for environment %s", self.environment)
 
     @protocol.handle(methods_v2.update_agent_map)
     async def update_agent_map(self, agent_map: dict[str, str]) -> None:
@@ -216,58 +229,51 @@ class Agent(SessionEndpoint):
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: str, enabled: bool) -> Apireturn:
-        # if agent == AGENT_SCHEDULER_ID:
-        #     return (
-        #         400,
-        #         "Invalid request, cannot pause the scheduler! The closest action to that would be to pause the environment",
-        #     )
-
         if agent == AGENT_SCHEDULER_ID:
-            if enabled:
-                await self.executor_manager.start()
-                await self.scheduler.start()
-                self._enable_time_triggers()
+            should_be_running = await self.scheduler.should_be_running()
+
+            if should_be_running:
+                if self.working != should_be_running:
+                    await self.start_working()
+                else:
+                    # Special cast that the server considers us disconnected, but the Scheduler thinks we are still connected.
+                    # In that case, the Scheduler may have missed some event, but it would get a start after a start.
+                    # Therefore, we need to refresh everything (Scheduler side) to make sure we are up to date
+                    await self.scheduler.read_version()
+                    await self.scheduler.refresh_all_agent_states_from_db()
             else:
-                await self.scheduler.stop()
-                await self.executor_manager.stop()
-                await self.executor_manager.join([], timeout=const.EXECUTOR_GRACE_HARD)
+                # We want the request to not end in a 500 error:
+                # if the scheduler is being shut down, it cannot respond to the request
+                await self.stop_working(timeout=const.EXECUTOR_GRACE_HARD)
+
+            return 200, "Scheduler has been notified!"
         else:
-
-            try:
-                await self.scheduler.refresh_agent_state_from_db(name=agent)
-            except LookupError:
-                return 404, f"No such agent: {agent}"
-
-        return 200, f"{agent} has been {'started' if enabled else 'stopped'}"
-
-    @protocol.handle(methods_v2.resume_scheduler_environment, environment="tid")
-    async def resume_scheduler_environment(self, environment: uuid.UUID) -> Apireturn:
-        assert environment == self.environment
-        await self.executor_manager.start()
-        await self.scheduler.start()
-        self._enable_time_triggers()
-        return 200, f"Environment {environment} has been resumed"
-
-    @protocol.handle(methods_v2.halt_scheduler_environment, environment="tid")
-    async def halt_scheduler_environment(self, environment: uuid.UUID) -> Apireturn:
-        assert environment == self.environment
-        await self.executor_manager.stop()
-        await self.executor_manager.join([], timeout=const.EXECUTOR_GRACE_HARD)
-        await self.scheduler.stop()
-        return 200, f"Environment {environment} has been stopped"
+            if agent is None:
+                await self.scheduler.refresh_all_agent_states_from_db()
+                return 200, "All agents have been notified!"
+            else:
+                try:
+                    await self.scheduler.refresh_agent_state_from_db(name=agent)
+                    return 200, f"Agent `{agent}` has been notified!"
+                except LookupError:
+                    return 404, f"No such agent: {agent}"
 
     async def on_reconnect(self) -> None:
         result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)
         if result.code == 200 and result.result is not None:
             state = result.result
             if "enabled" in state and isinstance(state["enabled"], bool):
-                await self.start_working()
+                if state["enabled"]:
+                    await self.start_working()
+                else:
+                    assert not self.working
             else:
                 LOGGER.warning("Server reported invalid state %s" % (repr(state)))
         else:
             LOGGER.warning("could not get state from the server")
 
     async def on_disconnect(self) -> None:
+        LOGGER.warning("Connection to server lost, stopping scheduler in environment %s", self.environment)
         await self.stop_working()
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
@@ -335,36 +341,34 @@ class Agent(SessionEndpoint):
 
     def check_storage(self) -> dict[str, str]:
         """
-        Check if the server storage is configured and ready to use.
+        Check if the server storage is configured and ready to use. Ultimately, this is
+        what the layout on disk will look like:
+
+            /var/lib/inmanta/
+                ├─ server
+                    ├─ env_uuid
+                        ├─ executors/
+                        │   ├─ venvs/
+                        │   │   ├─ venv_blueprint_hash_1/
+                        │   │   ├─ venv_blueprint_hash_2/
+                        │   │   ├─ ...
+                        │   │
+                        │   ├─ code/
+                        │       ├─ executor_blueprint_hash_1/
+                        │       ├─ executor_blueprint_hash_2/
+                        │       ├─ ...
+                        │
+                        ├─ compiler/
+                        │
+                        ├─ scheduler.cfg
+
         """
 
-        # FIXME: review on disk layout: https://github.com/inmanta/inmanta-core/issues/7590
-
         state_dir = cfg.state_dir.get()
-
         if not os.path.exists(state_dir):
             os.mkdir(state_dir)
 
-        agent_state_dir = os.path.join(state_dir, "agent")
-
-        if not os.path.exists(agent_state_dir):
-            os.mkdir(agent_state_dir)
-
-        dir_map = {"agent": agent_state_dir}
-
-        code_dir = os.path.join(agent_state_dir, "code")
-        dir_map["code"] = code_dir
-        if not os.path.exists(code_dir):
-            os.mkdir(code_dir)
-
-        env_dir = os.path.join(agent_state_dir, "env")
-        dir_map["env"] = env_dir
-        if not os.path.exists(env_dir):
-            os.mkdir(env_dir)
-
-        executor_dir = os.path.join(agent_state_dir, "executor")
-        dir_map["executor"] = executor_dir
-        if not os.path.exists(executor_dir):
-            os.mkdir(executor_dir)
-
+        dir_map = {
+            "executors": ensure_directory_exist(state_dir, "executors"),
+        }
         return dir_map

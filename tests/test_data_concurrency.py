@@ -232,7 +232,7 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
 
 
 @pytest.mark.slowtest
-async def test_release_version_concurrently(monkeypatch, server, client, environment: str, clienthelper) -> None:
+async def test_release_version_concurrently(monkeypatch, server, client, environment: str, clienthelper, null_agent) -> None:
     version1 = await clienthelper.get_version()
     resource1 = get_resource(version1, key="test1")
     await clienthelper.put_version_simple(resources=[resource1], version=version1)

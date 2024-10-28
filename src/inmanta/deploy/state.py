@@ -126,7 +126,7 @@ class AgentStatus(StrEnum):
     The status of the agent responsible of a given resource.
 
     STARTED: Agent has been started.
-    STARTED: Agent is stopping.
+    STOPPING: Agent is stopping.
     STOPPED: Agent has been stopped (previously called PAUSED).
     """
 
@@ -163,7 +163,6 @@ class ResourceState:
     status: ResourceStatus
     deployment_result: DeploymentResult
     blocked: BlockedStatus
-    agent_status: AgentStatus
 
 
 @dataclass(kw_only=True)
@@ -180,18 +179,15 @@ class ModelState:
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict[ResourceIdStr, ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
+    # (might be simply a change of its dependencies), which are still being processed by
+    # the resource scheduler. This is a short-lived transient state, used for internal concurrency control. Kept separate from
+    # ResourceStatus so that it lives outside the scheduler lock's scope.
     dirty: set[ResourceIdStr] = dataclasses.field(default_factory=set)
     # types per agent keeps track of which resource types live on which agent by doing a reference count
     # the dict is agent_name -> resource_type -> resource_count
     types_per_agent: dict[str, dict[ResourceType, int]] = dataclasses.field(
         default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
     )
-    agent_status: dict[str, AgentStatus] = dataclasses.field(default_factory=dict)
-    """
-    Resources that have a new desired state (might be simply a change of its dependencies), which are still being processed by
-    the resource scheduler. This is a shortlived transient state, used for internal concurrency control. Kept separate from
-    ResourceStatus so that it lives outside of the scheduler lock's scope.
-    """
 
     def reset(self) -> None:
         self.version = 0
@@ -199,7 +195,23 @@ class ModelState:
         self.requires.clear()
         self.resource_state.clear()
         self.types_per_agent.clear()
-        self.agent_status.clear()
+
+    def add_up_to_date_resource(self, resource: ResourceIdStr, details: ResourceDetails) -> None:
+        """
+        Add a resource to this ModelState for which the desired state was successfully deployed before, has an up-to-date
+        desired state and for which the deployment isn't blocked at the moment.
+        """
+        self.resources[resource] = details
+        if resource in self.resource_state:
+            self.resource_state[resource].status = ResourceStatus.UP_TO_DATE
+            self.resource_state[resource].deployment_result = DeploymentResult.DEPLOYED
+            self.resource_state[resource].blocked = BlockedStatus.NO
+        else:
+            self.resource_state[resource] = ResourceState(
+                status=ResourceStatus.UP_TO_DATE, deployment_result=DeploymentResult.DEPLOYED, blocked=BlockedStatus.NO
+            )
+            self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
+        self.dirty.discard(resource)
 
     def block_resource(self, resource: ResourceIdStr, details: ResourceDetails, transient: bool) -> None:
         """
@@ -222,7 +234,6 @@ class ModelState:
                 status=resource_status,
                 deployment_result=DeploymentResult.NEW,
                 blocked=BlockedStatus.YES,
-                agent_status=AgentStatus.STARTED,
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
@@ -289,7 +300,6 @@ class ModelState:
                 status=ResourceStatus.HAS_UPDATE,
                 deployment_result=DeploymentResult.NEW,
                 blocked=BlockedStatus.NO,
-                agent_status=AgentStatus.STARTED,
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.add(resource)
