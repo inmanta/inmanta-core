@@ -744,7 +744,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     Test a recompile on the server and verify recompile triggers
     """
 
-    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), 'compiler')
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
     print("Project at: ", project_dir)
 
@@ -777,7 +777,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert result.code == 200
 
     logger.info("wait for 1")
-    versions = await wait_for_version(client, environment, 1, compile_timeout=40)
+    versions = await wait_for_version(client, environment, 1, compile_timeout=12)
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
 
@@ -868,7 +868,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
     # clear the environment
     state_dir = config.state_dir.get()
-    project_dir = os.path.join(state_dir, "server", "environments", environment)
+    project_dir = os.path.join(state_dir, "server", environment)
     assert os.path.exists(project_dir)
 
     result = await client.clear_environment(environment)

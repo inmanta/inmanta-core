@@ -65,7 +65,7 @@ Bash = abc.Callable[[str], abc.Awaitable[CliResult]]
 def workon_environments_dir(server: Server) -> abc.Iterator[py.path.local]:
     state_dir: Optional[str] = config.Config.get("config", "state-dir")
     assert state_dir is not None
-    yield py.path.local(state_dir).join("server", "environments")
+    yield py.path.local(state_dir).join("server")
 
 
 @pytest.fixture
@@ -1173,7 +1173,7 @@ async def test_workon_sets_pip_config(
     Check the expected behaviour for the different scenarios defined in the "scenarios" fixture.
     """
     inner_env_id: uuid.UUID = compiled_environments[0].id
-    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id))
+    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id), "compiler")
 
     scenario = scenarios[scenario_id]
 
