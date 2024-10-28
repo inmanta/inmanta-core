@@ -865,6 +865,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
+        logger.warning(f"SUMMARY: {summary}")
         return summary["by_state"]["available"] == 1
 
     await retry_limited(wait_for_db_update_from_scheduler, 10)
