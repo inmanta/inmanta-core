@@ -2363,7 +2363,6 @@ RECOMPILE_BACKOFF = "recompile_backoff"
 ENVIRONMENT_METRICS_RETENTION = "environment_metrics_retention"
 
 
-
 class Setting:
     """
     A class to define a new environment setting.

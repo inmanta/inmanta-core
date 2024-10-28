@@ -173,6 +173,30 @@ executor_venv_retention_time: Option[int] = Option(
     is_lower_bounded_int(60),
 )
 
+agent_db_connection_pool_min_size: Option[int] = Option(
+    "agent",
+    "db-connection-pool-min-size",
+    1,
+    "The database connection pool will be initialized with this number of connections for "
+    "the resource scheduler in this environment.",
+    is_lower_bounded_int(0),
+)
+agent_db_connection_pool_max_size: Option[int] = Option(
+    "agent",
+    "db-connection-pool-max-size",
+    5,
+    "Limit the size of the database connection pool to this number of connections for "
+    "the resource scheduler in this environment.",
+    is_lower_bounded_int(1),
+)
+agent_db_connection_timeout: Option[int] = Option(
+    "agent",
+    "db-connection-timeout",
+    60,
+    "Database connection timeout in seconds for interactions of the scheduler in this environment " "with the database.",
+    is_lower_bounded_int(0),
+)
+
 
 class AgentExecutorMode(str, enum.Enum):
     threaded = "threaded"
