@@ -18,11 +18,12 @@
 
 import asyncio
 import logging
+import uuid
 
 import pytest
 
 import utils
-from inmanta import config, const
+from inmanta import config, const, data
 from inmanta.agent.agent_new import Agent
 
 
@@ -119,10 +120,12 @@ async def test_scheduler_initialization(agent, resource_container, clienthelper,
     assert result.result["data"][0]["resource_version_ids"] == ["test::Resource[agent1,key=key1],v=1"]
 
     # Pause the agent to stop the scheduler
-    result = await client.agent_action(tid=environment, name=const.AGENT_SCHEDULER_ID, action=const.AgentAction.pause.value)
-    assert result.code == 200
-    result = await client.agent_action(tid=environment, name=const.AGENT_SCHEDULER_ID, action=const.AgentAction.unpause.value)
-    assert result.code == 200
+    await data.Agent.pause(env=uuid.UUID(environment), endpoint=const.AGENT_SCHEDULER_ID, paused=True)
+    result, _ = await agent.set_state(const.AGENT_SCHEDULER_ID, enabled=False)
+    assert result == 200
+    await data.Agent.pause(env=uuid.UUID(environment), endpoint=const.AGENT_SCHEDULER_ID, paused=False)
+    result, _ = await agent.set_state(const.AGENT_SCHEDULER_ID, enabled=True)
+    assert result == 200
     await utils.retry_limited(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1", timeout=10, interval=0.05)
 
     for rid, expected_status in [

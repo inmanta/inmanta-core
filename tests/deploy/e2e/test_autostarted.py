@@ -770,6 +770,14 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     # Wait for this resource to be deployed
     await retry_limited(are_resources_deploying, 5)
 
+    # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
+    # something is moving
+    async def wait_for_actual_deployment() -> bool:
+        current_children_mapping = construct_mapping_relevant_processes(current_pid)
+        return len(current_children_mapping) == 3
+
+    await retry_limited(wait_for_actual_deployment, 5)
+
     # Retrieve the current processes, we should have more processes than `start_children`
     children_after_deployment = construct_mapping_relevant_processes(current_pid)
 
