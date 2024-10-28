@@ -4,11 +4,11 @@ change-type: major
 destination-branches: [master]
 sections:
   upgrade-note: >
-    Previously, a single database connection pool was shared among the server and the agent configured
+    Previously, a single database connection pool was shared among the server and the agent, configured
     via the ``database.connection_pool_max_size`` and ``database.connection_pool_min_size`` options.
     For each environment, the new resource scheduler uses a database connection pool of its own.
     Please review the following connection pool options and make sure they fit your
-    needs for each of your active environments:
+    needs. Do keep in mind that these options will apply to all active environments:
       - For the scheduler: ["agent.db_connection_timeout", agent.db_connection_pool_max_size", agent.db_connection_pool_min_size"]
       - For the server: [``database.service_connection_pool_max_size``, ``database.service_connection_pool_min_size``, ``database.connection_timeout``]
 
