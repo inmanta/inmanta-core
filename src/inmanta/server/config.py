@@ -62,7 +62,7 @@ db_connection_pool_max_size = Option(
 db_connection_timeout = Option(
     "database",
     "connection_timeout",
-    60,
+    60.0,
     "Connection timeout in seconds when the server communicates with the database",
     is_float,
 )

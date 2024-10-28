@@ -177,24 +177,25 @@ agent_db_connection_pool_min_size: Option[int] = Option(
     "agent",
     "db-connection-pool-min-size",
     1,
-    "The database connection pool will be initialized with this number of connections for "
-    "the resource scheduler in this environment.",
+    "In each environment, the database connection pool will be initialized with this number of connections for "
+    "the resource scheduler.",
     is_lower_bounded_int(0),
 )
 agent_db_connection_pool_max_size: Option[int] = Option(
     "agent",
     "db-connection-pool-max-size",
     5,
-    "Limit the size of the database connection pool to this number of connections for "
-    "the resource scheduler in this environment.",
+    "In each environment, limit the size of the database connection pool to this number of connections for "
+    "the resource scheduler.",
     is_lower_bounded_int(1),
 )
-agent_db_connection_timeout: Option[int] = Option(
+agent_db_connection_timeout: Option[float] = Option(
     "agent",
     "db-connection-timeout",
-    60,
-    "Database connection timeout in seconds for interactions of the scheduler in this environment " "with the database.",
-    is_lower_bounded_int(0),
+    60.0,
+    "In each environment, set the database connection timeout for interactions of the scheduler with the database"
+    " (in seconds).",
+    is_float,
 )
 
 
