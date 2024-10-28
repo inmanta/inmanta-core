@@ -612,11 +612,9 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     if should_time_out:
         # Wait for at least one resource to be in deploying
         await retry_limited(are_resources_being_deployed, timeout=5)
-        await asyncio.sleep(0.5)
-        await retry_limited(
-            lambda: len(construct_scheduler_children(current_pid).children) == len(state_after_deployment.children),
-            10,
-        )
+        async def wait_for_old_state():
+            current_state = construct_scheduler_children(current_pid).children
+            return len(current_state) == len(state_after_deployment.children)
     else:
         with pytest.raises(AssertionError):  # Nothing should get deployed
             await retry_limited(are_resources_being_deployed, timeout=1)
@@ -625,10 +623,10 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
             current_state = construct_scheduler_children(current_pid).children
             return len(current_state) == 2
 
-        await retry_limited(
-            lambda: wait_for_old_state,
-            10,
-        )
+    await retry_limited(
+        lambda: wait_for_old_state,
+        10,
+    )
 
 
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
