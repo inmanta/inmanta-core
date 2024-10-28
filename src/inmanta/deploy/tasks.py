@@ -177,10 +177,9 @@ class Deploy(Task):
                 success = False
                 return
 
-            # TODO: assert reason is not None # Should always be set for deploy
+            assert reason is not None  # Should always be set for deploy
             # Deploy
             try:
-                # FIXME: reason argument is not used
                 deploy_result = await my_executor.execute(action_id, gid, executor_resource_details, reason, requires)
                 success = deploy_result.status == const.ResourceState.deployed
             except Exception as e:
