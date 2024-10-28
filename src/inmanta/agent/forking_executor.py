@@ -840,7 +840,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
-        :param storage_folder: folder to place code files
+        :param storage_folder: folder to place code files and venvs
         :param log_level: log level for the executors
         :param cli_log: do we also want to echo the log to std_err
 
@@ -861,11 +861,16 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         self.storage_folder = storage_folder
         os.makedirs(self.log_folder, exist_ok=True)
         os.makedirs(self.storage_folder, exist_ok=True)
-        venv_dir = pathlib.Path(self.storage_folder) / "venv"
+        venv_dir = pathlib.Path(self.storage_folder) / "venvs"
         venv_dir.mkdir(exist_ok=True)
 
+        self.code_folder = pathlib.Path(self.storage_folder) / "code"
+        self.code_folder.mkdir(exist_ok=True)
+
         # Env manager
-        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venv_dir.absolute()), self.thread_pool)
+        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(
+            envs_dir=str(venv_dir.absolute()), thread_pool=self.thread_pool
+        )
 
         # logging
         self.log_level = log_level
@@ -919,7 +924,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
             executor.process.pid,
             self.render_id(blueprint),
         )
-        storage_for_blueprint = os.path.join(self.storage_folder, "code", blueprint.blueprint_hash())
+        storage_for_blueprint = os.path.join(self.code_folder, blueprint.blueprint_hash())
         os.makedirs(storage_for_blueprint, exist_ok=True)
         failed_types = await executor.connection.call(
             InitCommand(
@@ -1000,7 +1005,7 @@ class MPManager(
         :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
-        :param storage_folder: folder to place code files
+        :param storage_folder: folder to place code files and venvs
         :param log_level: log level for the executors
         :param cli_log: do we also want to echo the log to std_err
 
