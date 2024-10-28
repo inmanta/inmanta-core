@@ -65,7 +65,7 @@ Bash = abc.Callable[[str], abc.Awaitable[CliResult]]
 def workon_environments_dir(server: Server) -> abc.Iterator[py.path.local]:
     state_dir: Optional[str] = config.Config.get("config", "state-dir")
     assert state_dir is not None
-    yield py.path.local(state_dir).join("server", "environments")
+    yield py.path.local(state_dir).join("server")
 
 
 @pytest.fixture
@@ -493,7 +493,7 @@ async def test_workon(
     await assert_workon_state(
         workon_bash,
         str(compiled_environments[0].id),
-        expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
+        expected_dir=workon_environments_dir.join(str(compiled_environments[0].id), "compiler"),
         expect_stderr=(
             "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
             " the shell. This ensures the proper permission checks are performed.\n"
@@ -503,14 +503,14 @@ async def test_workon(
     await assert_workon_state(
         workon_bash,
         compiled_environments[1].name,
-        expected_dir=workon_environments_dir.join(str(compiled_environments[1].id)),
+        expected_dir=workon_environments_dir.join(str(compiled_environments[1].id), "compiler"),
         expect_stderr=(
             "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
             " the shell. This ensures the proper permission checks are performed.\n"
         ),
     )
     # .env dir missing
-    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[2].id))
+    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[2].id), "compiler")
     shutil.rmtree(str(env_dir.join(".env")))
     await assert_workon_state(
         workon_bash,
@@ -536,7 +536,7 @@ async def test_workon_no_env(
     """
     # env dir does not exist
     env: data.model.Environment = simple_environments[0]
-    env_dir: py.path.local = workon_environments_dir.join(str(env.id))
+    env_dir: py.path.local = workon_environments_dir.join(str(env.id), "compiler")
     for identifier in (str(env.id), env.name):
         await assert_workon_state(
             workon_bash,
@@ -603,7 +603,7 @@ async def test_workon_broken_cli(
     await assert_workon_state(
         workon_bash,
         str(compiled_environments[0].id),
-        expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
+        expected_dir=workon_environments_dir.join(str(compiled_environments[0].id), "compiler"),
         expect_stderr=(
             "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
             " the shell. This ensures the proper permission checks are performed.\n"
@@ -613,7 +613,7 @@ async def test_workon_broken_cli(
     await assert_workon_state(
         workon_bash,
         compiled_environments[1].name,
-        expected_dir=workon_environments_dir.join(str(compiled_environments[1].id)),
+        expected_dir=workon_environments_dir.join(str(compiled_environments[1].id), "compiler"),
         invert_success_assert=True,
         invert_working_dir_assert=True,
         invert_python_assert=True,
@@ -624,7 +624,7 @@ async def test_workon_broken_cli(
     )
     # no environment with this id exists
     random_id: uuid.UUID = uuid.uuid4()
-    env_dir: py.path.local = workon_environments_dir.join(str(random_id))
+    env_dir: py.path.local = workon_environments_dir.join(str(random_id), "compiler")
     await assert_workon_state(
         workon_bash,
         str(random_id),
@@ -722,7 +722,7 @@ async def test_workon_compile(
                 "\n"
             )
         ),
-        expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
+        expected_dir=workon_environments_dir.join(str(compiled_environments[0].id), "compiler"),
         invert_python_assert=True,
         invert_ps1_assert=True,
         expect_stderr=(
@@ -744,7 +744,7 @@ async def test_workon_deactivate(
     Verify the deactivate behavior of inmanta-workon.
     """
     env_id: uuid.UUID = compiled_environments[0].id
-    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id))
+    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id), "compiler")
     # simple deactivate
     await assert_workon_state(
         workon_bash,
@@ -777,8 +777,8 @@ async def test_workon_deactivate(
         ),
     )
     # ownership warning on activation of a different environment
-    env1_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[1].id))
-    env2_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[2].id))
+    env1_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[1].id), "compiler")
+    env2_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[2].id), "compiler")
     await assert_workon_state(
         workon_bash,
         # activate env 0
@@ -832,7 +832,7 @@ async def test_workon_sets_inmanta_config_environment(
     """
     outer_env_id: uuid.UUID = uuid.uuid4()
     inner_env_id: uuid.UUID = compiled_environments[0].id
-    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id))
+    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id), "compiler")
     # simple deactivate
     await assert_workon_state(
         workon_bash,
@@ -882,7 +882,7 @@ async def test_workon_sets_inmanta_config_environment_empty_outer(
     Verify that INMANTA_CONFIG_ENVIRONMENT is correctly unset if non-existent prior to activation.
     """
     inner_env_id: uuid.UUID = compiled_environments[0].id
-    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id))
+    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id), "compiler")
     await assert_workon_state(
         workon_bash,
         str(inner_env_id),
@@ -1173,7 +1173,7 @@ async def test_workon_sets_pip_config(
     Check the expected behaviour for the different scenarios defined in the "scenarios" fixture.
     """
     inner_env_id: uuid.UUID = compiled_environments[0].id
-    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id))
+    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id), "compiler")
 
     scenario = scenarios[scenario_id]
 
