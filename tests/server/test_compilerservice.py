@@ -1968,7 +1968,6 @@ async def test_environment_delete_removes_env_directories_on_server(
     """
     state_dir: Optional[str] = config.Config.get("config", "state-dir")
     assert state_dir is not None
-    env_dir = py.path.local(state_dir).join("server", "environments")
 
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -1987,12 +1986,13 @@ async def test_environment_delete_removes_env_directories_on_server(
 
     await utils.retry_limited(wait_for_compile, 15)
 
-    assert os.path.exists(os.path.join(env_dir, env_id))
+    env_dir = py.path.local(state_dir).join("server", str(env_id), "compiler")
+    assert os.path.exists(env_dir)
 
     result = await client.environment_delete(env_id)
     assert result.code == 200
 
-    assert not os.path.exists(os.path.join(env_dir, env_id))
+    assert not os.path.exists(env_dir)
 
 
 async def test_overlapping_env_vars(mocked_compiler_service, server, client, environment) -> None:

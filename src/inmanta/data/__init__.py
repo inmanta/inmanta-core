@@ -3999,6 +3999,10 @@ class LogLine(DataDocument):
         level: str = self._data["level"]
         return LogLevel[level]
 
+    @property
+    def timestamp(self) -> datetime.datetime:
+        return cast(datetime.datetime, self._data["timestamp"])
+
     def write_to_logger(self, logger: logging.Logger) -> None:
         logger.log(self.log_level.to_int, self.msg, *self.args)
 
@@ -4051,7 +4055,7 @@ class ResourceAction(BaseDocument):
 
     messages: Optional[list[dict[str, object]]] = None
     status: Optional[const.ResourceState] = None
-    changes: Optional[dict[m.ResourceIdStr, dict[str, object]]] = None
+    changes: Optional[dict[m.ResourceVersionIdStr, dict[str, object]]] = None
     change: Optional[const.Change] = None
 
     def __init__(self, from_postgres: bool = False, **kwargs: object) -> None:
@@ -4172,7 +4176,7 @@ class ResourceAction(BaseDocument):
             self._updates["messages"] = []
         self._updates["messages"] += messages
 
-    def add_changes(self, changes: dict[m.ResourceIdStr, dict[str, object]]) -> None:
+    def add_changes(self, changes: dict[m.ResourceVersionIdStr, dict[str, object]]) -> None:
         for resource, values in changes.items():
             for field, change in values.items():
                 if "changes" not in self._updates:
@@ -4184,7 +4188,7 @@ class ResourceAction(BaseDocument):
     async def set_and_save(
         self,
         messages: list[dict[str, object]],
-        changes: dict[str, object],
+        changes: dict[m.ResourceVersionIdStr, dict[str, object]],
         status: Optional[const.ResourceState],
         change: Optional[const.Change],
         finished: Optional[datetime.datetime],

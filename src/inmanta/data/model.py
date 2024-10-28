@@ -22,8 +22,7 @@ import urllib
 import uuid
 from collections import abc
 from collections.abc import Sequence
-from enum import Enum
-from itertools import chain
+from enum import Enum, StrEnum
 from typing import ClassVar, NewType, Optional, Self, Union
 
 import pydantic
@@ -426,17 +425,19 @@ class ResourceIdDetails(BaseModel):
     resource_id_value: str
 
 
-class OrphanedResource(str, Enum):
+class ReleasedResourceState(StrEnum):
+    # Copied over from const.ResourceState
+    unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource
+    skipped = "skipped"  #
+    dry = "dry"
+    deployed = "deployed"
+    failed = "failed"
+    deploying = "deploying"
+    available = "available"
+    cancelled = "cancelled"  # When a new version is pushed, in progress deploys are cancelled
+    undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
+    skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
     orphaned = "orphaned"
-
-
-class StrEnum(str, Enum):
-    """Enum where members are also (and must be) strs"""
-
-
-ReleasedResourceState = StrEnum(
-    "ReleasedResourceState", [(i.name, i.value) for i in chain(const.ResourceState, OrphanedResource)]
-)
 
 
 class VersionedResource(BaseModel):
@@ -640,13 +641,11 @@ class DesiredStateVersion(BaseModel):
     status: const.DesiredStateVersionStatus
 
 
-class NoPushTriggerMethod(str, Enum):
+class PromoteTriggerMethod(StrEnum):
+    # partly copies from const.AgentTriggerMethod
+    push_incremental_deploy = "push_incremental_deploy"
+    push_full_deploy = "push_full_deploy"
     no_push = "no_push"
-
-
-PromoteTriggerMethod = StrEnum(
-    "PromoteTriggerMethod", [(i.name, i.value) for i in chain(const.AgentTriggerMethod, NoPushTriggerMethod)]
-)
 
 
 class DryRun(BaseModel):

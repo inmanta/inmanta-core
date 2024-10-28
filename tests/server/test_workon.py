@@ -362,7 +362,7 @@ async def test_workon_list_no_api_no_environments(
             result.stderr.strip()
             == "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
             "\n"
-            f"WARNING: no environments directory found at '{tmpdir}/doesnotexist/server/environments'. This is expected if no"
+            f"WARNING: no environments directory found at '{tmpdir}/doesnotexist/server'. This is expected if no"
             " environments have been compiled yet. Otherwise, make sure you use this function on the server host."
         )
         assert result.stdout == ""

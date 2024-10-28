@@ -35,7 +35,16 @@ from inmanta.deploy import scheduler
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.types import Apireturn
-from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, Scheduler, TaskMethod, TaskSchedule, join_threadpools
+from inmanta.util import (
+    CronSchedule,
+    IntervalSchedule,
+    ScheduledTask,
+    Scheduler,
+    TaskMethod,
+    TaskSchedule,
+    ensure_directory_exist,
+    join_threadpools,
+)
 
 LOGGER = logging.getLogger("inmanta.scheduler")
 
@@ -169,7 +178,7 @@ class Agent(SessionEndpoint):
             self.sessionid,
             self._env_id,
             config.log_dir.get(),
-            self._storage["executor"],
+            self._storage["executors"],
             LOGGER.level,
             cli_log=False,
         )
@@ -332,36 +341,34 @@ class Agent(SessionEndpoint):
 
     def check_storage(self) -> dict[str, str]:
         """
-        Check if the server storage is configured and ready to use.
+        Check if the server storage is configured and ready to use. Ultimately, this is
+        what the layout on disk will look like:
+
+            /var/lib/inmanta/
+                ├─ server
+                    ├─ env_uuid
+                        ├─ executors/
+                        │   ├─ venvs/
+                        │   │   ├─ venv_blueprint_hash_1/
+                        │   │   ├─ venv_blueprint_hash_2/
+                        │   │   ├─ ...
+                        │   │
+                        │   ├─ code/
+                        │       ├─ executor_blueprint_hash_1/
+                        │       ├─ executor_blueprint_hash_2/
+                        │       ├─ ...
+                        │
+                        ├─ compiler/
+                        │
+                        ├─ scheduler.cfg
+
         """
 
-        # FIXME: review on disk layout: https://github.com/inmanta/inmanta-core/issues/7590
-
         state_dir = cfg.state_dir.get()
-
         if not os.path.exists(state_dir):
             os.mkdir(state_dir)
 
-        agent_state_dir = os.path.join(state_dir, "agent")
-
-        if not os.path.exists(agent_state_dir):
-            os.mkdir(agent_state_dir)
-
-        dir_map = {"agent": agent_state_dir}
-
-        code_dir = os.path.join(agent_state_dir, "code")
-        dir_map["code"] = code_dir
-        if not os.path.exists(code_dir):
-            os.mkdir(code_dir)
-
-        env_dir = os.path.join(agent_state_dir, "env")
-        dir_map["env"] = env_dir
-        if not os.path.exists(env_dir):
-            os.mkdir(env_dir)
-
-        executor_dir = os.path.join(agent_state_dir, "executor")
-        dir_map["executor"] = executor_dir
-        if not os.path.exists(executor_dir):
-            os.mkdir(executor_dir)
-
+        dir_map = {
+            "executors": ensure_directory_exist(state_dir, "executors"),
+        }
         return dir_map

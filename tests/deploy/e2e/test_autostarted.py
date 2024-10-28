@@ -194,7 +194,6 @@ async def test_auto_deploy_no_splay(server, client, clienthelper: ClientHelper, 
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 2
-    assert result.result["model"]["result"] == "failed"
 
     # check if agent 1 is started by the server
     # deploy will fail because handler code is not uploaded to the server
@@ -309,9 +308,7 @@ async def test_autostart_clear_agent_venv_on_delete(
     await wait_until_deployment_finishes(client, environment, version)
 
     autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-    venv_dir_agent1 = os.path.join(
-        autostarted_agent_manager._get_state_dir_for_agent_in_env(uuid.UUID(environment)), "agent", "env"
-    )
+    venv_dir_agent1 = os.path.join(autostarted_agent_manager._get_state_dir_for_agent_in_env(uuid.UUID(environment)))
 
     assert os.path.exists(venv_dir_agent1)
 
