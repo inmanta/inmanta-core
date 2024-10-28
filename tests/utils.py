@@ -52,6 +52,7 @@ from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data import ResourceIdStr
 from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceType, ResourceVersionIdStr
+from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceDetails
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
@@ -993,3 +994,17 @@ class DummyCodeManager(CodeManager):
         self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
     ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
         return ([ResourceInstallSpec(rt, version, dummyblueprint) for rt in resource_types], {})
+
+
+async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:
+    """
+    Return True iff the given agent has finished executing all its tasks.
+
+    :param scheduler: The resource scheduler that hands out work to the agent for which the done status has to be checked.
+    :param agent_name: The name of the agent for which the done status has to be checked.
+    """
+    agent_queue = scheduler._work.agent_queues._agent_queues.get(agent_name)
+    if not agent_queue:
+        # Agent queue doesn't exist -> Tasks have not been queued yet
+        return False
+    return agent_queue._unfinished_tasks == 0

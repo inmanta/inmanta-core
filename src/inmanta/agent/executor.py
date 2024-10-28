@@ -33,6 +33,7 @@ from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, cast
+from uuid import UUID
 
 import inmanta.types
 import inmanta.util
@@ -40,8 +41,10 @@ import packaging.requirements
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
-from inmanta.const import ResourceState
-from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.agent.handler import HandlerContext
+from inmanta.const import Change, ResourceState
+from inmanta.data import LogLine
+from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
@@ -471,6 +474,42 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         return process_environment
 
 
+@dataclass
+class DeployResult:
+    rvid: ResourceVersionIdStr
+    action_id: uuid.UUID
+    status: ResourceState
+    messages: list[LogLine]
+    changes: dict[str, AttributeStateChange]
+    change: Optional[Change]
+
+    @classmethod
+    def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployResult":
+        if ctx.status is None:
+            ctx.warning("Deploy status field is None, failing!")
+            ctx.set_status(ResourceState.failed)
+
+        return DeployResult(
+            rvid=rvid,
+            action_id=ctx.action_id,
+            status=ctx.status or ResourceState.failed,
+            messages=ctx.logs,
+            changes=ctx.changes,
+            change=ctx.change,
+        )
+
+    @classmethod
+    def undeployable(self, rvid: ResourceVersionIdStr, action_id: UUID, message: LogLine) -> "DeployResult":
+        return DeployResult(
+            rvid=rvid,
+            action_id=action_id,
+            status=ResourceState.unavailable,
+            messages=[message],
+            changes={},
+            change=Change.nochange,
+        )
+
+
 class Executor(abc.ABC):
     """
     Represents an executor responsible for deploying resources within a specified virtual environment.
@@ -486,10 +525,12 @@ class Executor(abc.ABC):
     @abc.abstractmethod
     async def execute(
         self,
+        action_id: uuid.UUID,
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-    ) -> ResourceState:
+        requires: dict[ResourceIdStr, const.ResourceState],
+    ) -> DeployResult:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
 
