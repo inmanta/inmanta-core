@@ -113,8 +113,7 @@ class TaskRunner:
         self.status = AgentStatus.STARTED
         assert (
             self._task is None or self._task.done()
-        ), f"Task Runner {self.endpoint} is trying to start twice, tis should not happen"
-        assert self._task is None or self._task.done(), f"Task Runner {self.endpoint} is trying to start twice, this should not happen"
+        ), f"Task Runner {self.endpoint} is trying to start twice, this should not happen"
         self._task = asyncio.create_task(self._run())
 
     async def _stop(self) -> None:
@@ -502,7 +501,7 @@ class ResourceScheduler(TaskManager):
         """
         current_environment = await Environment.get_by_id(self.environment)
         assert current_environment
-        if not current_environment.halted:
+        if current_environment.halted:
             return False
         if endpoint is None:
             return not current_environment.halted

@@ -431,13 +431,14 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
             - inmanta: multiprocessing fork server (if it was started by the Scheduler and not the old agent)
             - inmanta: executor process
         """
+        children = latest_scheduler.children(recursive=True)
         fork_server = None
         executors = []
-        children = latest_scheduler.children(recursive=True)
+
         for child in children:
             match child.name():
                 case "inmanta: multiprocessing fork server":
-                    assert not fork_server, f"`{child.name()}` == `inmanta: multiprocessing fork server`?"
+                    assert not fork_server
                     fork_server = child
                 case executor if "inmanta: executor process" in executor:
                     executors.append(child)
@@ -611,6 +612,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     if should_time_out:
         # Wait for at least one resource to be in deploying
         await retry_limited(are_resources_being_deployed, timeout=5)
+        await asyncio.sleep(0.5)
         await retry_limited(
             lambda: len(construct_scheduler_children(current_pid).children) == len(state_after_deployment.children),
             10,
