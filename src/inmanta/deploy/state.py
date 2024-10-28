@@ -214,7 +214,7 @@ class ModelState:
                 todo.extend(provides_view.get(resource_id, set()))
         return result
 
-    def mark_as_defined(self, resource: ResourceIdStr) -> None:
+    def mark_as_defined(self, resource: ResourceIdStr, details: ResourceDetails) -> None:
         """
         Mark the given resource as defined. If the given resource or any of its provides became unblocked, because of this,
         this method also updates the blocked status.
@@ -223,6 +223,7 @@ class ModelState:
         are populated in the resources dictionary.
 
         :param resource: The resource that became defined.
+        :param details: The details of resource.
         """
 
         def update_blocked_status(resource: ResourceIdStr) -> bool:
@@ -244,6 +245,7 @@ class ModelState:
             return True
 
         provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.provides_view()
+        self.resources[resource] = details
         self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
         todo: list[ResourceIdStr] = [resource]
         while todo:
