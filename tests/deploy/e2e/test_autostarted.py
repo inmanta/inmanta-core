@@ -34,7 +34,7 @@ from psutil import NoSuchProcess, Process
 
 from inmanta import config, const, data
 from inmanta.const import AgentAction
-from inmanta.server import SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from typing_extensions import Optional
@@ -486,6 +486,7 @@ async def wait_for_consistent_children(current_pid: int) -> None:
         - Besides, when the executor process is created, it can have, for a very short time, the same name as the fork server
             (because it was forked from it). This will cause an assertion error.
     """
+
     async def wait_consistent_scheduler() -> bool:
         try:
             _ = construct_scheduler_children(current_pid)
@@ -522,12 +523,7 @@ async def test_halt_deploy(
     current_pid = os.getpid()
 
     # First, configure everything
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    agent_name = "agent1"
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})  # TODO h clean this not mandatory anymore
-    await env.set(data.AUTOSTART_ON_START, True)
     config.Config.set("config", "environment", environment)
-
     # Make sure the session with the Scheduler is there
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
@@ -637,6 +633,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         # Wait for at least one resource to be in deploying
         await retry_limited(are_resources_being_deployed, timeout=5)
         await wait_for_consistent_children(current_pid)
+
         async def wait_for_old_state():
             try:
                 current_state = construct_scheduler_children(current_pid).children
@@ -645,6 +642,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
                 # This can occur, when the fork server forks and for a small amount of time, there will be two fork servers
                 # even though one of them is actually the executor process (will be shortly renamed)
                 return False
+
     else:
         with pytest.raises(AssertionError):  # Nothing should get deployed
             await retry_limited(are_resources_being_deployed, timeout=1)
@@ -677,11 +675,10 @@ async def test_pause_agent_deploy(
     current_pid = os.getpid()
 
     # First, configure everything
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    agent_name = "agent1"
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
-    await env.set(data.AUTOSTART_ON_START, True)
     config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
 
     # Retrieve the actual processes before deploying anything
     start_state = construct_scheduler_children(current_pid)
@@ -812,11 +809,10 @@ async def test_agent_paused_scheduler_crash(
     current_pid = os.getpid()
 
     # First, configure everything
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    agent_name = "agent1"
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
-    await env.set(data.AUTOSTART_ON_START, True)
     config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
 
     # Retrieve the actual processes before deploying anything
     start_state = construct_scheduler_children(current_pid)
@@ -850,6 +846,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
     # something is moving
     await wait_for_consistent_children(current_pid)
+
     async def wait_for_actual_deployment() -> bool:
         current_children_mapping = construct_scheduler_children(current_pid)
         return len(current_children_mapping.children) == 3
@@ -913,11 +910,10 @@ async def test_agent_paused_should_remain_paused_after_environment_resume(
     current_pid = os.getpid()
 
     # First, configure everything
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    agent_name = "agent1"
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
-    await env.set(data.AUTOSTART_ON_START, True)
     config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
 
     # Retrieve the actual processes before deploying anything
     start_state = construct_scheduler_children(current_pid)
@@ -1050,10 +1046,10 @@ async def test_pause_unpause_all_agents_deploy(
     Verify that the new scheduler can pause and unpause all agents
     """
     # First, configure everything
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": "", "agent2": "", "agent3": ""})
-    await env.set(data.AUTOSTART_ON_START, True)
     config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
 
     snippetcompiler.setup_for_snippet(
         """
