@@ -102,13 +102,13 @@ def test_configfile_hierarchy(monkeypatch, tmpdir):
             """
 [server]
 auth=false
+db-connection-pool-max-size=2
 [config]
 log-dir=/log
 [database]
 host=host1
 name=db1
 port=1234
-service_connection_pool_max_size=2
 username=non-default-name-0
 [influxdb]
 host=host1
@@ -163,15 +163,16 @@ tags=tag2=value2
             """
 [database]
 username=non-default-name-2
-service_connection_pool_max_size=3
+[server]
+db-connection-pool-max-size=3
         """
         )
 
     with open(min_c_file, "w", encoding="utf-8") as f:
         f.write(
             """
-[database]
-service_connection_pool_max_size=5
+[server]
+db-connection-pool-max-size=5
         """
         )
 
@@ -186,7 +187,7 @@ service_connection_pool_max_size=5
     assert Config.get("influxdb", "interval") == 20
     assert Config.get("influxdb", "tags")["tag2"] == "value2"
     assert Config.get("database", "username") == "non-default-name-2"
-    assert Config.get("database", "service_connection_pool_max_size") == 5
+    assert Config.get("server", "db_connection_pool_max_size") == 5
     assert Config.get("server", "auth")
     assert Config.get("server", "agent-timeout") == 60
 
