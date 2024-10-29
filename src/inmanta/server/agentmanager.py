@@ -956,7 +956,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         self.environment_service = cast(environmentservice.EnvironmentService, server.get_slice(SLICE_ENVIRONMENT))
         self.environment_service.register_listener(self, inmanta.server.services.environmentlistener.EnvironmentAction.created)
-        self.environment_service.register_listener(self, inmanta.server.services.environmentlistener.EnvironmentAction.cleared)
 
     async def start(self) -> None:
         await super().start()
@@ -1414,17 +1413,6 @@ password={opt.db_password.get()}
         await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
         if not (assert_no_start_scheduler or no_start_scheduler):
             await self._ensure_scheduler(env.id)
-
-    async def environment_action_cleared(self, env: model.Environment) -> None:
-        """
-        Will be called when a new environment is created to create a scheduler agent
-
-        :param env: The new environment
-        """
-        env_db = await data.Environment.get_by_id(env.id)
-        assert env_db
-        # We need to make sure that the AGENT_SCHEDULER is registered to be up and running
-        await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
 
 
 # For testing only
