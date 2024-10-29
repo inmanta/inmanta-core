@@ -35,7 +35,7 @@ import utils
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import DeployResult, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployResult, DryrunResult, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.const import Change
 from inmanta.data import ResourceIdStr
@@ -244,6 +244,9 @@ class DummyStateManager(StateUpdateManager):
                 assert scheduler._state.resource_state[resource].blocked == blocked
             if status:
                 assert scheduler._state.resource_state[resource].status == status
+
+    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
+        self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
 
 
 def state_manager_check(agent: "TestAgent"):

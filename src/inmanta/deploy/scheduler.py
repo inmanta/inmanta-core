@@ -149,7 +149,7 @@ class ResourceScheduler(TaskManager):
         self.client = client
         self.code_manager = CodeManager(client)
         self.executor_manager = executor_manager
-        self._state_update_delegate = ToDbUpdateManager(environment)
+        self._state_update_delegate = ToDbUpdateManager(client, environment)
 
     def reset(self) -> None:
         """
@@ -509,3 +509,6 @@ class ResourceScheduler(TaskManager):
 
     async def send_deploy_done(self, result: DeployResult) -> None:
         return await self._state_update_delegate.send_deploy_done(result)
+
+    async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
+        await self._state_update_delegate.dryrun_update(env, dryrun_result)
