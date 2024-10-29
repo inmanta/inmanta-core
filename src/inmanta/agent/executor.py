@@ -559,7 +559,7 @@ class Executor(abc.ABC):
         """
         Perform a dryrun for the given resources
 
-        :param resource: Resource to perform a dryrun.
+        :param resource: Resource for which to perform a dryrun.
         :param dry_run_id: id for this dryrun
         """
         pass

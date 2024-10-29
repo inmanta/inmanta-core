@@ -268,7 +268,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         """
         Perform a dryrun for the given resources
 
-        :param resource: Resource to perform a dryrun.
+        :param resource: Resource for which to perform a dryrun.
         :param dry_run_id: id for this dryrun
         """
         async with self.activity_lock:
@@ -350,7 +350,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                             )
 
                 except Exception as e:
-                    # This one doesn't make sense, right? It's just a log line in the try
                     ctx.exception(
                         "Unable to process resource %(resource_id)s for dryrun (exception: %(exception)s",
                         resource_id=resource.rvid,
