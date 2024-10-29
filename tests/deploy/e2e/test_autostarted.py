@@ -574,7 +574,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
     expected_additional_children_after_deployment = 3
     assert len(state_after_deployment.children) == expected_additional_children_after_deployment, (
-        "These processes should be present: The fork server and the actual agent! " f"Actual state: {state_after_deployment}"
+        "These processes should be present: The fork server and the actual executor! " f"Actual state: {state_after_deployment}"
     )
     for child in state_after_deployment.children:
         assert child.is_running()
