@@ -199,33 +199,7 @@ class DatabaseService(protocol.ServerSlice):
 
     async def get_status(self) -> dict[str, ArgumentTypes]:
         """Get the status of the database connection"""
-        schedulers = self.agentmanager_service.get_all_schedulers()
-
-        deadline = 0.9 * Server.GET_SERVER_STATUS_TIMEOUT
-
-        async def get_report(env: uuid.UUID, session: protocol.Session) -> tuple[uuid, DataBaseReport]:
-            result = await asyncio.wait_for(session.client.get_db_status(), deadline)
-            assert result.code == 200
-
-            return (env, DataBaseReport(**result.result["data"]))
-
-        self_status_job = asyncio.create_task(self._db_monitor.get_status())
-        results = await asyncio.gather(*[get_report(env, scheduler) for env, scheduler in schedulers], return_exceptions=True)
-
-        self_status = await self_status_job
-
-        total = self_status
-
-        for result in results:
-            if isinstance(result, Exception):
-                raise result
-            else:
-                total += result[1]
-
-        # Overall
-        # Server
-        # Scheduler
-        return (total).dict()
+        return (await self._db_monitor.get_status()).dict()
 
     async def _purge_agent_processes(self) -> None:
         # Move to agent manager
