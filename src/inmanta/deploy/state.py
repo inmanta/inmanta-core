@@ -238,6 +238,9 @@ class ModelState:
 
             :return: True iff the given resource was unblocked.
             """
+            if self.resource_state[resource].blocked is BlockedStatus.NO:
+                # The resource is already unblocked.
+                return False
             if self.resource_state[resource].status is ResourceStatus.UNDEFINED:
                 # The resource is undefined.
                 return False
