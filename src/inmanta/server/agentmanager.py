@@ -255,31 +255,41 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             raise BadRequest(f"Unknown agent action: {action.name}")
 
+    async def _update_paused_status_agent(
+        self,
+        env: data.Environment,
+        new_paused_status: bool,
+        endpoint: Optional[str] = None,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """
+        Helper method to pause / unpause a logical agent by pausing an active agent instance if it exists and notify the
+        scheduler that something has changed.
+        """
+        # We need this lock otherwise, we would have transaction conflict in DB
+        async with self.session_lock:
+            await data.Agent.pause(env=env.id, endpoint=endpoint, paused=new_paused_status, connection=connection)
+            key = (env.id, const.AGENT_SCHEDULER_ID)
+            live_session = self.tid_endpoint_to_session.get(key)
+            if live_session:
+                await live_session.get_client().set_state(endpoint, enabled=not new_paused_status)
+
     async def _pause_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         """
-        Pause a logical agent by pausing an active agent instance if it exists, and removing the logical agent's primary.
+        Pause a logical agent by pausing an active agent instance if it exists.
         """
-
-        async with self.session_lock:
-            await data.Agent.pause(env=env.id, endpoint=endpoint, paused=True, connection=connection)
-            key = (env.id, const.AGENT_SCHEDULER_ID)
-            live_session = self.tid_endpoint_to_session.get(key)
-            if live_session:
-                await live_session.get_client().set_state(endpoint, enabled=False)
+        await self._update_paused_status_agent(env=env, new_paused_status=True, endpoint=endpoint, connection=connection)
 
     async def _unpause_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
-        async with self.session_lock:
-            await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
-            key = (env.id, const.AGENT_SCHEDULER_ID)
-            live_session = self.tid_endpoint_to_session.get(key)
-            if not live_session:
-                session = self.get_session_for(tid=env.id, endpoint=const.AGENT_SCHEDULER_ID)
-                if session:
-                    await session.get_client().set_state(endpoint, enabled=True)
+        """
+        Unpause a logical agent by pausing an active agent instance if it exists.
+        """
+        await self._update_paused_status_agent(env=env, new_paused_status=False, endpoint=endpoint, connection=connection)
 
     async def _set_unpause_on_resume(
         self,
@@ -946,7 +956,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         self.environment_service = cast(environmentservice.EnvironmentService, server.get_slice(SLICE_ENVIRONMENT))
         self.environment_service.register_listener(self, inmanta.server.services.environmentlistener.EnvironmentAction.created)
-        self.environment_service.register_listener(self, inmanta.server.services.environmentlistener.EnvironmentAction.cleared)
 
     async def start(self) -> None:
         await super().start()
@@ -1404,17 +1413,6 @@ password={opt.db_password.get()}
         await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
         if not (assert_no_start_scheduler or no_start_scheduler):
             await self._ensure_scheduler(env.id)
-
-    async def environment_action_cleared(self, env: model.Environment) -> None:
-        """
-        Will be called when a new environment is created to create a scheduler agent
-
-        :param env: The new environment
-        """
-        env_db = await data.Environment.get_by_id(env.id)
-        assert env_db
-        # We need to make sure that the AGENT_SCHEDULER is registered to be up and running
-        await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
 
 
 # For testing only

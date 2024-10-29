@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import datetime
 import logging
 import os
@@ -192,7 +191,7 @@ class Agent(SessionEndpoint):
 
         await join_threadpools(threadpools_to_join)
         # We need to shield to avoid CancelledTask exception
-        await asyncio.shield(super().stop())
+        await super().stop()
 
     async def start_connected(self) -> None:
         """
@@ -228,12 +227,10 @@ class Agent(SessionEndpoint):
         pass
 
     @protocol.handle(methods.set_state)
-    async def set_state(self, agent: str, enabled: bool) -> Apireturn:
+    async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
         if agent == AGENT_SCHEDULER_ID:
-            should_be_running = await self.scheduler.should_be_running()
-
-            if should_be_running:
-                if self.working != should_be_running:
+            if enabled:
+                if self.working != enabled:
                     await self.start_working()
                 else:
                     # Special cast that the server considers us disconnected, but the Scheduler thinks we are still connected.

@@ -385,6 +385,8 @@ async def wait_until_deployment_finishes(client: Client, environment: str, timeo
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
+        # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
+        #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
         print(summary)
         available = summary["by_state"]["available"]
         deploying = summary["by_state"]["deploying"]
@@ -927,7 +929,7 @@ class NullAgent(SessionEndpoint):
         return 200
 
     @protocol.handle(methods.set_state)
-    async def set_state(self, agent: str, enabled: bool) -> Apireturn:
+    async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
         self.enabled[agent] = enabled
         return 200
 
