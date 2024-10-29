@@ -537,9 +537,6 @@ class ResourceScheduler(TaskManager):
         """
         # The None represent the all agents action
         for worker in self._workers.values():
-            if worker.endpoint == const.AGENT_SCHEDULER_ID:
-                continue
-
             await worker.notify()
 
     async def is_agent_running(self, name: str) -> bool:
