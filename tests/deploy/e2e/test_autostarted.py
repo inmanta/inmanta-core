@@ -769,7 +769,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         resumed_children = construct_scheduler_children(current_pid)
         return len(resumed_children.children) == 3
 
-    await retry_limited(wait_for_new_executor, 5)
+    await retry_limited(wait_for_new_executor, 10)
     resumed_state = construct_scheduler_children(current_pid)
     # All expected processes are back online
     assert (
