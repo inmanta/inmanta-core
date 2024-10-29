@@ -560,6 +560,9 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     # Let's check the agent table and check that agent1 is present and not paused
     await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
+    # Make sure the children of the scheduler are consistent
+    await wait_for_consistent_children(current_pid)
+
     # Wait for something to be deployed
     try:
         await clienthelper.wait_for_deployed(timeout=5)
@@ -709,6 +712,9 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     # Wait for at least one resource to be deployed
     await retry_limited(check_resource_in_state, timeout=10)
 
+    # Make sure the children of the scheduler are consistent
+    await wait_for_consistent_children(current_pid)
+
     # Retrieve the current processes, we should have more processes than `start_children`
     state_after_deployment = construct_scheduler_children(current_pid)
     expected_additional_children_after_deployment = 3
@@ -851,6 +857,9 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
     await retry_limited(wait_for_actual_deployment, 5)
 
+    # Make sure the children of the scheduler are consistent
+    await wait_for_consistent_children(current_pid)
+
     # Retrieve the current processes, we should have more processes than `start_children`
     children_after_deployment = construct_scheduler_children(current_pid)
 
@@ -863,6 +872,9 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     async_finalizer.add(partial(ibl.stop, timeout=20))
     # Let's restart the server
     await ibl.start()
+
+    # Make sure the children of the scheduler are consistent
+    await wait_for_consistent_children(current_pid)
 
     async def wait_for_scheduler() -> bool:
         current_children_mapping = construct_scheduler_children(current_pid)
@@ -944,6 +956,9 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     # Wait for at least one resource to be deployed
     await retry_limited(are_resources_deployed, timeout=10)
 
+    # Make sure the children of the scheduler are consistent
+    await wait_for_consistent_children(current_pid)
+
     # Retrieve the current processes, we should have more processes than `start_children`
     state_after_deployment = construct_scheduler_children(current_pid)
     expected_additional_children_after_deployment = 3
@@ -1020,6 +1035,9 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
     assert expected_agents_status["agent1"]
     assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
+
+    # Make sure the children of the scheduler are consistent
+    await wait_for_consistent_children(current_pid)
 
     resumed_state = construct_scheduler_children(current_pid)
     assert len(resumed_state.children) == 1, (
