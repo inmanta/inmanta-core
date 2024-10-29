@@ -620,9 +620,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
     assert (
         len(halted_state.children) == 0
-    ), "The Scheduler and the fork server and the agent created by the scheduler should have been killed!"
-    for child in halted_state.children:
-        assert child.is_running()
+    ), "The Scheduler and the fork server and the executor created by the scheduler should have been killed!"
 
     await client.resume_environment(environment)
 
@@ -716,7 +714,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     expected_additional_children_after_deployment = 3
     assert (
         len(state_after_deployment.children) == expected_additional_children_after_deployment
-    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
+    ), "These processes should be present: The Scheduler, the fork server and the actual executor!"
     for children in state_after_deployment.children:
         assert children.is_running()
 
@@ -776,7 +774,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     # All expected processes are back online
     assert (
         len(resumed_state.children) == expected_additional_children_after_deployment
-    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
+    ), "These processes should be present: The Scheduler, the fork server and the actual executor!"
     for children in resumed_state.children:
         assert children.is_running()
 
@@ -951,7 +949,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     expected_additional_children_after_deployment = 3
     assert (
         len(state_after_deployment.children) == expected_additional_children_after_deployment
-    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
+    ), "These processes should be present: The Scheduler, the fork server and the actual executor!"
     for children in state_after_deployment.children:
         assert children.is_running()
 
@@ -1003,7 +1001,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     halted_state = construct_scheduler_children(current_pid)
     assert (
         len(halted_state.children) == 0
-    ), "The Scheduler and the fork server and the agent created by the scheduler should have been killed!"
+    ), "The Scheduler and the fork server and the executor created by the scheduler should have been killed!"
 
     await client.resume_environment(environment)
 

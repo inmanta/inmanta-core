@@ -278,7 +278,10 @@ class TestScheduler(ResourceScheduler):
     ) -> None:
         pass
 
-    async def should_be_running(self, endpoint: str) -> bool:
+    async def should_be_running(self) -> bool:
+        return True
+
+    async def should_runner_be_running(self, endpoint: str) -> bool:
         return True
 
     async def _build_resource_mappings_from_db(

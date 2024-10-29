@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import datetime
 import logging
 import os
@@ -192,7 +191,7 @@ class Agent(SessionEndpoint):
 
         await join_threadpools(threadpools_to_join)
         # We need to shield to avoid CancelledTask exception
-        await asyncio.shield(super().stop())
+        await super().stop()
 
     async def start_connected(self) -> None:
         """
