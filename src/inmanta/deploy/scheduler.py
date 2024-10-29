@@ -34,7 +34,7 @@ from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.data import ConfigurationModel
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
-from inmanta.deploy.persistence import StateUpdateManager, ToServerUpdateManager
+from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
@@ -99,9 +99,6 @@ class TaskManager(StateUpdateManager, abc.ABC):
         :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
         """
 
-    @abc.abstractmethod
-    async def set_parameters(self, fact_result: FactResult) -> None:
-        pass
 
 
 class ResourceScheduler(TaskManager):
@@ -153,7 +150,7 @@ class ResourceScheduler(TaskManager):
         self.client = client
         self.code_manager = CodeManager(client)
         self.executor_manager = executor_manager
-        self._state_update_delegate = ToServerUpdateManager(client, environment)
+        self._state_update_delegate = ToDbUpdateManager(client, environment)
 
     def reset(self) -> None:
         """
@@ -389,14 +386,14 @@ class ResourceScheduler(TaskManager):
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in blocked_resources:
-                    self._state.block_resource(resource, details, transient=False)
+                    self._state.block_resource(resource, resources[resource], is_transitive=False)
                 for resource in new_desired_state:
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
-                transitively_blocked_resources: set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
+                transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 for resource in unblocked_resources:
-                    self._state.unblock_resource(resource)
+                    self._state.mark_as_defined(resource, resources[resource])
                 # Update set of in-progress non-stale deploys by trimming resources with new state
                 self._deploying_latest.difference_update(
                     new_desired_state, deleted_resources, blocked_resources, transitively_blocked_resources
@@ -513,6 +510,9 @@ class ResourceScheduler(TaskManager):
 
     async def send_deploy_done(self, result: DeployResult) -> None:
         return await self._state_update_delegate.send_deploy_done(result)
+
+    async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
+        await self._state_update_delegate.dryrun_update(env, dryrun_result)
 
     async def set_parameters(self, fact_result: FactResult) -> None:
         await self._state_update_delegate.set_parameters(fact_result)

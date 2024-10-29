@@ -65,6 +65,16 @@ class AgentInstance(abc.ABC):
         pass
 
 
+@dataclass
+class DryrunResult:
+    rvid: ResourceVersionIdStr
+    dryrun_id: uuid.UUID
+    changes: dict[str, AttributeStateChange]
+    started: datetime.datetime
+    finished: datetime.datetime
+    messages: list[LogLine]
+
+
 class ResourceDetails:
     """
     In memory representation of the desired state of a resource
@@ -538,13 +548,13 @@ class Executor(abc.ABC):
     @abc.abstractmethod
     async def dry_run(
         self,
-        resources: Sequence[ResourceDetails],
+        resource: ResourceDetails,
         dry_run_id: uuid.UUID,
-    ) -> None:
+    ) -> DryrunResult:
         """
         Perform a dryrun for the given resources
 
-        :param resources: Sequence of resources for which to perform a dryrun.
+        :param resource: Resource for which to perform a dryrun.
         :param dry_run_id: id for this dryrun
         """
         pass

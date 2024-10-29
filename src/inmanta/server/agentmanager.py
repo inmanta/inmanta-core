@@ -1367,9 +1367,12 @@ port={opt.db_port.get()}
 name={opt.db_name.get()}
 username={opt.db_username.get()}
 password={opt.db_password.get()}
+[scheduler]
+db-connection-pool-min-size={agent_cfg.scheduler_db_connection_pool_min_size.get()}
+db-connection-pool-max-size={agent_cfg.scheduler_db_connection_pool_max_size.get()}
+db-connection-timeout={agent_cfg.scheduler_db_connection_timeout.get()}
 
             """
-        # TODO: connection pool
         return config
 
     async def _fork_inmanta(

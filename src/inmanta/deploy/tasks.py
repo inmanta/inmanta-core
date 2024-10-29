@@ -18,6 +18,7 @@
 
 import abc
 import dataclasses
+import datetime
 import logging
 import traceback
 import uuid
@@ -26,7 +27,7 @@ from dataclasses import dataclass
 from inmanta import const, data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployResult
-from inmanta.data.model import ResourceIdStr, ResourceType
+from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType
 from inmanta.deploy import scheduler, state
 
 LOGGER = logging.getLogger(__name__)
@@ -235,11 +236,19 @@ class DryRun(Task):
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(
             self.version, self.resource_details
         )
+        # Just in case we reach the general exception
+        started = datetime.datetime.now().astimezone()
         try:
             my_executor: executor.Executor = await self.get_executor(
                 task_manager, agent, executor_resource_details.id.entity_type, self.version
             )
-            await my_executor.dry_run([executor_resource_details], self.dry_run_id)
+
+            dryrun_result: executor.DryrunResult = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
+            await task_manager.dryrun_update(
+                env=task_manager.environment,
+                dryrun_result=dryrun_result,
+            )
+
         except Exception:
             # FIXME: seems weird to conclude undeployable state from generic Exception on either of two method calls
             logger_for_agent(agent).error(
@@ -247,12 +256,15 @@ class DryRun(Task):
                 executor_resource_details.rvid,
                 exc_info=True,
             )
-            await task_manager.client.dryrun_update(
-                tid=task_manager.environment,
-                id=self.dry_run_id,
-                resource=executor_resource_details.rvid,
-                changes={"handler": {"current": "FAILED", "desired": "Resource is in an undeployable state"}},
+            result = executor.DryrunResult(
+                rvid=executor_resource_details.rvid,
+                dryrun_id=self.dry_run_id,
+                changes={"handler": AttributeStateChange(current="FAILED", desired="Resource is in an undeployable state")},
+                started=started,
+                finished=datetime.datetime.now().astimezone(),
+                messages=[],
             )
+            await task_manager.dryrun_update(env=task_manager.environment, dryrun_result=result)
 
 
 class RefreshFact(Task):

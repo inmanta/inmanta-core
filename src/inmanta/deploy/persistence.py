@@ -25,6 +25,7 @@ from uuid import UUID
 from asyncpg import UniqueViolationError
 
 from inmanta import const, data
+from inmanta.agent.executor import DeployResult, DryrunResult
 from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
@@ -52,6 +53,10 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def send_deploy_done(self, result: DeployResult) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
         pass
 
     @abc.abstractmethod
@@ -94,6 +99,24 @@ class ToServerUpdateManager(StateUpdateManager):
         if response.code != 200:
             LOGGER.error("Resource status update failed %s for %s ", response.result, result.rvid)
 
+    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
+        await self.client.dryrun_update(
+            tid=env,
+            id=dryrun_result.dryrun_id,
+            resource=dryrun_result.rvid,
+            changes=dryrun_result.changes,
+        )
+        await self.client.resource_action_update(
+            tid=env,
+            resource_ids=[dryrun_result.rvid],
+            action_id=dryrun_result.dryrun_id,
+            action=const.ResourceAction.dryrun,
+            started=dryrun_result.started,
+            finished=dryrun_result.finished,
+            messages=dryrun_result.messages,
+            status=const.ResourceState.dry,
+        )
+
     async def set_parameters(self, fact_result: FactResult) -> None:
         await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
         await self.client.resource_action_update(
@@ -109,11 +132,27 @@ class ToServerUpdateManager(StateUpdateManager):
 
 class ToDbUpdateManager(StateUpdateManager):
 
-    def __init__(self, environment: UUID) -> None:
+    def __init__(self, client: Client, environment: UUID) -> None:
         self.environment = environment
+        # TODO: The client is only here temporarily while we fix the dryrun_update
+        self.client = client
         # FIXME: We may want to move the writing of the log to the scheduler side as well,
         #  when all uses of this logger are moved
         self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
+
+    def get_resource_action_logger(self, environment: UUID) -> logging.Logger:
+        """Get the resource action logger for the given environment.
+        :param environment: The environment to get a logger for
+        :return: The logger for the given environment.
+        """
+        return self._resource_action_logger.getChild(str(environment))
+
+    def log_resource_action(self, env: UUID, resource_id: str, log_level: int, ts: datetime.datetime, message: str) -> None:
+        """Write the given log to the correct resource action logger"""
+        logger = self.get_resource_action_logger(env)
+        message = resource_id + ": " + message
+        log_record = resourceservice.ResourceActionLogLine(logger.name, log_level, message, ts)
+        logger.handle(log_record)
 
     async def send_in_progress(
         self, action_id: UUID, resource_id: ResourceVersionIdStr
@@ -290,161 +329,34 @@ class ToDbUpdateManager(StateUpdateManager):
                         environment=self.environment, resource_id=resource.resource_id, connection=connection
                     )
 
-    def log_resource_action(
-        self, env: UUID, resource_id: ResourceVersionIdStr, log_level: int, ts: datetime.datetime, message: str
-    ) -> None:
-        """Write the given log to the correct resource action logger"""
-        logger = self.get_resource_action_logger(env)
-        message = resource_id + ": " + message
-        log_record = resourceservice.ResourceActionLogLine(logger.name, log_level, message, ts)
-        logger.handle(log_record)
-
-    def get_resource_action_logger(self, environment: UUID) -> logging.Logger:
-        """Get the resource action logger for the given environment.
-        :param environment: The environment to get a logger for
-        :return: The logger for the given environment.
-        """
-        return self._resource_action_logger.getChild(str(environment))
+    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
+        # TODO: Inline these methods so that we don't call the server
+        # To be done after we update the dryrun database table
+        await self.client.dryrun_update(
+            tid=env,
+            id=dryrun_result.dryrun_id,
+            resource=dryrun_result.rvid,
+            changes=dryrun_result.changes,
+        )
+        await self.client.resource_action_update(
+            tid=env,
+            resource_ids=[dryrun_result.rvid],
+            action_id=dryrun_result.dryrun_id,
+            action=const.ResourceAction.dryrun,
+            started=dryrun_result.started,
+            finished=dryrun_result.finished,
+            messages=dryrun_result.messages,
+            status=const.ResourceState.dry,
+        )
 
     async def set_parameters(self, fact_result: FactResult) -> None:
-        recompile = False
-        parameters=fact_result.parameters
-
-        updating_facts: bool = False
-        updating_parameters: bool = False
-        parameters_and_or_facts: str = "parameters"
-
-        params: list[tuple[str, ResourceIdStr | None]] = []
-
-        # Validate the full list of parameters before applying any changes
-        def _validate_parameter(
-            name: str,
-            resource_id: Optional[str],
-            expires: Optional[bool],
-        ) -> None:
-            if not resource_id and expires:
-                # Parameters cannot expire
-                raise BadRequest(
-                    "Cannot update or set parameter %s: `expire` set to True but parameters cannot expire."
-                    " Consider using a fact instead by providing a resource_id." % name,
-                )
-
-        async def _update_param(
-            name: str,
-            value: Optional[str],
-            source: str,
-            resource_id: Optional[str],
-            metadata: Optional[JsonType],
-            expires: Optional[bool] = None,
-        ) -> bool:
-            """
-            Update or set a parameter or fact.
-
-            :param expires: When setting a new parameter/fact: if set to None, then a sensible default will be provided (i.e. False
-                for parameter and True for fact). When updating a parameter or fact, a None value will leave the existing value
-                unchanged.
-
-            This method returns true if:
-            - this update resolves an unknown
-            - recompile is true and the parameter updates an existing parameter to a new value
-            """
-            if resource_id:
-                LOGGER.debug("Updating/setting fact %s in env %s (for resource %s)", name, self.environment, resource_id)
-            else:
-                LOGGER.debug("Updating/setting parameter %s in env %s", name, self.environment)
-
-            if not isinstance(value, str):
-                value = str(value)
-
-            if resource_id is None:
-                resource_id = ""
-
-            params = await data.Parameter.get_list(environment=self.environment, name=name, resource_id=resource_id)
-
-            value_updated = True
-
-            if len(params) == 0:
-                if expires is None:
-                    # By default:
-                    #   - parameters (i.e. not associated with a resource id) don't expire
-                    #   - facts (i.e. associated with a resource id) expire
-                    expires = bool(resource_id)
-
-                param = data.Parameter(
-                    environment=self.environment,
-                    name=name,
-                    resource_id=resource_id,
-                    value=value,
-                    source=source,
-                    updated=datetime.datetime.now().astimezone(),
-                    metadata=metadata,
-                    expires=expires,
-                )
-                await param.insert()
-            else:
-                param = params[0]
-                value_updated = param.value != value
-                if expires is not None:
-                    await param.update(
-                        source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata,
-                        expires=expires
-                    )
-                else:
-                    await param.update(source=source, value=value, updated=datetime.datetime.now().astimezone(),
-                                       metadata=metadata)
-
-            # check if the parameter is an unknown
-            unknown_params = await data.UnknownParameter.get_list(
-                environment=self.environment, name=name, resource_id=resource_id, resolved=False
-            )
-            if len(unknown_params) > 0:
-                LOGGER.info(
-                    "Received values for unknown parameters %s, triggering a recompile",
-                    ", ".join([x.name for x in unknown_params])
-                )
-                for p in unknown_params:
-                    await p.update_fields(resolved=True)
-
-                return True
-
-        for param in parameters:
-            _validate_parameter(
-                param["id"],
-                param["resource_id"] if "resource_id" in param else None,
-                param["expires"] if "expires" in param else None,
-            )
-
-        for param in parameters:
-            name: str = param["id"]
-            source = param["source"]
-            value = param["value"] if "value" in param else None
-            resource_id: ResourceIdStr | None = param["resource_id"] if "resource_id" in param else None
-            metadata = param["metadata"] if "metadata" in param else None
-            expires = param["expires"] if "expires" in param else None
-
-            if resource_id:
-                updating_facts = True
-            else:
-                updating_parameters = True
-
-            result = await _update_param(self.environment, name, value, source, resource_id, metadata, expires=expires)
-            if result:
-                recompile = True
-                params.append((name, resource_id))
-
-        if updating_facts:
-            parameters_and_or_facts = "facts"
-        if updating_parameters and updating_facts:
-            parameters_and_or_facts = "parameters and facts"
-
-        compile_metadata = {
-            "message": f"Recompile model because one or more {parameters_and_or_facts} were updated",
-            "type": "param",
-            "params": params,
-        }
-
-        warnings = None
-        if recompile:
-            warnings = await self.server_slice._async_recompile(self.environment, False, metadata=compile_metadata)
-
-        return attach_warnings(200, None, warnings)
+        await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
+        await self.client.resource_action_update(
+            tid=self.environment,
+            resource_ids=[fact_result.resource_id],
+            action_id=fact_result.action_id,
+            action=const.ResourceAction.getfact,
+            started=fact_result.started,
+            finished=fact_result.finished,
+            messages=fact_result.messages,
+        )
