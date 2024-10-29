@@ -197,7 +197,7 @@ class ModelState:
         are populated in the resources dictionary.
 
         :param resources: The set of resources for which the provides have to be blocked.
-        :return: The set of dependent resources that were marked as blocked (transitively).
+        :return: The set of dependent resources that were newly marked as blocked (transitively).
         """
         result: set[ResourceIdStr] = set()
         provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.provides_view()
