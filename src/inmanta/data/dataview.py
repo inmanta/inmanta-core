@@ -39,6 +39,7 @@ from inmanta.data import (
     DatabaseOrderV2,
     DesiredStateVersionOrder,
     DiscoveredResourceOrder,
+    Environment,
     FactOrder,
     InvalidQueryParameter,
     InvalidSort,
@@ -1212,15 +1213,15 @@ class AgentView(DataView[AgentOrder, model.Agent]):
     def get_base_query(self) -> SimpleQueryBuilder:
         base = SimpleQueryBuilder(
             select_clause="""SELECT a.name, a.environment, a.last_failover, a.paused, a.unpause_on_resume,
-                                            (CASE WHEN a.paused THEN 'paused'
-                                                WHEN sched.paused THEN 'down'
+                                            (CASE WHEN a.paused AND NOT sched.halted THEN 'paused'
+                                                WHEN sched.halted THEN 'down'
                                                 ELSE 'up'
                                             END) as status""",
-            from_clause=f" FROM  (SELECT sched.name, sched.paused FROM {Agent.table_name()} sched "
-            f"WHERE sched.name ='{const.AGENT_SCHEDULER_ID}') AS sched RIGHT JOIN {Agent.table_name()} a "
-            f"ON a.name <> sched.name",
-            filter_statements=[" a.environment = $1 ", " a.name <> sched.name "],
-            values=[self.environment.id],
+            from_clause=f" FROM  (SELECT sched.id, sched.halted FROM {Environment.table_name()} AS sched "
+            f"WHERE sched.id =$1) AS sched RIGHT JOIN {Agent.table_name()} a "
+            f"ON a.environment = sched.id",
+            filter_statements=[" a.environment = $1 ", " a.name <> $2 "],
+            values=[self.environment.id, const.AGENT_SCHEDULER_ID],
         )
         # wrap when using compound fields
         virtual_fields = {"status"}

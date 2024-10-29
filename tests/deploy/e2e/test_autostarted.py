@@ -625,6 +625,22 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         len(halted_state.children) == 0
     ), "The Scheduler and the fork server and the executor created by the scheduler should have been killed!"
 
+    result = await client.get_agents(environment)
+    assert result.code == 200
+    actual_data = result.result["data"]
+    assert len(actual_data) == 1
+    expected_data = {
+        "environment": environment,
+        "last_failover": actual_data[0]["last_failover"],
+        "name": "agent1",
+        "paused": True,
+        "process_id": None,
+        "process_name": None,
+        "status": "down",
+        "unpause_on_resume": True,
+    }
+    assert actual_data[0] == expected_data
+
     await client.resume_environment(environment)
 
     # Let's check the agent table and check that the scheduler and agent1 are present and not paused
@@ -1126,6 +1142,43 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
     await assert_is_paused(
         client, environment, {const.AGENT_SCHEDULER_ID: True, "agent1": True, "agent2": True, "agent3": True}
     )
+    result = await client.get_agents(environment)
+    assert result.code == 200
+    actual_data = result.result["data"]
+    assert len(actual_data) == 3
+    expected_data = [
+        {
+            "environment": environment,
+            "last_failover": actual_data[0]["last_failover"],
+            "name": "agent1",
+            "paused": True,
+            "process_id": None,
+            "process_name": None,
+            "status": "paused",
+            "unpause_on_resume": None,
+        },
+        {
+            "environment": environment,
+            "last_failover": actual_data[1]["last_failover"],
+            "name": "agent2",
+            "paused": True,
+            "process_id": None,
+            "process_name": None,
+            "status": "paused",
+            "unpause_on_resume": None,
+        },
+        {
+            "environment": environment,
+            "last_failover": actual_data[2]["last_failover"],
+            "name": "agent3",
+            "paused": True,
+            "process_id": None,
+            "process_name": None,
+            "status": "paused",
+            "unpause_on_resume": None,
+        },
+    ]
+    assert actual_data == expected_data
 
     await client.all_agents_action(tid=environment, action=AgentAction.unpause.value)
     assert result.code == 200
@@ -1134,3 +1187,41 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
     await assert_is_paused(
         client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False, "agent2": False, "agent3": False}
     )
+
+    result = await client.get_agents(environment)
+    assert result.code == 200
+    actual_data = result.result["data"]
+    assert len(actual_data) == 3
+    expected_data = [
+        {
+            "environment": environment,
+            "last_failover": actual_data[0]["last_failover"],
+            "name": "agent1",
+            "paused": False,
+            "process_id": None,
+            "process_name": None,
+            "status": "up",
+            "unpause_on_resume": None,
+        },
+        {
+            "environment": environment,
+            "last_failover": actual_data[1]["last_failover"],
+            "name": "agent2",
+            "paused": False,
+            "process_id": None,
+            "process_name": None,
+            "status": "up",
+            "unpause_on_resume": None,
+        },
+        {
+            "environment": environment,
+            "last_failover": actual_data[2]["last_failover"],
+            "name": "agent3",
+            "paused": False,
+            "process_id": None,
+            "process_name": None,
+            "status": "up",
+            "unpause_on_resume": None,
+        },
+    ]
+    assert actual_data == expected_data
