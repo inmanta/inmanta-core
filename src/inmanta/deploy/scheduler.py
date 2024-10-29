@@ -37,7 +37,7 @@ from inmanta.deploy import work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
 from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
-from inmanta.deploy.work import PrioritizedTask, TaskPriority
+from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
 
@@ -227,15 +227,13 @@ class ResourceScheduler(TaskManager):
         resources = await self._build_resource_mappings_from_db(version)
         for rid, resource in resources.items():
             self._work.agent_queues.queue_put_nowait(
-                PrioritizedTask(
-                    task=DryRun(
-                        resource=rid,
-                        version=version,
-                        resource_details=resource,
-                        dry_run_id=dry_run_id,
-                    ),
-                    priority=TaskPriority.DRYRUN,
-                )
+                DryRun(
+                    resource=rid,
+                    version=version,
+                    resource_details=resource,
+                    dry_run_id=dry_run_id,
+                ),
+                priority=TaskPriority.DRYRUN,
             )
 
     async def get_facts(self, resource: dict[str, object]) -> None:
@@ -243,10 +241,8 @@ class ResourceScheduler(TaskManager):
             return
         rid = Id.parse_id(resource["id"]).resource_str()
         self._work.agent_queues.queue_put_nowait(
-            PrioritizedTask(
-                task=RefreshFact(resource=rid),
-                priority=TaskPriority.FACT_REFRESH,
-            )
+            RefreshFact(resource=rid),
+            priority=TaskPriority.FACT_REFRESH,
         )
 
     async def _build_resource_mappings_from_db(
