@@ -234,7 +234,7 @@ class ModelState:
 
         # Cache used by the `update_blocked_status()` method to prevent the expensive check on the blocked
         # status of the requirements of a resource. If the dictionary contains key value pair (X, Y), it
-        # indicates that resource Y is a requirement of resource X that is blocked.
+        # indicates that resource Y is a requirement of resource X that was blocked, last we checked
         known_blockers_cache: dict[ResourceIdStr, ResourceIdStr] = {}
 
         def update_blocked_status(resource: ResourceIdStr) -> bool:
