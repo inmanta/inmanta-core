@@ -232,6 +232,11 @@ class ModelState:
         :param details: The details of resource.
         """
 
+        # Cache used by the `update_blocked_status()` method to prevent the expensive check on the blocked
+        # status of the requirements of a resource. If the dictionary contains key value pair (X, Y), it
+        # indicates that resource Y is a requirement of resource X that is blocked.
+        known_blockers_cache: dict[ResourceIdStr, ResourceIdStr] = {}
+
         def update_blocked_status(resource: ResourceIdStr) -> bool:
             """
             Check if the deployment of the given resource is still blocked and mark it as unblocked if it is.
@@ -244,8 +249,21 @@ class ModelState:
             if self.resource_state[resource].status is ResourceStatus.UNDEFINED:
                 # The resource is undefined.
                 return False
-            if any(self.resource_state[r].blocked.is_blocked() for r in self.requires.get(resource, set())):
+            if resource in known_blockers_cache:
+                # First check the blocked status of the cached known blocker for improved performance.
+                known_blocker: ResourceIdStr = known_blockers_cache[resource]
+                if self.resource_state[known_blocker].blocked.is_blocked():
+                    return False
+                else:
+                    # Cache is out of date. Clear cache item.
+                    del known_blockers_cache[resource]
+            # Perform more expensive call by traversing all requirements of resource.
+            blocked_dependency: ResourceIdStr | None = next(
+                (r for r in self.requires.get(resource, set()) if self.resource_state[r].blocked.is_blocked()), None
+            )
+            if blocked_dependency:
                 # Resource is blocked, because a dependency is blocked.
+                known_blockers_cache[resource] = blocked_dependency
                 return False
             # Unblock resource
             self.resource_state[resource].blocked = BlockedStatus.NO
