@@ -185,7 +185,17 @@ class DatabaseService(protocol.ServerSlice):
 
     async def connect_database(self) -> None:
         """Connect to the database"""
-        self._pool = await server_db_connect()
+        self._pool = await initialize_database_connection_pool(
+            database_host=opt.db_host.get(),
+            database_port=opt.db_port.get(),
+            database_name=opt.db_name.get(),
+            database_username=opt.db_username.get(),
+            database_password=opt.db_password.get(),
+            create_db_schema=True,
+            connection_pool_min_size=opt.server_db_connection_pool_min_size.get(),
+            connection_pool_max_size=opt.server_db_connection_pool_max_size.get(),
+            connection_timeout=opt.server_db_connection_timeout.get(),
+        )
 
         # Check if JIT is enabled
         async with self._pool.acquire() as connection:
@@ -207,23 +217,41 @@ class DatabaseService(protocol.ServerSlice):
         await data.AgentProcess.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
 
 
-async def server_db_connect() -> asyncpg.pool.Pool:
-    database_host = opt.db_host.get()
-    database_port = opt.db_port.get()
-    database_username = opt.db_username.get()
-    database_password = opt.db_password.get()
-    connection_pool_min_size = opt.db_connection_pool_min_size.get()
-    connection_pool_max_size = opt.db_connection_pool_max_size.get()
-    connection_timeout = opt.db_connection_timeout.get()
+async def initialize_database_connection_pool(
+    database_host: str,
+    database_port: int,
+    database_name: str,
+    database_username: str,
+    database_password: str,
+    create_db_schema: bool,
+    connection_pool_min_size: int,
+    connection_pool_max_size: int,
+    connection_timeout: float,
+) -> asyncpg.pool.Pool:
+    """
+    Initialize the database connection pool for the current process and return it.
+
+    :param database_host: Database host address.
+    :param database_port: Port number to connect to at the server host.
+    :param database_name: Name of the database to connect to.
+    :param database_username: Username for database authentication.
+    :param database_password: Password for database authentication.
+    :param create_db_schema: Make sure the DB schema is created and up-to-date.
+    :param connection_pool_min_size: Initialize the pool with this number of connections .
+    :param connection_pool_max_size: Limit the size of the pool to this number of connections .
+    :param connection_timeout: Connection timeout (in seconds) when interacting with the database.
+    """
+
     out = await data.connect(
-        database_host,
-        database_port,
-        opt.db_name.get(),
-        database_username,
-        database_password,
+        host=database_host,
+        port=database_port,
+        database=database_name,
+        username=database_username,
+        password=database_password,
+        create_db_schema=create_db_schema,
         connection_pool_min_size=connection_pool_min_size,
         connection_pool_max_size=connection_pool_max_size,
         connection_timeout=connection_timeout,
     )
-    LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
+    LOGGER.info("Connected to PostgreSQL database %s on %s:%d", database_name, database_host, database_port)
     return out

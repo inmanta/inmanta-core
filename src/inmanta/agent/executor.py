@@ -67,6 +67,16 @@ class AgentInstance(abc.ABC):
         pass
 
 
+@dataclass
+class DryrunResult:
+    rvid: ResourceVersionIdStr
+    dryrun_id: uuid.UUID
+    changes: dict[str, AttributeStateChange]
+    started: datetime.datetime
+    finished: datetime.datetime
+    messages: list[LogLine]
+
+
 class ResourceDetails:
     """
     In memory representation of the desired state of a resource
@@ -359,19 +369,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         os.makedirs(self.env_path)
 
 
-def initialize_envs_directory() -> str:
-    """
-    Initializes the base directory for storing virtual environments. If the directory
-    does not exist, it is created.
-
-    :return: The path to the environments directory.
-    """
-    state_dir = cfg.state_dir.get()
-    env_dir = os.path.join(state_dir, "envs")
-    os.makedirs(env_dir, exist_ok=True)
-    return env_dir
-
-
 class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, str, ExecutorVirtualEnvironment]):
     """
     Manages virtual environments to ensure efficient reuse.
@@ -433,11 +430,11 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         This method must execute under the self._locks.get(<blueprint-hash>) lock to ensure thread-safe operations for each
         unique blueprint.
 
-        :param blueprint: The blueprint specifying the configuration for the new virtual environment.
+        :param member_id: The blueprint specifying the configuration for the new virtual environment.
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
         """
-        interal_id = member_id.blueprint_hash()
-        env_dir_name: str = interal_id
+        internal_id = member_id.blueprint_hash()
+        env_dir_name: str = internal_id
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
         # Check if the directory already exists and create it if not
@@ -449,7 +446,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
                 "Found existing venv for content %s at %s, content hash: %s",
                 str(member_id),
                 env_dir,
-                interal_id,
+                internal_id,
             )
             is_new = False  # Returning the path and False for existing directory
 
@@ -462,14 +459,14 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
                 "Venv is already present but it was not correctly initialized. Re-creating it for content %s, "
                 "content hash: %s located in %s",
                 str(member_id),
-                interal_id,
+                internal_id,
                 env_dir,
             )
             await loop.run_in_executor(self.thread_pool, process_environment.reset)
             is_new = True
 
         if is_new:
-            LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), interal_id)
+            LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), internal_id)
             await process_environment.create_and_install_environment(member_id)
         return process_environment
 
@@ -543,13 +540,13 @@ class Executor(abc.ABC):
     @abc.abstractmethod
     async def dry_run(
         self,
-        resources: Sequence[ResourceDetails],
+        resource: ResourceDetails,
         dry_run_id: uuid.UUID,
-    ) -> None:
+    ) -> DryrunResult:
         """
         Perform a dryrun for the given resources
 
-        :param resources: Sequence of resources for which to perform a dryrun.
+        :param resource: Resource for which to perform a dryrun.
         :param dry_run_id: id for this dryrun
         """
         pass

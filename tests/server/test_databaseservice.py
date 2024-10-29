@@ -53,16 +53,16 @@ async def set_pool_size_to_one():
     """
     Sets the database pool's max and min size to 1 and resets their prior values upon exiting.
     """
-    save_min_size = opt.db_connection_pool_min_size.get()
-    save_max_size = opt.db_connection_pool_max_size.get()
+    save_min_size = opt.server_db_connection_pool_min_size.get()
+    save_max_size = opt.server_db_connection_pool_max_size.get()
 
-    opt.db_connection_pool_min_size.set("1")
-    opt.db_connection_pool_max_size.set("1")
+    opt.server_db_connection_pool_min_size.set("1")
+    opt.server_db_connection_pool_max_size.set("1")
 
     yield
 
-    opt.db_connection_pool_min_size.set(str(save_min_size))
-    opt.db_connection_pool_max_size.set(str(save_max_size))
+    opt.server_db_connection_pool_min_size.set(str(save_min_size))
+    opt.server_db_connection_pool_max_size.set(str(save_max_size))
 
 
 async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):

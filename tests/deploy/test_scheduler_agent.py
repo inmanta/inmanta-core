@@ -35,7 +35,7 @@ import utils
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import DeployResult, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployResult, DryrunResult, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.const import Change
 from inmanta.data import ResourceIdStr
@@ -244,6 +244,9 @@ class DummyStateManager(StateUpdateManager):
                 assert scheduler._state.resource_state[resource].blocked == blocked
             if status:
                 assert scheduler._state.resource_state[resource].status == status
+
+    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
+        self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
 
 
 def state_manager_check(agent: "TestAgent"):
@@ -1249,6 +1252,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         status: state.ResourceStatus,
         deployment_result: state.DeploymentResult,
         blocked_status: state.BlockedStatus,
+        attribute_hash: str,
     ) -> None:
         """
         Assert that the given resource has the given ResourceStatus, DeploymentResult and BlockedStatus.
@@ -1258,19 +1262,24 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         :param status: The ResourceStatus to assert.
         :param deployment_result: The DeploymentResult to assert.
         :param blocked_status: The BlockedStatus to assert.
+        :param attribute_hash: The hash of the attributes of the resource.
         """
         assert agent.scheduler._state.resource_state[resource].status is status
         assert agent.scheduler._state.resource_state[resource].deployment_result is deployment_result
         assert agent.scheduler._state.resource_state[resource].blocked is blocked_status
+        assert agent.scheduler._state.resources[resource].attribute_hash == attribute_hash
 
     # rid4 is undefined due to an unknown
     resources = {
         rid1: make_resource_minimal(
-            rid=rid1, values={"value": "a"}, requires=[rid2, rid3, rid4], status=const.ResourceState.skipped_for_undefined
+            rid=rid1,
+            values={"value": "unknown"},
+            requires=[rid2, rid3, rid4],
+            status=const.ResourceState.skipped_for_undefined,
         ),
         rid2: make_resource_minimal(rid=rid2, values={"value": "a"}, requires=[rid5]),
         rid3: make_resource_minimal(rid=rid3, values={"value": "a"}, requires=[rid5, rid6]),
-        rid4: make_resource_minimal(rid=rid4, values={"value": "a"}, requires=[], status=const.ResourceState.undefined),
+        rid4: make_resource_minimal(rid=rid4, values={"value": "unknown"}, requires=[], status=const.ResourceState.undefined),
         rid5: make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[]),
         rid6: make_resource_minimal(rid=rid6, values={"value": "a"}, requires=[rid7]),
         rid7: make_resource_minimal(rid=rid7, values={"value": "a"}, requires=[]),
@@ -1287,21 +1296,65 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5: deployed
     # rid6: deployed
     # rid7: deployed
-    assert_resource_state(rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.YES)
-    assert_resource_state(rid2, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
-    assert_resource_state(rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
-    assert_resource_state(rid4, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES)
-    assert_resource_state(rid5, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
-    assert_resource_state(rid6, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
-    assert_resource_state(rid7, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+    assert_resource_state(
+        rid1,
+        state.ResourceStatus.HAS_UPDATE,
+        state.DeploymentResult.NEW,
+        state.BlockedStatus.YES,
+        resources[rid1].attribute_hash,
+    )
+    assert_resource_state(
+        rid2,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.NO,
+        resources[rid2].attribute_hash,
+    )
+    assert_resource_state(
+        rid3,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.NO,
+        resources[rid3].attribute_hash,
+    )
+    assert_resource_state(
+        rid4,
+        state.ResourceStatus.UNDEFINED,
+        state.DeploymentResult.NEW,
+        state.BlockedStatus.YES,
+        resources[rid4].attribute_hash,
+    )
+    assert_resource_state(
+        rid5,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.NO,
+        resources[rid5].attribute_hash,
+    )
+    assert_resource_state(
+        rid6,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.NO,
+        resources[rid6].attribute_hash,
+    )
+    assert_resource_state(
+        rid7,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.NO,
+        resources[rid7].attribute_hash,
+    )
 
     # rid4 becomes deployable
     # rid5 and rid6 are undefined
     # Change the desired state of rid2
     resources[rid4] = make_resource_minimal(rid=rid4, values={"value": "a"}, requires=[], status=const.ResourceState.available)
-    resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[], status=const.ResourceState.undefined)
+    resources[rid5] = make_resource_minimal(
+        rid=rid5, values={"value": "unknown"}, requires=[], status=const.ResourceState.undefined
+    )
     resources[rid6] = make_resource_minimal(
-        rid=rid6, values={"value": "a"}, requires=[rid7], status=const.ResourceState.undefined
+        rid=rid6, values={"value": "unknown"}, requires=[rid7], status=const.ResourceState.undefined
     )
     resources[rid2] = make_resource_minimal(
         rid=rid2, values={"value": "b"}, requires=[rid5], status=const.ResourceState.skipped_for_undefined
@@ -1320,13 +1373,55 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5: blocked because it has an unknown attribute
     # rid6: blocked because it has an unknown attribute
     # rid7: deployed
-    assert_resource_state(rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.YES)
-    assert_resource_state(rid2, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
-    assert_resource_state(rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
-    assert_resource_state(rid4, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
-    assert_resource_state(rid5, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
-    assert_resource_state(rid6, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
-    assert_resource_state(rid7, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+    assert_resource_state(
+        rid1,
+        state.ResourceStatus.HAS_UPDATE,
+        state.DeploymentResult.NEW,
+        state.BlockedStatus.YES,
+        resources[rid1].attribute_hash,
+    )
+    assert_resource_state(
+        rid2,
+        state.ResourceStatus.HAS_UPDATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.YES,
+        resources[rid2].attribute_hash,
+    )
+    assert_resource_state(
+        rid3,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.YES,
+        resources[rid3].attribute_hash,
+    )
+    assert_resource_state(
+        rid4,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.NO,
+        resources[rid4].attribute_hash,
+    )
+    assert_resource_state(
+        rid5,
+        state.ResourceStatus.UNDEFINED,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.YES,
+        resources[rid5].attribute_hash,
+    )
+    assert_resource_state(
+        rid6,
+        state.ResourceStatus.UNDEFINED,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.YES,
+        resources[rid6].attribute_hash,
+    )
+    assert_resource_state(
+        rid7,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.NO,
+        resources[rid7].attribute_hash,
+    )
 
     # rid5 no longer has an unknown attribute
     resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[], status=const.ResourceState.available)
@@ -1344,28 +1439,84 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5: deployed
     # rid6: blocked because it has an unknown attribute
     # rid7: deployed
-    assert_resource_state(rid1, state.ResourceStatus.HAS_UPDATE, state.DeploymentResult.NEW, state.BlockedStatus.YES)
-    assert_resource_state(rid2, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
-    assert_resource_state(rid3, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
-    assert_resource_state(rid4, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
-    assert_resource_state(rid5, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
-    assert_resource_state(rid6, state.ResourceStatus.UNDEFINED, state.DeploymentResult.DEPLOYED, state.BlockedStatus.YES)
-    assert_resource_state(rid7, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
+    assert_resource_state(
+        rid1,
+        state.ResourceStatus.HAS_UPDATE,
+        state.DeploymentResult.NEW,
+        state.BlockedStatus.YES,
+        resources[rid1].attribute_hash,
+    )
+    assert_resource_state(
+        rid2,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.NO,
+        resources[rid2].attribute_hash,
+    )
+    assert_resource_state(
+        rid3,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.YES,
+        resources[rid3].attribute_hash,
+    )
+    assert_resource_state(
+        rid4,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.NO,
+        resources[rid4].attribute_hash,
+    )
+    assert_resource_state(
+        rid5,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.NO,
+        resources[rid5].attribute_hash,
+    )
+    assert_resource_state(
+        rid6,
+        state.ResourceStatus.UNDEFINED,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.YES,
+        resources[rid6].attribute_hash,
+    )
+    assert_resource_state(
+        rid7,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.NO,
+        resources[rid7].attribute_hash,
+    )
 
     # rid8 and rid9 are both undefined
     rid8 = ResourceIdStr("test::Resource[agent1,name=8]")
     rid9 = ResourceIdStr("test::Resource[agent1,name=9]")
     resources = {
-        rid8: make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[], status=const.ResourceState.undefined),
-        rid9: make_resource_minimal(rid=rid9, values={"value": "a"}, requires=[rid8], status=const.ResourceState.undefined),
+        rid8: make_resource_minimal(rid=rid8, values={"value": "unknown"}, requires=[], status=const.ResourceState.undefined),
+        rid9: make_resource_minimal(
+            rid=rid9, values={"value": "unknown"}, requires=[rid8], status=const.ResourceState.undefined
+        ),
     }
     await agent.scheduler._new_version(version=4, resources=resources, requires=make_requires(resources))
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 2
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
 
-    assert_resource_state(rid8, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES)
-    assert_resource_state(rid9, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES)
+    assert_resource_state(
+        rid8,
+        state.ResourceStatus.UNDEFINED,
+        state.DeploymentResult.NEW,
+        state.BlockedStatus.YES,
+        resources[rid8].attribute_hash,
+    )
+    assert_resource_state(
+        rid9,
+        state.ResourceStatus.UNDEFINED,
+        state.DeploymentResult.NEW,
+        state.BlockedStatus.YES,
+        resources[rid9].attribute_hash,
+    )
 
     # rid8 is no longer undefined
     resources[rid8] = make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[], status=const.ResourceState.available)
@@ -1375,8 +1526,20 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     assert len(agent.scheduler._state.resources) == 2
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
 
-    assert_resource_state(rid8, state.ResourceStatus.UP_TO_DATE, state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO)
-    assert_resource_state(rid9, state.ResourceStatus.UNDEFINED, state.DeploymentResult.NEW, state.BlockedStatus.YES)
+    assert_resource_state(
+        rid8,
+        state.ResourceStatus.UP_TO_DATE,
+        state.DeploymentResult.DEPLOYED,
+        state.BlockedStatus.NO,
+        resources[rid8].attribute_hash,
+    )
+    assert_resource_state(
+        rid9,
+        state.ResourceStatus.UNDEFINED,
+        state.DeploymentResult.NEW,
+        state.BlockedStatus.YES,
+        resources[rid9].attribute_hash,
+    )
 
 
 async def test_scheduler_priority(agent: TestAgent, environment, make_resource_minimal):
