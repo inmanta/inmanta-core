@@ -82,7 +82,7 @@ server_db_connection_pool_min_size = Option(
     section="server",
     name="db_connection_pool_min_size",
     default=default_db_pool_min_size,
-    documentation="Number of connections the database connection pool will be initialized with.",
+    documentation="Number of connections the server's database connection pool will be initialized with.",
     validator=is_int,
     predecessor_option=db_connection_pool_min_size,
 )
@@ -90,7 +90,7 @@ server_db_connection_pool_max_size = Option(
     section="server",
     name="db_connection_pool_max_size",
     default=default_db_pool_max_size,
-    documentation="Max number of connections in the database connection pool.",
+    documentation="Max number of connections in the server's database connection pool.",
     validator=is_int,
     predecessor_option=db_connection_pool_max_size,
 )
