@@ -202,8 +202,14 @@ class ModelState:
         result: set[ResourceIdStr] = set()
         provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.provides_view()
         todo: list[ResourceIdStr] = list(itertools.chain.from_iterable(provides_view.get(r, set()) for r in resources))
+        # We rely on the seen set to improve performance. Although the improvement might be rather small,
+        # because we only save one call to `self.resource_state[resource_id].blocked.is_blocked()`.
+        seen: set[ResourceIdStr] = set()
         while todo:
             resource_id: ResourceIdStr = todo.pop()
+            if resource_id in seen:
+                continue
+            seen.add(resource_id)
             if self.resource_state[resource_id].blocked.is_blocked():
                 # Resource is already blocked. All provides will be blocked as well.
                 continue
