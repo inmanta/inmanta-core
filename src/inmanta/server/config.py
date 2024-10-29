@@ -49,33 +49,59 @@ db_connection_pool_min_size = Option(
     "database",
     "connection_pool_min_size",
     10,
-    "[DEPRECATED USE :inmanta.config:option:`database.service_connection_pool_min_size`] Number of connections the database connection pool will be initialized with",
+    "[DEPRECATED, USE :inmanta.config:option:`server.db_connection_pool_min_size` INSTEAD] Number of connections the database connection pool will be initialized with",
     is_int,
 )
 db_connection_pool_max_size = Option(
     "database",
     "connection_pool_max_size",
     70,
-    "[DEPRECATED USE :inmanta.config:option:`database.service_connection_pool_max_size`] Max number of connections in the database connection pool",
+    "[DEPRECATED, USE :inmanta.config:option:`server.db_connection_pool_max_size` INSTEAD] Max number of connections in the database connection pool",
     is_int,
 )
 db_connection_timeout = Option(
     "database",
     "connection_timeout",
     60.0,
-    "Connection timeout in seconds when the server communicates with the database",
+    "[DEPRECATED, USE :inmanta.config:option:`server.db_connection_timeout` INSTEAD] Connection timeout in seconds when the server communicates with the database",
     is_float,
 )
 
-db_service_connection_pool_min_size = Option(
-    "database",
-    "service_connection_pool_min_size",
-    5,
-    "Number of connections the database connection pool will be initialized with",
-    is_int,
+
+def default_db_pool_min_size() -> int:
+    """:inmanta.config:option:`database.connection-pool-min-size` / 2"""
+    return int(db_connection_pool_min_size.get() / 2)
+
+
+def default_db_pool_max_size() -> int:
+    """:inmanta.config:option:`database.connection-pool-max-size` / 2"""
+    return int(db_connection_pool_max_size.get() / 2)
+
+
+server_db_connection_pool_min_size = Option(
+    section="server",
+    name="db_connection_pool_min_size",
+    default=default_db_pool_min_size,
+    documentation="Number of connections the database connection pool will be initialized with.",
+    validator=is_int,
+    predecessor_option=db_connection_pool_min_size,
 )
-db_service_connection_pool_max_size = Option(
-    "database", "service_connection_pool_max_size", 35, "Max number of connections in the database connection pool", is_int
+server_db_connection_pool_max_size = Option(
+    section="server",
+    name="db_connection_pool_max_size",
+    default=default_db_pool_max_size,
+    documentation="Max number of connections in the database connection pool.",
+    validator=is_int,
+    predecessor_option=db_connection_pool_max_size,
+)
+
+server_db_connection_timeout = Option(
+    section="server",
+    name="db_connection_timeout",
+    default=60.0,
+    documentation="Connection timeout in seconds when the server communicates with the database.",
+    validator=is_float,
+    predecessor_option=db_connection_timeout,
 )
 
 #############################
