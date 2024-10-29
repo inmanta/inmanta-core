@@ -524,8 +524,6 @@ class ResourceScheduler(TaskManager):
         """
         if name in self._workers:
             await self._workers[name].notify()
-        else:
-            raise LookupError(f"The agent `{name}` does not exist!")
 
     async def refresh_all_agent_states_from_db(self) -> None:
         """

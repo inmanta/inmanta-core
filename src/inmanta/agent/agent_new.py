@@ -249,11 +249,8 @@ class Agent(SessionEndpoint):
                 await self.scheduler.refresh_all_agent_states_from_db()
                 return 200, "All agents have been notified!"
             else:
-                try:
-                    await self.scheduler.refresh_agent_state_from_db(name=agent)
-                    return 200, f"Agent `{agent}` has been notified!"
-                except LookupError:
-                    return 404, f"No such agent: {agent}"
+                await self.scheduler.refresh_agent_state_from_db(name=agent)
+                return 200, f"Agent `{agent}` has been notified!"
 
     async def on_reconnect(self) -> None:
         result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)
