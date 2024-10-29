@@ -1024,7 +1024,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     resumed_state = construct_scheduler_children(current_pid)
     assert len(resumed_state.children) == 1, (
         "This process should be present: the Scheduler. "
-        "The fork server and the agent created by the scheduler should have been killed and the agent is still paused!"
+        "The fork server and the executor created by the scheduler should have been killed and the agent is still paused!"
     )
     for children in resumed_state.children:
         assert children.is_running()
