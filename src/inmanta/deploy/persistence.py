@@ -115,8 +115,10 @@ class ToServerUpdateManager(StateUpdateManager):
 
 class ToDbUpdateManager(StateUpdateManager):
 
-    def __init__(self, environment: UUID) -> None:
+    def __init__(self, client: Client, environment: UUID) -> None:
         self.environment = environment
+        # TODO: The client is only here temporarily while we fix the dryrun_update
+        self.client = client
         # FIXME: We may want to move the writing of the log to the scheduler side as well,
         #  when all uses of this logger are moved
         self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
@@ -311,4 +313,21 @@ class ToDbUpdateManager(StateUpdateManager):
                     )
 
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
-        pass
+        # TODO: Inline these methods so that we don't call the server
+        # To be done after we update the dryrun database table
+        await self.client.dryrun_update(
+            tid=env,
+            id=dryrun_result.dryrun_id,
+            resource=dryrun_result.rvid,
+            changes=dryrun_result.changes,
+        )
+        await self.client.resource_action_update(
+            tid=env,
+            resource_ids=[dryrun_result.rvid],
+            action_id=dryrun_result.dryrun_id,
+            action=const.ResourceAction.dryrun,
+            started=dryrun_result.started,
+            finished=dryrun_result.finished,
+            messages=dryrun_result.messages,
+            status=const.ResourceState.dry,
+        )
