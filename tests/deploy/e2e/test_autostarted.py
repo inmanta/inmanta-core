@@ -787,7 +787,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
 
 
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_agent_paused_scheduler_crash(
+async def test_agent_paused_scheduler_server_restart(
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
