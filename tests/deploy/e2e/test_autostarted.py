@@ -771,7 +771,6 @@ async def test_agent_paused_scheduler_crash(
     environment,
     auto_start_agent: bool,
     async_finalizer,
-    agent,
 ):
     """
     Verify that the new scheduler does not alter the state of agent after a restart:
@@ -873,6 +872,128 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
     assert summary["total"] == 1, f"Unexpected summary: {summary}"
+    breakpoint()
+    # FIXME this should be fixed -> old resource is still in deploying state, should be available
+    # Uncomment this once fixed, see https://github.com/inmanta/inmanta-core/issues/8216
+    # assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
+
+
+@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_agent_resource_state_scheduler_crash(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    clienthelper,
+    environment,
+    auto_start_agent: bool,
+    async_finalizer,
+):
+    """
+    Verify that the new scheduler does not alter the state of agent after a restart:
+        - The agent is deploying something that takes a lot of time
+        - The agent is paused
+        - The server (and thus the scheduler) is (are) restarted
+        - The agent should remain paused (the Scheduler shouldn't do anything after the restart)
+    """
+    current_pid = os.getpid()
+
+    # First, configure everything
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    agent_name = "agent1"
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
+    await env.set(data.AUTOSTART_ON_START, True)
+    config.Config.set("config", "environment", environment)
+
+    # Retrieve the actual processes before deploying anything
+    start_state = construct_scheduler_children(current_pid)
+    for children in start_state.children:
+        assert children.is_running()
+
+    snippetcompiler.setup_for_snippet(
+        """
+import minimalwaitingmodule
+
+a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
+""",
+        autostd=True,
+    )
+
+    # Now, let's deploy a resource
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    async def are_resources_deploying(deployed_resources: int = 1) -> bool:
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        deployed = summary["by_state"]["deploying"]
+        return deployed == deployed_resources
+
+    # Wait for this resource to be deployed
+    await retry_limited(are_resources_deploying, 5)
+
+    # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
+    # something is moving
+    async def wait_for_actual_deployment() -> bool:
+        current_children_mapping = construct_scheduler_children(current_pid)
+        return len(current_children_mapping.children) == 3
+
+    await retry_limited(wait_for_actual_deployment, 5)
+
+    # Retrieve the current processes, we should have more processes than `start_children`
+    children_after_deployment = construct_scheduler_children(current_pid)
+    # Everything should be consistent in DB: the agent should still be paused
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+
+    # Let's pretend that the server crashes
+    await asyncio.wait_for(server.stop(), timeout=20)
+    ibl = InmantaBootloader(configure_logging=False)
+    async_finalizer.add(partial(ibl.stop, timeout=20))
+    # Let's restart the server
+    await ibl.start()
+
+    async def wait_for_scheduler() -> bool:
+        current_children_mapping = construct_scheduler_children(current_pid)
+        return len(current_children_mapping.children) == 1
+
+    # Wait for the scheduler
+    await retry_limited(wait_for_scheduler, 5)
+
+    # Everything should be consistent in DB: the agent should still be paused
+    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+
+    await asyncio.sleep(5)
+    # Let's recheck the number of processes after restarting the server
+    state_after_restart = construct_scheduler_children(current_pid)
+    assert (
+        len(state_after_restart.children) == len(children_after_deployment.children) - 2
+    ), "Only this process should be present: The Scheduler!"
+    for children in state_after_restart.children:
+        assert children.is_running()
+
+    async def wait_for_db_update_from_scheduler():
+        """
+        Wait for DB update that the Scheduler should do once it restarts for inconsistent resources: resources in invalid
+            states -> "deploying" state
+        """
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        logger.warning(f"SUMMARY: {summary}")
+        return summary["by_state"]["available"] == 1
+
+    await retry_limited(wait_for_db_update_from_scheduler, 10)
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    summary = result.result["metadata"]["deploy_summary"]
+    assert summary["total"] == 1, f"Unexpected summary: {summary}"
+    breakpoint()
+    # FIXME this should be fixed -> old resource is still in deploying state, should be available
+    # Uncomment this once fixed, see https://github.com/inmanta/inmanta-core/issues/8216
+    # assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
     assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
 
 
