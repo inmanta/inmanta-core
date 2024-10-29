@@ -228,7 +228,7 @@ class Agent(SessionEndpoint):
         pass
 
     @protocol.handle(methods.set_state)
-    async def set_state(self, agent: str, enabled: bool) -> Apireturn:
+    async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
         if agent == AGENT_SCHEDULER_ID:
             should_be_running = await self.scheduler.should_be_running()
 

@@ -927,7 +927,7 @@ class NullAgent(SessionEndpoint):
         return 200
 
     @protocol.handle(methods.set_state)
-    async def set_state(self, agent: str, enabled: bool) -> Apireturn:
+    async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
         self.enabled[agent] = enabled
         return 200
 

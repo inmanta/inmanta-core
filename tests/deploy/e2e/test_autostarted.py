@@ -34,7 +34,7 @@ from psutil import NoSuchProcess, Process
 
 from inmanta import config, const, data
 from inmanta.const import AgentAction
-from inmanta.server import SLICE_AUTOSTARTED_AGENT_MANAGER
+from inmanta.server import SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from typing_extensions import Optional
@@ -478,6 +478,26 @@ async def assert_is_paused(client, environment: str, expected_agents: dict[str, 
     assert {e["name"]: e["paused"] for e in result.result["agents"]} == expected_agents
 
 
+async def wait_for_consistent_children(current_pid: int) -> None:
+    """
+    Wait for consistent children for the Scheduler:
+        - When the Scheduler is started, it can take some time before every process is actually running
+        - This is especially True for the `Executor process`.
+        - Besides, when the executor process is created, it can have, for a very short time, the same name as the fork server
+            (because it was forked from it). This will cause an assertion error.
+    """
+    async def wait_consistent_scheduler() -> bool:
+        try:
+            _ = construct_scheduler_children(current_pid)
+            return True
+        except AssertionError:
+            # This can occur, when the fork server forks and for a small amount of time, there will be two fork servers
+            # even though one of them is actually the executor process (will be shortly renamed)
+            return False
+
+    await retry_limited(wait_consistent_scheduler, 10)
+
+
 @pytest.mark.parametrize(
     "auto_start_agent,should_time_out,time_to_sleep,", [(True, False, 2), (True, True, 120)]
 )  # this overrides a fixture to allow the agent to fork!
@@ -504,9 +524,13 @@ async def test_halt_deploy(
     # First, configure everything
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     agent_name = "agent1"
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})  # TODO h clean this not mandatory anymore
     await env.set(data.AUTOSTART_ON_START, True)
     config.Config.set("config", "environment", environment)
+
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
 
     # Retrieve the actual processes before deploying anything
     start_state = construct_scheduler_children(current_pid)
@@ -612,9 +636,15 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     if should_time_out:
         # Wait for at least one resource to be in deploying
         await retry_limited(are_resources_being_deployed, timeout=5)
+        await wait_for_consistent_children(current_pid)
         async def wait_for_old_state():
-            current_state = construct_scheduler_children(current_pid).children
-            return len(current_state) == len(state_after_deployment.children)
+            try:
+                current_state = construct_scheduler_children(current_pid).children
+                return len(current_state) == len(state_after_deployment.children)
+            except AssertionError:
+                # This can occur, when the fork server forks and for a small amount of time, there will be two fork servers
+                # even though one of them is actually the executor process (will be shortly renamed)
+                return False
     else:
         with pytest.raises(AssertionError):  # Nothing should get deployed
             await retry_limited(are_resources_being_deployed, timeout=1)
@@ -819,6 +849,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
     # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
     # something is moving
+    await wait_for_consistent_children(current_pid)
     async def wait_for_actual_deployment() -> bool:
         current_children_mapping = construct_scheduler_children(current_pid)
         return len(current_children_mapping.children) == 3
