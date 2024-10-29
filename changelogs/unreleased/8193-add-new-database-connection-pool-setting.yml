@@ -9,8 +9,10 @@ sections:
     For each environment, the new resource scheduler uses a database connection pool of its own.
     Please review the following connection pool options and make sure they fit your
     needs. Do keep in mind that these options will apply to all active environments:
-      - For the scheduler: ["scheduler.db_connection_pool_max_size", "scheduler.db_connection_pool_min_size", "scheduler.db_connection_timeout"]
       - For the server: ["server.db_connection_pool_max_size", "server.db_connection_pool_min_size", "server.db_connection_timeout"]
+        By default, the new server pool will be 50% the size of the previous global pool.
+      - For the scheduler: ["scheduler.db_connection_pool_max_size", "scheduler.db_connection_pool_min_size", "scheduler.db_connection_timeout"]
+        By default, each scheduler pool will be 10% the size of the previous global pool.
 
   deprecation-note: >
     The following settings are being deprecated: [``database.connection_pool_max_size``, ``database.connection_pool_min_size``, ``database.connection_timeout``].
