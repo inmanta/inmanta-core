@@ -19,7 +19,7 @@
 import abc
 import datetime
 import logging
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
 from asyncpg import UniqueViolationError
@@ -307,4 +307,144 @@ class ToDbUpdateManager(StateUpdateManager):
         return self._resource_action_logger.getChild(str(environment))
 
     async def set_parameters(self, fact_result: FactResult) -> None:
-        pass
+        recompile = False
+        parameters=fact_result.parameters
+
+        updating_facts: bool = False
+        updating_parameters: bool = False
+        parameters_and_or_facts: str = "parameters"
+
+        params: list[tuple[str, ResourceIdStr | None]] = []
+
+        # Validate the full list of parameters before applying any changes
+        def _validate_parameter(
+            name: str,
+            resource_id: Optional[str],
+            expires: Optional[bool],
+        ) -> None:
+            if not resource_id and expires:
+                # Parameters cannot expire
+                raise BadRequest(
+                    "Cannot update or set parameter %s: `expire` set to True but parameters cannot expire."
+                    " Consider using a fact instead by providing a resource_id." % name,
+                )
+
+        async def _update_param(
+            name: str,
+            value: Optional[str],
+            source: str,
+            resource_id: Optional[str],
+            metadata: Optional[JsonType],
+            expires: Optional[bool] = None,
+        ) -> bool:
+            """
+            Update or set a parameter or fact.
+
+            :param expires: When setting a new parameter/fact: if set to None, then a sensible default will be provided (i.e. False
+                for parameter and True for fact). When updating a parameter or fact, a None value will leave the existing value
+                unchanged.
+
+            This method returns true if:
+            - this update resolves an unknown
+            - recompile is true and the parameter updates an existing parameter to a new value
+            """
+            if resource_id:
+                LOGGER.debug("Updating/setting fact %s in env %s (for resource %s)", name, self.environment, resource_id)
+            else:
+                LOGGER.debug("Updating/setting parameter %s in env %s", name, self.environment)
+
+            if not isinstance(value, str):
+                value = str(value)
+
+            if resource_id is None:
+                resource_id = ""
+
+            params = await data.Parameter.get_list(environment=self.environment, name=name, resource_id=resource_id)
+
+            value_updated = True
+
+            if len(params) == 0:
+                if expires is None:
+                    # By default:
+                    #   - parameters (i.e. not associated with a resource id) don't expire
+                    #   - facts (i.e. associated with a resource id) expire
+                    expires = bool(resource_id)
+
+                param = data.Parameter(
+                    environment=self.environment,
+                    name=name,
+                    resource_id=resource_id,
+                    value=value,
+                    source=source,
+                    updated=datetime.datetime.now().astimezone(),
+                    metadata=metadata,
+                    expires=expires,
+                )
+                await param.insert()
+            else:
+                param = params[0]
+                value_updated = param.value != value
+                if expires is not None:
+                    await param.update(
+                        source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata,
+                        expires=expires
+                    )
+                else:
+                    await param.update(source=source, value=value, updated=datetime.datetime.now().astimezone(),
+                                       metadata=metadata)
+
+            # check if the parameter is an unknown
+            unknown_params = await data.UnknownParameter.get_list(
+                environment=self.environment, name=name, resource_id=resource_id, resolved=False
+            )
+            if len(unknown_params) > 0:
+                LOGGER.info(
+                    "Received values for unknown parameters %s, triggering a recompile",
+                    ", ".join([x.name for x in unknown_params])
+                )
+                for p in unknown_params:
+                    await p.update_fields(resolved=True)
+
+                return True
+
+        for param in parameters:
+            _validate_parameter(
+                param["id"],
+                param["resource_id"] if "resource_id" in param else None,
+                param["expires"] if "expires" in param else None,
+            )
+
+        for param in parameters:
+            name: str = param["id"]
+            source = param["source"]
+            value = param["value"] if "value" in param else None
+            resource_id: ResourceIdStr | None = param["resource_id"] if "resource_id" in param else None
+            metadata = param["metadata"] if "metadata" in param else None
+            expires = param["expires"] if "expires" in param else None
+
+            if resource_id:
+                updating_facts = True
+            else:
+                updating_parameters = True
+
+            result = await _update_param(self.environment, name, value, source, resource_id, metadata, expires=expires)
+            if result:
+                recompile = True
+                params.append((name, resource_id))
+
+        if updating_facts:
+            parameters_and_or_facts = "facts"
+        if updating_parameters and updating_facts:
+            parameters_and_or_facts = "parameters and facts"
+
+        compile_metadata = {
+            "message": f"Recompile model because one or more {parameters_and_or_facts} were updated",
+            "type": "param",
+            "params": params,
+        }
+
+        warnings = None
+        if recompile:
+            warnings = await self.server_slice._async_recompile(self.environment, False, metadata=compile_metadata)
+
+        return attach_warnings(200, None, warnings)
