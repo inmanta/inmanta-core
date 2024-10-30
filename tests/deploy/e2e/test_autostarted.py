@@ -658,8 +658,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         "last_failover": actual_data[0]["last_failover"],
         "name": "agent1",
         "paused": True,
-        "process_id": None,
-        "process_name": None,
+        "process_id": actual_data[0]["process_id"],
+        "process_name": actual_data[0]["process_name"],
         "status": "paused",
         "unpause_on_resume": True,
     }
@@ -837,8 +837,8 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         "last_failover": actual_data[0]["last_failover"],
         "name": "agent1",
         "paused": False,
-        "process_id": None,
-        "process_name": None,
+        "process_id": actual_data[0]["process_id"],
+        "process_name": actual_data[0]["process_name"],
         "status": "up",
         "unpause_on_resume": None,
     }
@@ -1180,8 +1180,8 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
             "last_failover": actual_data[0]["last_failover"],
             "name": "agent1",
             "paused": True,
-            "process_id": None,
-            "process_name": None,
+            "process_id": actual_data[0]["process_id"],
+            "process_name": actual_data[0]["process_name"],
             "status": "paused",
             "unpause_on_resume": None,
         },
@@ -1190,8 +1190,8 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
             "last_failover": actual_data[1]["last_failover"],
             "name": "agent2",
             "paused": True,
-            "process_id": None,
-            "process_name": None,
+            "process_id": actual_data[1]["process_id"],
+            "process_name": actual_data[1]["process_name"],
             "status": "paused",
             "unpause_on_resume": None,
         },
@@ -1200,13 +1200,19 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
             "last_failover": actual_data[2]["last_failover"],
             "name": "agent3",
             "paused": True,
-            "process_id": None,
-            "process_name": None,
+            "process_id": actual_data[2]["process_id"],
+            "process_name": actual_data[2]["process_name"],
             "status": "paused",
             "unpause_on_resume": None,
         },
     ]
     assert actual_data == expected_data
+    assert (actual_data[0]["process_id"] == actual_data[1]["process_id"]) and (
+        actual_data[0]["process_id"] == actual_data[2]["process_id"]
+    )
+    assert (actual_data[0]["process_name"] == actual_data[1]["process_name"]) and (
+        actual_data[0]["process_name"] == actual_data[2]["process_name"]
+    )
 
     await client.all_agents_action(tid=environment, action=AgentAction.unpause.value)
     assert result.code == 200
@@ -1226,8 +1232,8 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
             "last_failover": actual_data[0]["last_failover"],
             "name": "agent1",
             "paused": False,
-            "process_id": None,
-            "process_name": None,
+            "process_id": actual_data[0]["process_id"],
+            "process_name": actual_data[0]["process_name"],
             "status": "up",
             "unpause_on_resume": None,
         },
@@ -1236,8 +1242,8 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
             "last_failover": actual_data[1]["last_failover"],
             "name": "agent2",
             "paused": False,
-            "process_id": None,
-            "process_name": None,
+            "process_id": actual_data[1]["process_id"],
+            "process_name": actual_data[1]["process_name"],
             "status": "up",
             "unpause_on_resume": None,
         },
@@ -1246,8 +1252,8 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
             "last_failover": actual_data[2]["last_failover"],
             "name": "agent3",
             "paused": False,
-            "process_id": None,
-            "process_name": None,
+            "process_id": actual_data[2]["process_id"],
+            "process_name": actual_data[2]["process_name"],
             "status": "up",
             "unpause_on_resume": None,
         },
@@ -1358,8 +1364,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         "last_failover": actual_data[0]["last_failover"],
         "name": "agent1",
         "paused": False,
-        "process_id": None,
-        "process_name": None,
+        "process_id": actual_data[0]["process_id"],
+        "process_name": actual_data[0]["process_name"],
         "status": "down",
         "unpause_on_resume": None,
     }

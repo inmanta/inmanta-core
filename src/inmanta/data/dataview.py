@@ -33,13 +33,14 @@ from inmanta.data import (
     APILIMIT,
     PRIMITIVE_SQL_TYPES,
     Agent,
+    AgentInstance,
     AgentOrder,
+    AgentProcess,
     CompileReportOrder,
     ConfigurationModel,
     DatabaseOrderV2,
     DesiredStateVersionOrder,
     DiscoveredResourceOrder,
-    Environment,
     FactOrder,
     InvalidQueryParameter,
     InvalidSort,
@@ -83,6 +84,7 @@ from inmanta.server.validate_filter import (
     ContainsFilterResourceAction,
     ContainsPartialFilter,
     DateRangeFilter,
+    DummyFilter,
     Filter,
     FilterValidator,
     IntRangeFilter,
@@ -1196,6 +1198,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
     def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "name": ContainsPartialFilter,
+            "process_name": DummyFilter,
             "status": ContainsFilter,
         }
 
@@ -1212,20 +1215,21 @@ class AgentView(DataView[AgentOrder, model.Agent]):
     def get_base_query(self) -> SimpleQueryBuilder:
         base = SimpleQueryBuilder(
             select_clause="""SELECT a.name, a.environment, a.last_failover, a.paused, a.unpause_on_resume,
+                sa_join.hostname as process_name, sa_join.process as process_id,
                                             (CASE WHEN a.paused THEN 'paused'
-                                                WHEN NOT a.paused AND schedagent.id_primary IS NULL THEN 'down'
+                                                WHEN NOT a.paused AND sa_join.id_primary IS NULL THEN 'down'
                                                 ELSE 'up'
                                             END) as status""",
-            from_clause=f" FROM  (SELECT sched.id, sched.halted FROM {Environment.table_name()} AS sched "
-            "WHERE sched.id =$1) AS sched "
-            f"RIGHT JOIN {Agent.table_name()} a ON a.environment = sched.id "
-            f"RIGHT JOIN (SELECT schedagent.name, schedagent.id_primary FROM {Agent.table_name()} AS schedagent "
-            f"WHERE schedagent.name ='{const.AGENT_SCHEDULER_ID}') AS schedagent ON a.name <> schedagent.name ",
+            from_clause=f" FROM {Agent.table_name()} a "
+            "LEFT JOIN (SELECT sa.name, sa.id_primary, ap.hostname, ai.process FROM agent sa  "
+            f"LEFT JOIN {AgentInstance.table_name()} ai ON sa.id_primary=ai.id "
+            f"LEFT JOIN {AgentProcess.table_name()} ap ON ai.process = ap.sid  "
+            "WHERE sa.environment = $1 AND sa.name = $2) sa_join ON a.name <> sa_join.name ",
             filter_statements=[" a.environment = $1 ", " a.name <> $2 "],
             values=[self.environment.id, const.AGENT_SCHEDULER_ID],
         )
         # wrap when using compound fields
-        virtual_fields = {"status"}
+        virtual_fields = {"status", "process_name", "process_id"}
         used_fields = set(self.filter.keys()).union({t[0] for t in self.order.get_order_elements(False)})
         if virtual_fields.intersection(used_fields):
             query, values = base.build()
@@ -1244,8 +1248,8 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                 last_failover=agent["last_failover"],
                 paused=agent["paused"],
                 unpause_on_resume=agent["unpause_on_resume"],
-                process_id=agent["process_id"] if "process_id" in agent else None,
-                process_name=agent["process_name"] if "process_name" in agent else None,
+                process_id=agent["process_id"],
+                process_name=agent["process_name"],
                 status=agent["status"],
             )
             for agent in records
