@@ -506,6 +506,7 @@ async def wait_for_consistent_children(
     await retry_limited(wait_consistent_scheduler, 10)
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize(
     "auto_start_agent,should_time_out,time_to_sleep,", [(True, False, 2), (True, True, 120)]
 )  # this overrides a fixture to allow the agent to fork!
@@ -668,6 +669,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         )
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_pause_agent_deploy(
     snippetcompiler,
@@ -801,6 +803,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     ), result.result
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_agent_paused_scheduler_server_restart(
     snippetcompiler,
@@ -910,6 +913,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     # assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_agent_paused_should_remain_paused_after_environment_resume(
     snippetcompiler,
@@ -1061,6 +1065,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         assert children.is_running()
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_pause_unpause_all_agents_deploy(
     snippetcompiler,
