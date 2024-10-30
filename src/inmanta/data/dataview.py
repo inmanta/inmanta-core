@@ -1196,7 +1196,6 @@ class AgentView(DataView[AgentOrder, model.Agent]):
     def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "name": ContainsPartialFilter,
-            "process_name": ContainsPartialFilter,
             "status": ContainsFilter,
         }
 
@@ -1213,13 +1212,15 @@ class AgentView(DataView[AgentOrder, model.Agent]):
     def get_base_query(self) -> SimpleQueryBuilder:
         base = SimpleQueryBuilder(
             select_clause="""SELECT a.name, a.environment, a.last_failover, a.paused, a.unpause_on_resume,
-                                            (CASE WHEN a.paused AND NOT sched.halted THEN 'paused'
-                                                WHEN sched.halted THEN 'down'
+                                            (CASE WHEN a.paused OR sched.halted THEN 'paused'
+                                                WHEN NOT a.paused AND schedagent.id_primary IS NULL THEN 'down'
                                                 ELSE 'up'
                                             END) as status""",
             from_clause=f" FROM  (SELECT sched.id, sched.halted FROM {Environment.table_name()} AS sched "
-            f"WHERE sched.id =$1) AS sched RIGHT JOIN {Agent.table_name()} a "
-            f"ON a.environment = sched.id",
+            "WHERE sched.id =$1) AS sched "
+            f"RIGHT JOIN {Agent.table_name()} a ON a.environment = sched.id "
+            f"RIGHT JOIN (SELECT schedagent.name, schedagent.id_primary FROM {Agent.table_name()} AS schedagent "
+            f"WHERE schedagent.name ='{const.AGENT_SCHEDULER_ID}') AS schedagent ON a.name <> schedagent.name ",
             filter_statements=[" a.environment = $1 ", " a.name <> $2 "],
             values=[self.environment.id, const.AGENT_SCHEDULER_ID],
         )
