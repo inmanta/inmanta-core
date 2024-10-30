@@ -90,7 +90,7 @@ class SliceStatus(BaseModel):
     """
 
     name: str
-    status: dict[str, ArgumentTypes]
+    status: dict[str, ArgumentTypes | dict[str, ArgumentTypes]]
 
 
 class FeatureStatus(BaseModel):
@@ -872,8 +872,8 @@ class DataBaseReport(BaseModel):
     free_connections: int
     pool_exhaustion_count: int
 
-    def __add__(self, other: BaseModel) -> BaseModel:
-        if not isinstance(other, BaseModel):
+    def __add__(self, other: "DataBaseReport") -> "DataBaseReport":
+        if not isinstance(other, DataBaseReport):
             return NotImplemented
         if other.database != self.database:
             return NotImplemented

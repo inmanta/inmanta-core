@@ -27,6 +27,7 @@ from asyncio import queues, subprocess
 from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence, Set
 from datetime import datetime
 from enum import Enum
+from functools import reduce
 from typing import Any, Optional, Union, cast
 from uuid import UUID
 
@@ -40,7 +41,7 @@ from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
 from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, InvalidSort, model
-from inmanta.data.model import ResourceIdStr
+from inmanta.data.model import ResourceIdStr, DataBaseReport
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
@@ -168,11 +169,45 @@ class AgentManager(ServerSlice, SessionListener):
 
         self.closesessionsonstart: bool = closesessionsonstart
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
-        return {
+    async def get_status(self) -> Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]:
+        schedulers = self.get_all_schedulers()
+        deadline = 0.9 * Server.GET_SERVER_STATUS_TIMEOUT
+
+        async def get_report(env: uuid.UUID, session: protocol.Session) -> tuple[uuid.UUID, DataBaseReport]:
+            result = await asyncio.wait_for(session.client.get_db_status(), deadline)
+            assert result.code == 200
+            return (env, DataBaseReport(**result.result["data"]))
+
+        results = await asyncio.gather(*[get_report(env, scheduler) for env, scheduler in schedulers], return_exceptions=True)
+
+        total: DataBaseReport = reduce(lambda x,y: x+y,(x[1] for x in results if not isinstance(x, BaseException)))
+
+        out: dict[str, ArgumentTypes | Mapping[str, ArgumentTypes]]  = {
             "resource_facts": len(self._fact_resource_block_set),
             "sessions": len(self.sessions),
         }
+
+        def short_report(report: DataBaseReport) -> Mapping[str, ArgumentTypes]:
+            return {
+                "connected": report.connected,
+                "max_pool": report.max_pool,
+                "open_connections": report.open_connections,
+                "free_connections": report.free_connections,
+                "pool_exhaustion_count": report.pool_exhaustion_count,
+            }
+
+        if total:
+            out["database"] = total.database
+            out["host"] = total.host
+            out["total"] = short_report(total)
+
+        for result in results:
+            if isinstance(result, BaseException):
+                logging.debug("Failed to collect database status for scheduler", exc_info=True)
+            else:
+                out[result[0]] = short_report(result[1])
+
+        return out
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_SESSION_MANAGER]
@@ -951,7 +986,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         self._agent_procs: dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
         self.agent_lock = asyncio.Lock()  # Prevent concurrent updates on _agent_procs
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, ArgumentTypes]:
         return {"processes": len(self._agent_procs)}
 
     async def prestart(self, server: protocol.Server) -> None:

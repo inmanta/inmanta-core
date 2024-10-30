@@ -540,7 +540,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         self._queue_count_cache: int = 0
         self._queue_count_cache_lock = asyncio.locks.Lock()
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, ArgumentTypes]:
         return {"task_queue": self._queue_count_cache, "listeners": len(self.async_listeners) + len(self.blocking_listeners)}
 
     def add_listener(self, listener: CompileStateListener) -> None:

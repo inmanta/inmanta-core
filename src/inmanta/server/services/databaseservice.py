@@ -21,7 +21,7 @@ import dataclasses
 import logging
 import typing
 import uuid
-from typing import Optional, cast
+from typing import Optional, cast, Mapping
 
 import asyncpg
 from pyformance import gauge, global_registry
@@ -207,7 +207,7 @@ class DatabaseService(protocol.ServerSlice):
         """Disconnect the database"""
         await data.disconnect()
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, ArgumentTypes]:
         """Get the status of the database connection"""
         return (await self._db_monitor.get_status()).dict()
 

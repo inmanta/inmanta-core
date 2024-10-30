@@ -25,12 +25,11 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Callable, Coroutine, Optional, Union
 
 import inmanta.server.config as opt
-from inmanta import config, const, protocol
+from inmanta import config, const, protocol, data
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data import Agent, Resource
 from inmanta.data.model import AttributeStateChange, DataBaseReport, ResourceVersionIdStr
 from inmanta.deploy import scheduler
 from inmanta.deploy.work import TaskPriority
@@ -90,7 +89,7 @@ class Agent(SessionEndpoint):
     async def start(self) -> None:
         # None of this very OO, this is a bit messy
         self._db_monitor = DatabaseMonitor(
-            Resource._connection_pool,
+            data.Resource._connection_pool,
             opt.db_name.get(),
             opt.db_host.get(),
             "scheduler",

@@ -26,7 +26,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING, Callable, Optional, Union, Mapping
 
 from tornado import gen, queues, routing, web
 
@@ -399,7 +399,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | No
                 result[ext_status.name] = ext_status
         return list(result.values())
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]:
         """
         Get the status of this slice.
         """
@@ -620,7 +620,7 @@ class TransportSlice(ServerSlice):
         await super().stop()
         await self.server._transport.join()
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, ArgumentTypes]:
         def format_socket(sock: socket.socket) -> str:
             sname = sock.getsockname()
             return f"{sname[0]}:{sname[1]}"
@@ -667,7 +667,7 @@ class SessionManager(ServerSlice):
         # Listeners
         self.listeners: list[SessionListener] = []
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, ArgumentTypes]:
         return {"hangtime": self.hangtime, "interval": self.interval, "sessions": len(self._sessions)}
 
     def add_listener(self, listener: SessionListener) -> None:
