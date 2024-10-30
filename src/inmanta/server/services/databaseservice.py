@@ -16,12 +16,9 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
-import dataclasses
 import logging
 import typing
-import uuid
-from typing import Optional, cast, Mapping
+from typing import Mapping, Optional, cast
 
 import asyncpg
 from pyformance import gauge, global_registry
@@ -32,7 +29,6 @@ from inmanta.data.model import DataBaseReport
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
-from inmanta.server.server import Server
 from inmanta.types import ArgumentTypes
 from inmanta.util import Scheduler
 
@@ -110,7 +106,7 @@ class DatabaseMonitor:
             CallbackGauge(callback=lambda: self._db_pool_watcher._exhausted_pool_events_count),
         )
 
-    def stop_monitor(self):
+    def stop_monitor(self) -> None:
         suffix = f",component={self.component}"
         if self.environment:
             suffix += f",environment={self.environment}"
@@ -146,10 +142,10 @@ class DatabaseService(protocol.ServerSlice):
         super().__init__(SLICE_DATABASE)
         self._pool: Optional[asyncpg.pool.Pool] = None
         self._db_monitor: Optional[DatabaseMonitor] = None
-        self._server_handler: Server | None = None
+        self._server_handler: protocol.Server | None = None
         self.agentmanager_service: "agentmanager.AgentManager"
 
-    async def prestart(self, server: Server) -> None:
+    async def prestart(self, server: protocol.Server) -> None:
         """
         Called by the RestServer host prior to start, can be used to collect references to other server slices
         Dependencies are not up yet.
@@ -168,6 +164,7 @@ class DatabaseService(protocol.ServerSlice):
                 self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
             )
 
+        assert self._server_handler is not None # Make mypy happy
         self.agentmanager_service = cast("agentmanager.AgentManager", self._server_handler.get_slice(SLICE_AGENT_MANAGER))
 
         assert self._pool is not None  # Make mypy happy
@@ -176,8 +173,9 @@ class DatabaseService(protocol.ServerSlice):
 
     async def stop(self) -> None:
         await super().stop()
+        if self._db_monitor is not None:
+            await self._db_monitor.stop()
         await self.disconnect_database()
-        await self._db_monitor.stop()
         self._pool = None
 
     def get_dependencies(self) -> list[str]:
@@ -209,6 +207,7 @@ class DatabaseService(protocol.ServerSlice):
 
     async def get_status(self) -> Mapping[str, ArgumentTypes]:
         """Get the status of the database connection"""
+        assert self._db_monitor is not None # make mypy happy
         return (await self._db_monitor.get_status()).dict()
 
     async def _purge_agent_processes(self) -> None:

@@ -26,7 +26,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import TYPE_CHECKING, Callable, Optional, Union, Mapping
+from typing import TYPE_CHECKING, Callable, Mapping, Optional, Union
 
 from tornado import gen, queues, routing, web
 
@@ -39,16 +39,7 @@ from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.types import ArgumentTypes, JsonType
-from inmanta.util import (
-    CronSchedule,
-    CycleException,
-    IntervalSchedule,
-    ScheduledTask,
-    Scheduler,
-    TaskHandler,
-    TaskMethod,
-    stable_depth_first,
-)
+from inmanta.util import CronSchedule, CycleException, ScheduledTask, Scheduler, TaskHandler, TaskMethod, stable_depth_first
 
 if TYPE_CHECKING:
     from inmanta.server.extensions import Feature, FeatureManager

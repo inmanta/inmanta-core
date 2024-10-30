@@ -101,7 +101,7 @@ src/inmanta/ast/type.py:0: error: No overload variant of "reversed" matches argu
 src/inmanta/ast/type.py:0: note: Possible overload variants:
 src/inmanta/ast/type.py:0: note: def [_T] __new__(cls, Reversible[_T], /) -> reversed[_T]
 src/inmanta/ast/type.py:0: note: def [_T] __new__(cls, SupportsLenAndGetItem[_T], /) -> reversed[_T]
-src/inmanta/server/services/databaseservice.py:0: error: Incompatible return value type (got "dict[str, object]", expected "dict[str, BaseModel | UUID | bool | int | float | datetime | str | Sequence[BaseModel | UUID | bool | int | float | datetime | str] | Mapping[str, BaseModel | UUID | bool | int | float | datetime | str]]")  [return-value]
+src/inmanta/server/services/metricservice.py:0: error: Incompatible types in assignment (expression has type "float", variable has type "int")  [assignment]
 src/inmanta/protocol/decorators.py:0: error: "FuncT" has no attribute "__protocol_method__"  [attr-defined]
 src/inmanta/protocol/decorators.py:0: error: "FuncT" has no attribute "__protocol_mapping__"  [attr-defined]
 src/inmanta/protocol/decorators.py:0: error: "FuncT" has no attribute "__api_version__"  [attr-defined]
@@ -156,6 +156,7 @@ src/inmanta/ast/attribute.py:0: error: Incompatible types in assignment (express
 src/inmanta/ast/attribute.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]
 src/inmanta/ast/attribute.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]
 src/inmanta/util/__init__.py:0: error: Argument "key" to "sorted" has incompatible type "Callable[[T], S]"; expected "Callable[[T], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"  [arg-type]
+src/inmanta/util/__init__.py:0: error: Returning Any from function declared to return "ScheduledTask | None"  [no-any-return]
 src/inmanta/util/__init__.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/util/__init__.py:0: error: Incompatible return value type (got "bool | Awaitable[bool]", expected "bool")  [return-value]
 src/inmanta/resources.py:0: error: Function is missing a type annotation  [no-untyped-def]
@@ -226,6 +227,7 @@ src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-bo
 src/inmanta/protocol/methods_v2.py:0: error: Module "inmanta.protocol.methods" does not explicitly export attribute "ArgOption"  [attr-defined]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Module "inmanta.protocol.methods" does not explicitly export attribute "ArgOption"  [attr-defined]
+src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
@@ -1101,6 +1103,7 @@ src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types in assignment (expression has type "set[str | None]", variable has type "set[str]")  [assignment]
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument "agents" to "_trigger_auto_deploy" of "OrchestrationService" has incompatible type "Collection[str]"; expected "Sequence[str] | None"  [arg-type]
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible return value type (got "ReturnValueWithMeta[Sequence[DesiredStateVersion]]", expected "ReturnValue[list[DesiredStateVersion]]")  [return-value]
+src/inmanta/server/agentmanager.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/server/agentmanager.py:0: error: Argument 1 to "ensure_agent_registered" of "AgentManager" has incompatible type "Environment | None"; expected "Environment"  [arg-type]
 src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/agent/forking_executor.py:0: note: This violates the Liskov substitution principle
@@ -1115,7 +1118,6 @@ src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types 
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"
 src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for > ("timedelta" and "datetime")  [operator]
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | timedelta"
-src/inmanta/server/services/metricservice.py:0: error: Incompatible types in assignment (expression has type "float", variable has type "int")  [assignment]
 src/inmanta/server/services/environment_metrics_service.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/server/services/environment_metrics_service.py:0: error: "Sequence[EnvironmentMetricsGauge]" has no attribute "append"  [attr-defined]
 src/inmanta/server/services/environment_metrics_service.py:0: error: Function is missing a return type annotation  [no-untyped-def]

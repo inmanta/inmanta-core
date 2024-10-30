@@ -25,7 +25,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Callable, Coroutine, Optional, Union
 
 import inmanta.server.config as opt
-from inmanta import config, const, protocol, data
+from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
@@ -87,7 +87,8 @@ class Agent(SessionEndpoint):
         self._set_deploy_and_repair_intervals()
 
     async def start(self) -> None:
-        # None of this very OO, this is a bit messy
+        # Make mypy happy
+        assert data.Resource._connection_pool is not None
         self._db_monitor = DatabaseMonitor(
             data.Resource._connection_pool,
             opt.db_name.get(),
@@ -95,6 +96,7 @@ class Agent(SessionEndpoint):
             "scheduler",
             str(self.environment),
         )
+        self._db_monitor.start()
 
         await super().start()
 

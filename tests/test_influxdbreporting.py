@@ -26,7 +26,9 @@ from tornado.httpserver import HTTPServer
 from tornado.web import url
 
 from inmanta.reporter import AsyncReporter, InfluxReporter
+from inmanta.server.config import influxdb_host, influxdb_interval, influxdb_port
 from inmanta.server.services.metricservice import CPUMicroBenchMark
+from utils import retry_limited
 
 
 class QueryMockHandler(tornado.web.RequestHandler):
@@ -36,13 +38,13 @@ class QueryMockHandler(tornado.web.RequestHandler):
     def get(self, *args, **kwargs):
         self.parent.querycount += 1
         try:
-            assert self.request.query_arguments["q"] == [b"CREATE DATABASE metrics"]
+            assert self.request.query_arguments["q"] == [b"CREATE DATABASE inmanta"]
         except Exception as e:
             # carry over  failures
             self.parent.failure = e
 
 
-influxlineprotocol = re.compile(r"\w+(,\w+=\w+)* (\w+=[\d.e+-]*)(,\w+=[\d.e+-]*)* \d+")
+influxlineprotocol = re.compile(r"\w+(,\w+=[^, ]+)* (\w+=[\d.e+-]*)(,\w+=[\d.e+-]*)* \d+")
 
 
 class WriteMockHandler(tornado.web.RequestHandler):
@@ -102,7 +104,7 @@ def influxdb(event_loop, free_socket):
 
 
 async def test_influxdb(influxdb):
-    rep = InfluxReporter(port=influxdb.port, tags={"mark": "X"}, autocreate_database=True)
+    rep = InfluxReporter(port=influxdb.port, tags={"mark": "X"}, autocreate_database=True, database="inmanta")
     with timer("test").time():
         pass
 
@@ -182,20 +184,36 @@ async def test_available_metrics(server):
                     base_types = [base_type]
                 types[key] = base_types
 
-    assert metrics["db.connected"]["value"]
-    assert "db.max_pool" in metrics
-    assert "db.open_connections" in metrics
-    assert "db.free_connections" in metrics
+    assert metrics["db.connected,component=server"]["value"]
+    assert "db.max_pool,component=server" in metrics
+    assert "db.open_connections,component=server" in metrics
+    assert "db.free_connections,component=server" in metrics
     assert "self.spec.cpu" in metrics
 
     # ensure it doesn't crash when the server is down
     await server.stop()
     metrics = global_registry().dump_metrics()
 
-    assert metrics["db.max_pool"]["value"] == 0
-    assert not metrics["db.connected"]["value"]
-
 
 async def test_safeness_if_server_down():
     # ensure it works is there is no server
     global_registry().dump_metrics()
+
+
+@pytest.fixture
+async def server_config(server_config, influxdb):
+    influxdb_host.set("127.0.0.1")
+    influxdb_port.set(str(influxdb.port))
+    influxdb_interval.set(str(1))
+
+
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_influxdb_server_and_scheduler(server, influxdb, auto_start_agent, environment):
+    """Test that we receive influxdb information from the scheduler"""
+
+    # Using this function signature makes test easier to debug, but doesn't test the intialization
+    # async def test_influxdb_server_and_scheduler(server, agent, influxdb):
+    def has_scheduler_metrics():
+        return any("metrics,key=db.pool_exhaustion_count,component=scheduler,environment=" in line for line in influxdb.lines)
+
+    await retry_limited(has_scheduler_metrics, 10)

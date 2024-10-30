@@ -40,8 +40,8 @@ from inmanta import const, data, tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
 from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
-from inmanta.data import APILIMIT, InvalidSort, model
-from inmanta.data.model import ResourceIdStr, DataBaseReport
+from inmanta.data import APILIMIT, Environment, InvalidSort, model
+from inmanta.data.model import DataBaseReport, ResourceIdStr
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
@@ -170,22 +170,37 @@ class AgentManager(ServerSlice, SessionListener):
         self.closesessionsonstart: bool = closesessionsonstart
 
     async def get_status(self) -> Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]:
+        # The basic report
+
+        out: dict[str, ArgumentTypes | Mapping[str, ArgumentTypes]] = {
+            "resource_facts": len(self._fact_resource_block_set),
+            "sessions": len(self.sessions),
+        }
+
+        # Try to get more info from scheduler, but make sure not to timeout
         schedulers = self.get_all_schedulers()
         deadline = 0.9 * Server.GET_SERVER_STATUS_TIMEOUT
 
         async def get_report(env: uuid.UUID, session: protocol.Session) -> tuple[uuid.UUID, DataBaseReport]:
             result = await asyncio.wait_for(session.client.get_db_status(), deadline)
             assert result.code == 200
+            # Mypy can't help here, ....
             return (env, DataBaseReport(**result.result["data"]))
 
+        env_mapping = asyncio.create_task(
+            asyncio.wait_for(Environment.get_list(details=False, is_marked_for_deletion=False), deadline)
+        )
         results = await asyncio.gather(*[get_report(env, scheduler) for env, scheduler in schedulers], return_exceptions=True)
+        try:
+            # This can timeout, but not likely
+            env_mapping_result = await env_mapping
+            uuid_to_name = {env.id: env.name for env in env_mapping_result}
+        except TimeoutError:
+            # default to uuid's
+            uuid_to_name = {}
 
-        total: DataBaseReport = reduce(lambda x,y: x+y,(x[1] for x in results if not isinstance(x, BaseException)))
-
-        out: dict[str, ArgumentTypes | Mapping[str, ArgumentTypes]]  = {
-            "resource_facts": len(self._fact_resource_block_set),
-            "sessions": len(self.sessions),
-        }
+        # Filter out timeouts
+        total: DataBaseReport = reduce(lambda x, y: x + y, (x[1] for x in results if not isinstance(x, BaseException)))
 
         def short_report(report: DataBaseReport) -> Mapping[str, ArgumentTypes]:
             return {
@@ -205,7 +220,9 @@ class AgentManager(ServerSlice, SessionListener):
             if isinstance(result, BaseException):
                 logging.debug("Failed to collect database status for scheduler", exc_info=True)
             else:
-                out[result[0]] = short_report(result[1])
+                the_uuid = result[0]
+                name = uuid_to_name.get(the_uuid, str(the_uuid))
+                out[name] = short_report(result[1])
 
         return out
 
@@ -1410,12 +1427,21 @@ port={opt.db_port.get()}
 name={opt.db_name.get()}
 username={opt.db_username.get()}
 password={opt.db_password.get()}
+
 [scheduler]
 db-connection-pool-min-size={agent_cfg.scheduler_db_connection_pool_min_size.get()}
 db-connection-pool-max-size={agent_cfg.scheduler_db_connection_pool_max_size.get()}
 db-connection-timeout={agent_cfg.scheduler_db_connection_timeout.get()}
 
-            """
+[influxdb]
+host = {opt.influxdb_host.get()}
+port = {opt.influxdb_port.get()}
+name = {opt.influxdb_name.get()}
+username = {opt.influxdb_username.get()}
+password = {opt.influxdb_password.get()}
+interval = {opt.influxdb_interval.get()}
+tags = {opt.influxdb_tags.get()}
+"""
         return config
 
     async def _fork_inmanta(

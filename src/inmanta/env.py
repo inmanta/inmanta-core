@@ -1135,7 +1135,7 @@ class ActiveEnv(PythonEnvironment):
         Return True iff the given requirements are installed in this environment.
         """
         assert self.is_using_virtual_env()
-        return PythonWorkingSet.are_instadelled(requirements)
+        return PythonWorkingSet.are_installed(requirements)
 
     def install_for_config(
         self,

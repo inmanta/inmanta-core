@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import dataclasses
 import datetime
 import typing
 import urllib
@@ -24,7 +23,7 @@ import uuid
 from collections import abc
 from collections.abc import Sequence
 from enum import Enum, StrEnum
-from typing import ClassVar, NewType, Optional, Self, Union
+from typing import ClassVar, NewType, Optional, Self, Union, Mapping
 
 import pydantic
 import pydantic.schema
@@ -90,7 +89,7 @@ class SliceStatus(BaseModel):
     """
 
     name: str
-    status: dict[str, ArgumentTypes | dict[str, ArgumentTypes]]
+    status: Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]
 
 
 class FeatureStatus(BaseModel):
