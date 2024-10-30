@@ -177,6 +177,13 @@ class ContainsPartialFilter(Filter):
         return None
 
 
+class DummyFilter(Filter):
+    """Dummy filter, do nothing and returns None"""
+
+    def to_query_type(self) -> Optional[tuple[QueryType, object]]:
+        return None
+
+
 class ContainsFilter(Filter):
     """Represents a valid string list constraint which should be handled as a containment filter"""
 

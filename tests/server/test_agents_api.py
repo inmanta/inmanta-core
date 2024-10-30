@@ -123,7 +123,7 @@ def agent_names(agents: list[dict[str, str]]) -> list[str]:
 async def test_agents_paging(server, client, env_with_agents: None, environment: str, order_by_column: str, order: str) -> None:
     result = await client.get_agents(
         environment,
-        filter={"status": ["paused", "up"]},
+        filter={"status": ["down"]},
     )
     assert result.code == 200
     assert len(result.result["data"]) == 7
@@ -142,7 +142,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
         environment,
         limit=2,
         sort=f"{order_by_column}.{order}",
-        filter={"status": ["paused", "up"]},
+        filter={"status": ["down"]},
     )
     assert result.code == 200
     assert len(result.result["data"]) == 2
@@ -209,7 +209,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
         environment,
         limit=100,
         sort=f"{order_by_column}.{order}",
-        filter={"status": ["paused", "up"]},
+        filter={"status": ["down"]},
     )
     assert result.code == 200
     assert len(result.result["data"]) == 7

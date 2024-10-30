@@ -28,12 +28,14 @@ from uuid import UUID
 from asyncpg import Record
 
 import inmanta.data
-from inmanta import data
+from inmanta import const, data
 from inmanta.data import (
     APILIMIT,
     PRIMITIVE_SQL_TYPES,
     Agent,
+    AgentInstance,
     AgentOrder,
+    AgentProcess,
     CompileReportOrder,
     ConfigurationModel,
     DatabaseOrderV2,
@@ -82,6 +84,7 @@ from inmanta.server.validate_filter import (
     ContainsFilterResourceAction,
     ContainsPartialFilter,
     DateRangeFilter,
+    DummyFilter,
     Filter,
     FilterValidator,
     IntRangeFilter,
@@ -1195,7 +1198,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
     def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "name": ContainsPartialFilter,
-            "process_name": ContainsPartialFilter,
+            "process_name": DummyFilter,
             "status": ContainsFilter,
         }
 
@@ -1211,16 +1214,19 @@ class AgentView(DataView[AgentOrder, model.Agent]):
 
     def get_base_query(self) -> SimpleQueryBuilder:
         base = SimpleQueryBuilder(
-            select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
-                                            ap.hostname as process_name, ai.process as process_id,
-                                            (CASE WHEN paused THEN 'paused'
-                                                WHEN id_primary IS NOT NULL THEN 'up'
-                                                ELSE 'down'
+            select_clause="""SELECT a.name, a.environment, a.last_failover, a.paused, a.unpause_on_resume,
+                sa_join.hostname as process_name, sa_join.process as process_id,
+                                            (CASE WHEN a.paused THEN 'paused'
+                                                WHEN NOT a.paused AND sa_join.id_primary IS NULL THEN 'down'
+                                                ELSE 'up'
                                             END) as status""",
-            from_clause=f" FROM {Agent.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
-            " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
-            filter_statements=[" a.environment = $1 "],
-            values=[self.environment.id],
+            from_clause=f" FROM {Agent.table_name()} a "
+            "LEFT JOIN (SELECT sa.name, sa.id_primary, ap.hostname, ai.process FROM agent sa  "
+            f"LEFT JOIN {AgentInstance.table_name()} ai ON sa.id_primary=ai.id "
+            f"LEFT JOIN {AgentProcess.table_name()} ap ON ai.process = ap.sid  "
+            "WHERE sa.environment = $1 AND sa.name = $2) sa_join ON a.name <> sa_join.name ",
+            filter_statements=[" a.environment = $1 ", " a.name <> $2 "],
+            values=[self.environment.id, const.AGENT_SCHEDULER_ID],
         )
         # wrap when using compound fields
         virtual_fields = {"status", "process_name", "process_id"}
