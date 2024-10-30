@@ -233,12 +233,9 @@ class Agent(SessionEndpoint):
                     await self.start_working()
                 else:
                     # Special case that the server considers us disconnected, but the Scheduler thinks we are still connected.
-                    # In that case, the Scheduler may have missed some event, but it would get a start after a start:
-                    # agent_new --Start--> Scheduler (the scheduler is started)
-                    # Server --disconnected-- agent_new (after some time, the server considers us disconnected)
-                    # When the server sees the scheduler again, this would happen (logic in agent_new.on_reconnect):
-                    # agent_new --Start--> Scheduler (second start since we have already received one)
-                    # Therefore, we need to refresh everything (Scheduler side) to make sure we are up to date
+                    # In that case, the Scheduler may have missed some event, therefore, we need to refresh everything
+                    # (Scheduler side) to make sure we are up to date when the server considers that the Scheduler
+                    # is back online
                     await self.scheduler.read_version()
                     await self.scheduler.refresh_all_agent_states_from_db()
             else:
