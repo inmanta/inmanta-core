@@ -506,7 +506,7 @@ class ResourceScheduler(TaskManager):
     async def should_runner_be_running(self, endpoint: str) -> bool:
         """
         Check in the DB (authoritative entity) if the agent (or the Scheduler if endpoint == Scheduler id) should be running
-            i.e. if it is not paused and its environment is not halted.
+            i.e. if it is not paused.
 
         :param endpoint: The name of the agent
         """
@@ -531,7 +531,6 @@ class ResourceScheduler(TaskManager):
             - If an agent is not paused: It will make sure that the agent is running.
             - If an agent is paused: Stop a particular agent.
         """
-        # The None represent the all agents action
         for worker in self._workers.values():
             await worker.notify()
 
