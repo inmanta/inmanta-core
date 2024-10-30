@@ -20,12 +20,11 @@ import concurrent
 import typing
 import uuid
 from copy import deepcopy
-from typing import Sequence
 
 import inmanta.types
 from inmanta import const
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployResult, FailedResources, ResourceDetails, ResourceInstallSpec, DryrunResult
+from inmanta.agent.executor import DeployResult, DryrunResult, FailedResources, ResourceDetails, ResourceInstallSpec
 from inmanta.data.model import ResourceIdStr
 
 
