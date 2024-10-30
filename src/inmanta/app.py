@@ -55,6 +55,7 @@ from tornado.ioloop import IOLoop
 
 import inmanta.compiler as compiler
 from inmanta import const, module, moduletool, protocol, tracing, util
+from inmanta.agent import config as agent_config
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -63,8 +64,9 @@ from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env
 from inmanta.logging import InmantaLoggerConfig, LoggerMode, LoggerModeManager, _is_on_tty
+from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.services.databaseservice import server_db_connect
+from inmanta.server.services.databaseservice import initialize_database_connection_pool
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
@@ -143,7 +145,17 @@ def start_scheduler(options: argparse.Namespace) -> None:
     a = agent_new.Agent()
 
     async def start() -> None:
-        await server_db_connect()
+        await initialize_database_connection_pool(
+            database_host=opt.db_host.get(),
+            database_port=opt.db_port.get(),
+            database_name=opt.db_name.get(),
+            database_username=opt.db_username.get(),
+            database_password=opt.db_password.get(),
+            create_db_schema=True,
+            connection_pool_min_size=agent_config.scheduler_db_connection_pool_min_size.get(),
+            connection_pool_max_size=agent_config.scheduler_db_connection_pool_max_size.get(),
+            connection_timeout=agent_config.scheduler_db_connection_timeout.get(),
+        )
         await a.start()
 
     setup_signal_handlers(a.stop)

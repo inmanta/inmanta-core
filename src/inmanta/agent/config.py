@@ -23,6 +23,7 @@ import typing
 import uuid
 
 from inmanta.config import *
+from inmanta.server.config import db_connection_pool_max_size, db_connection_pool_min_size
 
 LOGGER = logging.getLogger(__name__)
 
@@ -181,6 +182,42 @@ scheduler_resource_compliance_check_window = Option(
     "good state with no pending update or that they need to be re-deployed. This window controls how long "
     "the scheduler should wait between two such checks, on a per-resource basis.",
     is_time,
+)
+
+
+def default_db_pool_min_size() -> int:
+    """:inmanta.config:option:`database.connection-pool-min-size` / 10"""
+    return int(db_connection_pool_min_size.get() / 10)
+
+
+def default_db_pool_max_size() -> int:
+    """:inmanta.config:option:`database.connection-pool-max-size` / 10"""
+    return int(db_connection_pool_max_size.get() / 10)
+
+
+scheduler_db_connection_pool_min_size: Option[int] = Option(
+    "scheduler",
+    "db-connection-pool-min-size",
+    default_db_pool_min_size,
+    "In each environment, the database connection pool will be initialized with this number of connections for "
+    "the resource scheduler.",
+    is_lower_bounded_int(0),
+)
+scheduler_db_connection_pool_max_size: Option[int] = Option(
+    "scheduler",
+    "db-connection-pool-max-size",
+    default_db_pool_max_size,
+    "In each environment, limit the size of the database connection pool to this number of connections for "
+    "the resource scheduler.",
+    is_lower_bounded_int(1),
+)
+scheduler_db_connection_timeout: Option[float] = Option(
+    "scheduler",
+    "db-connection-timeout",
+    60.0,
+    "In each environment, set the database connection timeout for interactions of the scheduler with the database"
+    " (in seconds).",
+    is_float,
 )
 
 

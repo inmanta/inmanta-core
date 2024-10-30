@@ -246,9 +246,9 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         del self._in_progress[task]
         self._agent_queues[agent].task_done()
 
-    #########################
-    # Mapping implementation#
-    #########################
+    ##########################
+    # Mapping implementation #
+    ##########################
 
     def __getitem__(self, key: tasks.Task) -> PrioritizedTask[tasks.Task]:
         return self._tasks_by_resource.get(key.resource, {})[key].task
