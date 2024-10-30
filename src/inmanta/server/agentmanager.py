@@ -187,9 +187,11 @@ class AgentManager(ServerSlice, SessionListener):
             # Mypy can't help here, ....
             return (env, DataBaseReport(**result.result["data"]))
 
+        # Get env name mapping in parallel with next call
         env_mapping = asyncio.create_task(
             asyncio.wait_for(Environment.get_list(details=False, is_marked_for_deletion=False), deadline)
         )
+        # Get the reports of all schedulers
         results = await asyncio.gather(*[get_report(env, scheduler) for env, scheduler in schedulers], return_exceptions=True)
         try:
             # This can timeout, but not likely
@@ -221,6 +223,7 @@ class AgentManager(ServerSlice, SessionListener):
                 logging.debug("Failed to collect database status for scheduler", exc_info=True)
             else:
                 the_uuid = result[0]
+                # Default name to uuid
                 name = uuid_to_name.get(the_uuid, str(the_uuid))
                 out[name] = short_report(result[1])
 
@@ -237,7 +240,6 @@ class AgentManager(ServerSlice, SessionListener):
         autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
         assert isinstance(autostarted_agent_manager, AutostartedAgentManager)
         self._autostarted_agent_manager = autostarted_agent_manager
-
         presession = server.get_slice(SLICE_SESSION_MANAGER)
         assert isinstance(presession, SessionManager)
         presession.add_listener(self)
