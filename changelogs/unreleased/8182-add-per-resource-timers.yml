@@ -1,0 +1,6 @@
+description: >
+  Add ``scheduler.resource-compliance-check-window`` agent config option to set the maximum time window
+  between two compliance checks on a per-resource basis.
+change-type: patch
+destination-branches: [master]
+

@@ -110,8 +110,7 @@ async def test_spontaneous_deploy(
     clienthelper,
     caplog,
 ):
-    """
-    """
+    """ """
     with caplog.at_level(logging.DEBUG):
         resource_container.Provider.reset()
 
@@ -201,9 +200,7 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
 
     # do a deploy
     result = await client.release_version(
-        tid=env_id,
-        id=version,
-        agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+        tid=env_id, id=version, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
     )
     assert result.code == 200
     assert not result.result["model"]["deployed"]

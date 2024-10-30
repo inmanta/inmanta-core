@@ -177,7 +177,7 @@ executor_venv_retention_time: Option[int] = Option(
 scheduler_resource_compliance_check_window = Option(
     "scheduler",
     "resource-compliance-check-window",
-    60*60*24,
+    60 * 60 * 24,
     "The scheduler will periodically check the state of the resources and enforce that either they are in a known "
     "good state with no pending update or that they need to be re-deployed. This window controls how long "
     "the scheduler should wait between two such checks, on a per-resource basis.",

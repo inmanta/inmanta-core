@@ -18,11 +18,9 @@
 
 import abc
 import asyncio
-import functools
 import logging
 import uuid
 from abc import abstractmethod
-from asyncio import ensure_future
 from collections.abc import Collection, Mapping, Set
 from typing import Optional
 from uuid import UUID
@@ -30,8 +28,8 @@ from uuid import UUID
 import asyncpg
 
 from inmanta import const, data
-from inmanta.agent import executor
 from inmanta.agent import config as agent_config
+from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import DeployResult
 from inmanta.data import ConfigurationModel
@@ -443,7 +441,7 @@ class ResourceScheduler(TaskManager):
 
             self._work.agent_queues.task_done(agent, task)
 
-    async def _start_compliance_check(self, resource: ResourceIdStr) -> None: # TODO naming ?
+    async def _start_compliance_check(self, resource: ResourceIdStr) -> None:  # TODO naming ?
         """
         This method is expected to be called when the given resource was checked to be in compliance with the desired state.
         i.e. either right after a successful deploy or after checking that the resource is in a known good state with no
@@ -481,9 +479,6 @@ class ResourceScheduler(TaskManager):
 
         LOGGER.debug(f"Scheduling next compliance check for resource {resource} in {self._compliance_check_window}s.")
         asyncio.create_task(delay(_recurrent_compliance_check(resource), self._compliance_check_window))
-
-
-
 
     # TaskManager interface
 

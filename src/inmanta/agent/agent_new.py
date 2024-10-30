@@ -16,13 +16,11 @@
     Contact: code@inmanta.com
 """
 
-import datetime
 import logging
 import os
-import random
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
-from typing import Any, Callable, Coroutine, Optional, Union
+from typing import Any, Optional
 
 from inmanta import config, const, protocol
 from inmanta.agent import config as cfg
@@ -31,19 +29,9 @@ from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
 from inmanta.deploy import scheduler
-from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.types import Apireturn
-from inmanta.util import (
-    CronSchedule,
-    IntervalSchedule,
-    ScheduledTask,
-    Scheduler,
-    TaskMethod,
-    TaskSchedule,
-    ensure_directory_exist,
-    join_threadpools,
-)
+from inmanta.util import ensure_directory_exist, join_threadpools
 
 LOGGER = logging.getLogger("inmanta.scheduler")
 
@@ -87,8 +75,6 @@ class Agent(SessionEndpoint):
         """
         # quick and dirty, fix later:
         self.scheduler._compliance_check_window = cfg.scheduler_resource_compliance_check_window.get()
-
-
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
         assert self._env_id is not None
