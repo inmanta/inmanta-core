@@ -29,13 +29,12 @@ from typing import Mapping, Optional, Sequence, Tuple
 from uuid import UUID
 
 import pytest
-import inmanta.types
+
 import utils
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import DeployResult, FactResult, ResourceDetails, ResourceInstallSpec
-from inmanta.agent.executor import DeployResult, DryrunResult, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.const import Change
 from inmanta.data import ResourceIdStr

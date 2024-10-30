@@ -19,14 +19,13 @@
 import abc
 import datetime
 import logging
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from asyncpg import UniqueViolationError
 
 from inmanta import const, data
-from inmanta.agent.executor import DeployResult, DryrunResult
-from inmanta.agent.executor import DeployResult, FactResult
+from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.protocol import Client

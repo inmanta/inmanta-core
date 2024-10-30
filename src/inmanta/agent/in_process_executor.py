@@ -27,8 +27,7 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import DeployResult, DryrunResult, FailedResources, ResourceDetails
-from inmanta.agent.executor import DeployResult, FactResult, FailedResources, ResourceDetails
+from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.const import ParameterSource
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
@@ -379,7 +378,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             try:
                 resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.getfact)
             except Exception:
-                return None
+                return 500
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
             async with self.activity_lock:
@@ -416,13 +415,15 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
                 except Exception:
                     self.logger.exception("Unable to retrieve fact")
+                    return 500
 
         except Exception:
             self.logger.exception("Unable to find a handler for %s", resource.id)
+            return 500
         finally:
             if provider is not None:
                 provider.close()
-        return None
+        return 200
 
 
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
