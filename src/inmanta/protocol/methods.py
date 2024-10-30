@@ -422,7 +422,6 @@ def get_resource(
     tid: uuid.UUID,
     id: str,
     logs: Optional[bool] = None,
-    status: Optional[bool] = None,
     log_action: Optional[const.ResourceAction] = None,
     log_limit: int = 0,
 ):

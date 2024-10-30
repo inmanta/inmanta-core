@@ -209,7 +209,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
         logs: bool,
-        status: bool,
         log_action: const.ResourceAction,
         log_limit: int,
         connection: Optional[Connection] = None,
@@ -224,9 +223,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             resv = await data.Resource.get(env.id, resource_id, con)
             if resv is None:
                 return 404, {"message": "The resource with the given id does not exist in the given environment"}
-
-            if status is not None and status:
-                return 200, {"status": resv.status}
 
             actions: list[data.ResourceAction] = []
             if bool(logs):

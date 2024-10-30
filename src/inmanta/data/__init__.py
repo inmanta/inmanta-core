@@ -4543,6 +4543,7 @@ class Resource(BaseDocument):
         # version field is present in the attributes dictionary served out via the API.
         record["attributes"]["version"] = version
         record["provides"] = [resources.Id.set_version_in_id(id, version) for id in record["provides"]]
+        del record["status"]
 
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
