@@ -145,13 +145,15 @@ class Agent(SessionEndpoint):
         async def interval_deploy() -> None:
             now = datetime.datetime.now().astimezone()
             await self.scheduler.deploy(
-                f"Deploy was triggered at {now} because of deploy timer {self._deploy_interval}", TaskPriority.INTERVAL_DEPLOY
+                reason=f"Deploy was triggered at {now} because of deploy timer {self._deploy_interval}",
+                priority=TaskPriority.INTERVAL_DEPLOY,
             )
 
         async def interval_repair() -> None:
             now = datetime.datetime.now().astimezone()
             await self.scheduler.repair(
-                f"Deploy was triggered at {now} because of repair timer {self._repair_interval}", TaskPriority.INTERVAL_REPAIR
+                reason=f"Deploy was triggered at {now} because of repair timer {self._repair_interval}",
+                priority=TaskPriority.INTERVAL_REPAIR,
             )
 
         periodic_schedule(
@@ -275,10 +277,10 @@ class Agent(SessionEndpoint):
         assert agent == AGENT_SCHEDULER_ID
         if incremental_deploy:
             LOGGER.info("Agent %s got a trigger to run deploy in environment %s", agent, env)
-            await self.scheduler.deploy("Deploy was triggered because user has requested a deploy")
+            await self.scheduler.deploy(reason="Deploy was triggered because user has requested a deploy")
         else:
             LOGGER.info("Agent %s got a trigger to run repair in environment %s", agent, env)
-            await self.scheduler.repair("Deploy was triggered because user has requested a repair")
+            await self.scheduler.repair(reason="Deploy was triggered because user has requested a repair")
         return 200
 
     @protocol.handle(methods.trigger_read_version, env="tid", agent="id")

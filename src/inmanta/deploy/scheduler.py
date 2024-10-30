@@ -192,7 +192,11 @@ class ResourceScheduler(TaskManager):
         }
 
         await self._new_version(
-            version, resources=resources_to_deploy, requires=requires, up_to_date_resources=up_to_date_resources
+            version,
+            resources=resources_to_deploy,
+            requires=requires,
+            up_to_date_resources=up_to_date_resources,
+            reason="Deploy was triggered because the scheduler was started",
         )
 
     async def stop(self) -> None:
@@ -202,7 +206,7 @@ class ResourceScheduler(TaskManager):
         self._work.agent_queues.send_shutdown()
         await asyncio.gather(*self._workers.values())
 
-    async def deploy(self, reason: str, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
+    async def deploy(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
         """
         Trigger a deploy
         """
@@ -213,7 +217,7 @@ class ResourceScheduler(TaskManager):
                 self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
             )
 
-    async def repair(self, reason: str, priority: TaskPriority = TaskPriority.USER_REPAIR) -> None:
+    async def repair(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_REPAIR) -> None:
         """
         Trigger a repair, i.e. mark all resources as dirty, then trigger a deploy.
         """
@@ -322,7 +326,12 @@ class ResourceScheduler(TaskManager):
             # No model version has been released yet.
             return
         else:
-            await self._new_version(version, resources, requires)
+            await self._new_version(
+                version,
+                resources,
+                requires,
+                reason="Deploy was triggered because a new version has been released",
+            )
 
     async def _new_version(
         self,
@@ -330,6 +339,7 @@ class ResourceScheduler(TaskManager):
         resources: Mapping[ResourceIdStr, ResourceDetails],
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
         up_to_date_resources: Optional[Mapping[ResourceIdStr, ResourceDetails]] = None,
+        reason: str = "Deploy was triggered because a new version has been released",
     ) -> None:
         up_to_date_resources = {} if up_to_date_resources is None else up_to_date_resources
         async with self._intent_lock:
@@ -404,7 +414,7 @@ class ResourceScheduler(TaskManager):
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
                     self._state.dirty,
-                    reason="Deploy was triggered because a new version has been released",
+                    reason=reason,
                     priority=TaskPriority.NEW_VERSION_DEPLOY,
                     deploying=self._deploying_latest,
                     added_requires=added_requires,
