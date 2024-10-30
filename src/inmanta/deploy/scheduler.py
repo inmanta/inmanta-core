@@ -458,6 +458,7 @@ class ResourceScheduler(TaskManager):
         and return the associated task. This task will be canceled and scheduled again when the next deploy finishes
         for this resource.
         """
+
         async def delay(coro: Coroutine[Any, Any, None], seconds: float) -> None:
             """
             Helper function to run a coroutine after a delay
@@ -473,7 +474,9 @@ class ResourceScheduler(TaskManager):
             to_deploy.add(resource)
             # TODO Add dependents ?
             async with self._scheduler_lock:
-                LOGGER.debug("Periodic deploy for resource %s. Triggering deploy for resources: %s", str(resource), str(to_deploy))
+                LOGGER.debug(
+                    "Periodic deploy for resource %s. Triggering deploy for resources: %s", str(resource), str(to_deploy)
+                )
                 self._work.deploy_with_context(to_deploy, priority=TaskPriority.INTERVAL_REPAIR, deploying=set())
 
         async def _recurrent_compliance_check(resource: ResourceIdStr) -> None:
