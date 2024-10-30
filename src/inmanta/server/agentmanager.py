@@ -576,6 +576,10 @@ class AgentManager(ServerSlice, SessionListener):
                     await data.AgentInstance.expire_all(now=datetime.now().astimezone(), connection=connection)
                     await data.Agent.mark_all_as_non_primary(connection=connection)
 
+    async def _purge_agent_processes(self) -> None:
+        agent_processes_to_keep = opt.agent_processes_to_keep.get()
+        await data.AgentProcess.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
+
     # Util
     async def _use_new_active_session_for_agent(self, tid: uuid.UUID, endpoint_name: str) -> Optional[protocol.Session]:
         """
@@ -1023,6 +1027,12 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
     async def start(self) -> None:
         await super().start()
         self.add_background_task(self._start_agents())
+        # Schedule cleanup agentprocess and agentinstance tables
+        agent_process_purge_interval = opt.agent_process_purge_interval.get()
+        if agent_process_purge_interval > 0:
+            self.schedule(
+                self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
+            )
 
     async def prestop(self) -> None:
         await super().prestop()

@@ -23,7 +23,7 @@ import uuid
 from collections import abc
 from collections.abc import Sequence
 from enum import Enum, StrEnum
-from typing import ClassVar, NewType, Optional, Self, Union, Mapping
+from typing import ClassVar, Mapping, NewType, Optional, Self, Union
 
 import pydantic
 import pydantic.schema

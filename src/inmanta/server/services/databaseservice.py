@@ -17,8 +17,7 @@
 """
 
 import logging
-import typing
-from typing import Mapping, Optional, cast
+from typing import Mapping, Optional
 
 import asyncpg
 from pyformance import gauge, global_registry
@@ -26,16 +25,13 @@ from pyformance.meters import CallbackGauge
 
 from inmanta import data, util
 from inmanta.data.model import DataBaseReport
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE
+from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import ArgumentTypes
 from inmanta.util import Scheduler
 
 LOGGER = logging.getLogger(__name__)
-
-if typing.TYPE_CHECKING:
-    from inmanta.server import agentmanager
 
 
 class DatabaseMonitor:
@@ -142,30 +138,10 @@ class DatabaseService(protocol.ServerSlice):
         super().__init__(SLICE_DATABASE)
         self._pool: Optional[asyncpg.pool.Pool] = None
         self._db_monitor: Optional[DatabaseMonitor] = None
-        self._server_handler: protocol.Server | None = None
-        self.agentmanager_service: "agentmanager.AgentManager"
-
-    async def prestart(self, server: protocol.Server) -> None:
-        """
-        Called by the RestServer host prior to start, can be used to collect references to other server slices
-        Dependencies are not up yet.
-        """
-        self._server_handler = server
-        await super().prestart(server)
 
     async def start(self) -> None:
         await super().start()
         await self.connect_database()
-
-        # Schedule cleanup agentprocess and agentinstance tables
-        agent_process_purge_interval = opt.agent_process_purge_interval.get()
-        if agent_process_purge_interval > 0:
-            self.schedule(
-                self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
-            )
-
-        assert self._server_handler is not None # Make mypy happy
-        self.agentmanager_service = cast("agentmanager.AgentManager", self._server_handler.get_slice(SLICE_AGENT_MANAGER))
 
         assert self._pool is not None  # Make mypy happy
         self._db_monitor = DatabaseMonitor(self._pool, opt.db_name.get(), opt.db_host.get(), "server")
@@ -207,13 +183,8 @@ class DatabaseService(protocol.ServerSlice):
 
     async def get_status(self) -> Mapping[str, ArgumentTypes]:
         """Get the status of the database connection"""
-        assert self._db_monitor is not None # make mypy happy
+        assert self._db_monitor is not None  # make mypy happy
         return (await self._db_monitor.get_status()).dict()
-
-    async def _purge_agent_processes(self) -> None:
-        # Move to agent manager
-        agent_processes_to_keep = opt.agent_processes_to_keep.get()
-        await data.AgentProcess.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
 
 
 async def initialize_database_connection_pool(
