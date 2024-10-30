@@ -153,11 +153,11 @@ class ResourceScheduler(TaskManager):
         self._state_update_delegate = ToDbUpdateManager(client, environment)
 
         # Add dict resourceidstr -> periodic deploy task
-        # on successful deploy/repair for a resource -> cancel + reschedule the task
+        # when deploy is done for a resource -> cancel + reschedule the task
         self.resource_periodic_deploys: dict[ResourceIdStr, asyncio.Task[None]] = {}
         self._compliance_check_window = agent_config.scheduler_resource_compliance_check_window.get()
 
-    async def reset(self) -> None:
+    def reset(self) -> None:
         """
         Clear out all state and start empty
 
@@ -175,7 +175,7 @@ class ResourceScheduler(TaskManager):
     async def start(self) -> None:
         if self._running:
             return
-        await self.reset()
+        self.reset()
         await self._initialize()
         self._running = True
 
