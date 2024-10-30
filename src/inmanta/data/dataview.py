@@ -1212,7 +1212,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
     def get_base_query(self) -> SimpleQueryBuilder:
         base = SimpleQueryBuilder(
             select_clause="""SELECT a.name, a.environment, a.last_failover, a.paused, a.unpause_on_resume,
-                                            (CASE WHEN a.paused OR sched.halted THEN 'paused'
+                                            (CASE WHEN a.paused THEN 'paused'
                                                 WHEN NOT a.paused AND schedagent.id_primary IS NULL THEN 'down'
                                                 ELSE 'up'
                                             END) as status""",
