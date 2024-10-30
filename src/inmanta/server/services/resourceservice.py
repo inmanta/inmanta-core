@@ -1237,19 +1237,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
 
         # TODO: optimize for no orphans
 
-    @handle(methods_v2.resources_status, env="tid")
-    async def resources_status(
-        self,
-        env: data.Environment,
-        version: int,
-        rids: list[ResourceIdStr],
-    ) -> dict[str, ResourceState]:
-        try:
-            rids = [Id.parse_id(rid).resource_str() for rid in rids]
-        except ValueError as e:
-            raise BadRequest(str(e))
-        return await data.Resource.get_status_for(env.id, version, rids)
-
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:
         details = await data.Resource.get_resource_details(env.id, rid)
