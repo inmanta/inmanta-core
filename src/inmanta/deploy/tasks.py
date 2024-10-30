@@ -119,7 +119,7 @@ class Deploy(Task):
             # Stale resource, can simply be dropped.
             return
 
-        # Resolve to exector form
+        # Resolve to executor form
         version, resource_details = intent
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
 

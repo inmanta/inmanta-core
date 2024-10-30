@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import asyncio
 import contextlib
 import dataclasses
 import enum

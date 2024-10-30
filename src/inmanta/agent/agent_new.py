@@ -79,96 +79,16 @@ class Agent(SessionEndpoint):
         self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
 
-        self._sched = Scheduler("new agent endpoint")
-        self._time_triggered_actions: set[ScheduledTask] = set()
-
-        self._set_deploy_and_repair_intervals()
-
     def _set_deploy_and_repair_intervals(self) -> None:
         """
         Fetch the settings related to automatic deploys and repairs from the config
         FIXME: These settings are not currently updated (unlike the old agent)
             We should fix or remove this timer in the future.
         """
-        # do regular deploys
-        self._deploy_interval = cfg.agent_deploy_interval.get()
-        deploy_splay_time = cfg.agent_deploy_splay_time.get()
+        # quick and dirty, fix later:
+        self.scheduler._compliance_check_window = cfg.scheduler_resource_compliance_check_window.get()
 
-        self._deploy_splay_value = random.randint(0, deploy_splay_time)
 
-        # do regular repair runs
-        self._repair_interval: Union[int, str] = cfg.agent_repair_interval.get()
-        repair_splay_time = cfg.agent_repair_splay_time.get()
-        self._repair_splay_value = random.randint(0, repair_splay_time)
-
-    def _enable_time_triggers(self) -> None:
-
-        def periodic_schedule(
-            kind: str,
-            action: Callable[[], Coroutine[object, None, object]],
-            interval: Union[int, str],
-            splay_value: int,
-        ) -> bool:
-            """
-            Schedule a periodic task
-
-            :param kind: Name of the task (value to display in logs)
-            :param action: The action to schedule periodically
-            :param interval: The interval at which to schedule the task. Can be specified as either a number of
-                seconds, or a cron string.
-            :param splay_value: When specifying the interval as a number of seconds, this parameter specifies
-                the number of seconds by which to delay the initial execution of this action.
-            """
-            now = datetime.datetime.now().astimezone()
-
-            if isinstance(interval, int) and interval > 0:
-                LOGGER.info(
-                    "Scheduling periodic %s with interval %d and splay %d (first run at %s)",
-                    kind,
-                    interval,
-                    splay_value,
-                    (now + datetime.timedelta(seconds=splay_value)).strftime(const.TIME_LOGFMT),
-                )
-                interval_schedule: IntervalSchedule = IntervalSchedule(
-                    interval=float(interval), initial_delay=float(splay_value)
-                )
-                self._enable_time_trigger(action, interval_schedule)
-                return True
-
-            if isinstance(interval, str):
-                LOGGER.info("Scheduling periodic %s with cron expression '%s'", kind, interval)
-                cron_schedule = CronSchedule(cron=interval)
-                self._enable_time_trigger(action, cron_schedule)
-                return True
-            return False
-
-        async def interval_deploy() -> None:
-            await self.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
-
-        async def interval_repair() -> None:
-            await self.scheduler.repair(TaskPriority.INTERVAL_REPAIR)
-
-        periodic_schedule(
-            "deploy",
-            interval_deploy,
-            self._deploy_interval,
-            self._deploy_splay_value,
-        )
-        periodic_schedule(
-            "repair",
-            interval_repair,
-            self._repair_interval,
-            self._repair_splay_value,
-        )
-
-    def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
-        self._sched.add_action(action, schedule)
-        self._time_triggered_actions.add(ScheduledTask(action=action, schedule=schedule))
-
-    def _disable_time_triggers(self) -> None:
-        for task in self._time_triggered_actions:
-            self._sched.remove(task)
-        self._time_triggered_actions.clear()
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
         assert self._env_id is not None
@@ -205,14 +125,12 @@ class Agent(SessionEndpoint):
         self.working = True
         await self.executor_manager.start()
         await self.scheduler.start()
-        self._enable_time_triggers()
 
     async def stop_working(self) -> None:
         """Stop working, connection lost"""
         if not self.working:
             return
         self.working = False
-        self._disable_time_triggers()
         await self.executor_manager.stop()
         await self.scheduler.stop()
 

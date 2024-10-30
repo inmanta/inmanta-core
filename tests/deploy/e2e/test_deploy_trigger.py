@@ -101,10 +101,6 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
     )
 
 
-@pytest.mark.parametrize(
-    "agent_deploy_interval",
-    ["2", "*/2 * * * * * *"],
-)
 async def test_spontaneous_deploy(
     server,
     client,
@@ -113,24 +109,16 @@ async def test_spontaneous_deploy(
     environment,
     clienthelper,
     caplog,
-    agent_deploy_interval,
 ):
     """
-    Test that a deploy run is executed every 2 seconds in the new agent
-     as specified in the agent_repair_interval (using a cron or not)
     """
     with caplog.at_level(logging.DEBUG):
         resource_container.Provider.reset()
 
         env_id = UUID(environment)
 
-        Config.set("config", "agent-deploy-interval", agent_deploy_interval)
-        Config.set("config", "agent-deploy-splay-time", "2")
-        Config.set("config", "agent-repair-interval", "0")
-
-        # This is just so we can reuse the agent from the fixtures with the new config options
+        Config.set("scheduler", "resource-compliance-check-window", "2")
         agent._set_deploy_and_repair_intervals()
-        agent._enable_time_triggers()
 
         resource_container.Provider.set_fail("agent1", "key1", 1)
 
@@ -152,7 +140,10 @@ async def test_spontaneous_deploy(
         # do a deploy
         start = time.time()
 
-        result = await client.release_version(env_id, version, False)
+        result = await client.release_version(
+            tid=env_id,
+            id=version,
+        )
         assert result.code == 200
 
         assert not result.result["model"]["deployed"]
@@ -181,14 +172,7 @@ async def test_spontaneous_deploy(
     ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleep mechanism is broken"
 
 
-@pytest.mark.parametrize(
-    "agent_repair_interval",
-    [
-        "2",
-        "*/2 * * * * * *",
-    ],
-)
-async def test_spontaneous_repair(server, client, agent, resource_container, environment, clienthelper, agent_repair_interval):
+async def test_spontaneous_repair(server, client, agent, resource_container, environment, clienthelper):
     """
     Test that a repair run is executed every 2 seconds in the new agent
      as specified in the agent_repair_interval (using a cron or not)
@@ -196,13 +180,10 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     resource_container.Provider.reset()
     env_id = environment
 
-    Config.set("config", "agent-repair-interval", agent_repair_interval)
-    Config.set("config", "agent-repair-splay-time", "2")
-    Config.set("config", "agent-deploy-interval", "0")
+    Config.set("scheduler", "resource-compliance-check-window", "2")
 
     # This is just so we can reuse the agent from the fixtures with the new config options
     agent._set_deploy_and_repair_intervals()
-    agent._enable_time_triggers()
     version = await clienthelper.get_version()
 
     resources = [
@@ -219,7 +200,11 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     await clienthelper.put_version_simple(resources, version)
 
     # do a deploy
-    result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
+    result = await client.release_version(
+        tid=env_id,
+        id=version,
+        agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]

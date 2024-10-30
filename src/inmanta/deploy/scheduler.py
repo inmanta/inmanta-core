@@ -18,9 +18,11 @@
 
 import abc
 import asyncio
+import functools
 import logging
 import uuid
 from abc import abstractmethod
+from asyncio import ensure_future
 from collections.abc import Collection, Mapping, Set
 from typing import Optional
 from uuid import UUID
@@ -29,6 +31,7 @@ import asyncpg
 
 from inmanta import const, data
 from inmanta.agent import executor
+from inmanta.agent import config as agent_config
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import DeployResult
 from inmanta.data import ConfigurationModel
@@ -151,7 +154,12 @@ class ResourceScheduler(TaskManager):
         self.executor_manager = executor_manager
         self._state_update_delegate = ToDbUpdateManager(client, environment)
 
-    def reset(self) -> None:
+        # Add dict resourceidstr -> periodic deploy task
+        # on successful deploy/repair for a resource -> cancel + reschedule the task
+        self.resource_periodic_deploys: dict[ResourceIdStr, asyncio.TimerHandle] = {}
+        self._compliance_check_window = agent_config.scheduler_resource_compliance_check_window.get()
+
+    async def reset(self) -> None:
         """
         Clear out all state and start empty
 
@@ -162,11 +170,13 @@ class ResourceScheduler(TaskManager):
         self._work.reset()
         self._workers.clear()
         self._deploying_latest.clear()
+        await asyncio.gather(*[handle.cancel() for handle in self.resource_periodic_deploys.values()])
+        self.resource_periodic_deploys.clear()
 
     async def start(self) -> None:
         if self._running:
             return
-        self.reset()
+        await self.reset()
         await self._initialize()
         self._running = True
 
@@ -433,6 +443,48 @@ class ResourceScheduler(TaskManager):
 
             self._work.agent_queues.task_done(agent, task)
 
+    async def _start_compliance_check(self, resource: ResourceIdStr) -> None: # TODO naming ?
+        """
+        This method is expected to be called when the given resource was checked to be in compliance with the desired state.
+        i.e. either right after a successful deploy or after checking that the resource is in a known good state with no
+        pending updates.
+        """
+        LOGGER.debug(f"Marked {resource} resource as compliant...")
+        if previous_task := self.resource_periodic_deploys.get(resource) is not None:
+            previous_task.cancel()
+
+        self.resource_periodic_deploys[resource] = self.create_recurring_compliance_check(resource)
+
+    def create_recurring_compliance_check(self, resource: ResourceIdStr):
+        async def delay(coro, seconds):
+            # suspend for a time limit in seconds
+            await asyncio.sleep(seconds)
+            # execute the other coroutine
+            await coro
+
+        async def _run_compliance_check(resource: ResourceIdStr):
+            """
+            Check that the given resource is in a known good state with no pending updates and schedule a repair if need be
+            """
+            LOGGER.debug(f"Checking compliance for {resource}...")
+
+            to_deploy: set[ResourceIdStr] = set()
+            to_deploy.add(resource)
+            # TODO Add dependents ?
+            async with self._scheduler_lock:
+                LOGGER.debug(f"compliance check triggered deploy for resource {resource}...")
+                self._work.deploy_with_context(to_deploy, priority=TaskPriority.INTERVAL_REPAIR, deploying=set())
+
+        async def _recurrent_compliance_check(resource: ResourceIdStr):
+            await _run_compliance_check(resource)
+            await delay(_recurrent_compliance_check(resource), self._compliance_check_window)
+
+        LOGGER.debug(f"Scheduling next compliance check for resource {resource} in {self._compliance_check_window}s.")
+        asyncio.create_task(delay(_recurrent_compliance_check(resource), self._compliance_check_window))
+
+
+
+
     # TaskManager interface
 
     async def get_resource_intent(
@@ -498,6 +550,7 @@ class ResourceScheduler(TaskManager):
                         assert task in self._work.agent_queues.in_progress
                         priority = self._work.agent_queues.in_progress[task]
                         self._work.deploy_with_context(event_listeners, priority=priority, deploying=set())
+                await self._start_compliance_check(resource)
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])

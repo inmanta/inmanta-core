@@ -280,7 +280,7 @@ class ScheduledWork:
         scheduled work, they will be processed in requires order. Only direct requires are considered. It is the responsibility
         of the scheduler to include in-between resources as scheduled work if/when transitive requires ordering is desired.
 
-    Expects to be informed by the scheduler of deploy requests and/or state changes through add() and
+    Expects to be informed by the scheduler of deploy requests and/or state changes through deploy_with_context() and
     delete_resource().
 
     Expects to be informed by scheduler of finished tasks through finished_deploy().

@@ -101,7 +101,7 @@ agent_deploy_interval: Option[int | str] = Option(
     "config",
     "agent-deploy-interval",
     0,
-    "Either the number of seconds between two (incremental) deployment runs of the agent or a cron-like expression."
+    "[DEPRECATED] Either the number of seconds between two (incremental) deployment runs of the agent or a cron-like expression."
     " If a cron-like expression is specified, a deploy will be run following a cron-like time-to-run specification,"
     " interpreted in UTC. The expected format is ``[sec] min hour dom month dow [year]`` (If only 6 values are provided, they"
     " are interpreted as ``min hour dom month dow year``)."
@@ -115,7 +115,7 @@ agent_deploy_splay_time = Option(
     "config",
     "agent-deploy-splay-time",
     600,
-    """The splaytime added to the agent-deploy-interval. Set this to 0 to disable the splaytime.
+    """[DEPRECATED]The splaytime added to the agent-deploy-interval. Set this to 0 to disable the splaytime.
 
 At startup the agent will choose a random number between 0 and agent-deploy-splay-time.
 It will wait this number of second before performing the first deployment run.
@@ -128,7 +128,7 @@ agent_repair_interval = Option(
     "config",
     "agent-repair-interval",
     600,
-    "Either the number of seconds between two repair runs (full deploy) of the agent or a cron-like expression."
+    "[DEPRECATED]Either the number of seconds between two repair runs (full deploy) of the agent or a cron-like expression."
     " If a cron-like expression is specified, a repair will be run following a cron-like time-to-run specification,"
     " interpreted in UTC. The expected format is `[sec] min hour dom month dow [year]` ( If only 6 values are provided, they"
     " are interpreted as `min hour dom month dow year`)."
@@ -141,7 +141,7 @@ agent_repair_splay_time = Option(
     "config",
     "agent-repair-splay-time",
     600,
-    """The splaytime added to the agent-repair-interval. Set this to 0 to disable the splaytime.
+    """[DEPRECATED]The splaytime added to the agent-repair-interval. Set this to 0 to disable the splaytime.
 
 At startup the agent will choose a random number between 0 and agent-repair-splay-time.
 It will wait this number of second before performing the first repair run.
@@ -171,6 +171,16 @@ executor_venv_retention_time: Option[int] = Option(
     " may result in increased disk usage.",
     # We know that the .inmanta venv status file is touched every minute, so `60` seconds is the lowest default we can use
     is_lower_bounded_int(60),
+)
+
+scheduler_resource_compliance_check_window = Option(
+    "scheduler",
+    "resource-compliance-check-window",
+    60*60*24,
+    "The scheduler will periodically check the state of the resources and enforce that either they are in a known "
+    "good state with no pending update or that they need to be re-deployed. This window controls how long "
+    "the scheduler should wait between two such checks, on a per-resource basis.",
+    is_time,
 )
 
 
