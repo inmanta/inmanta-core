@@ -22,7 +22,7 @@ import logging
 import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
-from typing import Optional
+from typing import Any, Coroutine, Optional
 from uuid import UUID
 
 import asyncpg
@@ -154,7 +154,7 @@ class ResourceScheduler(TaskManager):
 
         # Add dict resourceidstr -> periodic deploy task
         # on successful deploy/repair for a resource -> cancel + reschedule the task
-        self.resource_periodic_deploys: dict[ResourceIdStr, asyncio.TimerHandle] = {}
+        self.resource_periodic_deploys: dict[ResourceIdStr, asyncio.Task[None]] = {}
         self._compliance_check_window = agent_config.scheduler_resource_compliance_check_window.get()
 
     async def reset(self) -> None:
@@ -168,7 +168,8 @@ class ResourceScheduler(TaskManager):
         self._work.reset()
         self._workers.clear()
         self._deploying_latest.clear()
-        await asyncio.gather(*[handle.cancel() for handle in self.resource_periodic_deploys.values()])
+        for task in self.resource_periodic_deploys.values():
+            task.cancel()
         self.resource_periodic_deploys.clear()
 
     async def start(self) -> None:
@@ -448,19 +449,19 @@ class ResourceScheduler(TaskManager):
         pending updates.
         """
         LOGGER.debug(f"Marked {resource} resource as compliant...")
-        if previous_task := self.resource_periodic_deploys.get(resource) is not None:
+        if (previous_task := self.resource_periodic_deploys.get(resource)) is not None:
             previous_task.cancel()
 
         self.resource_periodic_deploys[resource] = self.create_recurring_compliance_check(resource)
 
-    def create_recurring_compliance_check(self, resource: ResourceIdStr):
-        async def delay(coro, seconds):
+    def create_recurring_compliance_check(self, resource: ResourceIdStr) -> asyncio.Task[None]:
+        async def delay(coro: Coroutine[Any, Any, None], seconds: float) -> None:
             # suspend for a time limit in seconds
             await asyncio.sleep(seconds)
             # execute the other coroutine
             await coro
 
-        async def _run_compliance_check(resource: ResourceIdStr):
+        async def _run_compliance_check(resource: ResourceIdStr) -> None:
             """
             Check that the given resource is in a known good state with no pending updates and schedule a repair if need be
             """
@@ -473,12 +474,12 @@ class ResourceScheduler(TaskManager):
                 LOGGER.debug(f"compliance check triggered deploy for resource {resource}...")
                 self._work.deploy_with_context(to_deploy, priority=TaskPriority.INTERVAL_REPAIR, deploying=set())
 
-        async def _recurrent_compliance_check(resource: ResourceIdStr):
+        async def _recurrent_compliance_check(resource: ResourceIdStr) -> None:
             await _run_compliance_check(resource)
             await delay(_recurrent_compliance_check(resource), self._compliance_check_window)
 
         LOGGER.debug(f"Scheduling next compliance check for resource {resource} in {self._compliance_check_window}s.")
-        asyncio.create_task(delay(_recurrent_compliance_check(resource), self._compliance_check_window))
+        return asyncio.create_task(delay(_recurrent_compliance_check(resource), self._compliance_check_window))
 
     # TaskManager interface
 
