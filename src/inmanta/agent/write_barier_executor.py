@@ -20,12 +20,11 @@ import concurrent
 import typing
 import uuid
 from copy import deepcopy
-from typing import Sequence
 
 import inmanta.types
 from inmanta import const
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployResult, FailedResources, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployResult, DryrunResult, FailedResources, ResourceDetails, ResourceInstallSpec
 from inmanta.data.model import ResourceIdStr
 
 
@@ -51,8 +50,12 @@ class WriteBarierExecutor(executor.Executor):
             deepcopy(requires),
         )
 
-    async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
-        return await self.delegate.dry_run(deepcopy(resources), dry_run_id)
+    async def dry_run(
+        self,
+        resource: ResourceDetails,
+        dry_run_id: uuid.UUID,
+    ) -> DryrunResult:
+        return await self.delegate.dry_run(deepcopy(resource), dry_run_id)
 
     async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
         return await self.delegate.get_facts(deepcopy(resource))
