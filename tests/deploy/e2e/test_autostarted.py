@@ -34,7 +34,7 @@ from psutil import NoSuchProcess, Process
 
 from inmanta import config, const, data
 from inmanta.const import AgentAction
-from inmanta.server import SLICE_AUTOSTARTED_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from typing_extensions import Optional
@@ -395,7 +395,16 @@ def wait_for_terminated_status(current_children: list[psutil.Process], expected_
 
 
 def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
-    def get_process_state(current_pid: int) -> list[Process]:
+    """
+    Retrieve and construct a `SchedulerChildren` instance that will contain processes that are related to the Scheduler
+    (more precisely children). This is the list of processes that can be expected depending on if these processes actually
+    exist:
+        - Scheduler
+        - Fork server
+        - Executor(s)
+    """
+
+    def get_process_children(current_pid: int) -> list[Process]:
         """
         Retrieves the current list of processes running under this process
 
@@ -438,7 +447,6 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
         for child in children:
             match child.name():
                 case "inmanta: multiprocessing fork server":
-                    assert not fork_server
                     fork_server = child
                 case executor if "inmanta: executor process" in executor:
                     executors.append(child)
@@ -456,7 +464,7 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
             executors=executors,
         )
 
-    children = get_process_state(current_pid)
+    children = get_process_children(current_pid)
     latest_scheduler = find_scheduler(children)
     if latest_scheduler is None:
         return SchedulerChildren(
@@ -478,6 +486,36 @@ async def assert_is_paused(client, environment: str, expected_agents: dict[str, 
     assert {e["name"]: e["paused"] for e in result.result["agents"]} == expected_agents
 
 
+async def wait_for_consistent_children(
+    current_pid: int,
+    should_scheduler_be_defined: bool,
+    should_fork_server_be_defined: bool,
+    executor_to_be_defined: int,
+) -> None:
+    """
+    Wait for consistent children for the Scheduler:
+        - When the Scheduler is started, it can take some time before every process is actually running
+        - This is especially True for the `Executor process`.
+        - Besides, when the executor process is created, it can have, for a very short time, the same name as the fork server
+            (because it was forked from it).
+    """
+
+    async def wait_consistent_scheduler() -> bool:
+        # This can occur, when the fork server forks and for a small amount of time, there will be two fork servers
+        # even though one of them is actually the executor process (will be shortly renamed)
+        current = construct_scheduler_children(current_pid)
+        is_scheduler_defined = current.scheduler is not None
+        is_fork_server_defined = current.fork_server is not None
+        return (
+            (is_scheduler_defined == should_scheduler_be_defined)
+            and (is_fork_server_defined == should_fork_server_be_defined)
+            and (len(current.executors) == executor_to_be_defined)
+        )
+
+    await retry_limited(wait_consistent_scheduler, 10)
+
+
+@pytest.mark.slowtest
 @pytest.mark.parametrize(
     "auto_start_agent,should_time_out,time_to_sleep,", [(True, False, 2), (True, True, 120)]
 )  # this overrides a fixture to allow the agent to fork!
@@ -502,11 +540,10 @@ async def test_halt_deploy(
     current_pid = os.getpid()
 
     # First, configure everything
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    agent_name = "agent1"
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
-    await env.set(data.AUTOSTART_ON_START, True)
     config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
 
     # Retrieve the actual processes before deploying anything
     start_state = construct_scheduler_children(current_pid)
@@ -540,6 +577,14 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     # Let's check the agent table and check that agent1 is present and not paused
     await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
+    # Make sure the children of the scheduler are consistent
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=True,
+        executor_to_be_defined=1,
+    )
+
     # Wait for something to be deployed
     try:
         await clienthelper.wait_for_deployed(timeout=5)
@@ -550,12 +595,14 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         assert should_time_out, f"This wasn't supposed to time out with a deployment sleep set to {time_to_sleep}!"
     finally:
         # Retrieve the current processes, we should have more processes than `start_children`
-        state_after_deployment = construct_scheduler_children(current_pid)
+        await wait_for_consistent_children(
+            current_pid=current_pid,
+            should_scheduler_be_defined=True,
+            should_fork_server_be_defined=True,
+            executor_to_be_defined=1,
+        )
 
-    expected_additional_children_after_deployment = 3
-    assert len(state_after_deployment.children) == expected_additional_children_after_deployment, (
-        "These processes should be present: The fork server and the actual agent! " f"Actual state: {state_after_deployment}"
-    )
+    state_after_deployment = construct_scheduler_children(current_pid)
     for child in state_after_deployment.children:
         assert child.is_running()
 
@@ -600,9 +647,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
     assert (
         len(halted_state.children) == 0
-    ), "The Scheduler and the fork server and the agent created by the scheduler should have been killed!"
-    for child in halted_state.children:
-        assert child.is_running()
+    ), "The Scheduler and the fork server and the executor created by the scheduler should have been killed!"
 
     await client.resume_environment(environment)
 
@@ -612,23 +657,28 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     if should_time_out:
         # Wait for at least one resource to be in deploying
         await retry_limited(are_resources_being_deployed, timeout=5)
-        async def wait_for_old_state():
-            current_state = construct_scheduler_children(current_pid).children
-            return len(current_state) == len(state_after_deployment.children)
+        await wait_for_consistent_children(
+            current_pid=current_pid,
+            should_scheduler_be_defined=True,
+            should_fork_server_be_defined=True,
+            executor_to_be_defined=1,
+        )
+        current_state = construct_scheduler_children(current_pid)
+        assert len(current_state.children) == len(state_after_deployment.children)
+
     else:
         with pytest.raises(AssertionError):  # Nothing should get deployed
             await retry_limited(are_resources_being_deployed, timeout=1)
 
-        async def wait_for_old_state():
-            current_state = construct_scheduler_children(current_pid).children
-            return len(current_state) == 2
-
-    await retry_limited(
-        lambda: wait_for_old_state,
-        10,
-    )
+        await wait_for_consistent_children(
+            current_pid=current_pid,
+            should_scheduler_be_defined=True,
+            should_fork_server_be_defined=False,
+            executor_to_be_defined=0,
+        )
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_pause_agent_deploy(
     snippetcompiler,
@@ -647,11 +697,10 @@ async def test_pause_agent_deploy(
     current_pid = os.getpid()
 
     # First, configure everything
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    agent_name = "agent1"
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
-    await env.set(data.AUTOSTART_ON_START, True)
     config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
 
     # Retrieve the actual processes before deploying anything
     start_state = construct_scheduler_children(current_pid)
@@ -684,12 +733,16 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     # Wait for at least one resource to be deployed
     await retry_limited(check_resource_in_state, timeout=10)
 
+    # Make sure the children of the scheduler are consistent
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=True,
+        executor_to_be_defined=1,
+    )
+
     # Retrieve the current processes, we should have more processes than `start_children`
     state_after_deployment = construct_scheduler_children(current_pid)
-    expected_additional_children_after_deployment = 3
-    assert (
-        len(state_after_deployment.children) == expected_additional_children_after_deployment
-    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
     for children in state_after_deployment.children:
         assert children.is_running()
 
@@ -709,8 +762,9 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     # Let's recheck the agent table and check that agent1 is present and paused
     await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
 
-    # Let's also check if the state of resources are consistent with what we expect: one resource still needs to be
-    # deployed
+    # Let's also check if the state of resources are consistent with what we expect:
+    # The agent finished deploying resource n°2 before pausing and resource n°3
+    # still needs to be deployed
     await retry_limited(check_resource_in_state, timeout=6, expected_resources=2)
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
@@ -719,7 +773,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
-    # Let's wait for the executor to die
+    # Let's wait for the executor to be cleaned up
     with pytest.raises(AssertionError):
         await retry_limited(check_resource_in_state, state="deploying", timeout=1, interval=0.3)
 
@@ -740,16 +794,14 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
     # Let's wait for the new executor to kick in
-    def wait_for_new_executor() -> bool:
-        resumed_children = construct_scheduler_children(current_pid)
-        return len(resumed_children.children) == 3
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=True,
+        executor_to_be_defined=1,
+    )
 
-    await retry_limited(wait_for_new_executor, 5)
     resumed_state = construct_scheduler_children(current_pid)
-    # All expected processes are back online
-    assert (
-        len(resumed_state.children) == expected_additional_children_after_deployment
-    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
     for children in resumed_state.children:
         assert children.is_running()
 
@@ -761,8 +813,9 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     ), result.result
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_agent_paused_scheduler_crash(
+async def test_agent_paused_scheduler_server_restart(
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
@@ -782,11 +835,10 @@ async def test_agent_paused_scheduler_crash(
     current_pid = os.getpid()
 
     # First, configure everything
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    agent_name = "agent1"
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
-    await env.set(data.AUTOSTART_ON_START, True)
     config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
 
     # Retrieve the actual processes before deploying anything
     start_state = construct_scheduler_children(current_pid)
@@ -819,11 +871,16 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
     # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
     # something is moving
-    async def wait_for_actual_deployment() -> bool:
-        current_children_mapping = construct_scheduler_children(current_pid)
-        return len(current_children_mapping.children) == 3
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=True,
+        executor_to_be_defined=1,
+    )
 
-    await retry_limited(wait_for_actual_deployment, 5)
+    current_children_mapping = construct_scheduler_children(current_pid)
+    for children in current_children_mapping.children:
+        assert children.is_running()
 
     # Retrieve the current processes, we should have more processes than `start_children`
     children_after_deployment = construct_scheduler_children(current_pid)
@@ -838,12 +895,13 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     # Let's restart the server
     await ibl.start()
 
-    async def wait_for_scheduler() -> bool:
-        current_children_mapping = construct_scheduler_children(current_pid)
-        return len(current_children_mapping.children) == 1
-
     # Wait for the scheduler
-    await retry_limited(wait_for_scheduler, 5)
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=False,
+        executor_to_be_defined=0,
+    )
 
     # Everything should be consistent in DB: the agent should still be paused
     await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
@@ -997,6 +1055,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_agent_paused_should_remain_paused_after_environment_resume(
     snippetcompiler,
@@ -1014,11 +1073,10 @@ async def test_agent_paused_should_remain_paused_after_environment_resume(
     current_pid = os.getpid()
 
     # First, configure everything
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    agent_name = "agent1"
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", agent_name: ""})
-    await env.set(data.AUTOSTART_ON_START, True)
     config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
 
     # Retrieve the actual processes before deploying anything
     start_state = construct_scheduler_children(current_pid)
@@ -1051,12 +1109,16 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     # Wait for at least one resource to be deployed
     await retry_limited(are_resources_deployed, timeout=10)
 
+    # Make sure the children of the scheduler are consistent
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=True,
+        executor_to_be_defined=1,
+    )
+
     # Retrieve the current processes, we should have more processes than `start_children`
     state_after_deployment = construct_scheduler_children(current_pid)
-    expected_additional_children_after_deployment = 3
-    assert (
-        len(state_after_deployment.children) == expected_additional_children_after_deployment
-    ), "These processes should be present: The Scheduler, the fork server and the actual agent!"
     for children in state_after_deployment.children:
         assert children.is_running()
 
@@ -1085,7 +1147,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
-    # Let's wait for the executor to die
+    # Let's wait for the executor to be cleaned up
     await retry_limited(wait_for_terminated_status, timeout=10, current_children=state_after_deployment.children)
 
     # Let's halt the environment to be able to set `keep_paused_on_resume` flag on agent1
@@ -1108,7 +1170,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     halted_state = construct_scheduler_children(current_pid)
     assert (
         len(halted_state.children) == 0
-    ), "The Scheduler and the fork server and the agent created by the scheduler should have been killed!"
+    ), "The Scheduler and the fork server and the executor created by the scheduler should have been killed!"
 
     await client.resume_environment(environment)
 
@@ -1128,15 +1190,24 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert expected_agents_status["agent1"]
     assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
 
+    # Make sure the children of the scheduler are consistent
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=False,
+        executor_to_be_defined=0,
+    )
+
     resumed_state = construct_scheduler_children(current_pid)
     assert len(resumed_state.children) == 1, (
         "This process should be present: the Scheduler. "
-        "The fork server and the agent created by the scheduler should have been killed and the agent is still paused!"
+        "The fork server and the executor created by the scheduler should have been killed and the agent is still paused!"
     )
     for children in resumed_state.children:
         assert children.is_running()
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_pause_unpause_all_agents_deploy(
     snippetcompiler,
@@ -1151,10 +1222,10 @@ async def test_pause_unpause_all_agents_deploy(
     Verify that the new scheduler can pause and unpause all agents
     """
     # First, configure everything
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": "", "agent2": "", "agent3": ""})
-    await env.set(data.AUTOSTART_ON_START, True)
     config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
 
     snippetcompiler.setup_for_snippet(
         """

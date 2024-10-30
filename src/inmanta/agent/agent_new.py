@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import datetime
 import logging
 import os
@@ -191,8 +190,7 @@ class Agent(SessionEndpoint):
         self.thread_pool.shutdown(wait=False)
 
         await join_threadpools(threadpools_to_join)
-        # We need to shield to avoid CancelledTask exception
-        await asyncio.shield(super().stop())
+        await super().stop()
 
     async def start_connected(self) -> None:
         """
@@ -228,17 +226,16 @@ class Agent(SessionEndpoint):
         pass
 
     @protocol.handle(methods.set_state)
-    async def set_state(self, agent: str, enabled: bool) -> Apireturn:
+    async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
         if agent == AGENT_SCHEDULER_ID:
-            should_be_running = await self.scheduler.should_be_running()
-
-            if should_be_running:
-                if self.working != should_be_running:
+            if enabled:
+                if self.working != enabled:
                     await self.start_working()
                 else:
-                    # Special cast that the server considers us disconnected, but the Scheduler thinks we are still connected.
-                    # In that case, the Scheduler may have missed some event, but it would get a start after a start.
-                    # Therefore, we need to refresh everything (Scheduler side) to make sure we are up to date
+                    # Special case that the server considers us disconnected, but the Scheduler thinks we are still connected.
+                    # In that case, the Scheduler may have missed some event, therefore, we need to refresh everything
+                    # (Scheduler side) to make sure we are up to date when the server considers that the Scheduler
+                    # is back online
                     await self.scheduler.read_version()
                     await self.scheduler.refresh_all_agent_states_from_db()
             else:
@@ -252,11 +249,8 @@ class Agent(SessionEndpoint):
                 await self.scheduler.refresh_all_agent_states_from_db()
                 return 200, "All agents have been notified!"
             else:
-                try:
-                    await self.scheduler.refresh_agent_state_from_db(name=agent)
-                    return 200, f"Agent `{agent}` has been notified!"
-                except LookupError:
-                    return 404, f"No such agent: {agent}"
+                await self.scheduler.refresh_agent_state_from_db(name=agent)
+                return 200, f"Agent `{agent}` has been notified!"
 
     async def on_reconnect(self) -> None:
         result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)

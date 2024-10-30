@@ -743,7 +743,9 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     yield ibl.restserver
 
     try:
-        await ibl.stop(timeout=const.SHUTDOWN_GRACE_HARD)
+        # This timeout needs to be bigger than the timeout of other components. Otherwise, this would leak sessions and cause
+        # problems in other tests
+        await ibl.stop(timeout=20)
     except concurrent.futures.TimeoutError:
         logger.exception("Timeout during stop of the server in teardown")
 
