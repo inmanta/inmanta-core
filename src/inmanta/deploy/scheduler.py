@@ -442,43 +442,45 @@ class ResourceScheduler(TaskManager):
 
             self._work.agent_queues.task_done(agent, task)
 
-    async def _start_compliance_check(self, resource: ResourceIdStr) -> None:  # TODO naming ?
+    async def _start_compliance_check(self, resource: ResourceIdStr) -> None:
         """
-        This method is expected to be called when the given resource was checked to be in compliance with the desired state.
-        i.e. either right after a successful deploy or after checking that the resource is in a known good state with no
-        pending updates.
+        This method is expected to be called when the given resource has just finished deploying,
+        no matter the result itself i.e. success or failure.
         """
-        LOGGER.debug(f"Marked {resource} resource as compliant...")
         if (previous_task := self.resource_periodic_deploys.get(resource)) is not None:
             previous_task.cancel()
 
         self.resource_periodic_deploys[resource] = self.create_recurring_compliance_check(resource)
 
     def create_recurring_compliance_check(self, resource: ResourceIdStr) -> asyncio.Task[None]:
+        """
+        Schedule recurring deploys for the given resource every <scheduler_resource_compliance_check_window> seconds
+        and return the associated task. This task will be canceled and scheduled again when the next deploy finishes
+        for this resource.
+        """
         async def delay(coro: Coroutine[Any, Any, None], seconds: float) -> None:
-            # suspend for a time limit in seconds
+            """
+            Helper function to run a coroutine after a delay
+            """
             await asyncio.sleep(seconds)
-            # execute the other coroutine
             await coro
 
-        async def _run_compliance_check(resource: ResourceIdStr) -> None:
+        async def _trigger_deploy(resource: ResourceIdStr) -> None:
             """
             Check that the given resource is in a known good state with no pending updates and schedule a repair if need be
             """
-            LOGGER.debug(f"Checking compliance for {resource}...")
-
             to_deploy: set[ResourceIdStr] = set()
             to_deploy.add(resource)
             # TODO Add dependents ?
             async with self._scheduler_lock:
-                LOGGER.debug(f"compliance check triggered deploy for resource {resource}...")
+                LOGGER.debug("Periodic deploy for resource %s. Triggering deploy for resources: %s", str(resource), str(to_deploy))
                 self._work.deploy_with_context(to_deploy, priority=TaskPriority.INTERVAL_REPAIR, deploying=set())
 
         async def _recurrent_compliance_check(resource: ResourceIdStr) -> None:
-            await _run_compliance_check(resource)
+            await _trigger_deploy(resource)
             await delay(_recurrent_compliance_check(resource), self._compliance_check_window)
 
-        LOGGER.debug(f"Scheduling next compliance check for resource {resource} in {self._compliance_check_window}s.")
+        LOGGER.debug("Scheduling recurrent deploys for resource %s every %s seconds.", resource, self._compliance_check_window)
         return asyncio.create_task(delay(_recurrent_compliance_check(resource), self._compliance_check_window))
 
     # TaskManager interface
