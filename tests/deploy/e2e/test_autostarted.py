@@ -395,7 +395,16 @@ def wait_for_terminated_status(current_children: list[psutil.Process], expected_
 
 
 def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
-    def get_process_state(current_pid: int) -> list[Process]:
+    """
+    Retrieve and construct a `SchedulerChildren` instance that will contain processes that are related to the Scheduler
+    (more precisely children). This is the list of processes that can be expected depending on if these processes actually
+    exist:
+        - Scheduler
+        - Fork server
+        - Executor(s)
+    """
+
+    def get_process_children(current_pid: int) -> list[Process]:
         """
         Retrieves the current list of processes running under this process
 
@@ -455,7 +464,7 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
             executors=executors,
         )
 
-    children = get_process_state(current_pid)
+    children = get_process_children(current_pid)
     latest_scheduler = find_scheduler(children)
     if latest_scheduler is None:
         return SchedulerChildren(
@@ -769,8 +778,9 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     # Let's recheck the agent table and check that agent1 is present and paused
     await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
 
-    # Let's also check if the state of resources are consistent with what we expect: one resource still needs to be
-    # deployed
+    # Let's also check if the state of resources are consistent with what we expect:
+    # The agent finished deploying resource n°2 before pausing and resource n°3
+    # still needs to be deployed
     await retry_limited(check_resource_in_state, timeout=6, expected_resources=2)
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
@@ -779,7 +789,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
-    # Let's wait for the executor to die
+    # Let's wait for the executor to be cleaned up
     with pytest.raises(AssertionError):
         await retry_limited(check_resource_in_state, state="deploying", timeout=1, interval=0.3)
 
@@ -1037,7 +1047,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
-    # Let's wait for the executor to die
+    # Let's wait for the executor to be cleaned up
     await retry_limited(wait_for_terminated_status, timeout=10, current_children=state_after_deployment.children)
 
     # Let's halt the environment to be able to set `keep_paused_on_resume` flag on agent1
