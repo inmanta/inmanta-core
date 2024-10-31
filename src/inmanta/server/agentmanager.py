@@ -201,8 +201,8 @@ class AgentManager(ServerSlice, SessionListener):
             # default to uuid's
             uuid_to_name = {}
 
-        # Filter out timeouts
-        total: DataBaseReport = reduce(lambda x, y: x + y, (x[1] for x in results if not isinstance(x, BaseException)))
+        # Filter out timeouts and other errors
+        good_reports = [x[1] for x in results if not isinstance(x, BaseException)]
 
         def short_report(report: DataBaseReport) -> Mapping[str, ArgumentTypes]:
             return {
@@ -213,7 +213,8 @@ class AgentManager(ServerSlice, SessionListener):
                 "pool_exhaustion_count": report.pool_exhaustion_count,
             }
 
-        if total:
+        if good_reports:
+            total: DataBaseReport = reduce(lambda x, y: x + y, good_reports)
             out["database"] = total.database
             out["host"] = total.host
             out["total"] = short_report(total)
@@ -251,6 +252,12 @@ class AgentManager(ServerSlice, SessionListener):
             await self._expire_all_sessions_in_db()
 
         self.add_background_task(self._process_session_listener_actions())
+        # Schedule cleanup agentprocess and agentinstance tables
+        agent_process_purge_interval = opt.agent_process_purge_interval.get()
+        if agent_process_purge_interval > 0:
+            self.schedule(
+                self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
+            )
 
     async def prestop(self) -> None:
         await super().prestop()
@@ -1029,12 +1036,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
     async def start(self) -> None:
         await super().start()
         self.add_background_task(self._start_agents())
-        # Schedule cleanup agentprocess and agentinstance tables
-        agent_process_purge_interval = opt.agent_process_purge_interval.get()
-        if agent_process_purge_interval > 0:
-            self.schedule(
-                self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
-            )
 
     async def prestop(self) -> None:
         await super().prestop()

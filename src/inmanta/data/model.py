@@ -862,7 +862,6 @@ LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
 
 
 class DataBaseReport(BaseModel):
-
     connected: bool
     database: str
     host: str
@@ -879,7 +878,7 @@ class DataBaseReport(BaseModel):
         if other.host != self.host:
             return NotImplemented
         return DataBaseReport(
-            connected=self.connected,
+            connected=self.connected and other.connected,
             database=self.database,
             host=self.host,
             max_pool=self.max_pool + other.max_pool,

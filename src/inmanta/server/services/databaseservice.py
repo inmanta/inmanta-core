@@ -47,6 +47,13 @@ class DatabaseMonitor:
         self.component = component
         self.environment = environment
 
+        # Influxdb part
+        self.infuxdb_suffix = f",component={self.component}"
+        if self.environment:
+            self.infuxdb_suffix += f",environment={self.environment}"
+
+        self.registered_guages: list[str] = []
+
     def start(self) -> None:
         self.start_monitor()
 
@@ -74,44 +81,43 @@ class DatabaseMonitor:
             pool_exhaustion_count=self._db_pool_watcher._exhausted_pool_events_count,
         )
 
+    def _add_guage(self, name: str, the_gauge: CallbackGauge) -> None:
+        """Helper to register gauges and keep track of registrations"""
+        name = name + self.infuxdb_suffix
+        gauge(name, the_gauge)
+        self.registered_guages.append(name)
+
     def start_monitor(self) -> None:
         """Attach to monitoring system"""
-        suffix = f",component={self.component}"
-        if self.environment:
-            suffix += f",environment={self.environment}"
 
-        gauge(
-            "db.connected" + suffix,
+        self._add_guage(
+            "db.connected",
             CallbackGauge(
                 callback=lambda: 1 if (self._pool is not None and not self._pool._closing and not self._pool._closed) else 0
             ),
         )
-        gauge(
-            "db.max_pool" + suffix, CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0)
+        self._add_guage(
+            "db.max_pool", CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0)
         )
-        gauge(
-            "db.open_connections" + suffix,
+        self._add_guage(
+            "db.open_connections",
             CallbackGauge(callback=lambda: self._pool.get_size() if self._pool is not None else 0),
         )
-        gauge(
-            "db.free_connections" + suffix,
+        self._add_guage(
+            "db.free_connections",
             CallbackGauge(callback=lambda: self._pool.get_idle_size() if self._pool is not None else 0),
         )
-        gauge(
-            "db.pool_exhaustion_count" + suffix,
+        self._add_guage(
+            "db.pool_exhaustion_count",
             CallbackGauge(callback=lambda: self._db_pool_watcher._exhausted_pool_events_count),
         )
 
     def stop_monitor(self) -> None:
-        suffix = f",component={self.component}"
-        if self.environment:
-            suffix += f",environment={self.environment}"
+        """Disconnect form pyformance"""
+        for key in self.registered_guages:
+            global_registry()._gauges.pop(key, None)
 
-        global_registry()._gauges.pop("db.connected" + suffix, None)
-        global_registry()._gauges.pop("db.max_pool" + suffix, None)
-        global_registry()._gauges.pop("db.open_connections" + suffix, None)
-        global_registry()._gauges.pop("db.free_connections" + suffix, None)
-        global_registry()._gauges.pop("db.pool_exhaustion_count" + suffix, None)
+        self.registered_guages.clear()
 
     async def get_connection_status(self) -> bool:
         if self._pool is not None and not self._pool._closing and not self._pool._closed:
