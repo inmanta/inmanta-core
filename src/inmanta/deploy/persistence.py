@@ -28,6 +28,7 @@ from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
+from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.protocol import Client
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
@@ -115,13 +116,14 @@ class ToServerUpdateManager(StateUpdateManager):
 
 class ToDbUpdateManager(StateUpdateManager):
 
-    def __init__(self, client: Client, environment: UUID) -> None:
+    def __init__(self, client: Client, environment: UUID, scheduler: ResourceScheduler) -> None:
         self.environment = environment
         # TODO: The client is only here temporarily while we fix the dryrun_update
         self.client = client
         # FIXME: We may want to move the writing of the log to the scheduler side as well,
         #  when all uses of this logger are moved
         self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
+        self.scheduler = scheduler
 
     def get_resource_action_logger(self, environment: UUID) -> logging.Logger:
         """Get the resource action logger for the given environment.
@@ -181,12 +183,8 @@ class ToDbUpdateManager(StateUpdateManager):
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-            # FIXME: shortcut to use scheduler state
-            result = await data.Resource.get_last_non_deploying_state_for_dependencies(
-                environment=self.environment, resource_version_id=resource_id_parsed, connection=connection
-            )
-
-            return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.items()}
+            result = self.scheduler.get_last_non_deploying_state_for_dependencies(resource_id=resource_id_parsed)
+            return result
 
     async def send_deploy_done(self, result: DeployResult) -> None:
         def error_and_log(message: str, **context: Any) -> None:

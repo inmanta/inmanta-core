@@ -218,7 +218,7 @@ class ResourceScheduler(TaskManager):
         self.client = client
         self.code_manager = CodeManager(client)
         self.executor_manager = executor_manager
-        self._state_update_delegate = ToDbUpdateManager(client, environment)
+        self._state_update_delegate = ToDbUpdateManager(client, environment, scheduler=self)
 
     def reset(self) -> None:
         """
@@ -627,6 +627,18 @@ class ResourceScheduler(TaskManager):
                             priority=priority,
                             deploying=set(),
                         )
+
+    def get_last_non_deploying_state_for_dependencies(
+        self, resource_id: ResourceIdStr
+    ) -> dict[ResourceIdStr, const.ResourceState]:
+        """
+        Get resource state for every dependency of a give resource from the scheduler state
+
+        :param resource_id: The id of the resource to find the dependencies for
+        """
+        provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.provides_view()
+        dependencies = provides_view[resource_id]
+        return {resource_id: self._state.resource_state[resource_id] for resource_id in dependencies}
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
