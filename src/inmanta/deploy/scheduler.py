@@ -36,6 +36,8 @@ from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
+from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
+from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
 from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
@@ -148,9 +150,9 @@ class TaskRunner:
         """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
         allowed to run."""
         while self._scheduler._running and self.status == AgentStatus.STARTED:
-            task: Task = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
+            task, reason = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
             try:
-                await task.execute(self._scheduler, self.endpoint)
+                await task.execute(self._scheduler, self.endpoint, reason)
             except Exception:
                 LOGGER.exception(
                     "Task %s for agent %s has failed and the exception was not properly handled", task, self.endpoint
@@ -218,7 +220,7 @@ class ResourceScheduler(TaskManager):
         self.client = client
         self.code_manager = CodeManager(client)
         self.executor_manager = executor_manager
-        self._state_update_delegate = ToDbUpdateManager(environment)
+        self._state_update_delegate = ToDbUpdateManager(client, environment)
 
     def reset(self) -> None:
         """
@@ -262,7 +264,11 @@ class ResourceScheduler(TaskManager):
         }
 
         await self._new_version(
-            version, resources=resources_to_deploy, requires=requires, up_to_date_resources=up_to_date_resources
+            version,
+            resources=resources_to_deploy,
+            requires=requires,
+            up_to_date_resources=up_to_date_resources,
+            reason="Deploy was triggered because the scheduler was started",
         )
 
     async def stop(self) -> None:
@@ -274,16 +280,18 @@ class ResourceScheduler(TaskManager):
     async def join(self) -> None:
         await asyncio.gather(*[worker.join() for worker in self._workers.values()])
 
-    async def deploy(self, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
+    async def deploy(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
         """
         Trigger a deploy
         """
         if not self._running:
             return
         async with self._scheduler_lock:
-            self._work.deploy_with_context(self._state.dirty, priority=priority, deploying=self._deploying_latest)
+            self._work.deploy_with_context(
+                self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
+            )
 
-    async def repair(self, priority: TaskPriority = TaskPriority.USER_REPAIR) -> None:
+    async def repair(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_REPAIR) -> None:
         """
         Trigger a repair, i.e. mark all resources as dirty, then trigger a deploy.
         """
@@ -291,7 +299,9 @@ class ResourceScheduler(TaskManager):
             return
         async with self._scheduler_lock:
             self._state.dirty.update(self._state.resources.keys())
-            self._work.deploy_with_context(self._state.dirty, priority=priority, deploying=self._deploying_latest)
+            self._work.deploy_with_context(
+                self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
+            )
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         if not self._running:
@@ -390,7 +400,12 @@ class ResourceScheduler(TaskManager):
             # No model version has been released yet.
             return
         else:
-            await self._new_version(version, resources, requires)
+            await self._new_version(
+                version,
+                resources,
+                requires,
+                reason="Deploy was triggered because a new version has been released",
+            )
 
     async def reset_resource_state(self) -> None:
         """
@@ -413,6 +428,7 @@ class ResourceScheduler(TaskManager):
         resources: Mapping[ResourceIdStr, ResourceDetails],
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
         up_to_date_resources: Optional[Mapping[ResourceIdStr, ResourceDetails]] = None,
+        reason: str = "Deploy was triggered because a new version has been released",
     ) -> None:
         up_to_date_resources = {} if up_to_date_resources is None else up_to_date_resources
         async with self._intent_lock:
@@ -472,14 +488,14 @@ class ResourceScheduler(TaskManager):
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in blocked_resources:
-                    self._state.block_resource(resource, details, transient=False)
+                    self._state.block_resource(resource, resources[resource], is_transitive=False)
                 for resource in new_desired_state:
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
-                transitively_blocked_resources: set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
+                transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 for resource in unblocked_resources:
-                    self._state.unblock_resource(resource)
+                    self._state.mark_as_defined(resource, resources[resource])
                 # Update set of in-progress non-stale deploys by trimming resources with new state
                 self._deploying_latest.difference_update(
                     new_desired_state, deleted_resources, blocked_resources, transitively_blocked_resources
@@ -487,6 +503,7 @@ class ResourceScheduler(TaskManager):
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
                     self._state.dirty,
+                    reason=reason,
                     priority=TaskPriority.NEW_VERSION_DEPLOY,
                     deploying=self._deploying_latest,
                     added_requires=added_requires,
@@ -622,7 +639,12 @@ class ResourceScheduler(TaskManager):
                         task = Deploy(resource=resource)
                         assert task in self._work.agent_queues.in_progress
                         priority = self._work.agent_queues.in_progress[task]
-                        self._work.deploy_with_context(event_listeners, priority=priority, deploying=set())
+                        self._work.deploy_with_context(
+                            event_listeners,
+                            reason=f"Deploying because an event was received from {resource}",
+                            priority=priority,
+                            deploying=set(),
+                        )
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
@@ -634,3 +656,6 @@ class ResourceScheduler(TaskManager):
 
     async def send_deploy_done(self, result: DeployResult) -> None:
         return await self._state_update_delegate.send_deploy_done(result)
+
+    async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
+        await self._state_update_delegate.dryrun_update(env, dryrun_result)
