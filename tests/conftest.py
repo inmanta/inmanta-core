@@ -36,6 +36,7 @@ from inmanta.agent.handler import (
     TResource,
     provider,
 )
+from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.data.model import ResourceIdStr
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
@@ -852,6 +853,9 @@ async def agent(server, environment):
         str(pathlib.Path(a._storage["executors"]) / "venvs"),
         False,
     )
+
+    executor = WriteBarierExecutorManager(executor)
+
     a.executor_manager = executor
     a.scheduler.executor_manager = executor
     a.scheduler.code_manager = utils.DummyCodeManager(a._client)
@@ -2063,6 +2067,14 @@ def resource_container(clean_reset):
 
         fields = ("key", "value", "purged")
 
+    @resource("test::Resourcex", agent="agent", id_attribute="key")
+    class MyResourcex(Resource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged", "attributes")
+
     @resource("test::Fact", agent="agent", id_attribute="key")
     class FactResource(Resource):
         """
@@ -2301,6 +2313,15 @@ def resource_container(clean_reset):
     @provider("test::Resource", name="test_resource")
     class ResourceProvider(Provider[MyResource]):
         pass
+
+    @provider("test::Resourcex", name="test_resource")
+    class ResourceProviderX(Provider[MyResource]):
+
+        def check_resource(self, ctx, resource):
+            # This resource checks that the executor can withstand mutating the resources
+            assert resource.attributes == {"A": "B"}
+            resource.attributes.clear()
+            return super().check_resource(ctx, resource)
 
     @provider("test::Fail", name="test_fail")
     class Fail(ResourceHandler[FailR]):
