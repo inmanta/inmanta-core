@@ -244,7 +244,7 @@ class AttributeStateChange(BaseModel):
         return v
 
     def __getstate__(self) -> str:
-        # make pickle use json to keep leaking stuff
+        # make pickle use json to keep from leaking stuff
         # Will make the objects into json-like things
         # This method exists only to keep IPC light compatible with the json based RPC
         return protocol.common.json_encode(self)
