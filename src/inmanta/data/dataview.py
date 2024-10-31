@@ -1224,8 +1224,8 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                                         WHEN NOT a.paused AND sa_join.id_primary IS NULL THEN 'down'
                                         ELSE 'up'
                                     END) as status""",
-            from_clause=f""" FROM {Agent.table_name()} a "
-                             LEFT JOIN (SELECT sa.name, sa.id_primary, ap.hostname, ai.process FROM agent sa
+            from_clause=f""" FROM {Agent.table_name()} a
+                             CROSS JOIN (SELECT sa.name, sa.id_primary, ap.hostname, ai.process FROM agent sa
                              LEFT JOIN {AgentInstance.table_name()} ai ON sa.id_primary=ai.id
                              LEFT JOIN {AgentProcess.table_name()} ap ON ai.process = ap.sid
                              WHERE sa.environment = $1 AND sa.name = $2) sa_join ON a.name <> sa_join.name """,
