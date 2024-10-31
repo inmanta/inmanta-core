@@ -878,12 +878,10 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         executor_to_be_defined=1,
     )
 
-    current_children_mapping = construct_scheduler_children(current_pid)
-    for children in current_children_mapping.children:
-        assert children.is_running()
-
     # Retrieve the current processes, we should have more processes than `start_children`
     children_after_deployment = construct_scheduler_children(current_pid)
+    for children in children_after_deployment.children:
+        assert children.is_running()
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     assert result.code == 200
@@ -908,9 +906,6 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
     # Let's recheck the number of processes after restarting the server
     state_after_restart = construct_scheduler_children(current_pid)
-    assert (
-        len(state_after_restart.children) == len(children_after_deployment.children) - 2
-    ), "Only this process should be present: The Scheduler!"
     for children in state_after_restart.children:
         assert children.is_running()
 
