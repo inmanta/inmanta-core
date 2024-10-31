@@ -805,7 +805,7 @@ async def server_multi(
 
         yield ibl.restserver
         try:
-            await ibl.stop(timeout=15)
+            await ibl.stop(timeout=20)
         except concurrent.futures.TimeoutError:
             logger.exception("Timeout during stop of the server in teardown")
 

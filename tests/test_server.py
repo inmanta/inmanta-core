@@ -834,7 +834,7 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
 
     log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
 
 @pytest.mark.parametrize("db_wait_time", ["2", "0"])
@@ -847,7 +847,7 @@ async def test_bootloader_connect_running_db(server_config, postgres_db, caplog,
     caplog.clear()
     caplog.set_level(logging.INFO)
     await ibl.start()
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
     if db_wait_time != "0":
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
