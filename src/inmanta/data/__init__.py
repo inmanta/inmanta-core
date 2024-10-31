@@ -63,7 +63,6 @@ from inmanta.data.model import (
 )
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.protocol.exceptions import BadRequest, NotFound
-from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
@@ -4610,7 +4609,7 @@ class Resource(BaseDocument):
             return []
         query_lock: str = lock.value if lock is not None else ""
 
-        def convert_or_ignore(rvid: m.ResourceVersionIdStr) -> Id | None:
+        def convert_or_ignore(rvid: m.ResourceVersionIdStr) -> resources.Id | None:
             """Method to retain backward compatibility, ignore bad ID's"""
             try:
                 return resources.Id.parse_resource_version_id(rvid)
