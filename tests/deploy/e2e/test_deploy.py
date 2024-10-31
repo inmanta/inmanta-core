@@ -110,6 +110,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     This tests make sure the resource scheduler is working as expected for these parts:
         - Construction of initial model state
         - Retrieval of data when a new version is released
+        - Use test::Resourcex to ensure the executor doesn't mutate the input
     """
 
     env_id = environment
@@ -136,45 +137,50 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                     {
                         "key": "key",
                         "value": "value",
-                        "id": "test::Resource[%s,key=key],v=%d" % (agent, version),
-                        "requires": ["test::Resource[%s,key=key3],v=%d" % (agent, version)],
+                        "id": "test::Resourcex[%s,key=key],v=%d" % (agent, version),
+                        "requires": ["test::Resourcex[%s,key=key3],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
+                        "attributes": {"A": "B"},
                     },
                     {
                         "key": "key2",
                         "value": "value",
-                        "id": "test::Resource[%s,key=key2],v=%d" % (agent, version),
-                        "requires": ["test::Resource[%s,key=key],v=%d" % (agent, version)],
+                        "id": "test::Resourcex[%s,key=key2],v=%d" % (agent, version),
+                        "requires": ["test::Resourcex[%s,key=key],v=%d" % (agent, version)],
                         "purged": not is_different,
                         "send_event": False,
+                        "attributes": {"A": "B"},
                     },
                     {
                         "key": "key3",
                         "value": "value",
-                        "id": "test::Resource[%s,key=key3],v=%d" % (agent, version),
+                        "id": "test::Resourcex[%s,key=key3],v=%d" % (agent, version),
                         "requires": [],
                         "purged": False,
                         "send_event": False,
+                        "attributes": {"A": "B"},
                     },
                     {
                         "key": "key4",
                         "value": "value",
-                        "id": "test::Resource[%s,key=key4],v=%d" % (agent, version),
-                        "requires": ["test::Resource[%s,key=key3],v=%d" % (agent, version)],
+                        "id": "test::Resourcex[%s,key=key4],v=%d" % (agent, version),
+                        "requires": ["test::Resourcex[%s,key=key3],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
+                        "attributes": {"A": "B"},
                     },
                     {
                         "key": "key5",
                         "value": "value",
-                        "id": "test::Resource[%s,key=key5],v=%d" % (agent, version),
+                        "id": "test::Resourcex[%s,key=key5],v=%d" % (agent, version),
                         "requires": [
-                            "test::Resource[%s,key=key4],v=%d" % (agent, version),
-                            "test::Resource[%s,key=key],v=%d" % (agent, version),
+                            "test::Resourcex[%s,key=key4],v=%d" % (agent, version),
+                            "test::Resourcex[%s,key=key],v=%d" % (agent, version),
                         ],
                         "purged": False,
                         "send_event": False,
+                        "attributes": {"A": "B"},
                     },
                 ]
             )
@@ -186,7 +192,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             {
                 "key": "key",
                 "value": "value",
-                "id": "test::Resource[agentx,key=key],v=%d" % version,
+                "id": "test::Resourcex[agentx,key=key],v=%d" % version,
                 "requires": [],
                 "purged": False,
                 "send_event": False,

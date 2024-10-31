@@ -427,7 +427,10 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
                 case "python" | "python3":
                     cmd_line_process = " ".join(child.cmdline())
                     if "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
-                        assert current_scheduler is None
+                        assert current_scheduler is None, (
+                            f"A scheduler was already found: {current_scheduler} but we found "
+                            f"a new one: {child}, this is unexpected!"
+                        )
                         current_scheduler = child
                 case _:
                     continue
