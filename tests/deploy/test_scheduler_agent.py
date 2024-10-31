@@ -28,6 +28,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Mapping, Optional, Sequence, Tuple
 from uuid import UUID
 
+import asyncpg
 import pytest
 
 import inmanta.types
@@ -45,6 +46,7 @@ from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import BlockedStatus
 from inmanta.deploy.work import TaskPriority
+from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.resources import Id
 from inmanta.util import retry_limited
@@ -264,6 +266,37 @@ async def pass_method():
     pass
 
 
+class TestScheduler(ResourceScheduler):
+    def __init__(self, environment: uuid.UUID, executor_manager: executor.ExecutorManager[executor.Executor], client: Client):
+        super().__init__(environment, executor_manager, client)
+        # Bypass DB
+        self.executor_manager = self.executor_manager
+        self.code_manager = DummyCodeManager(client)
+        self.mock_versions = {}
+        self._state_update_delegate = DummyStateManager()
+
+    async def read_version(
+        self,
+    ) -> None:
+        pass
+
+    async def _initialize(
+        self,
+    ) -> None:
+        pass
+
+    async def should_be_running(self) -> bool:
+        return True
+
+    async def should_runner_be_running(self, endpoint: str) -> bool:
+        return True
+
+    async def _build_resource_mappings_from_db(
+        self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Mapping[ResourceIdStr, ResourceDetails]:
+        return self.mock_versions[version]
+
+
 class TestAgent(Agent):
     """
     An agent (scheduler) that mock everything:
@@ -284,18 +317,7 @@ class TestAgent(Agent):
     ):
         super().__init__(environment)
         self.executor_manager = DummyManager()
-        self.scheduler.executor_manager = self.executor_manager
-        self.scheduler.code_manager = DummyCodeManager(self._client)
-        # Bypass DB
-        self.scheduler.read_version = pass_method
-        self.scheduler._initialize = pass_method
-        self.scheduler.mock_versions = {}
-
-        async def build_resource_mappings_from_db(version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:
-            return self.scheduler.mock_versions[version]
-
-        self.scheduler._build_resource_mappings_from_db = build_resource_mappings_from_db
-        self.scheduler._state_update_delegate = DummyStateManager()
+        self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
 
 
 @pytest.fixture

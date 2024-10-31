@@ -1006,11 +1006,11 @@ def get_status():
 
 
 @method(path="/agentstate", operation="POST", server_agent=True, enforce_auth=False, timeout=5, client_types=[])
-def set_state(agent: str, enabled: bool):
+def set_state(agent: Optional[str], enabled: bool):
     """
     Set the state of the agent.
 
-    :param agent: The name of the agent.
+    :param agent: The name of the agent if it's provided. None represents all agents
     :param enabled: A boolean value indicating whether the agent should be paused (enabled=False) or unpaused (enabled=True).
     """
 

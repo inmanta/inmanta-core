@@ -86,6 +86,20 @@ class DeploymentResult(StrEnum):
     FAILED = enum.auto()
 
 
+class AgentStatus(StrEnum):
+    """
+    The status of the agent responsible of a given resource.
+
+    STARTED: Agent has been started.
+    STOPPING: Agent is stopping.
+    STOPPED: Agent has been stopped (previously called PAUSED).
+    """
+
+    STARTED = enum.auto()
+    STOPPING = enum.auto()
+    STOPPED = enum.auto()
+
+
 class BlockedStatus(StrEnum):
     """
     YES: The resource will retain its blocked status within this model version. For example: A resource that has unknowns
@@ -130,17 +144,15 @@ class ModelState:
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict[ResourceIdStr, ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
+    # (might be simply a change of its dependencies), which are still being processed by
+    # the resource scheduler. This is a short-lived transient state, used for internal concurrency control. Kept separate from
+    # ResourceStatus so that it lives outside the scheduler lock's scope.
     dirty: set[ResourceIdStr] = dataclasses.field(default_factory=set)
     # types per agent keeps track of which resource types live on which agent by doing a reference count
     # the dict is agent_name -> resource_type -> resource_count
     types_per_agent: dict[str, dict[ResourceType, int]] = dataclasses.field(
         default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
     )
-    """
-    Resources that have a new desired state (might be simply a change of its dependencies), which are still being processed by
-    the resource scheduler. This is a shortlived transient state, used for internal concurrency control. Kept separate from
-    ResourceStatus so that it lives outside of the scheduler lock's scope.
-    """
 
     def reset(self) -> None:
         self.version = 0
@@ -184,7 +196,9 @@ class ModelState:
         else:
             resource_status = ResourceStatus.UNDEFINED if not is_transitive else ResourceStatus.HAS_UPDATE
             self.resource_state[resource] = ResourceState(
-                status=resource_status, deployment_result=DeploymentResult.NEW, blocked=BlockedStatus.YES
+                status=resource_status,
+                deployment_result=DeploymentResult.NEW,
+                blocked=BlockedStatus.YES,
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
@@ -297,7 +311,9 @@ class ModelState:
             self.resource_state[resource].blocked = BlockedStatus.NO
         else:
             self.resource_state[resource] = ResourceState(
-                status=ResourceStatus.HAS_UPDATE, deployment_result=DeploymentResult.NEW, blocked=BlockedStatus.NO
+                status=ResourceStatus.HAS_UPDATE,
+                deployment_result=DeploymentResult.NEW,
+                blocked=BlockedStatus.NO,
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.add(resource)

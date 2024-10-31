@@ -419,11 +419,11 @@ end
     args = [sys.executable, "-m", "inmanta.app"] + config_options + ["compile"]
     process = do_run(args, cwd=snippetcompiler.project_dir)
     out, err = process.communicate(timeout=30)
-    assert process.returncode == 0
-
     out = out.decode()
     err = err.decode()
     all_output = out + err
+
+    assert process.returncode == 0, f"Error occured: {all_output}"
 
     assert "Starting compile" in all_output
     assert "Compile done" in all_output

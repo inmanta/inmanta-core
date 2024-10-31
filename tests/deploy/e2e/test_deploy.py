@@ -400,7 +400,7 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
@@ -477,7 +477,7 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
@@ -627,7 +627,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
     result = await client.get_version(env_id, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, env_id, version)
+    await wait_until_deployment_finishes(client, env_id)
 
     result = await client.get_version(env_id, version)
     assert result.result["model"]["done"] == len(resources)
@@ -782,7 +782,7 @@ async def test_deploy_and_events(
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
@@ -845,7 +845,7 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
