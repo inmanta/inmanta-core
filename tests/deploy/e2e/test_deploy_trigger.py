@@ -252,3 +252,63 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
 
     await verify_deployment_result()
     await resource_action_consistency_check()
+
+
+async def test_repair_does_not_schedule_blocked_resources(server, client, agent, resource_container, environment, clienthelper):
+    """
+    Test that known blocked resources are not scheduled for deployment when triggering a repair.
+    TODO add actual check for this
+    """
+    resource_container.Provider.reset()
+    env_id = environment
+
+    version = await clienthelper.get_version()
+
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "purged": False,
+            "send_event": False,
+            "requires": [],
+        },
+    ]
+
+    await clienthelper.put_version_simple(resources, version)
+
+    # do a deploy
+    result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    result = await client.get_version(env_id, version)
+    assert result.code == 200
+
+    await clienthelper.wait_full_success(env_id)
+
+    async def verify_deployment_result():
+        result = await client.get_version(env_id, version)
+        # A repair run may put one resource from the deployed state to the deploying state.
+        assert len(resources) - 1 <= result.result["model"]["done"] <= len(resources)
+
+        assert resource_container.Provider.isset("agent1", "key1")
+        assert resource_container.Provider.get("agent1", "key1") == "value1"
+
+    await verify_deployment_result()
+
+    # Manual change
+    resource_container.Provider.set("agent1", "key1", "another_value")
+
+    await agent.trigger_update(UUID(environment), "$__scheduler", incremental_deploy=False)
+
+    def repaired() -> bool:
+        return resource_container.Provider.get("agent1", "key1") == "value1"
+
+    await retry_limited(repaired, 10)
+
+    await verify_deployment_result()
+    await resource_action_consistency_check()
