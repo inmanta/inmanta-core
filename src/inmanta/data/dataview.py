@@ -1228,7 +1228,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                              CROSS JOIN (SELECT sa.name, sa.id_primary, ap.hostname, ai.process FROM agent sa
                              LEFT JOIN {AgentInstance.table_name()} ai ON sa.id_primary=ai.id
                              LEFT JOIN {AgentProcess.table_name()} ap ON ai.process = ap.sid
-                             WHERE sa.environment = $1 AND sa.name = $2) sa_join ON a.name <> sa_join.name """,
+                             WHERE sa.environment = $1 AND sa.name = $2) sa_join """,
             filter_statements=[" a.environment = $1 ", " a.name <> $2 "],
             values=[self.environment.id, const.AGENT_SCHEDULER_ID],
         )
