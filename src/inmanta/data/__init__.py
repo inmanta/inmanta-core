@@ -5400,7 +5400,7 @@ class ConfigurationModel(BaseDocument):
 
     @classmethod
     def get_valid_field_names(cls) -> list[str]:
-        return super().get_valid_field_names() + ["status", "model"]
+        return super().get_valid_field_names() + ["model"]
 
     @classmethod
     async def create_for_partial_compile(
@@ -5589,8 +5589,7 @@ class ConfigurationModel(BaseDocument):
         offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
         lock_statement = f" {lock.value} " if lock is not None else ""
         query_string = f"""SELECT c.*
-                    FROM {cls.table_name()} AS c LEFT OUTER JOIN {Resource.table_name()} AS r
-                    ON c.environment = r.environment AND c.version = r.model
+                    FROM {cls.table_name()} AS c
                     {where_statement}
                     GROUP BY c.environment, c.version
                     {order_by_statement}
