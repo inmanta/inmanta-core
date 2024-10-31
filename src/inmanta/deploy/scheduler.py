@@ -479,6 +479,7 @@ class ResourceScheduler(TaskManager):
                 )
                 self._work.deploy_with_context(to_deploy, priority=TaskPriority.INTERVAL_REPAIR, deploying=set())
 
+        # could change this to task(callback= <recreate itself>)
         async def _recurrent_compliance_check(resource: ResourceIdStr) -> None:
             await _trigger_deploy(resource)
             await delay(_recurrent_compliance_check(resource), self._compliance_check_window)
