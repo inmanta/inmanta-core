@@ -376,6 +376,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         :param resource: The resource for which to get facts.
         """
         provider = None
+        started = datetime.datetime.now().astimezone()
         try:
             try:
                 resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.getfact)
@@ -384,7 +385,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     resource_id=resource.rvid,
                     action_id=None,
                     parameters=[],
-                    started=datetime.datetime.now().astimezone(),
+                    started=started,
                     finished=datetime.datetime.now().astimezone(),
                     messages=[],
                     succeeded=False,
@@ -395,7 +396,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             async with self.activity_lock:
                 try:
                     with self._cache:
-                        started = datetime.datetime.now().astimezone()
                         provider = await self.get_provider(resource_obj)
                         result = await asyncio.get_running_loop().run_in_executor(
                             self.thread_pool, provider.check_facts, ctx, resource_obj
@@ -424,29 +424,31 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     )
 
                 except Exception:
-                    self.logger.exception("Unable to retrieve facts for resource %s", resource.id)
+                    error_msg = "Unable to retrieve facts for resource %s" % resource.id
+                    self.logger.exception(error_msg)
                     return FactResult(
                         resource_id=resource.rvid,
                         action_id=ctx.action_id,
                         parameters=[],
-                        started=datetime.datetime.now().astimezone(),
+                        started=started,
                         finished=datetime.datetime.now().astimezone(),
                         messages=ctx.logs,
                         succeeded=False,
-                        error_msg=f"Unable to retrieve facts for resource {resource.id}",
+                        error_msg=error_msg,
                     )
 
         except Exception:
-            self.logger.exception("Unable to find a handler for %s", resource.id)
+            error_msg = "Unable to find a handler for %s" % resource.id
+            self.logger.exception(error_msg)
             return FactResult(
                 resource_id=resource.rvid,
                 action_id=None,
                 parameters=[],
-                started=datetime.datetime.now().astimezone(),
+                started=started,
                 finished=datetime.datetime.now().astimezone(),
                 messages=[],
                 succeeded=False,
-                error_msg=f"Unable to find a handler for {resource.id}",
+                error_msg=error_msg,
             )
         finally:
             if provider is not None:
