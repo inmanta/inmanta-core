@@ -629,16 +629,15 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
 
     await wait_until_deployment_finishes(client, env_id, version)
 
-    result = await client.get_version(env_id, version)
-    assert result.result["model"]["done"] == len(resources)
+    result = await client.resource_list(env_id)
 
-    states = {x["id"]: x["status"] for x in result.result["resources"]}
+    states = {x["resource_id"]: x["status"] for x in result.result["data"]}
 
-    assert states["test::Fail[agent1,key=key],v=%d" % version] == "failed"
-    assert states["test::Resource[agent1,key=key2],v=%d" % version] == "skipped"
-    assert states["test::Resource[agent1,key=key3],v=%d" % version] == "skipped"
-    assert states["test::Resource[agent1,key=key4],v=%d" % version] == "skipped"
-    assert states["test::Resource[agent1,key=key5],v=%d" % version] == "skipped"
+    assert states["test::Fail[agent1,key=key]"] == "failed"
+    assert states["test::Resource[agent1,key=key2]"] == "skipped"
+    assert states["test::Resource[agent1,key=key3]"] == "skipped"
+    assert states["test::Resource[agent1,key=key4]"] == "skipped"
+    assert states["test::Resource[agent1,key=key5]"] == "skipped"
 
 
 class ResourceProvider:
@@ -879,9 +878,9 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
     assert result.code == 200
 
     async def in_progress():
-        result = await client.get_version(environment, version)
+        result = await client.resource_list(environment, version)
         assert result.code == 200
-        res = result.result["resources"][0]
+        res = result.result["data"][0]
         status = res["status"]
         return status == "deploying"
 
