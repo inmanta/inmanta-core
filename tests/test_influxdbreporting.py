@@ -192,7 +192,6 @@ async def test_available_metrics(server):
 
     # ensure it doesn't crash when the server is down
     await server.stop()
-    metrics = global_registry().dump_metrics()
 
 
 async def test_safeness_if_server_down():
