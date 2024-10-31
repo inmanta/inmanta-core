@@ -19,7 +19,7 @@
 import abc
 import datetime
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from asyncpg import UniqueViolationError
@@ -28,13 +28,16 @@ from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
-from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.protocol import Client
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
 from inmanta.server.services import resourceservice
 
 LOGGER = logging.getLogger(__name__)
+
+
+if TYPE_CHECKING:
+    from inmanta.deploy.scheduler import ResourceScheduler
 
 
 class StateUpdateManager(abc.ABC):
@@ -116,7 +119,7 @@ class ToServerUpdateManager(StateUpdateManager):
 
 class ToDbUpdateManager(StateUpdateManager):
 
-    def __init__(self, client: Client, environment: UUID, scheduler: ResourceScheduler) -> None:
+    def __init__(self, client: Client, environment: UUID, scheduler: "ResourceScheduler") -> None:
         self.environment = environment
         # TODO: The client is only here temporarily while we fix the dryrun_update
         self.client = client
