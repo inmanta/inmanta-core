@@ -52,7 +52,7 @@ class DatabaseMonitor:
         if self.environment:
             self.infuxdb_suffix += f",environment={self.environment}"
 
-        self.registered_guages: list[str] = []
+        self.registered_gauges: list[str] = []
 
     def start(self) -> None:
         self.start_monitor()
@@ -81,43 +81,43 @@ class DatabaseMonitor:
             pool_exhaustion_count=self._db_pool_watcher._exhausted_pool_events_count,
         )
 
-    def _add_guage(self, name: str, the_gauge: CallbackGauge) -> None:
+    def _add_gauge(self, name: str, the_gauge: CallbackGauge) -> None:
         """Helper to register gauges and keep track of registrations"""
         name = name + self.infuxdb_suffix
         gauge(name, the_gauge)
-        self.registered_guages.append(name)
+        self.registered_gauges.append(name)
 
     def start_monitor(self) -> None:
         """Attach to monitoring system"""
 
-        self._add_guage(
+        self._add_gauge(
             "db.connected",
             CallbackGauge(
                 callback=lambda: 1 if (self._pool is not None and not self._pool._closing and not self._pool._closed) else 0
             ),
         )
-        self._add_guage(
+        self._add_gauge(
             "db.max_pool", CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0)
         )
-        self._add_guage(
+        self._add_gauge(
             "db.open_connections",
             CallbackGauge(callback=lambda: self._pool.get_size() if self._pool is not None else 0),
         )
-        self._add_guage(
+        self._add_gauge(
             "db.free_connections",
             CallbackGauge(callback=lambda: self._pool.get_idle_size() if self._pool is not None else 0),
         )
-        self._add_guage(
+        self._add_gauge(
             "db.pool_exhaustion_count",
             CallbackGauge(callback=lambda: self._db_pool_watcher._exhausted_pool_events_count),
         )
 
     def stop_monitor(self) -> None:
         """Disconnect form pyformance"""
-        for key in self.registered_guages:
+        for key in self.registered_gauges:
             global_registry()._gauges.pop(key, None)
 
-        self.registered_guages.clear()
+        self.registered_gauges.clear()
 
     async def get_connection_status(self) -> bool:
         if self._pool is not None and not self._pool._closing and not self._pool._closed:
