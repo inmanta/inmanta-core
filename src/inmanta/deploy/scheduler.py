@@ -236,7 +236,7 @@ class ResourceScheduler(TaskManager):
         if self._running:
             return
         self.reset()
-        await self.read_version()
+        await self._initialize()
         await self.reset_resource_state()
         self._running = True
 

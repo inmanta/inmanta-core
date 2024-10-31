@@ -1027,14 +1027,17 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
     # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
     # something is moving
-    async def wait_for_actual_deployment() -> bool:
-        current_children_mapping = construct_scheduler_children(current_pid)
-        return len(current_children_mapping.children) == 3
-
-    await retry_limited(wait_for_actual_deployment, 5)
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=True,
+        executor_to_be_defined=1,
+    )
 
     # Retrieve the current processes, we should have more processes than `start_children`
     children_after_deployment = construct_scheduler_children(current_pid)
+    for child in children_after_deployment.children:
+        assert child.is_running()
     # Everything should be consistent in DB: the agent should still be paused
     await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
@@ -1056,36 +1059,22 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
     # Let's recheck the number of processes after restarting the server
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=True,
+        executor_to_be_defined=1,
+    )
+
     state_after_restart = construct_scheduler_children(current_pid)
-    assert (
-        len(state_after_restart.children) == len(children_after_deployment.children) - 2
-    ), "Only this process should be present: The Scheduler!"
     for children in state_after_restart.children:
         assert children.is_running()
-
-    async def wait_for_db_update_from_scheduler():
-        """
-        Wait for DB update that the Scheduler should do once it restarts for inconsistent resources: resources in invalid
-            states -> "deploying" state
-        """
-        result = await client.resource_list(environment, deploy_summary=True)
-        assert result.code == 200
-        summary = result.result["metadata"]["deploy_summary"]
-        logger.warning(f"SUMMARY: {summary}")
-        return summary["by_state"]["available"] == 1
 
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
     assert summary["total"] == 1, f"Unexpected summary: {summary}"
-    breakpoint()
-
-    await retry_limited(wait_for_db_update_from_scheduler, 10)
-
-    # FIXME this should be fixed -> old resource is still in deploying state, should be available
-    # Uncomment this once fixed, see https://github.com/inmanta/inmanta-core/issues/8216
-    # assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
-    assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["deploying"] == 1, f"Unexpected summary: {summary}"
 
 
 @pytest.mark.slowtest
