@@ -1183,10 +1183,9 @@ class OrchestrationService(protocol.ServerSlice):
                     # Setting the model's released field to True is the trigger for the agents
                     # to start pulling in the resources.
                     # This has to be done after the resources outside of the increment have been marked as deployed.
-                    await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
+                    await model.update_fields(released=True, connection=connection)
 
             if model.total == 0:
-                await model.mark_done(connection=connection)
                 return 200, {"model": model}
 
             if connection.is_in_transaction():

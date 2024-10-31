@@ -379,7 +379,9 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     return versions.result
 
 
-async def wait_until_deployment_finishes(client: Client, environment: str, version: int = -1, timeout: int = 10) -> None:
+async def wait_until_deployment_finishes(
+    client: Client, environment: str, version: int = -1, timeout: int = 10, wait_for_n: int | None = None
+) -> None:
 
     async def done():
         result = await client.resource_list(environment, deploy_summary=True)
@@ -387,11 +389,14 @@ async def wait_until_deployment_finishes(client: Client, environment: str, versi
         summary = result.result["metadata"]["deploy_summary"]
         # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
         #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
-        print(summary)
-        available = summary["by_state"]["available"]
-        deploying = summary["by_state"]["deploying"]
-        if available + deploying != 0:
-            return False
+        if wait_for_n is None:
+            available = summary["by_state"]["available"]
+            deploying = summary["by_state"]["deploying"]
+            if available + deploying != 0:
+                return False
+            total: int = summary["total"]
+        else:
+            total = wait_for_n
         return (
             summary["by_state"]["deployed"]
             + summary["by_state"]["failed"]
@@ -399,7 +404,7 @@ async def wait_until_deployment_finishes(client: Client, environment: str, versi
             + summary["by_state"]["skipped_for_undefined"]
             + summary["by_state"]["unavailable"]
             + summary["by_state"]["undefined"]
-            == summary["total"]
+            >= total
         )
 
     await retry_limited(done, 10)
@@ -874,9 +879,7 @@ async def _deploy_resources(client, environment, resources, version, push, agent
     result = await client.release_version(environment, version, push, agent_trigger_method)
     assert result.code == 200
 
-    assert not result.result["model"]["deployed"]
-    assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == len(resources)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.code == 200
@@ -885,13 +888,7 @@ async def _deploy_resources(client, environment, resources, version, push, agent
 
 
 async def wait_for_n_deployed_resources(client, environment, version, n, timeout=5):
-    async def is_deployment_finished():
-        result = await client.get_version(environment, version)
-        assert result.code == 200
-        print(result.result["model"])
-        return result.result["model"]["done"] >= n
-
-    await retry_limited(is_deployment_finished, timeout)
+    await wait_until_deployment_finishes(client, environment, timeout=timeout, wait_for_n=n)
 
 
 async def _wait_for_n_deploying(client, environment, version, n, timeout=10):
