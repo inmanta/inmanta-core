@@ -287,8 +287,9 @@ class RefreshFact(Task):
             return
 
         fact_result = await my_executor.get_facts(executor_resource_details)
-        if fact_result is None:
-            raise Exception
-        await task_manager.set_parameters(
-            fact_result=fact_result,
-        )
+        if fact_result.succeeded:
+            await task_manager.set_parameters(
+                fact_result=fact_result,
+            )
+        else:
+            raise Exception(f"Error encountered while executing RefreshTask: {fact_result.error_msg}")

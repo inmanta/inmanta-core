@@ -370,7 +370,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     assert dryrun_result is not None, "Dryrun result cannot be None"
                     return dryrun_result
 
-    async def get_facts(self, resource: ResourceDetails) -> Optional[FactResult]:
+    async def get_facts(self, resource: ResourceDetails) -> FactResult:
         """
         Get facts for a given resource
         :param resource: The resource for which to get facts.
@@ -380,7 +380,16 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             try:
                 resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.getfact)
             except Exception:
-                return 500
+                return FactResult(
+                    resource_id=resource.rvid,
+                    action_id=None,
+                    parameters=[],
+                    started=datetime.datetime.now().astimezone(),
+                    finished=datetime.datetime.now().astimezone(),
+                    messages=[],
+                    succeeded=False,
+                    error_msg=f"Unable to deserialize resource {resource.id}",
+                )
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
             async with self.activity_lock:
@@ -404,28 +413,44 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         # Add facts set via the set_fact() method of the HandlerContext
                         parameters.extend(ctx.facts)
 
-                    finished = datetime.datetime.now().astimezone()
-
                     return FactResult(
                         resource_id=resource.rvid,
                         action_id=ctx.action_id,
                         parameters=parameters,
                         started=started,
-                        finished=finished,
+                        finished=datetime.datetime.now().astimezone(),
                         messages=ctx.logs,
+                        succeeded=True,
                     )
 
                 except Exception:
-                    self.logger.exception("Unable to retrieve fact")
-                    return 500
+                    self.logger.exception("Unable to retrieve facts for resource %s", resource.id)
+                    return FactResult(
+                        resource_id=resource.rvid,
+                        action_id=ctx.action_id,
+                        parameters=[],
+                        started=datetime.datetime.now().astimezone(),
+                        finished=datetime.datetime.now().astimezone(),
+                        messages=ctx.logs,
+                        succeeded=False,
+                        error_msg=f"Unable to retrieve facts for resource {resource.id}",
+                    )
 
         except Exception:
             self.logger.exception("Unable to find a handler for %s", resource.id)
-            return 500
+            return FactResult(
+                resource_id=resource.rvid,
+                action_id=None,
+                parameters=[],
+                started=datetime.datetime.now().astimezone(),
+                finished=datetime.datetime.now().astimezone(),
+                messages=[],
+                succeeded=False,
+                error_msg=f"Unable to find a handler for {resource.id}",
+            )
         finally:
             if provider is not None:
                 provider.close()
-        return 200
 
 
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):

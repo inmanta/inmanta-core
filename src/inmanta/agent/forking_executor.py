@@ -76,7 +76,7 @@ import typing
 import uuid
 from asyncio import Future, transports
 from concurrent.futures import ThreadPoolExecutor
-from typing import Awaitable, Optional
+from typing import Awaitable
 
 import inmanta.agent.cache
 import inmanta.agent.config
@@ -506,14 +506,14 @@ class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, Deplo
         )
 
 
-class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, Optional[FactResult]]):
+class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FactResult]):
     """Get facts from in an executor"""
 
     def __init__(self, agent_name: str, resource: "inmanta.agent.executor.ResourceDetails") -> None:
         self.agent_name = agent_name
         self.resource = resource
 
-    async def call(self, context: ExecutorContext) -> Optional[FactResult]:
+    async def call(self, context: ExecutorContext) -> FactResult:
         return await context.get(self.agent_name).get_facts(self.resource)
 
 
@@ -815,7 +815,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
     ) -> DeployResult:
         return await self.call(ExecuteCommand(self.id.agent_name, action_id, gid, resource_details, reason, requires))
 
-    async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> Optional[FactResult]:
+    async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> FactResult:
         return await self.call(FactsCommand(self.id.agent_name, resource))
 
     async def join(self) -> None:

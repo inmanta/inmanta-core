@@ -472,11 +472,14 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
 @dataclass
 class FactResult:
     resource_id: ResourceVersionIdStr
-    action_id: uuid.UUID
-    parameters: list[dict[str, Any]]
+    # Failed fact checks may have empty action_id
+    action_id: Optional[uuid.UUID]
     started: datetime.datetime
     finished: datetime.datetime
+    succeeded: bool
+    parameters: list[dict[str, Any]]
     messages: list[LogLine]
+    error_msg: Optional[str] = None
 
 
 @dataclass
@@ -560,7 +563,7 @@ class Executor(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_facts(self, resource: ResourceDetails) -> Optional[FactResult]:
+    async def get_facts(self, resource: ResourceDetails) -> FactResult:
         """
         Get facts for a given resource
         :param resource: The resource for which to get facts.

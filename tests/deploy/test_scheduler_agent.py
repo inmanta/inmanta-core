@@ -119,9 +119,8 @@ class DummyExecutor(executor.Executor):
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
         self.dry_run_count += 1
 
-    async def get_facts(self, resource: ResourceDetails) -> Optional[FactResult]:
+    async def get_facts(self, resource: ResourceDetails) -> None:
         self.facts_count += 1
-        return
 
     async def open_version(self, version: int) -> None:
         pass

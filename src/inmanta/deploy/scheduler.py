@@ -31,10 +31,8 @@ import asyncpg
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import DeployResult
-from inmanta.data import ConfigurationModel, Environment
 from inmanta.agent.executor import DeployResult, FactResult
-from inmanta.data import ConfigurationModel
+from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
