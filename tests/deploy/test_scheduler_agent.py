@@ -273,6 +273,9 @@ class TestScheduler(ResourceScheduler):
     ) -> None:
         pass
 
+    async def reset_resource_state(self) -> None:
+        pass
+
     async def _initialize(
         self,
     ) -> None:

@@ -148,4 +148,4 @@ async def test_scheduler_initialization(agent, resource_container, clienthelper,
     assert result.code == 200
     assert len(result.result["data"]) == 3
     for i in range(3):
-        assert result.result["data"][i]["resource_version_ids"] == [f"test::Resource[agent1,key=key{3-i}],v=1"]
+        assert result.result["data"][i]["resource_version_ids"] == [f"test::Resource[agent1,key=key{3 - i}],v=1"]
