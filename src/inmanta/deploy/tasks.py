@@ -54,7 +54,7 @@ class Task(abc.ABC):
         object.__setattr__(self, "id", resources.Id.parse_id(self.resource))
 
     @abc.abstractmethod
-    async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
+    async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
         pass
 
     def delete_with_resource(self) -> bool:
@@ -104,12 +104,12 @@ class PoisonPill(Task):
     It functions mostly as a no-op
     """
 
-    async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
+    async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
         pass
 
 
 class Deploy(Task):
-    async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
+    async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
 
         # First do scheduler book keeping to establish what to do
         version: int
@@ -178,12 +178,10 @@ class Deploy(Task):
                 success = False
                 return
 
+            assert reason is not None  # Should always be set for deploy
             # Deploy
             try:
-                # FIXME: reason argument is not used
-                deploy_result = await my_executor.execute(
-                    action_id, gid, executor_resource_details, "New Scheduler initiated action", requires
-                )
+                deploy_result = await my_executor.execute(action_id, gid, executor_resource_details, reason, requires)
                 success = deploy_result.status == const.ResourceState.deployed
             except Exception as e:
                 # This should not happen
@@ -232,7 +230,7 @@ class DryRun(Task):
     def delete_with_resource(self) -> bool:
         return False
 
-    async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
+    async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(
             self.version, self.resource_details
         )
@@ -269,7 +267,7 @@ class DryRun(Task):
 
 class RefreshFact(Task):
 
-    async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
+    async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
         version: int
         intent = await task_manager.get_resource_intent(self.resource)
         if intent is None:

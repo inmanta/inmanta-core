@@ -59,6 +59,7 @@ class PrioritizedTask(Generic[T]):
 
     task: T
     priority: TaskPriority
+    reason: str | None = None
 
 
 @functools.total_ordering
@@ -213,13 +214,14 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
             task=PrioritizedTask(
                 task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")),
                 priority=TaskPriority.TERMINATED,
+                reason="Scheduler shutdown",
             ),
             insert_order=0,
         )
         for queue in self._agent_queues.values():
             queue.put_nowait(poison_pill)
 
-    async def queue_get(self, agent: str) -> tasks.Task:
+    async def queue_get(self, agent: str) -> tuple[tasks.Task, str | None]:
         """
         Consume a task from an agent's queue. If the queue is empty, blocks until a task becomes available.
         """
@@ -234,7 +236,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
             self.discard(item.task.task)
             # add the item to _in_progress with the correct priority
             self._in_progress[item.task.task] = item.task.priority
-            return item.task.task
+            return item.task.task, item.task.reason
 
     def task_done(self, agent: str, task: tasks.Task) -> None:
         """
@@ -309,6 +311,7 @@ class ScheduledWork:
     def deploy_with_context(
         self,
         resources: Set[ResourceIdStr],
+        reason: str,
         *,
         priority: TaskPriority,
         deploying: Optional[Set[ResourceIdStr]] = None,
@@ -407,6 +410,7 @@ class ScheduledWork:
                     task=PrioritizedTask(
                         task=task,
                         priority=min(task_priority, priority) if task_priority is not None else priority,
+                        reason=reason,
                     ),
                     # task was previously ready to execute => assume no other blockers than this one
                     blocked_on=new_blockers,
@@ -417,7 +421,7 @@ class ScheduledWork:
 
         # ensure desired resource deploys are scheduled
         for resource in resources:
-            prioritized_task = PrioritizedTask(task=tasks.Deploy(resource=resource), priority=priority)
+            prioritized_task = PrioritizedTask(task=tasks.Deploy(resource=resource), priority=priority, reason=reason)
             if is_scheduled(resource):
                 # Deploy is already scheduled / running. Check to see if this task has a higher priority than the one already
                 # scheduled. If it has, update the priority. If any of its dependencies are to be

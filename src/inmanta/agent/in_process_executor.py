@@ -39,6 +39,8 @@ from inmanta.util import NamedLock, join_threadpools
 class InProcessExecutor(executor.Executor, executor.AgentInstance):
     """
     This is an executor that executes in the process it is started in
+
+    !!! This executor takes no steps to prevent handlers to mutate the resources passed into the methods !!!
     """
 
     def __init__(
