@@ -162,6 +162,7 @@ def start_scheduler(options: argparse.Namespace) -> None:
         metrics_reporter.start_metric_reporters()
         await a.start()
 
+    LOGGER.info("Agent with Resource scheduler starting now")
     setup_signal_handlers(a.stop)
     IOLoop.current().add_callback(start)
     IOLoop.current().start()

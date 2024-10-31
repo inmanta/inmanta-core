@@ -17,6 +17,7 @@
 """
 
 import datetime
+import json
 import typing
 import urllib
 import uuid
@@ -241,6 +242,16 @@ class AttributeStateChange(BaseModel):
                 # In production, try to cast the non-serializable value to str to prevent the handler from failing.
                 return str(v)
         return v
+
+    def __getstate__(self) -> str:
+        # make pickle use json to keep from leaking stuff
+        # Will make the objects into json-like things
+        # This method exists only to keep IPC light compatible with the json based RPC
+        return protocol.common.json_encode(self)
+
+    def __setstate__(self, state: str) -> None:
+        # This method exists only to keep IPC light compatible with the json based RPC
+        self.__dict__.update(json.loads(state))
 
 
 EnvSettingType = Union[bool, int, float, str, dict[str, Union[str, int, bool]]]

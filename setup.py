@@ -87,7 +87,7 @@ setup(
         # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
         "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~={version}.0.dev"],
         "datatrace": ["graphviz"],
-        "tracing": ["logfire>=0.46,<2.0", "opentelemetry-instrumentation-asyncpg~=0.46b0"],
+        "tracing": ["logfire>=0.46,<3.0", "opentelemetry-instrumentation-asyncpg~=0.46b0"],
     },
     entry_points={
         "console_scripts": [

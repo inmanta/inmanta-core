@@ -110,6 +110,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     This tests make sure the resource scheduler is working as expected for these parts:
         - Construction of initial model state
         - Retrieval of data when a new version is released
+        - Use test::Resourcex to ensure the executor doesn't mutate the input
     """
 
     env_id = environment
@@ -136,45 +137,50 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                     {
                         "key": "key",
                         "value": "value",
-                        "id": "test::Resource[%s,key=key],v=%d" % (agent, version),
-                        "requires": ["test::Resource[%s,key=key3],v=%d" % (agent, version)],
+                        "id": "test::Resourcex[%s,key=key],v=%d" % (agent, version),
+                        "requires": ["test::Resourcex[%s,key=key3],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
+                        "attributes": {"A": "B"},
                     },
                     {
                         "key": "key2",
                         "value": "value",
-                        "id": "test::Resource[%s,key=key2],v=%d" % (agent, version),
-                        "requires": ["test::Resource[%s,key=key],v=%d" % (agent, version)],
+                        "id": "test::Resourcex[%s,key=key2],v=%d" % (agent, version),
+                        "requires": ["test::Resourcex[%s,key=key],v=%d" % (agent, version)],
                         "purged": not is_different,
                         "send_event": False,
+                        "attributes": {"A": "B"},
                     },
                     {
                         "key": "key3",
                         "value": "value",
-                        "id": "test::Resource[%s,key=key3],v=%d" % (agent, version),
+                        "id": "test::Resourcex[%s,key=key3],v=%d" % (agent, version),
                         "requires": [],
                         "purged": False,
                         "send_event": False,
+                        "attributes": {"A": "B"},
                     },
                     {
                         "key": "key4",
                         "value": "value",
-                        "id": "test::Resource[%s,key=key4],v=%d" % (agent, version),
-                        "requires": ["test::Resource[%s,key=key3],v=%d" % (agent, version)],
+                        "id": "test::Resourcex[%s,key=key4],v=%d" % (agent, version),
+                        "requires": ["test::Resourcex[%s,key=key3],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
+                        "attributes": {"A": "B"},
                     },
                     {
                         "key": "key5",
                         "value": "value",
-                        "id": "test::Resource[%s,key=key5],v=%d" % (agent, version),
+                        "id": "test::Resourcex[%s,key=key5],v=%d" % (agent, version),
                         "requires": [
-                            "test::Resource[%s,key=key4],v=%d" % (agent, version),
-                            "test::Resource[%s,key=key],v=%d" % (agent, version),
+                            "test::Resourcex[%s,key=key4],v=%d" % (agent, version),
+                            "test::Resourcex[%s,key=key],v=%d" % (agent, version),
                         ],
                         "purged": False,
                         "send_event": False,
+                        "attributes": {"A": "B"},
                     },
                 ]
             )
@@ -186,7 +192,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             {
                 "key": "key",
                 "value": "value",
-                "id": "test::Resource[agentx,key=key],v=%d" % version,
+                "id": "test::Resourcex[agentx,key=key],v=%d" % version,
                 "requires": [],
                 "purged": False,
                 "send_event": False,
@@ -394,7 +400,7 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
@@ -471,7 +477,7 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
@@ -621,7 +627,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
     result = await client.get_version(env_id, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, env_id, version)
+    await wait_until_deployment_finishes(client, env_id)
 
     result = await client.get_version(env_id, version)
     assert result.result["model"]["done"] == len(resources)
@@ -776,7 +782,7 @@ async def test_deploy_and_events(
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
@@ -839,7 +845,7 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
