@@ -407,11 +407,8 @@ class ResourceScheduler(TaskManager):
 
     async def reset_resource_state(self) -> None:
         """
-        Update model state and scheduled work based on the latest released version in the database, e.g. when the scheduler is
-        started or when a new version is released. Triggers a deploy after updating internal state:
-        - schedules new or updated resources to be deployed
-        - schedules any resources that are not in a known good state.
-        - rearranges deploy tasks by requires if required
+        Update resources on the latest version of the model stuck in "deploying" state. This can occur when the Scheduler is
+        killed in the middle of a deployment.
         """
         cm_version = await ConfigurationModel.get_latest_version(self.environment)
         if cm_version is None:

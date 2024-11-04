@@ -4733,6 +4733,13 @@ class Resource(BaseDocument):
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
+        """
+        Update resources on the latest version of the model stuck in "deploying" state.
+
+        :param environment: The environment impacted by this
+        :param version: The version of the model impacted by this
+        :param connection: The connection to use
+        """
         query = """
             UPDATE resource AS updated_r
             SET status=inconsistent_r.last_non_deploying_status::TEXT::resourcestate
