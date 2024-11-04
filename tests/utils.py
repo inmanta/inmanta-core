@@ -379,6 +379,26 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     return versions.result
 
 
+async def get_done_count(
+    client: Client,
+    environment: str,
+) -> int:
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    summary = result.result["metadata"]["deploy_summary"]
+    # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
+    #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
+
+    return (
+        summary["by_state"]["deployed"]
+        + summary["by_state"]["failed"]
+        + summary["by_state"]["skipped"]
+        + summary["by_state"]["skipped_for_undefined"]
+        + summary["by_state"]["unavailable"]
+        + summary["by_state"]["undefined"]
+    )
+
+
 async def wait_until_deployment_finishes(
     client: Client, environment: str, version: int = -1, timeout: int = 10, wait_for_n: int | None = None
 ) -> None:
@@ -476,8 +496,11 @@ class ClientHelper:
             await self.wait_for_released(version)
         await wait_until_deployment_finishes(self.client, str(self.environment), timeout)
 
-    async def wait_full_success(self, environment: str) -> None:
-        await wait_full_success(self.client, environment)
+    async def wait_full_success(self) -> None:
+        await wait_full_success(self.client, self.environment)
+
+    async def done_count(self) -> int:
+        return await get_done_count(self.client, self.environment)
 
 
 def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> dict[str, Any]:
@@ -888,16 +911,6 @@ async def _deploy_resources(client, environment, resources, version, push, agent
 
 async def wait_for_n_deployed_resources(client, environment, version, n, timeout=5):
     await wait_until_deployment_finishes(client, environment, timeout=timeout, wait_for_n=n)
-
-
-async def _wait_for_n_deploying(client, environment, version, n, timeout=10):
-    async def in_progress():
-        result = await client.get_version(environment, version)
-        assert result.code == 200
-        res = [res for res in result.result["resources"] if res["status"] == "deploying"]
-        return len(res) >= n
-
-    await retry_limited(in_progress, timeout)
 
 
 class NullAgent(SessionEndpoint):

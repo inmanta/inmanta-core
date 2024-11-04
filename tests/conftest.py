@@ -2522,20 +2522,44 @@ def resource_container(clean_reset):
             )
 
         # unhang waiters
-        result = await client.get_version(env_id, version)
-        assert result.code == 200
         now = time.time()
-        log_progress(result.result["model"]["done"], result.result["model"]["total"])
-        while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = await client.resource_list(env_id, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
+        #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
+        available = summary["by_state"]["available"]
+        deploying = summary["by_state"]["deploying"]
+        total: int = summary["total"]
+
+        done = (
+            summary["by_state"]["deployed"]
+            + summary["by_state"]["failed"]
+            + summary["by_state"]["skipped"]
+            + summary["by_state"]["skipped_for_undefined"]
+            + summary["by_state"]["unavailable"]
+            + summary["by_state"]["undefined"]
+        )
+
+        log_progress(done, total)
+        while (total - done) > 0:
             if now + timeout < time.time():
                 raise Exception("Timeout")
-            if (
-                wait_for_this_amount_of_resources_in_done
-                and result.result["model"]["done"] - wait_for_this_amount_of_resources_in_done >= 0
-            ):
+            if wait_for_this_amount_of_resources_in_done and done - wait_for_this_amount_of_resources_in_done >= 0:
                 break
-            result = await client.get_version(env_id, version)
-            log_progress(result.result["model"]["done"], result.result["model"]["total"])
+            result = await client.resource_list(env_id, deploy_summary=True)
+            assert result.code == 200
+            summary = result.result["metadata"]["deploy_summary"]
+            done = (
+                summary["by_state"]["deployed"]
+                + summary["by_state"]["failed"]
+                + summary["by_state"]["skipped"]
+                + summary["by_state"]["skipped_for_undefined"]
+                + summary["by_state"]["unavailable"]
+                + summary["by_state"]["undefined"]
+            )
+
+            log_progress(done, total)
             waiter.acquire()
             waiter.notify_all()
             waiter.release()
