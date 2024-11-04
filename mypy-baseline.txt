@@ -739,7 +739,6 @@ src/inmanta/ast/variables.py:0: error: Missing type parameters for generic type 
 src/inmanta/ast/variables.py:0: error: Missing type parameters for generic type "VariableReader"  [type-arg]
 src/inmanta/ast/variables.py:0: error: Argument 2 to "AttributeReference" has incompatible type "str"; expected "LocatableString"  [arg-type]
 src/inmanta/server/protocol.py:0: error: Argument 1 to "RESTServer" has incompatible type "SessionManager"; expected "SessionManagerInterface"  [arg-type]
-src/inmanta/server/protocol.py:0: error: Name "IntervalSchedule" is not defined  [name-defined]
 src/inmanta/server/protocol.py:0: error: Argument 1 to "append" of "list" has incompatible type "tuple[str, type[RedirectHandler], dict[str, str]]"; expected "Rule"  [arg-type]
 src/inmanta/server/protocol.py:0: error: Missing type parameters for generic type "Future"  [type-arg]
 src/inmanta/server/protocol.py:0: error: Missing type parameters for generic type "Future"  [type-arg]
