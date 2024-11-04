@@ -3247,7 +3247,7 @@ class AgentInstance(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list[TAgentInstance]:
         if process is not None:
-            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process, connection=connection)
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
         else:
             objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
         return objects
