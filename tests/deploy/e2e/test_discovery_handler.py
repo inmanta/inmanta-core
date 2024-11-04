@@ -264,9 +264,9 @@ async def test_discovery_resource_requires_provides(
 
     await wait_for_n_deployed_resources(client, environment, version, n=len(resources))
 
-    result = await client.get_version(tid=environment, id=version)
+    result = await client.resource_list(tid=environment)
     assert result.code == 200
-    discovery_resources = [r for r in result.result["resources"] if r["resource_type"] == "test::MyDiscoveryResource"]
+    discovery_resources = [r for r in result.result["data"] if r["id_details"]["resource_type"] == "test::MyDiscoveryResource"]
     assert len(discovery_resources) == 1
     assert discovery_resources[0]["status"] == "skipped"
 

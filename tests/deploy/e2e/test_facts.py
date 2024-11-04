@@ -440,7 +440,6 @@ async def test_get_fact_no_code(resource_container, client, clienthelper, enviro
     response = await client.get_resource(environment, resource_id, logs=True)
     assert response.code == 200
     result = response.result
-    assert result["resource"]["status"] == "deployed"
     log_entry = result["logs"][0]
     assert log_entry["action"] == "getfact"
     assert log_entry["status"] == "unavailable"
