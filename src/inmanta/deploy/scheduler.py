@@ -236,8 +236,8 @@ class ResourceScheduler(TaskManager):
         if self._running:
             return
         self.reset()
-        await self._initialize()
         await self.reset_resource_state()
+        await self._initialize()
         self._running = True
 
     async def _initialize(self) -> None:
