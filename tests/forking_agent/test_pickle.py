@@ -64,3 +64,4 @@ def test_risky_objects():
     assert isinstance(deploy_out.changes["a"], AttributeStateChange)
     assert isinstance(deploy_out.changes["a"].desired, str)
     assert isinstance(deploy_out.messages[0], LogLine)
+    deploy_out.messages[0].log_level

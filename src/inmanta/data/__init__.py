@@ -4011,7 +4011,7 @@ class LogLine(DataDocument):
 
     def __setstate__(self, state: str) -> None:
         # This method exists only to keep IPC light compatible with the json based RPC
-        self.__dict__.update(json.loads(state))
+        self._data = json.loads(state)
 
 
 @stable_api
