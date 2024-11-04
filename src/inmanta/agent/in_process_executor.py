@@ -388,7 +388,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     started=started,
                     finished=datetime.datetime.now().astimezone(),
                     messages=[],
-                    succeeded=False,
+                    success=False,
                     error_msg=f"Unable to deserialize resource {resource.id}",
                 )
             assert resource_obj is not None
@@ -420,7 +420,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         started=started,
                         finished=datetime.datetime.now().astimezone(),
                         messages=ctx.logs,
-                        succeeded=True,
+                        success=True,
                     )
 
                 except Exception:
@@ -433,7 +433,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         started=started,
                         finished=datetime.datetime.now().astimezone(),
                         messages=ctx.logs,
-                        succeeded=False,
+                        success=False,
                         error_msg=error_msg,
                     )
 
@@ -447,7 +447,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 started=started,
                 finished=datetime.datetime.now().astimezone(),
                 messages=[],
-                succeeded=False,
+                success=False,
                 error_msg=error_msg,
             )
         finally:

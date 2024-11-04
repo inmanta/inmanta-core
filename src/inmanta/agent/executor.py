@@ -476,7 +476,7 @@ class FactResult:
     action_id: Optional[uuid.UUID]
     started: datetime.datetime
     finished: datetime.datetime
-    succeeded: bool
+    success: bool
     parameters: list[dict[str, Any]]
     messages: list[LogLine]
     error_msg: Optional[str] = None

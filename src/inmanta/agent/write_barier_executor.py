@@ -21,7 +21,6 @@ import typing
 import uuid
 from copy import deepcopy
 
-import inmanta.types  # noqa: F401
 from inmanta import const
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, FailedResources, ResourceDetails, ResourceInstallSpec
