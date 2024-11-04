@@ -1382,7 +1382,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    # Let's resume everything and check that the executor is not being created again
+    # Let's restart everything and check that the resource is considered as available
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]

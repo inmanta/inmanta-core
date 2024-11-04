@@ -4741,16 +4741,17 @@ class Resource(BaseDocument):
         :param version: The version of the model impacted by this
         :param connection: The connection to use
         """
-        query = """
+        query = f"""
             UPDATE resource AS updated_r
             SET status=inconsistent_r.last_non_deploying_status::TEXT::resourcestate
             FROM (
                 SELECT r.resource_id, r.status, r.model, ps.last_non_deploying_status
-                FROM resource r
-                INNER JOIN resource_persistent_state ps ON r.resource_id = ps.resource_id AND r.environment = ps.environment
+                FROM {Resource.table_name()} r
+                INNER JOIN {ResourcePersistentState.table_name()} ps ON r.resource_id = ps.resource_id
+                AND r.environment = ps.environment
                 WHERE r.environment=$1 AND r.model = $2 AND r.status = 'deploying'
             ) AS inconsistent_r
-            WHERE inconsistent_r.resource_id = updated_r.resource_id and inconsistent_r.model = updated_r.model
+            WHERE inconsistent_r.resource_id = updated_r.resource_id AND inconsistent_r.model = updated_r.model
         """
         values = [cls._get_value(environment), cls._get_value(version)]
         async with cls.get_connection(connection) as connection:
