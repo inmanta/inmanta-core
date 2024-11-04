@@ -5,6 +5,9 @@ from pyformance.meters import Gauge
 
 
 class MetricsRegistry:
+
+    _gauges: dict[str, Gauge]
+
     def __init__(self, clock): ...
     def dump_metrics(self)-> abc.Mapping[str, abc.Mapping[str, int|float|str]]: ...
 
