@@ -24,7 +24,7 @@ import uuid
 from collections import abc
 from collections.abc import Sequence
 from enum import Enum, StrEnum
-from typing import ClassVar, NewType, Optional, Self, Union
+from typing import ClassVar, Mapping, NewType, Optional, Self, Union
 
 import pydantic
 import pydantic.schema
@@ -90,7 +90,7 @@ class SliceStatus(BaseModel):
     """
 
     name: str
-    status: dict[str, ArgumentTypes]
+    status: Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]
 
 
 class FeatureStatus(BaseModel):
@@ -870,3 +870,30 @@ class PipConfig(BaseModel):
 
 
 LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
+
+
+class DataBaseReport(BaseModel):
+    connected: bool
+    database: str
+    host: str
+    max_pool: int
+    open_connections: int
+    free_connections: int
+    pool_exhaustion_count: int
+
+    def __add__(self, other: "DataBaseReport") -> "DataBaseReport":
+        if not isinstance(other, DataBaseReport):
+            return NotImplemented
+        if other.database != self.database:
+            return NotImplemented
+        if other.host != self.host:
+            return NotImplemented
+        return DataBaseReport(
+            connected=self.connected and other.connected,
+            database=self.database,
+            host=self.host,
+            max_pool=self.max_pool + other.max_pool,
+            open_connections=self.open_connections + other.open_connections,
+            free_connections=self.free_connections + other.free_connections,
+            pool_exhaustion_count=self.pool_exhaustion_count + other.pool_exhaustion_count,
+        )

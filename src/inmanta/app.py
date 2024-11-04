@@ -67,6 +67,7 @@ from inmanta.logging import InmantaLoggerConfig, LoggerMode, LoggerModeManager, 
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
+from inmanta.server.services.metricservice import MetricsService
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
@@ -156,6 +157,9 @@ def start_scheduler(options: argparse.Namespace) -> None:
             connection_pool_max_size=agent_config.scheduler_db_connection_pool_max_size.get(),
             connection_timeout=agent_config.scheduler_db_connection_timeout.get(),
         )
+        # also report metrics if this is relevant
+        metrics_reporter = MetricsService()
+        metrics_reporter.start_metric_reporters()
         await a.start()
 
     LOGGER.info("Agent with Resource scheduler starting now")
