@@ -111,6 +111,8 @@ class PoisonPill(Task):
 class Deploy(Task):
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str) -> None:
 
+        assert isinstance(task_manager, scheduler.ResourceScheduler)  # Make mypy happy
+
         # First do scheduler book keeping to establish what to do
         version: int
         resource_details: "state.ResourceDetails"
@@ -184,6 +186,8 @@ class Deploy(Task):
                 deploy_result = await my_executor.execute(
                     action_id, gid, executor_resource_details, "New Scheduler initiated action", requires
                 )
+                await task_manager.cancel_periodic_repair_and_deploy(executor_resource_details.rid)
+
                 success = deploy_result.status == const.ResourceState.deployed
             except Exception as e:
                 # This should not happen
@@ -221,6 +225,7 @@ class Deploy(Task):
                 status=state.ResourceStatus.UP_TO_DATE if success else state.ResourceStatus.HAS_UPDATE,
                 deployment_result=state.DeploymentResult.DEPLOYED if success else state.DeploymentResult.FAILED,
             )
+            await task_manager.resume_periodic_repair_and_deploy(executor_resource_details.rid)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -54,7 +54,7 @@ async def agent(server, environment, deactive_venv):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     a = Agent(environment)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.set_debug(True)
     executor = InProcessExecutorManager(
         environment,

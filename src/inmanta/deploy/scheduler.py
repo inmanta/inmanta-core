@@ -18,11 +18,13 @@
 
 import abc
 import asyncio
+import contextlib
+import functools
 import logging
 import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
-from typing import Any, Coroutine, Optional
+from typing import Optional
 from uuid import UUID
 
 import asyncpg
@@ -152,12 +154,19 @@ class ResourceScheduler(TaskManager):
         self.executor_manager = executor_manager
         self._state_update_delegate = ToDbUpdateManager(client, environment)
 
-        # Add dict resourceidstr -> periodic deploy task
-        # when deploy is done for a resource -> cancel + reschedule the task
-        self.resource_periodic_deploys: dict[ResourceIdStr, asyncio.Task[None]] = {}
-        self._compliance_check_window = agent_config.scheduler_resource_compliance_check_window.get()
+        # Maps resourceidstr -> periodic repair task
+        # when deploy starts for a resource: cancel the periodic task
+        # when deploy is done for a resource: reschedule the task
+        self.resource_periodic_repairs: dict[ResourceIdStr, asyncio.Task[None]] = {}
+        self._repair_compliance_check_window = agent_config.scheduler_resource_compliance_check_window.get()
 
-    def reset(self) -> None:
+        # Maps resourceidstr -> periodic deploy task
+        # when deploy starts for a resource: cancel the periodic task
+        # when deploy is done for a resource: reschedule the task
+        self.resource_periodic_deploys: dict[ResourceIdStr, asyncio.Task[None]] = {}
+        self._deploy_compliance_check_window = agent_config.scheduler_resource_compliance_check_window.get()
+
+    async def reset(self) -> None:
         """
         Clear out all state and start empty
 
@@ -168,14 +177,21 @@ class ResourceScheduler(TaskManager):
         self._work.reset()
         self._workers.clear()
         self._deploying_latest.clear()
-        for task in self.resource_periodic_deploys.values():
-            task.cancel()
-        self.resource_periodic_deploys.clear()
+
+        async def reset_task_dict(task_dict: dict[ResourceIdStr, asyncio.Task[None]]):
+            for task in task_dict.values():
+                task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.gather(*task_dict.values())
+            task_dict.clear()
+
+        await reset_task_dict(self.resource_periodic_repairs)
+        await reset_task_dict(self.resource_periodic_deploys)
 
     async def start(self) -> None:
         if self._running:
             return
-        self.reset()
+        await self.reset()
         await self._initialize()
         self._running = True
 
@@ -442,50 +458,25 @@ class ResourceScheduler(TaskManager):
 
             self._work.agent_queues.task_done(agent, task)
 
-    async def _start_compliance_check(self, resource: ResourceIdStr) -> None:
-        """
-        This method is expected to be called when the given resource has just finished deploying,
-        no matter the result itself i.e. success or failure.
-        """
-        if (previous_task := self.resource_periodic_deploys.get(resource)) is not None:
-            previous_task.cancel()
+    def create_recurring_repair(self, resource: ResourceIdStr) -> asyncio.Task[None]:
+        async def recurrent_repair() -> None:
+            while True:
+                async with self._scheduler_lock:
+                    to_deploy: set[ResourceIdStr] = set()
+                    to_deploy.add(resource)
 
-        self.resource_periodic_deploys[resource] = self.create_recurring_compliance_check(resource)
+                    asyncio.get_running_loop().call_soon(
+                        functools.partial(
+                            self._work.deploy_with_context,
+                            to_deploy,
+                            priority=TaskPriority.INTERVAL_REPAIR,
+                            deploying=self._deploying_latest,
+                        )
+                    )
 
-    def create_recurring_compliance_check(self, resource: ResourceIdStr) -> asyncio.Task[None]:
-        """
-        Schedule recurring deploys for the given resource every <scheduler_resource_compliance_check_window> seconds
-        and return the associated task. This task will be canceled and scheduled again when the next deploy finishes
-        for this resource.
-        """
+                await asyncio.sleep(self._repair_compliance_check_window)
 
-        async def delay(coro: Coroutine[Any, Any, None], seconds: float) -> None:
-            """
-            Helper function to run a coroutine after a delay
-            """
-            await asyncio.sleep(seconds)
-            await coro
-
-        async def _trigger_deploy(resource: ResourceIdStr) -> None:
-            """
-            Check that the given resource is in a known good state with no pending updates and schedule a repair if need be
-            """
-            to_deploy: set[ResourceIdStr] = set()
-            to_deploy.add(resource)
-            # TODO Add dependents ?
-            async with self._scheduler_lock:
-                LOGGER.debug(
-                    "Periodic deploy for resource %s. Triggering deploy for resources: %s", str(resource), str(to_deploy)
-                )
-                self._work.deploy_with_context(to_deploy, priority=TaskPriority.INTERVAL_REPAIR, deploying=set())
-
-        # could change this to task(callback= <recreate itself>)
-        async def _recurrent_compliance_check(resource: ResourceIdStr) -> None:
-            await _trigger_deploy(resource)
-            await delay(_recurrent_compliance_check(resource), self._compliance_check_window)
-
-        LOGGER.debug("Scheduling recurrent deploys for resource %s every %s seconds.", resource, self._compliance_check_window)
-        return asyncio.create_task(delay(_recurrent_compliance_check(resource), self._compliance_check_window))
+        return asyncio.create_task(recurrent_repair())
 
     # TaskManager interface
 
@@ -552,7 +543,27 @@ class ResourceScheduler(TaskManager):
                         assert task in self._work.agent_queues.in_progress
                         priority = self._work.agent_queues.in_progress[task]
                         self._work.deploy_with_context(event_listeners, priority=priority, deploying=set())
-                await self._start_compliance_check(resource)
+
+    async def cancel_periodic_repair_and_deploy(self, resource_id: ResourceIdStr) -> None:
+        """
+        Cancel periodic repair/deploy for the given resource.
+        """
+        for task in [self.resource_periodic_deploys.get(resource_id), self.resource_periodic_repairs.get(resource_id)]:
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+    async def resume_periodic_repair_and_deploy(self, resource_id: ResourceIdStr) -> None:
+        """
+        Resume periodic deploy/repair for the given resource.
+        """
+        await self.cancel_periodic_repair_and_deploy(resource_id)
+        self.resource_periodic_repairs[resource_id] = self.create_recurring_repair(resource_id)
+        # TODO add periodic deploy
+        # self.resource_periodic_deploys[resource_id] = self.create_recurring_deploy(resource_id)
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
