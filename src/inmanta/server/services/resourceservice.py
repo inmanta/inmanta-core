@@ -789,7 +789,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
         waiting_agents = {(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides}
-        for agent, resource_id in waiting_agents:
+        for agent, aresource_id in waiting_agents:
             aclient = self.agentmanager_service.get_agent_client(env.id, agent)
             if aclient is not None:
                 if change is None:
@@ -797,7 +797,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                 await aclient.resource_event(
                     tid=env.id,
                     id=agent,
-                    resource=resource_id,
+                    resource=aresource_id,
                     send_events=False,
                     state=status,
                     change=change,

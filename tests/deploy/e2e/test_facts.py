@@ -126,7 +126,7 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
@@ -284,7 +284,7 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     await get_fact("test::Fact[agent1,key=key1]", 503, lower_limit=0)  # undeployable
     await get_fact("test::Fact[agent1,key=key2]")  # normal
@@ -327,7 +327,7 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     # Make sure we get facts
     result = await client.get_param(environment, "length", res1)
@@ -426,7 +426,7 @@ async def test_get_fact_no_code(resource_container, client, clienthelper, enviro
     response = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert response.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     # make sure the code to load the resource is no longer available
     resources.resource.reset()
@@ -478,7 +478,7 @@ async def test_bad_post_get_facts(resource_container, server, client, agent, cli
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     assert "An error occurred after deployment of test::BadPost[agent1,key=key]" in caplog.text
     caplog.clear()

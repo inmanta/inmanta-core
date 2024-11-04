@@ -71,7 +71,7 @@ async def test_consistent_resource_state_reporting(
 
     result = await client.release_version(environment, version1, push=True)
     assert result.code == 200
-    await utils.wait_until_deployment_finishes(client, environment, version1)
+    await utils.wait_until_deployment_finishes(client, environment)
 
     result = await client.release_version(environment, version2, push=False)
     assert result.code == 200

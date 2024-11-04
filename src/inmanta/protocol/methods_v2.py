@@ -24,7 +24,7 @@ from typing import Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import LinkedDiscoveredResource, PipConfig, ResourceIdStr
+from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig, ResourceIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
@@ -493,6 +493,15 @@ def update_agent_map(agent_map: dict[str, str]) -> None:
     Notify an agent about the fact that the autostart_agent_map has been updated.
 
     :param agent_map: The content of the new autostart_agent_map
+    """
+
+
+@typedmethod(
+    path="/db_status", api=False, server_agent=True, enforce_auth=False, operation="POST", client_types=[], api_version=2
+)
+def get_db_status() -> DataBaseReport:
+    """
+    Get a report of the DB connection pool status
     """
 
 

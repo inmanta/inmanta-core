@@ -144,7 +144,7 @@ async def test_formatting_exception_messages(
     await clienthelper.put_version_simple(resources, version)
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_resource_actions(
         tid=environment,
@@ -196,7 +196,7 @@ async def test_format_token_in_logline(server, agent, client, environment, resou
 
     result = await client.get_version(environment, version)
     assert result.code == 200
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == 1
@@ -229,7 +229,7 @@ async def test_deploy_handler_method(server, client, environment, agent, clienth
 
         await _deploy_resources(client, environment, resources, version, push=True)
         await clienthelper.wait_for_released(version)
-        await wait_until_deployment_finishes(client, environment, version=version)
+        await wait_until_deployment_finishes(client, environment)
 
         result = await client.resource_details(tid=environment, rid=rid)
         assert result.code == 200
