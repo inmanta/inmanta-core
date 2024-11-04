@@ -166,6 +166,21 @@ class ResourceScheduler(TaskManager):
         self.resource_periodic_deploys: dict[ResourceIdStr, asyncio.Task[None]] = {}
         self._deploy_compliance_check_window = agent_config.scheduler_resource_compliance_check_window.get()
 
+    async def clear_periodic_tasks(self) -> None:
+        """
+        Cancel periodic deploys and repairs and clears the associated book-keeping dicts.
+        """
+
+        async def reset_task_dict(task_dict: dict[ResourceIdStr, asyncio.Task[None]]) -> None:
+            for task in task_dict.values():
+                task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.gather(*task_dict.values())
+            task_dict.clear()
+
+        await reset_task_dict(self.resource_periodic_repairs)
+        await reset_task_dict(self.resource_periodic_deploys)
+
     async def reset(self) -> None:
         """
         Clear out all state and start empty
@@ -178,15 +193,7 @@ class ResourceScheduler(TaskManager):
         self._workers.clear()
         self._deploying_latest.clear()
 
-        async def reset_task_dict(task_dict: dict[ResourceIdStr, asyncio.Task[None]]):
-            for task in task_dict.values():
-                task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await asyncio.gather(*task_dict.values())
-            task_dict.clear()
-
-        await reset_task_dict(self.resource_periodic_repairs)
-        await reset_task_dict(self.resource_periodic_deploys)
+        await self.clear_periodic_tasks()
 
     async def start(self) -> None:
         if self._running:
@@ -224,6 +231,7 @@ class ResourceScheduler(TaskManager):
         if not self._running:
             return
         self._running = False
+        await self.clear_periodic_tasks()
         self._work.agent_queues.send_shutdown()
         await asyncio.gather(*self._workers.values())
 
