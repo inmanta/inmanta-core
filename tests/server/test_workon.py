@@ -20,6 +20,7 @@ import asyncio
 import asyncio.subprocess
 import copy
 import getpass
+import logging
 import os
 import shutil
 import subprocess
@@ -29,11 +30,13 @@ import textwrap
 import uuid
 from collections import abc
 from dataclasses import dataclass
+import pprint
 from typing import Optional, Sequence, Union
 
 import py.path
 import pytest
 import yaml
+from black import datetime
 
 import inmanta.data.model
 import inmanta.env
@@ -197,7 +200,31 @@ async def compiled_environments(client: protocol.Client) -> abc.AsyncIterator[ab
                 for result in await asyncio.gather(*(client.get_compile_queue(env.id) for env in environments))
             )
 
-        await utils.retry_limited(all_compiles_done, 15)
+        try:
+            await utils.retry_limited(all_compiles_done, 15)
+        except AssertionError:
+            problematic_env_ids = []
+            for result in await asyncio.gather(*(client.get_compile_queue(env.id) for env in environments)):
+                if len(result.result["queue"]) > 0:
+                    problematic_env_ids.append(env.id)
+
+            def str_to_datatime(datetime_str: str) -> datetime.datetime:
+                return datetime.strptime(datetime_str, '%y-%m-%dT%H:%M:%S.%Z')
+            suspect_report_id = []
+            for result in await asyncio.gather(*(client.get_reports(env_id) for env_id in problematic_env_ids)):
+                for report in result.result["reports"]:
+                    if str_to_datatime(report["completed"]) - str_to_datatime(report["started"]) > 1:
+                        suspect_report_id.append(report["id"])
+                    elif str_to_datatime(report["started"]) - str_to_datatime(report["requested"]) > 1:
+                        suspect_report_id.append(report["id"])
+                    reports = await data.Report.get_list(compile=report["id"])
+                # TODO h report longuest compiles + compiles that took a while before starting
+                current_data = result.result["data"]
+                logging.warning(
+                    "Compile reports of environment `%s`:",
+                        current_data["environment"],
+                        pprint.pformat(current_data)
+                )
 
         yield environments
 
