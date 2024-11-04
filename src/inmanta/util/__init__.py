@@ -392,25 +392,6 @@ class Scheduler:
         self._scheduled[task_spec] = handle
         return task_spec
 
-    def schedule(
-        self,
-        call: TaskMethod,
-        interval: float = 60,
-        initial_delay: Optional[float] = None,
-        cancel_on_stop: bool = True,
-        quiet_mode: bool = False,
-    ) -> Optional[ScheduledTask]:
-        """
-        Schedule a task repeatedly with a given interval. Tasks with the same call and the same schedule are considered the
-        same. Clients that wish to be able to delete tasks should make sure to use a unique `call` function.
-
-        :param interval: The interval between executions of the task.
-        :param initial_delay: The delay to execute the task for the first time. If not set, interval is used.
-        :quiet_mode: Set to true to disable logging the recurring notification that the action is being called. Use this to
-        avoid polluting the server log for very frequent actions.
-        """
-        return self.add_action(call, IntervalSchedule(interval, initial_delay), cancel_on_stop, quiet_mode)
-
     @stable_api
     def remove(self, task: ScheduledTask) -> None:
         """

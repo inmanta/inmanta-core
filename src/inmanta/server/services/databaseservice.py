@@ -29,7 +29,7 @@ from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import ArgumentTypes
-from inmanta.util import Scheduler
+from inmanta.util import IntervalSchedule, Scheduler
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,9 +59,12 @@ class DatabaseMonitor:
 
         # Schedule database pool exhaustion watch:
         # Check for pool exhaustion every 200 ms
-        self._scheduler.schedule(self._check_database_pool_exhaustion, interval=0.2, cancel_on_stop=True, quiet_mode=True)
+        self._scheduler.add_action(
+            self._check_database_pool_exhaustion, IntervalSchedule(0.2), cancel_on_stop=True, cancel_on_stop=True
+        )
+
         # Report pool exhaustion every 24h
-        self._scheduler.schedule(self._report_database_pool_exhaustion, interval=3_600 * 24, cancel_on_stop=True)
+        self._scheduler.add_action(self._report_database_pool_exhaustion, IntervalSchedule(3600 * 24), cancel_on_stop=True)
 
     async def stop(self) -> None:
         self.stop_monitor()
