@@ -58,6 +58,7 @@ from inmanta.data.model import (
     PagingBoundaries,
     PipConfig,
     ResourceIdStr,
+    ResourceVersionIdStr,
     api_boundary_datetime_normalizer,
 )
 from inmanta.protocol.common import custom_json_encoder
@@ -65,6 +66,7 @@ from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
+from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
 
@@ -4002,6 +4004,19 @@ class LogLine(DataDocument):
         log_line = msg % kwargs
         return cls(level=LogLevel(level).name, msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
+    def __getstate__(self) -> str:
+        if "timestamp" not in self._data:
+            self._data["timestamp"] = datetime.datetime.now().astimezone()
+        # make pickle use json to keep leaking stuff
+        # Will make the objects into json-like things
+        # This method exists only to keep IPC light compatible with the json based RPC
+        return json_encode(self._data)
+
+    def __setstate__(self, state: str) -> None:
+        # This method exists only to keep IPC light compatible with the json based RPC
+        self._data = json.loads(state)
+        self._data["timestamp"] = parse_timestamp(cast(str, self._data["timestamp"]))
+
 
 @stable_api
 class ResourceAction(BaseDocument):
@@ -4531,7 +4546,7 @@ class Resource(BaseDocument):
 
     # Methods for backward compatibility
     @property
-    def resource_version_id(self):
+    def resource_version_id(self) -> ResourceVersionIdStr:
         # This field was removed from the DB, this method keeps code compatibility
         return resources.Id.set_version_in_id(self.resource_id, self.model)
 
@@ -4611,7 +4626,7 @@ class Resource(BaseDocument):
             return []
         query_lock: str = lock.value if lock is not None else ""
 
-        def convert_or_ignore(rvid):
+        def convert_or_ignore(rvid: m.ResourceVersionIdStr) -> resources.Id | None:
             """Method to retain backward compatibility, ignore bad ID's"""
             try:
                 return resources.Id.parse_resource_version_id(rvid)
