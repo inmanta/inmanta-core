@@ -4015,7 +4015,7 @@ class LogLine(DataDocument):
     def __setstate__(self, state: str) -> None:
         # This method exists only to keep IPC light compatible with the json based RPC
         self._data = json.loads(state)
-        self._data["timestamp"] = parse_timestamp(self._data["timestamp"])
+        self._data["timestamp"] = parse_timestamp(cast(str, self._data["timestamp"]))
 
 
 @stable_api
