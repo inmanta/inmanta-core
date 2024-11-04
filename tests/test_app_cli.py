@@ -33,6 +33,7 @@ from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
 from inmanta.const import INMANTA_REMOVED_SET_ID, VersionState
+from inmanta.data import AUTO_DEPLOY
 from utils import v1_module_from_template
 
 
@@ -147,16 +148,24 @@ def test_module_help(inmanta_config, capsys):
 @pytest.mark.parametrize_any("push_method", [([]), (["-d"]), (["-d", "--full"])])
 @pytest.mark.parametrize_any("set_server", [True, False])
 @pytest.mark.parametrize_any("set_port", [True, False])
-async def test_export(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, server, client, push_method, set_server, set_port):
+async def test_export(
+    tmpvenv_active_inherit: env.VirtualEnv,
+    tmpdir,
+    server,
+    client,
+    push_method,
+    set_server,
+    set_port,
+    null_agent,
+    environment,
+    clienthelper,
+):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
 
-    result = await client.create_project("test")
+    env_id = environment
+    result = await client.environment_settings_set(tid=environment, id=AUTO_DEPLOY, value=True)
     assert result.code == 200
-    proj_id = result.result["project"]["id"]
-    result = await client.create_environment(proj_id, "test", None, None)
-    assert result.code == 200
-    env_id = result.result["environment"]["id"]
 
     workspace = tmpdir.mkdir("tmp")
     path_main_file = workspace.join("main.cf")
@@ -229,10 +238,8 @@ std::testing::NullResource(name="test", agentname="non_existing_agent")
     assert result.code == 200
     assert len(result.result["versions"]) == 1
 
-    details_exported_version = result.result["versions"][0]
-
-    # Check that the version started deploying thanks to auto-deploy:
-    assert details_exported_version["result"] == VersionState.deploying.name
+    # wait for release by auto release
+    await clienthelper.wait_for_released(None)
 
     shutil.rmtree(workspace)
 
