@@ -66,6 +66,7 @@ from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
+from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
 
@@ -3246,7 +3247,7 @@ class AgentInstance(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list[TAgentInstance]:
         if process is not None:
-            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process, connection=connection)
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
         else:
             objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
         return objects
@@ -4004,14 +4005,17 @@ class LogLine(DataDocument):
         return cls(level=LogLevel(level).name, msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
     def __getstate__(self) -> str:
+        if "timestamp" not in self._data:
+            self._data["timestamp"] = datetime.datetime.now().astimezone()
         # make pickle use json to keep leaking stuff
         # Will make the objects into json-like things
         # This method exists only to keep IPC light compatible with the json based RPC
-        return json_encode(self)
+        return json_encode(self._data)
 
     def __setstate__(self, state: str) -> None:
         # This method exists only to keep IPC light compatible with the json based RPC
-        self.__dict__.update(json.loads(state))
+        self._data = json.loads(state)
+        self._data["timestamp"] = parse_timestamp(cast(str, self._data["timestamp"]))
 
 
 @stable_api

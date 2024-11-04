@@ -1214,17 +1214,32 @@ class AgentView(DataView[AgentOrder, model.Agent]):
 
     def get_base_query(self) -> SimpleQueryBuilder:
         base = SimpleQueryBuilder(
-            select_clause="""SELECT a.name, a.environment, a.last_failover, a.paused, a.unpause_on_resume,
-                sa_join.hostname as process_name, sa_join.process as process_id,
-                                            (CASE WHEN a.paused THEN 'paused'
-                                                WHEN NOT a.paused AND sa_join.id_primary IS NULL THEN 'down'
-                                                ELSE 'up'
-                                            END) as status""",
-            from_clause=f" FROM {Agent.table_name()} a "
-            "LEFT JOIN (SELECT sa.name, sa.id_primary, ap.hostname, ai.process FROM agent sa  "
-            f"LEFT JOIN {AgentInstance.table_name()} ai ON sa.id_primary=ai.id "
-            f"LEFT JOIN {AgentProcess.table_name()} ap ON ai.process = ap.sid  "
-            "WHERE sa.environment = $1 AND sa.name = $2) sa_join ON a.name <> sa_join.name ",
+            select_clause="""SELECT a.name,
+                                    a.environment,
+                                    a.last_failover,
+                                    a.paused,
+                                    a.unpause_on_resume,
+                                    sa_join.hostname as process_name,
+                                    sa_join.process as process_id,
+                                    (CASE
+                                        WHEN a.paused THEN 'paused'
+                                        WHEN NOT a.paused AND sa_join.id_primary IS NULL THEN 'down'
+                                        ELSE 'up'
+                                    END) as status""",
+            from_clause=f"""
+                            FROM {Agent.table_name()} a
+                            CROSS JOIN (
+                                SELECT
+                                    sa.name,
+                                    sa.id_primary,
+                                    ap.hostname,
+                                    ai.process
+                                FROM {Agent.table_name()} sa
+                                LEFT JOIN {AgentInstance.table_name()} ai ON sa.id_primary=ai.id
+                                LEFT JOIN {AgentProcess.table_name()} ap ON ai.process = ap.sid
+                                WHERE sa.environment = $1 AND sa.name = $2
+                            ) sa_join
+                            """,
             filter_statements=[" a.environment = $1 ", " a.name <> $2 "],
             values=[self.environment.id, const.AGENT_SCHEDULER_ID],
         )
