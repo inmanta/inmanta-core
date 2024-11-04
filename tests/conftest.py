@@ -911,6 +911,7 @@ async def agent_multi(server_multi, environment_multi):
         str(pathlib.Path(a._storage["executors"]) / "venvs"),
         False,
     )
+    executor = WriteBarierExecutorManager(executor)
     a.executor_manager = executor
     a.scheduler.executor_manager = executor
     a.scheduler.code_manager = utils.DummyCodeManager(a._client)
