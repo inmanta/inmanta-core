@@ -4723,8 +4723,9 @@ class Resource(BaseDocument):
             SET status=inconsistent_r.last_non_deploying_status::TEXT::resourcestate
             FROM (
                 SELECT r.resource_id, r.status, r.model, ps.last_non_deploying_status
-                FROM resource r JOIN resource_persistent_state ps ON r.resource_id = ps.resource_id
-                WHERE r.environment=$1 AND ps.environment = $1 and r.model = $2 and r.status = 'deploying'
+                FROM resource r
+                INNER JOIN resource_persistent_state ps ON r.resource_id = ps.resource_id AND r.environment = ps.environment
+                WHERE r.environment=$1 AND r.model = $2 AND r.status = 'deploying'
             ) AS inconsistent_r
             WHERE inconsistent_r.resource_id = updated_r.resource_id and inconsistent_r.model = updated_r.model
         """
