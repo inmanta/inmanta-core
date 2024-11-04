@@ -84,7 +84,6 @@ from inmanta.server.validate_filter import (
     ContainsFilterResourceAction,
     ContainsPartialFilter,
     DateRangeFilter,
-    DummyFilter,
     Filter,
     FilterValidator,
     IntRangeFilter,
@@ -1198,7 +1197,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
     def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "name": ContainsPartialFilter,
-            "process_name": DummyFilter,
+            "process_name": ContainsPartialFilter,
             "status": ContainsFilter,
         }
 
