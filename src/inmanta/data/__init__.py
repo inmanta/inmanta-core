@@ -4734,7 +4734,8 @@ class Resource(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
-        Update resources on the latest version of the model stuck in "deploying" state.
+        Update resources on the latest version of the model stuck in "deploying" state. The status will be reset to the latest
+        non deploying status.
 
         :param environment: The environment impacted by this
         :param version: The version of the model impacted by this
