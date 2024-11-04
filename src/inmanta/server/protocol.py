@@ -318,7 +318,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | No
         :quiet_mode: Set to true to disable logging the recurring notification that the action is being called. Use this to
         avoid polluting the server log for very frequent actions.
         """
-        self._sched.schedule(call, interval, initial_delay, cancel_on_stop, quiet_mode)
+        self._sched.add_action(call, IntervalSchedule(interval, initial_delay), cancel_on_stop, quiet_mode)
 
     def schedule_cron(self, call: TaskMethod, cron: str, cancel_on_stop: bool = True) -> None:
         """

@@ -60,7 +60,7 @@ class DatabaseMonitor:
         # Schedule database pool exhaustion watch:
         # Check for pool exhaustion every 200 ms
         self._scheduler.add_action(
-            self._check_database_pool_exhaustion, IntervalSchedule(0.2), cancel_on_stop=True, cancel_on_stop=True
+            self._check_database_pool_exhaustion, IntervalSchedule(0.2), cancel_on_stop=True, quiet_mode=True
         )
 
         # Report pool exhaustion every 24h
