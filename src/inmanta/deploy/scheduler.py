@@ -18,7 +18,6 @@
 
 import abc
 import asyncio
-import itertools
 import logging
 import typing
 import uuid
@@ -637,9 +636,10 @@ class ResourceScheduler(TaskManager):
 
         :param resource_id: The id of the resource to find the dependencies for
         """
-        provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.provides_view()
-        dependencies = provides_view.get(resource_id.resource_str(), [])
-        return {resource_id.resource_str(): self._state.resource_state[resource_id] for resource_id in dependencies}
+        resource_id_str = resource_id.resource_str()
+        provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires
+        dependencies = provides_view.get(resource_id_str, [])
+        return {id: const.ResourceState(self._state.resource_state[id].deployment_result) for id in dependencies}
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
