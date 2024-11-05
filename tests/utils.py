@@ -78,12 +78,15 @@ async def retry_limited(
     fun: Union[abc.Callable[..., bool], abc.Callable[..., abc.Awaitable[bool]]],
     timeout: float,
     interval: float = 0.1,
+    callback_before_assertion: abc.Callable[..., abc.Awaitable[None]] = None,
     *args: object,
     **kwargs: object,
 ) -> None:
     try:
         await util.retry_limited(fun, timeout, interval, *args, **kwargs)
     except asyncio.TimeoutError:
+        if callback_before_assertion is not None:
+            await callback_before_assertion()
         raise AssertionError("Bounded wait failed")
 
 
