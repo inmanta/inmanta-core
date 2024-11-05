@@ -305,6 +305,8 @@ def is_map(map_in: str | typing.Mapping[str, str]) -> typing.Mapping[str, str]:
 
     return map_out
 
+def config_map_to_str(inp: typing.Mapping[str, str]) -> str:
+    return ",".join(f"{k}={v}" for k,v in inp.items())
 
 def is_str(value: str) -> str:
     """str"""

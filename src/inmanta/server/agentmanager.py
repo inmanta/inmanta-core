@@ -38,7 +38,7 @@ import inmanta.server.services.environmentlistener
 from inmanta import config as global_config
 from inmanta import const, data, tracing
 from inmanta.agent import config as agent_cfg
-from inmanta.config import Config
+from inmanta.config import Config, config_map_to_str
 from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
 from inmanta.data.model import DataBaseReport, ResourceIdStr
@@ -1368,7 +1368,7 @@ name = {opt.influxdb_name.get()}
 username = {opt.influxdb_username.get()}
 password = {opt.influxdb_password.get()}
 interval = {opt.influxdb_interval.get()}
-tags = {opt.influxdb_tags.get()}
+tags = {config_map_to_str(opt.influxdb_tags.get())}
 """
         return config
 
