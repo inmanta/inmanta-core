@@ -29,15 +29,15 @@ import sys
 import tempfile
 import textwrap
 import uuid
-from collections import abc
+from collections import abc, defaultdict
 from dataclasses import dataclass
-from typing import Optional, Sequence, Union, Annotated, Any
+from typing import Any, Optional, Sequence, Union
 
 import py.path
 import pydantic
 import pytest
 import yaml
-from pydantic import AfterValidator, field_validator, model_validator
+from pydantic import model_validator
 
 import inmanta.data.model
 import inmanta.env
@@ -206,16 +206,12 @@ async def diagnose_compile_reports(client: protocol.Client, environments: list[u
     # chronological view
     for result in await asyncio.gather(*(client.get_reports(env_id) for env_id in environments)):
         for report in result.result["reports"]:
-            detailed_report = await client.get_report(id=report["id"])
-            assert detailed_report.code == 200
-            for sub_report in detailed_report.result["report"]["reports"]:
-                requested_timestamp = datetime.fromisoformat(detailed_report.result["report"]["requested"]).timestamp()
-                started_timestamp = (
-                    datetime.fromisoformat(sub_report["started"]).timestamp() if sub_report["started"] is not None else None
-                )
-                completed_timestamp = (
-                    datetime.fromisoformat(sub_report["completed"]).timestamp() if sub_report["completed"] is not None else None
-                )
+            detailed_report = await data.Compile.get_report(compile_id=report["id"], order_by="started", order="ASC")
+            assert detailed_report
+            for sub_report in detailed_report["reports"]:
+                requested_timestamp = detailed_report["requested"].timestamp()
+                started_timestamp = sub_report["started"].timestamp() if sub_report["started"] is not None else None
+                completed_timestamp = sub_report["completed"].timestamp() if sub_report["completed"] is not None else None
 
                 time_in_queue = (started_timestamp - requested_timestamp) if started_timestamp else None
                 completion_time = (
@@ -227,7 +223,7 @@ async def diagnose_compile_reports(client: protocol.Client, environments: list[u
                     else None
                 )
 
-                report_id = report["id"],
+                report_id = (report["id"],)
                 substitute_compile_id = report["substitute_compile_id"]
                 command = sub_report["command"]
                 return_code = sub_report["returncode"]
@@ -240,7 +236,7 @@ async def diagnose_compile_reports(client: protocol.Client, environments: list[u
                     "Completed timestamp: %s\n## Times ##\nTime in queue: %s\nCompletion time: %s\n"
                     "Timed out completion time: %s\n## Execution ##\nExecuted command: %s\n"
                     "Exit code: %s\nOutput stream: %s\nError stream: %s\n",
-                    detailed_report.result["report"]["environment"],
+                    str(detailed_report["environment"]),
                     report_id,
                     substitute_compile_id if substitute_compile_id else "",
                     requested_timestamp if requested_timestamp else "",
@@ -1308,30 +1304,50 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog) -
         output_stream: str
         error_stream: str
 
-        @model_validator(mode='before')
+        @model_validator(mode="before")
         @classmethod
         def check_optional_field(cls, data: Any) -> Any:
+            """
+            Transform empty strings into None to be compliant with Pydantic model
+
+            :param data: The dictionary that will be validated by Pydantic
+            """
+
             if isinstance(data, dict):
-                optional_fields = ['started_timestamp', 'completed_timestamp', 'time_in_queue', 'completion_time', 'timed_out_completion_time',
-                                  'exit_code', 'substitute_compile_id']
+                optional_fields = [
+                    "started_timestamp",
+                    "completed_timestamp",
+                    "time_in_queue",
+                    "completion_time",
+                    "timed_out_completion_time",
+                    "exit_code",
+                    "substitute_compile_id",
+                ]
                 for field in optional_fields:
                     if data[field] == "":
                         data[field] = None
             return data
 
-        def model_post_init(self, __context):
+        def model_post_init(self, __context: Any) -> None:
+            """
+            Add post-validation checks to make sure the provided data is consistent
+            """
+
             if self.started_timestamp is not None:
+                # This should be computable if requested and started timestamps are defined
                 assert self.time_in_queue > 0
             else:
                 assert self.time_in_queue is None, "Time in queue should not be defined for unstarted compile!"
 
             if self.completed_timestamp is not None:
+                # This should be computable if requested and started timestamps are defined
                 assert self.started_timestamp is not None, "Started time should be defined for finished compile!"
-                assert self.completed_timestamp > self.started_timestamp
                 assert self.completion_time is not None, "Completion time should be defined for finished compile!"
-                assert self.completion_time > 0
-                assert self.timed_out_completion_time is None, "Timed out completion time should not be defined for finished compile!"
-                #assert self.exit_code is not None, "Exit code should be defined for finished compile!"
+                assert self.completed_timestamp > self.started_timestamp
+                assert (
+                    self.timed_out_completion_time is None
+                ), "Timed out completion time should not be defined for finished compile!"
+                # assert self.exit_code is not None, "Exit code should be defined for finished compile!"
             else:
                 assert self.completion_time is None, "Completion time should not be defined for unfinished compile!"
                 assert self.timed_out_completion_time > 0
@@ -1358,20 +1374,52 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog) -
             problematic_env_ids = []
             for result in await asyncio.gather(*(client.get_compile_queue(env.id) for env in environments)):
                 if len(result.result["queue"]) > 0:
-                    problematic_env_ids.append(env.id)
+                    problematic_env_ids.append(result.result["queue"][0]["environment"])
             await diagnose_compile_reports(client=client, environments=problematic_env_ids)
 
-            reports = []
-            for _, _, message in caplog.record_tuples:
+            min_timestamp = defaultdict(lambda: 0.0)
+            for i, (_, _, message) in enumerate(caplog.record_tuples):
                 if "Environment id:" not in message:
                     continue
 
                 def convert_log_line_into_report(log_line: str) -> TestDiagnoseReport:
+                    """
+                    As we know that the logging will have the following structure:
+                        ```
+                            Environment id: .......-....-....-....-.......
+                            Compile id: ('.......-....-....-....-.......',)
+                            Substitute compile id:
+                            ## Timestamps ##
+                            Requested timestamp: AAAAAAAA.BBBBBB
+                            Started timestamp: CCCCCCCC.DDDDDDD
+                            Completed timestamp:
+                            ## Times ##
+                            Time in queue: 0.OOOOOOOOOOOOOO.
+                            Completion time:
+                            Timed out completion time: 0.PPPPPPPPP
+                            ## Execution ##
+                            Executed command:
+                            Exit code:
+                            Output stream: ''
+                            Error stream:
+                        ```
+                    We can transform this structure into a pydantic model by treating each line of this structure
+                    as a dictionary entry:
+                        - The line will be split by ':'
+                            - The generated list will contain the key and the value
+                            - For the key, we replace spaces by '_' and lower every character
+                    """
                     dict_log_line = {
                         line[0].lower().replace(" ", "_"): line[1].strip()
-                        for line in (item.split(":") for item in log_line.split("\n")) if len(line) == 2
+                        for line in (item.split(":") for item in log_line.split("\n"))
+                        if len(line) == 2
                     }
                     return TestDiagnoseReport(**dict_log_line)
 
-                reports.append(convert_log_line_into_report(log_line=message))
-            breakpoint()
+                # The different reports will be ordered by started field in Ascending order, allowing us to easily check that
+                # there are no overlapping compilations.
+                current_report = convert_log_line_into_report(log_line=message)
+                # We make sure the new compile (for this particular environment) has started after the last known one
+                assert min_timestamp[current_report.environment_id] <= current_report.started_timestamp
+                # The completion time of this compile is the new minimum value (ensure no overlap)
+                min_timestamp[current_report.environment_id] = current_report.completed_timestamp
