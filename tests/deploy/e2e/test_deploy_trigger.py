@@ -171,18 +171,26 @@ async def test_spontaneous_deploy(
     ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleep mechanism is broken"
 
 
-async def test_spontaneous_repair(server, client, agent, resource_container, environment, clienthelper):
+@pytest.mark.parametrize(
+    "agent_repair_interval",
+    [
+        "2",
+        "*/2 * * * * * *",
+    ],
+)
+async def test_spontaneous_repair(server, client, agent, resource_container, environment, clienthelper, agent_repair_interval):
     """
     Test that a repair run is executed every 2 seconds in the new agent
      as specified in the agent_repair_interval (using a cron or not)
     """
     resource_container.Provider.reset()
     env_id = environment
-
-    Config.set("scheduler", "resource-compliance-check-window", "2")
+    Config.set("config", "agent-repair-interval", agent_repair_interval)
 
     # This is just so we can reuse the agent from the fixtures with the new config options
     agent._set_deploy_and_repair_intervals()
+    agent.scheduler.trigger_global_repair()
+
     version = await clienthelper.get_version()
 
     resources = [

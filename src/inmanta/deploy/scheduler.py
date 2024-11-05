@@ -18,13 +18,12 @@
 
 import abc
 import asyncio
-import contextlib
 import functools
 import logging
 import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
-from typing import Optional
+from typing import Optional, Union
 from uuid import UUID
 
 import asyncpg
@@ -43,6 +42,7 @@ from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
+from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, Scheduler
 
 LOGGER = logging.getLogger(__name__)
 
@@ -154,32 +154,25 @@ class ResourceScheduler(TaskManager):
         self.executor_manager = executor_manager
         self._state_update_delegate = ToDbUpdateManager(client, environment)
 
-        # Maps resourceidstr -> periodic repair task
-        # when deploy starts for a resource: cancel the periodic task
-        # when deploy is done for a resource: reschedule the task
-        self.resource_periodic_repairs: dict[ResourceIdStr, asyncio.Task[None]] = {}
-        self._repair_compliance_check_window = agent_config.scheduler_resource_compliance_check_window.get()
+        self._sched = Scheduler("Resource scheduler")
+        self.resource_periodic_repairs: dict[ResourceIdStr, ScheduledTask] = {}
+        self._repair_timer: Union[int, str] = agent_config.agent_repair_interval.get()
 
-        # Maps resourceidstr -> periodic deploy task
-        # when deploy starts for a resource: cancel the periodic task
-        # when deploy is done for a resource: reschedule the task
-        self.resource_periodic_deploys: dict[ResourceIdStr, asyncio.Task[None]] = {}
-        self._deploy_compliance_check_window = agent_config.scheduler_resource_compliance_check_window.get()
+        self.global_periodic_repair_task: ScheduledTask | None = None
+
+        self.resource_periodic_deploys: dict[ResourceIdStr, ScheduledTask] = {}
+        self._deploy_timer: Union[int, str] = agent_config.agent_deploy_interval.get()
 
     async def clear_periodic_tasks(self) -> None:
         """
         Cancel periodic deploys and repairs and clears the associated book-keeping dicts.
         """
 
-        async def reset_task_dict(task_dict: dict[ResourceIdStr, asyncio.Task[None]]) -> None:
-            for task in task_dict.values():
-                task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await asyncio.gather(*task_dict.values())
-            task_dict.clear()
+        for task in [*self.resource_periodic_repairs.values(), *self.resource_periodic_deploys.values()]:
+            self._sched.remove(task)
 
-        await reset_task_dict(self.resource_periodic_repairs)
-        await reset_task_dict(self.resource_periodic_deploys)
+        if self.global_periodic_repair_task is not None:
+            self._sched.remove(self.global_periodic_repair_task)
 
     async def reset(self) -> None:
         """
@@ -227,11 +220,14 @@ class ResourceScheduler(TaskManager):
             version, resources=resources_to_deploy, requires=requires, up_to_date_resources=up_to_date_resources
         )
 
+        self.global_periodic_repair_task = self.trigger_global_repair()
+
     async def stop(self) -> None:
         if not self._running:
             return
         self._running = False
         await self.clear_periodic_tasks()
+        await self._sched.stop()
         self._work.agent_queues.send_shutdown()
         await asyncio.gather(*self._workers.values())
 
@@ -253,6 +249,25 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             self._state.dirty.update(self._state.resources.keys())
             self._work.deploy_with_context(self._state.dirty, priority=priority, deploying=self._deploying_latest)
+
+    def trigger_global_repair(self) -> ScheduledTask | None:
+        """
+        Trigger a global repair when repair interval is passed as a cron expression.
+        When repair interval is passed as an int, repairs are scheduled on a
+        per-resource basis instead.
+
+        :returns: the associated scheduled task, if any.
+        """
+
+        if isinstance(self._repair_timer, str):
+            cron_schedule = CronSchedule(cron=self._repair_timer)
+            task = self._sched.add_action(self.repair, cron_schedule)
+            # Omitting this yields mypy error: Returning Any from function declared to return "ScheduledTask | None"  [no-any-return]
+            assert task is None or isinstance(task, ScheduledTask)
+            return task
+
+        # Not a cron expression -> don't schedule a global repair.
+        return None
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         if not self._running:
@@ -466,25 +481,32 @@ class ResourceScheduler(TaskManager):
 
             self._work.agent_queues.task_done(agent, task)
 
-    def create_recurring_repair(self, resource: ResourceIdStr) -> asyncio.Task[None]:
-        async def recurrent_repair() -> None:
-            while True:
-                async with self._scheduler_lock:
-                    to_deploy: set[ResourceIdStr] = set()
-                    to_deploy.add(resource)
+    def create_recurring_repair_for_resource(self, resource: ResourceIdStr) -> ScheduledTask | None:
+        """
+        Schedule individual periodic repair for a given resource iff the repair timer is specified as
+        an int
+        """
+        # If repair timer is specified as a cron, a global repair is scheduled instead of a per-resource one.
+        if isinstance(self._repair_timer, str):
+            return None
 
-                    asyncio.get_running_loop().call_soon(
-                        functools.partial(
-                            self._work.deploy_with_context,
-                            to_deploy,
-                            priority=TaskPriority.INTERVAL_REPAIR,
-                            deploying=self._deploying_latest,
-                        )
-                    )
+        async def _repair() -> None:
+            async with self._scheduler_lock:
+                to_deploy: set[ResourceIdStr] = set()
+                to_deploy.add(resource)
 
-                await asyncio.sleep(self._repair_compliance_check_window)
+                self._work.deploy_with_context(
+                    to_deploy,
+                    priority=TaskPriority.INTERVAL_REPAIR,
+                    deploying=self._deploying_latest,
+                )
 
-        return asyncio.create_task(recurrent_repair())
+        interval_schedule: IntervalSchedule = IntervalSchedule(interval=float(self._repair_timer), initial_delay=0)
+        task = self._sched.add_action(_repair, interval_schedule)
+
+        # Omitting this yields mypy error: Returning Any from function declared to return "ScheduledTask | None"  [no-any-return]
+        assert task is None or isinstance(task, ScheduledTask)
+        return task
 
     # TaskManager interface
 
@@ -552,24 +574,22 @@ class ResourceScheduler(TaskManager):
                         priority = self._work.agent_queues.in_progress[task]
                         self._work.deploy_with_context(event_listeners, priority=priority, deploying=set())
 
-    async def cancel_periodic_repair_and_deploy(self, resource_id: ResourceIdStr) -> None:
+    async def cancel_periodic_repair_and_deploy_for_resource(self, resource_id: ResourceIdStr) -> None:
         """
-        Cancel periodic repair/deploy for the given resource.
+        Cancel individual periodic repair/deploy for the given resource.
         """
         for task in [self.resource_periodic_deploys.get(resource_id), self.resource_periodic_repairs.get(resource_id)]:
             if task is not None:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+                self._sched.remove(task)
 
     async def resume_periodic_repair_and_deploy(self, resource_id: ResourceIdStr) -> None:
         """
         Resume periodic deploy/repair for the given resource.
         """
-        await self.cancel_periodic_repair_and_deploy(resource_id)
-        self.resource_periodic_repairs[resource_id] = self.create_recurring_repair(resource_id)
+        await self.cancel_periodic_repair_and_deploy_for_resource(resource_id)
+        periodic_repair: ScheduledTask | None = self.create_recurring_repair_for_resource(resource_id)
+        if periodic_repair:
+            self.resource_periodic_repairs[resource_id] = periodic_repair
         # TODO add periodic deploy
         # self.resource_periodic_deploys[resource_id] = self.create_recurring_deploy(resource_id)
 

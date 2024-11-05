@@ -74,7 +74,8 @@ class Agent(SessionEndpoint):
             We should fix or remove this timer in the future.
         """
         # quick and dirty, fix later:
-        self.scheduler._repair_compliance_check_window = cfg.scheduler_resource_compliance_check_window.get()
+        self.scheduler._repair_timer = cfg.agent_repair_interval.get()
+        self.scheduler._deploy_timer = cfg.agent_deploy_interval.get()
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
         assert self._env_id is not None

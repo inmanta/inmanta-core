@@ -186,7 +186,7 @@ class Deploy(Task):
                 deploy_result = await my_executor.execute(
                     action_id, gid, executor_resource_details, "New Scheduler initiated action", requires
                 )
-                await task_manager.cancel_periodic_repair_and_deploy(executor_resource_details.rid)
+                await task_manager.cancel_periodic_repair_and_deploy_for_resource(executor_resource_details.rid)
 
                 success = deploy_result.status == const.ResourceState.deployed
             except Exception as e:
