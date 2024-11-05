@@ -31,7 +31,7 @@ import texttable
 
 from inmanta import protocol, util
 from inmanta.config import Config, cmdline_rest_transport
-from inmanta.const import AgentAction, AgentTriggerMethod, DesiredStateVersionStatus, ResourceAction
+from inmanta.const import AgentAction, DesiredStateVersionStatus, ResourceAction
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.resources import Id
 from inmanta.types import JsonType

@@ -7,7 +7,5 @@ sections:
   minor-improvement: "{{description}}"
   bugfix: "{{description}}"
   known-issue: "{{description}}"
-  upgrade-note: "{{description}}"
-  deprecation-note: "{{description}}"
-  other-note: "{{description}}"
-
+  upgrade-note: >
+    inmanta-cli version list has lost the columns `deployed` and `done`
