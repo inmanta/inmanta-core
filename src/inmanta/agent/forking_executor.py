@@ -94,8 +94,9 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
+from inmanta.agent.executor import DeployResult
 from inmanta.agent.resourcepool import PoolManager, PoolMember
-from inmanta.data.model import ResourceType
+from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
     IPCMethod,
@@ -463,40 +464,46 @@ class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
         await context.init_for(self.name, self.uri)
 
 
-class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, executor.DryrunResult]):
     """Run a dryrun in an executor"""
 
     def __init__(
         self,
         agent_name: str,
-        resources: typing.Sequence["inmanta.agent.executor.ResourceDetails"],
+        resource: "inmanta.agent.executor.ResourceDetails",
         dry_run_id: uuid.UUID,
     ) -> None:
         self.agent_name = agent_name
-        self.resources = resources
+        self.resource = resource
         self.dry_run_id = dry_run_id
 
-    async def call(self, context: ExecutorContext) -> None:
-        await context.get(self.agent_name).dry_run(self.resources, self.dry_run_id)
+    async def call(self, context: ExecutorContext) -> executor.DryrunResult:
+        return await context.get(self.agent_name).dry_run(self.resource, self.dry_run_id)
 
 
-class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, const.ResourceState]):
+class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, DeployResult]):
     """Run a deploy in an executor"""
 
     def __init__(
         self,
         agent_name: str,
+        action_id: uuid.UUID,
         gid: uuid.UUID,
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
+        requires: dict[ResourceIdStr, const.ResourceState],
     ) -> None:
         self.agent_name = agent_name
         self.gid = gid
         self.resource_details = resource_details
         self.reason = reason
+        self.action_id = action_id
+        self.requires = requires
 
-    async def call(self, context: ExecutorContext) -> const.ResourceState:
-        return await context.get(self.agent_name).execute(self.gid, self.resource_details, self.reason)
+    async def call(self, context: ExecutorContext) -> DeployResult:
+        return await context.get(self.agent_name).execute(
+            self.action_id, self.gid, self.resource_details, self.reason, self.requires
+        )
 
 
 class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta.types.Apireturn]):
@@ -793,18 +800,20 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
 
     async def dry_run(
         self,
-        resources: typing.Sequence["inmanta.agent.executor.ResourceDetails"],
+        resource: "inmanta.agent.executor.ResourceDetails",
         dry_run_id: uuid.UUID,
-    ) -> None:
-        await self.call(DryRunCommand(self.id.agent_name, resources, dry_run_id))
+    ) -> executor.DryrunResult:
+        return await self.call(DryRunCommand(self.id.agent_name, resource, dry_run_id))
 
     async def execute(
         self,
+        action_id: uuid.UUID,
         gid: uuid.UUID,
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
-    ) -> const.ResourceState:
-        return await self.call(ExecuteCommand(self.id.agent_name, gid, resource_details, reason))
+        requires: dict[ResourceIdStr, const.ResourceState],
+    ) -> DeployResult:
+        return await self.call(ExecuteCommand(self.id.agent_name, action_id, gid, resource_details, reason, requires))
 
     async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> inmanta.types.Apireturn:
         return await self.call(FactsCommand(self.id.agent_name, resource))
@@ -831,7 +840,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
-        :param storage_folder: folder to place code files
+        :param storage_folder: folder to place code files and venvs
         :param log_level: log level for the executors
         :param cli_log: do we also want to echo the log to std_err
 
@@ -852,11 +861,16 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         self.storage_folder = storage_folder
         os.makedirs(self.log_folder, exist_ok=True)
         os.makedirs(self.storage_folder, exist_ok=True)
-        venv_dir = pathlib.Path(self.storage_folder) / "venv"
+        venv_dir = pathlib.Path(self.storage_folder) / "venvs"
         venv_dir.mkdir(exist_ok=True)
 
+        self.code_folder = pathlib.Path(self.storage_folder) / "code"
+        self.code_folder.mkdir(exist_ok=True)
+
         # Env manager
-        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venv_dir.absolute()), self.thread_pool)
+        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(
+            envs_dir=str(venv_dir.absolute()), thread_pool=self.thread_pool
+        )
 
         # logging
         self.log_level = log_level
@@ -910,7 +924,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
             executor.process.pid,
             self.render_id(blueprint),
         )
-        storage_for_blueprint = os.path.join(self.storage_folder, "code", blueprint.blueprint_hash())
+        storage_for_blueprint = os.path.join(self.code_folder, blueprint.blueprint_hash())
         os.makedirs(storage_for_blueprint, exist_ok=True)
         failed_types = await executor.connection.call(
             InitCommand(
@@ -991,7 +1005,7 @@ class MPManager(
         :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
-        :param storage_folder: folder to place code files
+        :param storage_folder: folder to place code files and venvs
         :param log_level: log level for the executors
         :param cli_log: do we also want to echo the log to std_err
 

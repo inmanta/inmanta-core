@@ -26,7 +26,6 @@ from time import sleep
 import pytest
 from pytest import fixture
 
-from inmanta.agent import Agent
 from inmanta.agent import config as agent_config
 from inmanta.agent import executor
 from inmanta.agent.cache import AgentCache
@@ -76,14 +75,14 @@ def set_custom_cache_cleanup_policy(monkeypatch, server_config):
 
 
 @pytest.fixture(scope="function")
-async def agent_cache(agent: Agent):
+async def agent_cache(agent):
     pip_config = PipConfig()
 
     blueprint1 = executor.ExecutorBlueprint(
         pip_config=pip_config, requirements=(), sources=[], python_version=sys.version_info[:2]
     )
 
-    myagent_instance = await agent.executor_manager.get_executor(
+    myagent_instance = await agent.executor_manager.delegate.get_executor(
         "agent1", "local:", [executor.ResourceInstallSpec("test::Test", 5, blueprint1)]
     )
     yield myagent_instance._cache

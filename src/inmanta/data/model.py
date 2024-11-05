@@ -17,14 +17,14 @@
 """
 
 import datetime
+import json
 import typing
 import urllib
 import uuid
 from collections import abc
 from collections.abc import Sequence
-from enum import Enum
-from itertools import chain
-from typing import ClassVar, NewType, Optional, Self, Union
+from enum import Enum, StrEnum
+from typing import ClassVar, Mapping, NewType, Optional, Self, Union
 
 import pydantic
 import pydantic.schema
@@ -90,7 +90,7 @@ class SliceStatus(BaseModel):
     """
 
     name: str
-    status: dict[str, ArgumentTypes]
+    status: Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]
 
 
 class FeatureStatus(BaseModel):
@@ -242,6 +242,16 @@ class AttributeStateChange(BaseModel):
                 # In production, try to cast the non-serializable value to str to prevent the handler from failing.
                 return str(v)
         return v
+
+    def __getstate__(self) -> str:
+        # make pickle use json to keep from leaking stuff
+        # Will make the objects into json-like things
+        # This method exists only to keep IPC light compatible with the json based RPC
+        return protocol.common.json_encode(self)
+
+    def __setstate__(self, state: str) -> None:
+        # This method exists only to keep IPC light compatible with the json based RPC
+        self.__dict__.update(json.loads(state))
 
 
 EnvSettingType = Union[bool, int, float, str, dict[str, Union[str, int, bool]]]
@@ -426,17 +436,19 @@ class ResourceIdDetails(BaseModel):
     resource_id_value: str
 
 
-class OrphanedResource(str, Enum):
+class ReleasedResourceState(StrEnum):
+    # Copied over from const.ResourceState
+    unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource
+    skipped = "skipped"  #
+    dry = "dry"
+    deployed = "deployed"
+    failed = "failed"
+    deploying = "deploying"
+    available = "available"
+    cancelled = "cancelled"  # When a new version is pushed, in progress deploys are cancelled
+    undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
+    skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
     orphaned = "orphaned"
-
-
-class StrEnum(str, Enum):
-    """Enum where members are also (and must be) strs"""
-
-
-ReleasedResourceState = StrEnum(
-    "ReleasedResourceState", [(i.name, i.value) for i in chain(const.ResourceState, OrphanedResource)]
-)
 
 
 class VersionedResource(BaseModel):
@@ -657,13 +669,11 @@ class DesiredStateVersion(BaseModel):
     status: const.DesiredStateVersionStatus
 
 
-class NoPushTriggerMethod(str, Enum):
+class PromoteTriggerMethod(StrEnum):
+    # partly copies from const.AgentTriggerMethod
+    push_incremental_deploy = "push_incremental_deploy"
+    push_full_deploy = "push_full_deploy"
     no_push = "no_push"
-
-
-PromoteTriggerMethod = StrEnum(
-    "PromoteTriggerMethod", [(i.name, i.value) for i in chain(const.AgentTriggerMethod, NoPushTriggerMethod)]
-)
 
 
 class DryRun(BaseModel):
@@ -877,3 +887,30 @@ class PipConfig(BaseModel):
 
 
 LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
+
+
+class DataBaseReport(BaseModel):
+    connected: bool
+    database: str
+    host: str
+    max_pool: int
+    open_connections: int
+    free_connections: int
+    pool_exhaustion_count: int
+
+    def __add__(self, other: "DataBaseReport") -> "DataBaseReport":
+        if not isinstance(other, DataBaseReport):
+            return NotImplemented
+        if other.database != self.database:
+            return NotImplemented
+        if other.host != self.host:
+            return NotImplemented
+        return DataBaseReport(
+            connected=self.connected and other.connected,
+            database=self.database,
+            host=self.host,
+            max_pool=self.max_pool + other.max_pool,
+            open_connections=self.open_connections + other.open_connections,
+            free_connections=self.free_connections + other.free_connections,
+            pool_exhaustion_count=self.pool_exhaustion_count + other.pool_exhaustion_count,
+        )

@@ -24,7 +24,7 @@ from typing import Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import LinkedDiscoveredResource, PipConfig, ResourceIdStr
+from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig, ResourceIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
@@ -497,6 +497,15 @@ def update_agent_map(agent_map: dict[str, str]) -> None:
 
 
 @typedmethod(
+    path="/db_status", api=False, server_agent=True, enforce_auth=False, operation="POST", client_types=[], api_version=2
+)
+def get_db_status() -> DataBaseReport:
+    """
+    Get a report of the DB connection pool status
+    """
+
+
+@typedmethod(
     path="/compiledata/<id>",
     operation="GET",
     client_types=[ClientType.api],
@@ -861,31 +870,6 @@ def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.F
     :param id: The id of the fact
     :return: A specific fact corresponding to the id
     :raise NotFound: This status code is returned when the referenced environment or fact is not found
-    """
-
-
-# This should be be get operation,
-# but we can overflow the max url length if we don't put the parameters in the body
-# as such, we made this a post
-@typedmethod(
-    path="/resources/status",
-    operation="POST",
-    agent_server=True,
-    arg_options={**methods.ENV_OPTS},
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def resources_status(
-    tid: uuid.UUID,
-    version: int,
-    rids: list[model.ResourceIdStr],
-) -> dict[model.ResourceIdStr, ResourceState]:
-    """
-    Get the deployment status for a batch of resource ids
-
-    :param tid: The id of the environment the resources belong to
-    :param version: Version of the model to get the status for
-    :param rids: List of resource ids to fetch the status for.
     """
 
 

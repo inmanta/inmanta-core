@@ -17,6 +17,7 @@
 """
 
 import datetime
+import importlib.metadata
 import logging
 import os
 import shutil
@@ -26,7 +27,6 @@ from time import sleep
 from typing import Any, Callable, Optional, Union, cast
 
 import click
-import importlib_metadata
 import texttable
 
 from inmanta import protocol, util
@@ -180,7 +180,7 @@ def get_table(header: list[str], rows: list[list[str]], data_type: Optional[list
     return table.draw()
 
 
-@util.click_group_with_plugins(iter(importlib_metadata.entry_points(group="inmanta.cli_plugins")))
+@util.click_group_with_plugins(iter(importlib.metadata.entry_points(group="inmanta.cli_plugins")))
 @click.group(help="Base command")
 @click.option("--host", help="The server hostname to connect to")
 @click.option("--port", help="The server port to connect to")

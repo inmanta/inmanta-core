@@ -1,0 +1,5 @@
+description: Removed the agent
+issue-nr: 8184
+change-type: major
+destination-branches: [master]
+

@@ -1,0 +1,4 @@
+---
+description: Small fixes to the unknowns handling
+change-type: patch
+destination-branches: [master]

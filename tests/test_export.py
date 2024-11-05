@@ -19,12 +19,13 @@
 import json
 import logging
 import os
+from collections.abc import Mapping
 from typing import Optional
 
 import pytest
 
 import inmanta.resources
-from inmanta import config, const
+from inmanta import config, const, module
 from inmanta.ast import CompilerException, ExternalException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
@@ -48,7 +49,58 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
     assert actual_assignment == assignment
 
 
+def test_attribute_mapping_export(snippetcompiler):
+    """
+    Verify Python-defined attribute mapping between model resource and exported resource.
+    """
+    snippetcompiler.setup_for_snippet(
+        """\
+        import exp
+
+        exp::Test(name="a", agent="x")
+        exp::Test(name="b", agent="x", send_event=false, receive_events=true)
+        exp::Test(name="c", agent="x", send_event=true, receive_events=false)
+        """,
+        autostd=True,
+        project_requires=[module.InmantaModuleRequirement.parse("std>=6.1")],
+    )
+
+    _version, json_value = snippetcompiler.do_export()
+
+    assert len(json_value) == 3
+    resources: Mapping[str, Mapping[str, object]] = {
+        resource.name: {
+            # base resource mapping
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: getattr(resource, const.RESOURCE_ATTRIBUTE_SEND_EVENTS),
+            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: getattr(resource, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS),
+            # custom mapping
+            "mapped": resource.mapped,
+        }
+        for resource in json_value.values()
+    }
+    assert resources == {
+        "a": {
+            "mapped": "mapped_value_a",
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False,
+            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True,
+        },
+        "b": {
+            "mapped": "mapped_value_b",
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False,
+            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True,
+        },
+        "c": {
+            "mapped": "mapped_value_c",
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: True,
+            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: False,
+        },
+    }
+
+
 def test_id_mapping_export(snippetcompiler):
+    """
+    Verify id mapping for a virtual id value, i.e. not a field of the resource.
+    """
     snippetcompiler.setup_for_snippet(
         """import exp
 
@@ -61,6 +113,7 @@ def test_id_mapping_export(snippetcompiler):
 
     assert len(json_value) == 1
     resource = list(json_value.values())[0]
+    assert not hasattr(resource, resource.id.attribute)
     assert resource.id.attribute_value == "test_value_a"
 
 
@@ -773,3 +826,23 @@ def test_attribute_value_of_id_has_str_type(snippetcompiler):
     id_attribute_value = resources[0].id.attribute_value
     assert isinstance(id_attribute_value, str)
     assert id_attribute_value == "123"
+
+
+async def test_export_duplicate(resource_container, snippetcompiler):
+    """
+    The exported should provide a compilation error when a resource is defined twice in a model
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        import test
+
+        test::Resource(key="test", value="foo")
+        test::Resource(key="test", value="bar")
+    """,
+        autostd=True,
+    )
+
+    with pytest.raises(CompilerException) as exc:
+        snippetcompiler.do_export()
+
+    assert "exists more than once in the configuration model" in str(exc.value)

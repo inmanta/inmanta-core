@@ -15,9 +15,7 @@ requires = [
     "docstring-parser>=0.10,<0.17",
     "email-validator>=1,<3",
     "jinja2~=3.0",
-    "logfire>=0.46,<2.0",
     "more-itertools>=8,<11",
-    "opentelemetry-instrumentation-asyncpg~=0.46b0",
     # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
     "packaging>=21.3,<24.2",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
@@ -36,7 +34,7 @@ requires = [
     "typing_inspect~=0.9",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
-    "setproctitle~=1.3"
+    "setproctitle~=1.3",
 ]
 
 
@@ -47,7 +45,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "14.0.0"
+version = "15.0.0"
 
 setup(
     version=version,
@@ -89,6 +87,7 @@ setup(
         # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
         "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~={version}.0.dev"],
         "datatrace": ["graphviz"],
+        "tracing": ["logfire>=0.46,<3.0", "opentelemetry-instrumentation-asyncpg~=0.46b0"],
     },
     entry_points={
         "console_scripts": [
