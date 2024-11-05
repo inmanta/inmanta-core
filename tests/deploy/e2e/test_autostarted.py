@@ -948,9 +948,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
     assert summary["total"] == 1, f"Unexpected summary: {summary}"
-    # FIXME this should be fixed -> old resource is still in deploying state, should be available
-    # Uncomment this once fixed, see https://github.com/inmanta/inmanta-core/issues/8216
-    # assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["unavailable"] == 1, f"Unexpected summary: {summary}"
 
 
 @pytest.mark.slowtest
@@ -1274,6 +1272,7 @@ async def test_scheduler_killed(
     """
     Verify that the AgentView is updated accordingly to the state of the Scheduler:
         - If the scheduler was to crash, the agent view should reflect this on the view -> usage of down status
+        - If the scheduler come back online, it will override inconsistent resource states
     """
     current_pid = os.getpid()
 
@@ -1368,3 +1367,23 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         "unpause_on_resume": None,
     }
     assert actual_data[0] == expected_data
+
+    await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import minimalwaitingmodule
+
+a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
+    """,
+        autostd=True,
+    )
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    # Let's restart everything and check that the resource is considered as available
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    summary = result.result["metadata"]["deploy_summary"]
+    assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"

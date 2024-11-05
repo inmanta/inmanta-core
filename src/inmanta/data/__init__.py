@@ -4727,6 +4727,38 @@ class Resource(BaseDocument):
             await connection.execute(query, environment, version, resource_ids)
 
     @classmethod
+    async def reset_resource_state(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """
+        Update resources on the latest version of the model stuck in "deploying" state. The status will be reset to the latest
+        non deploying status.
+
+        :param environment: The environment impacted by this
+        :param version: The version of the model impacted by this
+        :param connection: The connection to use
+        """
+        query = f"""
+            UPDATE resource AS updated_r
+            SET status=inconsistent_r.last_non_deploying_status::TEXT::resourcestate
+            FROM (
+                SELECT r.resource_id, r.status, r.model, ps.last_non_deploying_status
+                FROM {Resource.table_name()} r
+                INNER JOIN {ResourcePersistentState.table_name()} ps ON r.resource_id = ps.resource_id
+                AND r.environment = ps.environment
+                WHERE r.environment=$1 AND r.model = $2 AND r.status = 'deploying'
+            ) AS inconsistent_r
+            WHERE inconsistent_r.resource_id = updated_r.resource_id AND inconsistent_r.model = updated_r.model
+        """
+        values = [cls._get_value(environment), cls._get_value(version)]
+        async with cls.get_connection(connection) as connection:
+            await connection.execute(query, *values)
+
+    @classmethod
     async def get_resource_ids_with_status(
         cls,
         environment: uuid.UUID,
