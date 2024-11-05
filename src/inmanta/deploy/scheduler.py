@@ -18,7 +18,6 @@
 
 import abc
 import asyncio
-import functools
 import logging
 import uuid
 from abc import abstractmethod
@@ -262,7 +261,8 @@ class ResourceScheduler(TaskManager):
         if isinstance(self._repair_timer, str):
             cron_schedule = CronSchedule(cron=self._repair_timer)
             task = self._sched.add_action(self.repair, cron_schedule)
-            # Omitting this yields mypy error: Returning Any from function declared to return "ScheduledTask | None"  [no-any-return]
+            # Omitting this yields mypy error:
+            # Returning Any from function declared to return "ScheduledTask | None"  [no-any-return]
             assert task is None or isinstance(task, ScheduledTask)
             return task
 
@@ -504,7 +504,8 @@ class ResourceScheduler(TaskManager):
         interval_schedule: IntervalSchedule = IntervalSchedule(interval=float(self._repair_timer), initial_delay=0)
         task = self._sched.add_action(_repair, interval_schedule)
 
-        # Omitting this yields mypy error: Returning Any from function declared to return "ScheduledTask | None"  [no-any-return]
+        # Omitting this yields mypy error:
+        # Returning Any from function declared to return "ScheduledTask | None"  [no-any-return]
         assert task is None or isinstance(task, ScheduledTask)
         return task
 
