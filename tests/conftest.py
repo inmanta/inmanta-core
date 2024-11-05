@@ -2528,8 +2528,6 @@ def resource_container(clean_reset):
         summary = result.result["metadata"]["deploy_summary"]
         # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
         #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
-        available = summary["by_state"]["available"]
-        deploying = summary["by_state"]["deploying"]
         total: int = summary["total"]
 
         done = (

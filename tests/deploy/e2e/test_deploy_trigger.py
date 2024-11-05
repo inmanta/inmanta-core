@@ -225,7 +225,6 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     await clienthelper.wait_full_success()
 
     async def verify_deployment_result():
-        result = await client.get_version(env_id, version)
         # A repair run may put one resource from the deployed state to the deploying state.
         assert len(resources) - 1 <= await clienthelper.done_count() <= len(resources)
 

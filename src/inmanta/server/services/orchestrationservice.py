@@ -410,7 +410,7 @@ class OrchestrationService(protocol.ServerSlice):
                 n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP, connection=connection)
                 assert isinstance(n_versions, int)
                 versions = await data.ConfigurationModel.get_list(
-                    environment=env_item.id, connection=connection, no_status=True, order_by_column="version", order="DESC"
+                    environment=env_item.id, connection=connection, order_by_column="version", order="DESC"
                 )
                 if len(versions) > n_versions:
                     version_dict = {x.version: x for x in versions}

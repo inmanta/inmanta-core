@@ -32,7 +32,7 @@ from inmanta.app import cmd_parser
 from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
-from inmanta.const import INMANTA_REMOVED_SET_ID, VersionState
+from inmanta.const import INMANTA_REMOVED_SET_ID
 from inmanta.data import AUTO_DEPLOY
 from utils import v1_module_from_template
 
