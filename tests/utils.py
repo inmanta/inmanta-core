@@ -508,6 +508,10 @@ class ClientHelper:
     async def done_count(self) -> int:
         return await get_done_count(self.client, self.environment)
 
+    async def set_auto_deploy(self, auto: bool = True) -> None:
+        result = await self.client.set_setting(self.environment, data.AUTO_DEPLOY, auto)
+        assert result.code == 200
+
 
 def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> dict[str, Any]:
     return {

@@ -1,0 +1,13 @@
+description: Added unicode support to templates
+issue-nr: >"fill in"
+change-type: >"fill in"
+destination-branches: [master, iso6, iso5]
+sections:
+  feature: "{{description}}"
+  minor-improvement: "{{description}}"
+  bugfix: "{{description}}"
+  known-issue: "{{description}}"
+  upgrade-note: "{{description}}"
+  deprecation-note: "{{description}}"
+  other-note: "{{description}}"
+
