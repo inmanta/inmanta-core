@@ -19,6 +19,7 @@
 import logging.config
 import pathlib
 import warnings
+from glob import glob
 from re import Pattern
 from threading import Condition
 
@@ -37,6 +38,7 @@ from inmanta.agent.handler import (
     provider,
 )
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
+from inmanta.config import log_dir
 from inmanta.data.model import ResourceIdStr
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
@@ -725,10 +727,10 @@ async def server_config(
 
 
 @pytest.fixture(scope="function")
-async def server(server_pre_start) -> abc.AsyncIterator[Server]:
+async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterator[Server]:
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
-
+    tests_failed_before = request.session.testsfailed
     ibl = InmantaBootloader(configure_logging=True)
 
     try:
@@ -749,8 +751,13 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
         await ibl.stop(timeout=20)
     except concurrent.futures.TimeoutError:
         logger.exception("Timeout during stop of the server in teardown")
-
     logger.info("Server clean up done")
+    tests_failed_during = request.session.testsfailed - tests_failed_before
+    if tests_failed_during and auto_start_agent:
+        for file in glob(log_dir.get() + "/*"):
+            if not os.path.isdir(file):
+                with open(file, "r") as fh:
+                    logger.debug("%s\n%s", file, fh.read())
 
 
 @pytest.fixture(
@@ -904,6 +911,7 @@ async def agent_multi(server_multi, environment_multi):
         str(pathlib.Path(a._storage["executors"]) / "venvs"),
         False,
     )
+    executor = WriteBarierExecutorManager(executor)
     a.executor_manager = executor
     a.scheduler.executor_manager = executor
     a.scheduler.code_manager = utils.DummyCodeManager(a._client)

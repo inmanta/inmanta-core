@@ -58,6 +58,7 @@ from inmanta.data.model import (
     PagingBoundaries,
     PipConfig,
     ResourceIdStr,
+    ResourceVersionIdStr,
     api_boundary_datetime_normalizer,
 )
 from inmanta.protocol.common import custom_json_encoder
@@ -65,6 +66,7 @@ from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
+from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
 
@@ -3245,7 +3247,7 @@ class AgentInstance(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list[TAgentInstance]:
         if process is not None:
-            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process, connection=connection)
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
         else:
             objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
         return objects
@@ -4002,6 +4004,19 @@ class LogLine(DataDocument):
         log_line = msg % kwargs
         return cls(level=LogLevel(level).name, msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
+    def __getstate__(self) -> str:
+        if "timestamp" not in self._data:
+            self._data["timestamp"] = datetime.datetime.now().astimezone()
+        # make pickle use json to keep leaking stuff
+        # Will make the objects into json-like things
+        # This method exists only to keep IPC light compatible with the json based RPC
+        return json_encode(self._data)
+
+    def __setstate__(self, state: str) -> None:
+        # This method exists only to keep IPC light compatible with the json based RPC
+        self._data = json.loads(state)
+        self._data["timestamp"] = parse_timestamp(cast(str, self._data["timestamp"]))
+
 
 @stable_api
 class ResourceAction(BaseDocument):
@@ -4531,7 +4546,7 @@ class Resource(BaseDocument):
 
     # Methods for backward compatibility
     @property
-    def resource_version_id(self):
+    def resource_version_id(self) -> ResourceVersionIdStr:
         # This field was removed from the DB, this method keeps code compatibility
         return resources.Id.set_version_in_id(self.resource_id, self.model)
 
@@ -4556,6 +4571,7 @@ class Resource(BaseDocument):
         # version field is present in the attributes dictionary served out via the API.
         record["attributes"]["version"] = version
         record["provides"] = [resources.Id.set_version_in_id(id, version) for id in record["provides"]]
+        del record["status"]
 
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
@@ -4611,7 +4627,7 @@ class Resource(BaseDocument):
             return []
         query_lock: str = lock.value if lock is not None else ""
 
-        def convert_or_ignore(rvid):
+        def convert_or_ignore(rvid: m.ResourceVersionIdStr) -> resources.Id | None:
             """Method to retain backward compatibility, ignore bad ID's"""
             try:
                 return resources.Id.parse_resource_version_id(rvid)
@@ -4709,6 +4725,38 @@ class Resource(BaseDocument):
         query = "UPDATE resource SET status='deployed' WHERE environment=$1 AND model=$2 AND resource_id =ANY($3) "
         async with cls.get_connection(connection) as connection:
             await connection.execute(query, environment, version, resource_ids)
+
+    @classmethod
+    async def reset_resource_state(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """
+        Update resources on the latest version of the model stuck in "deploying" state. The status will be reset to the latest
+        non deploying status.
+
+        :param environment: The environment impacted by this
+        :param version: The version of the model impacted by this
+        :param connection: The connection to use
+        """
+        query = f"""
+            UPDATE resource AS updated_r
+            SET status=inconsistent_r.last_non_deploying_status::TEXT::resourcestate
+            FROM (
+                SELECT r.resource_id, r.status, r.model, ps.last_non_deploying_status
+                FROM {Resource.table_name()} r
+                INNER JOIN {ResourcePersistentState.table_name()} ps ON r.resource_id = ps.resource_id
+                AND r.environment = ps.environment
+                WHERE r.environment=$1 AND r.model = $2 AND r.status = 'deploying'
+            ) AS inconsistent_r
+            WHERE inconsistent_r.resource_id = updated_r.resource_id AND inconsistent_r.model = updated_r.model
+        """
+        values = [cls._get_value(environment), cls._get_value(version)]
+        async with cls.get_connection(connection) as connection:
+            await connection.execute(query, *values)
 
     @classmethod
     async def get_resource_ids_with_status(

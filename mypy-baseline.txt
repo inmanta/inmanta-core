@@ -101,7 +101,7 @@ src/inmanta/ast/type.py:0: error: No overload variant of "reversed" matches argu
 src/inmanta/ast/type.py:0: note: Possible overload variants:
 src/inmanta/ast/type.py:0: note: def [_T] __new__(cls, Reversible[_T], /) -> reversed[_T]
 src/inmanta/ast/type.py:0: note: def [_T] __new__(cls, SupportsLenAndGetItem[_T], /) -> reversed[_T]
-src/inmanta/server/services/databaseservice.py:0: error: Incompatible return value type (got "dict[str, object]", expected "dict[str, BaseModel | UUID | bool | int | float | datetime | str | Sequence[BaseModel | UUID | bool | int | float | datetime | str] | Mapping[str, BaseModel | UUID | bool | int | float | datetime | str]]")  [return-value]
+src/inmanta/server/services/metricservice.py:0: error: Incompatible types in assignment (expression has type "float", variable has type "int")  [assignment]
 src/inmanta/protocol/decorators.py:0: error: "FuncT" has no attribute "__protocol_method__"  [attr-defined]
 src/inmanta/protocol/decorators.py:0: error: "FuncT" has no attribute "__protocol_mapping__"  [attr-defined]
 src/inmanta/protocol/decorators.py:0: error: "FuncT" has no attribute "__api_version__"  [attr-defined]
@@ -146,6 +146,10 @@ src/inmanta/execute/runtime.py:0: error: Argument 2 to "assign" of "AssignableNo
 src/inmanta/execute/runtime.py:0: error: Argument 1 to "AttributeException" has incompatible type "Instance"; expected "Locatable"  [arg-type]
 src/inmanta/execute/runtime.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]
 src/inmanta/execute/runtime.py:0: error: Argument 1 to "RuntimeException" has incompatible type "Instance"; expected "Locatable | None"  [arg-type]
+src/inmanta/data/model.py:0: error: Return type "str" of "__getstate__" incompatible with return type "dict[Any, Any]" in supertype "BaseModel"  [override]
+src/inmanta/data/model.py:0: error: Argument 1 of "__setstate__" is incompatible with supertype "BaseModel"; supertype defines the argument type as "dict[Any, Any]"  [override]
+src/inmanta/data/model.py:0: note: This violates the Liskov substitution principle
+src/inmanta/data/model.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
 src/inmanta/data/model.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/data/model.py:0: error: Unused "type: ignore" comment, use narrower [prop-decorator] instead of [misc] code  [unused-ignore]
 src/inmanta/ast/attribute.py:0: error: Incompatible types in assignment (expression has type "property", variable has type "Type")  [assignment]
@@ -236,13 +240,13 @@ src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-bo
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
+src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Cannot determine type of "RVID_OPTS"  [has-type]
 src/inmanta/protocol/methods_v2.py:0: error: Cannot determine type of "RVID_OPTS"  [has-type]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Cannot determine type of "RVID_OPTS"  [has-type]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Cannot determine type of "RVID_OPTS"  [has-type]
-src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
@@ -551,11 +555,8 @@ src/inmanta/data/__init__.py:0: error: Incompatible return value type (got "Reso
 src/inmanta/data/__init__.py:0: error: Argument 1 to "add_logs" of "ResourceAction" has incompatible type "list[dict[str, object]]"; expected "str | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/data/__init__.py:0: error: Argument "changes" to "ResourceAction" has incompatible type "dict[ResourceVersionIdStr, dict[str, object]] | None"; expected "dict[str, Any] | None"  [arg-type]
-src/inmanta/data/__init__.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/data/__init__.py:0: error: Missing type parameters for generic type "dict"  [type-arg]
 src/inmanta/data/__init__.py:0: error: Unsupported left operand type for + ("object")  [operator]
-src/inmanta/data/__init__.py:0: error: Function is missing a type annotation  [no-untyped-def]
-src/inmanta/data/__init__.py:0: error: Call to untyped function "convert_or_ignore" in typed context  [no-untyped-call]
 src/inmanta/data/__init__.py:0: error: Incompatible return value type (got "Sequence[Resource]", expected "list[Resource]")  [return-value]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "ResourceIdStr" has incompatible type "object"; expected "str"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Enum index should be a string (actual index type "object")  [misc]
@@ -1089,7 +1090,6 @@ src/inmanta/server/services/resourceservice.py:0: error: "object" has no attribu
 src/inmanta/server/services/resourceservice.py:0: error: Value of type variable "FuncT" of "__call__" of "handle" cannot be "Callable[[ResourceService, Environment, Id, UUID], Coroutine[Any, Any, dict[ResourceVersionIdStr, ResourceState]]]"  [type-var]
 src/inmanta/server/services/resourceservice.py:0: error: Value of type variable "FuncT" of "__call__" of "handle" cannot be "Callable[[ResourceService, Environment, Id, Change | None], Coroutine[Any, Any, dict[ResourceIdStr, list[ResourceAction]]]]"  [type-var]
 src/inmanta/server/services/resourceservice.py:0: error: Unsupported target for indexed assignment ("Mapping[str, BaseModel | UUID | bool | int | float | datetime | str | Sequence[BaseModel | UUID | bool | int | float | datetime | str] | Mapping[str, BaseModel | UUID | bool | int | float | datetime | str]] | None")  [index]
-src/inmanta/server/services/resourceservice.py:0: error: Incompatible return value type (got "dict[ResourceIdStr, ResourceState]", expected "dict[str, ResourceState]")  [return-value]
 src/inmanta/server/services/resourceservice.py:0: error: Module "inmanta.server.protocol" does not explicitly export attribute "handle"  [attr-defined]
 src/inmanta/server/services/orchestrationservice.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument 1 to "append" of "list" has incompatible type "Resource"; expected "dict[str, Any]"  [arg-type]
@@ -1101,6 +1101,7 @@ src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types in assignment (expression has type "set[str | None]", variable has type "set[str]")  [assignment]
 src/inmanta/server/services/orchestrationservice.py:0: error: Argument "agents" to "_trigger_auto_deploy" of "OrchestrationService" has incompatible type "Collection[str]"; expected "Sequence[str] | None"  [arg-type]
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible return value type (got "ReturnValueWithMeta[Sequence[DesiredStateVersion]]", expected "ReturnValue[list[DesiredStateVersion]]")  [return-value]
+src/inmanta/server/agentmanager.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" is incompatible with supertype "BaseProtocol"; supertype defines the argument type as "BaseTransport"  [override]
 src/inmanta/agent/forking_executor.py:0: note: This violates the Liskov substitution principle
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
@@ -1114,7 +1115,6 @@ src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types 
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"
 src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for > ("timedelta" and "datetime")  [operator]
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | timedelta"
-src/inmanta/server/services/metricservice.py:0: error: Incompatible types in assignment (expression has type "float", variable has type "int")  [assignment]
 src/inmanta/server/services/environment_metrics_service.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/server/services/environment_metrics_service.py:0: error: "Sequence[EnvironmentMetricsGauge]" has no attribute "append"  [attr-defined]
 src/inmanta/server/services/environment_metrics_service.py:0: error: Function is missing a return type annotation  [no-untyped-def]

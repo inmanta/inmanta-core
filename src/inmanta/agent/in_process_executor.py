@@ -182,7 +182,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 ctx.set_status(const.ResourceState.failed)
                 ctx.exception(
                     "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
-                    resource_id=resource.id,
+                    resource_id=str(resource.id),
                     exception=repr(e),
                 )
         finally:

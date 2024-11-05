@@ -209,7 +209,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
         logs: bool,
-        status: bool,
         log_action: const.ResourceAction,
         log_limit: int,
         connection: Optional[Connection] = None,
@@ -224,9 +223,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             resv = await data.Resource.get(env.id, resource_id, con)
             if resv is None:
                 return 404, {"message": "The resource with the given id does not exist in the given environment"}
-
-            if status is not None and status:
-                return 200, {"status": resv.status}
 
             actions: list[data.ResourceAction] = []
             if bool(logs):
@@ -793,7 +789,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
         waiting_agents = {(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides}
-        for agent, resource_id in waiting_agents:
+        for agent, aresource_id in waiting_agents:
             aclient = self.agentmanager_service.get_agent_client(env.id, agent)
             if aclient is not None:
                 if change is None:
@@ -801,7 +797,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                 await aclient.resource_event(
                     tid=env.id,
                     id=agent,
-                    resource=resource_id,
+                    resource=aresource_id,
                     send_events=False,
                     state=status,
                     change=change,
@@ -1240,19 +1236,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             raise BadRequest(e.message) from e
 
         # TODO: optimize for no orphans
-
-    @handle(methods_v2.resources_status, env="tid")
-    async def resources_status(
-        self,
-        env: data.Environment,
-        version: int,
-        rids: list[ResourceIdStr],
-    ) -> dict[str, ResourceState]:
-        try:
-            rids = [Id.parse_id(rid).resource_str() for rid in rids]
-        except ValueError as e:
-            raise BadRequest(str(e))
-        return await data.Resource.get_status_for(env.id, version, rids)
 
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:

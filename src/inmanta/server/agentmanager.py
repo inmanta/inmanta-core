@@ -27,6 +27,7 @@ from asyncio import queues, subprocess
 from collections.abc import Iterable, Iterator, Mapping, Sequence, Set
 from datetime import datetime
 from enum import Enum
+from functools import reduce
 from typing import Any, Optional, Union, cast
 from uuid import UUID
 
@@ -38,9 +39,9 @@ from inmanta import config as global_config
 from inmanta import const, data, tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
-from inmanta.const import UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
-from inmanta.data import APILIMIT, InvalidSort, model
-from inmanta.data.model import ResourceIdStr
+from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
+from inmanta.data import APILIMIT, Environment, InvalidSort, model
+from inmanta.data.model import DataBaseReport, ResourceIdStr
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
@@ -168,11 +169,66 @@ class AgentManager(ServerSlice, SessionListener):
 
         self.closesessionsonstart: bool = closesessionsonstart
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
-        return {
+    async def get_status(self) -> Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]:
+        # The basic report
+
+        out: dict[str, ArgumentTypes | Mapping[str, ArgumentTypes]] = {
             "resource_facts": len(self._fact_resource_block_set),
             "sessions": len(self.sessions),
         }
+
+        # Try to get more info from scheduler, but make sure not to timeout
+        schedulers = self.get_all_schedulers()
+        deadline = 0.9 * Server.GET_SERVER_STATUS_TIMEOUT
+
+        async def get_report(env: uuid.UUID, session: protocol.Session) -> tuple[uuid.UUID, DataBaseReport]:
+            result = await asyncio.wait_for(session.client.get_db_status(), deadline)
+            assert result.code == 200
+            # Mypy can't help here, ....
+            return (env, DataBaseReport(**result.result["data"]))
+
+        # Get env name mapping in parallel with next call
+        env_mapping = asyncio.create_task(
+            asyncio.wait_for(Environment.get_list(details=False, is_marked_for_deletion=False), deadline)
+        )
+        # Get the reports of all schedulers
+        results = await asyncio.gather(*[get_report(env, scheduler) for env, scheduler in schedulers], return_exceptions=True)
+        try:
+            # This can timeout, but not likely
+            env_mapping_result = await env_mapping
+            uuid_to_name = {env.id: env.name for env in env_mapping_result}
+        except TimeoutError:
+            # default to uuid's
+            uuid_to_name = {}
+
+        # Filter out timeouts and other errors
+        good_reports = [x[1] for x in results if not isinstance(x, BaseException)]
+
+        def short_report(report: DataBaseReport) -> Mapping[str, ArgumentTypes]:
+            return {
+                "connected": report.connected,
+                "max_pool": report.max_pool,
+                "open_connections": report.open_connections,
+                "free_connections": report.free_connections,
+                "pool_exhaustion_count": report.pool_exhaustion_count,
+            }
+
+        if good_reports:
+            total: DataBaseReport = reduce(lambda x, y: x + y, good_reports)
+            out["database"] = total.database
+            out["host"] = total.host
+            out["total"] = short_report(total)
+
+        for result in results:
+            if isinstance(result, BaseException):
+                logging.debug("Failed to collect database status for scheduler", exc_info=True)
+            else:
+                the_uuid = result[0]
+                # Default name to uuid
+                name = uuid_to_name.get(the_uuid, str(the_uuid))
+                out[name] = short_report(result[1])
+
+        return out
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_SESSION_MANAGER]
@@ -185,7 +241,6 @@ class AgentManager(ServerSlice, SessionListener):
         autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
         assert isinstance(autostarted_agent_manager, AutostartedAgentManager)
         self._autostarted_agent_manager = autostarted_agent_manager
-
         presession = server.get_slice(SLICE_SESSION_MANAGER)
         assert isinstance(presession, SessionManager)
         presession.add_listener(self)
@@ -197,12 +252,26 @@ class AgentManager(ServerSlice, SessionListener):
             await self._expire_all_sessions_in_db()
 
         self.add_background_task(self._process_session_listener_actions())
+        # Schedule cleanup agentprocess and agentinstance tables
+        agent_process_purge_interval = opt.agent_process_purge_interval.get()
+        if agent_process_purge_interval > 0:
+            self.schedule(
+                self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
+            )
 
     async def prestop(self) -> None:
         await super().prestop()
 
     async def stop(self) -> None:
         await super().stop()
+
+    def get_all_schedulers(self) -> list[tuple[uuid.UUID, protocol.Session]]:
+        # Linear scan, but every item should be a hit
+        return [
+            (env_id, session)
+            for (env_id, agent_id), session in self.tid_endpoint_to_session.items()
+            if agent_id == AGENT_SCHEDULER_ID
+        ]
 
     async def halt_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
@@ -512,6 +581,10 @@ class AgentManager(ServerSlice, SessionListener):
                     await data.AgentProcess.expire_all(now=datetime.now().astimezone(), connection=connection)
                     await data.AgentInstance.expire_all(now=datetime.now().astimezone(), connection=connection)
                     await data.Agent.mark_all_as_non_primary(connection=connection)
+
+    async def _purge_agent_processes(self) -> None:
+        agent_processes_to_keep = opt.agent_processes_to_keep.get()
+        await data.AgentProcess.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
 
     # Util
     async def _use_new_active_session_for_agent(self, tid: uuid.UUID, endpoint_name: str) -> Optional[protocol.Session]:
@@ -940,7 +1013,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         self._agent_procs: dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
         self.agent_lock = asyncio.Lock()  # Prevent concurrent updates on _agent_procs
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, ArgumentTypes]:
         return {"processes": len(self._agent_procs)}
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -1282,12 +1355,21 @@ port={opt.db_port.get()}
 name={opt.db_name.get()}
 username={opt.db_username.get()}
 password={opt.db_password.get()}
+
 [scheduler]
 db-connection-pool-min-size={agent_cfg.scheduler_db_connection_pool_min_size.get()}
 db-connection-pool-max-size={agent_cfg.scheduler_db_connection_pool_max_size.get()}
 db-connection-timeout={agent_cfg.scheduler_db_connection_timeout.get()}
 
-            """
+[influxdb]
+host = {opt.influxdb_host.get()}
+port = {opt.influxdb_port.get()}
+name = {opt.influxdb_name.get()}
+username = {opt.influxdb_username.get()}
+password = {opt.influxdb_password.get()}
+interval = {opt.influxdb_interval.get()}
+tags = {opt.influxdb_tags.get()}
+"""
         return config
 
     async def _fork_inmanta(

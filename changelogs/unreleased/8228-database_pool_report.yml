@@ -1,0 +1,6 @@
+description: Update database pool status reporting for the new scheduler
+issue-nr: 8228
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"

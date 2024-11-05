@@ -250,7 +250,6 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
 
     # resource stays available but an unavailable state is logged because of the failed dryrun
     result = response.result
-    assert result["resource"]["status"] == "available"
     log_entry = result["logs"][0]
     assert log_entry["action"] == "dryrun"
     assert log_entry["status"] == "unavailable"

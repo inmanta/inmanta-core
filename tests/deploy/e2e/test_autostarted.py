@@ -652,6 +652,22 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         len(halted_state.children) == 0
     ), "The Scheduler and the fork server and the executor created by the scheduler should have been killed!"
 
+    result = await client.get_agents(environment)
+    assert result.code == 200
+    actual_data = result.result["data"]
+    assert len(actual_data) == 1
+    expected_data = {
+        "environment": environment,
+        "last_failover": actual_data[0]["last_failover"],
+        "name": "agent1",
+        "paused": True,
+        "process_id": actual_data[0]["process_id"],
+        "process_name": actual_data[0]["process_name"],
+        "status": "paused",
+        "unpause_on_resume": True,
+    }
+    assert actual_data[0] == expected_data
+
     await client.resume_environment(environment)
 
     # Let's check the agent table and check that the scheduler and agent1 are present and not paused
@@ -815,6 +831,22 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         result.result["message"] == "Invalid request: Particular action cannot be directed towards the Scheduler agent: pause"
     ), result.result
 
+    result = await client.get_agents(environment)
+    assert result.code == 200
+    actual_data = result.result["data"]
+    assert len(actual_data) == 1
+    expected_data = {
+        "environment": environment,
+        "last_failover": actual_data[0]["last_failover"],
+        "name": "agent1",
+        "paused": False,
+        "process_id": actual_data[0]["process_id"],
+        "process_name": actual_data[0]["process_name"],
+        "status": "up",
+        "unpause_on_resume": None,
+    }
+    assert actual_data[0] == expected_data
+
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
@@ -916,9 +948,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
     assert summary["total"] == 1, f"Unexpected summary: {summary}"
-    # FIXME this should be fixed -> old resource is still in deploying state, should be available
-    # Uncomment this once fixed, see https://github.com/inmanta/inmanta-core/issues/8216
-    # assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["unavailable"] == 1, f"Unexpected summary: {summary}"
 
 
 @pytest.mark.slowtest
@@ -1136,6 +1166,49 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
     await assert_is_paused(
         client, environment, {const.AGENT_SCHEDULER_ID: True, "agent1": True, "agent2": True, "agent3": True}
     )
+    result = await client.get_agents(environment)
+    assert result.code == 200
+    actual_data = result.result["data"]
+    assert len(actual_data) == 3
+    expected_data = [
+        {
+            "environment": environment,
+            "last_failover": actual_data[0]["last_failover"],
+            "name": "agent1",
+            "paused": True,
+            "process_id": actual_data[0]["process_id"],
+            "process_name": actual_data[0]["process_name"],
+            "status": "paused",
+            "unpause_on_resume": None,
+        },
+        {
+            "environment": environment,
+            "last_failover": actual_data[1]["last_failover"],
+            "name": "agent2",
+            "paused": True,
+            "process_id": actual_data[1]["process_id"],
+            "process_name": actual_data[1]["process_name"],
+            "status": "paused",
+            "unpause_on_resume": None,
+        },
+        {
+            "environment": environment,
+            "last_failover": actual_data[2]["last_failover"],
+            "name": "agent3",
+            "paused": True,
+            "process_id": actual_data[2]["process_id"],
+            "process_name": actual_data[2]["process_name"],
+            "status": "paused",
+            "unpause_on_resume": None,
+        },
+    ]
+    assert actual_data == expected_data
+    assert (actual_data[0]["process_id"] == actual_data[1]["process_id"]) and (
+        actual_data[0]["process_id"] == actual_data[2]["process_id"]
+    )
+    assert (actual_data[0]["process_name"] == actual_data[1]["process_name"]) and (
+        actual_data[0]["process_name"] == actual_data[2]["process_name"]
+    )
 
     await client.all_agents_action(tid=environment, action=AgentAction.unpause.value)
     assert result.code == 200
@@ -1144,3 +1217,173 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
     await assert_is_paused(
         client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False, "agent2": False, "agent3": False}
     )
+
+    result = await client.get_agents(environment)
+    assert result.code == 200
+    actual_data = result.result["data"]
+    assert len(actual_data) == 3
+    expected_data = [
+        {
+            "environment": environment,
+            "last_failover": actual_data[0]["last_failover"],
+            "name": "agent1",
+            "paused": False,
+            "process_id": actual_data[0]["process_id"],
+            "process_name": actual_data[0]["process_name"],
+            "status": "up",
+            "unpause_on_resume": None,
+        },
+        {
+            "environment": environment,
+            "last_failover": actual_data[1]["last_failover"],
+            "name": "agent2",
+            "paused": False,
+            "process_id": actual_data[1]["process_id"],
+            "process_name": actual_data[1]["process_name"],
+            "status": "up",
+            "unpause_on_resume": None,
+        },
+        {
+            "environment": environment,
+            "last_failover": actual_data[2]["last_failover"],
+            "name": "agent3",
+            "paused": False,
+            "process_id": actual_data[2]["process_id"],
+            "process_name": actual_data[2]["process_name"],
+            "status": "up",
+            "unpause_on_resume": None,
+        },
+    ]
+    assert actual_data == expected_data
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_scheduler_killed(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    clienthelper,
+    environment,
+    auto_start_agent: bool,
+    async_finalizer,
+):
+    """
+    Verify that the AgentView is updated accordingly to the state of the Scheduler:
+        - If the scheduler was to crash, the agent view should reflect this on the view -> usage of down status
+        - If the scheduler come back online, it will override inconsistent resource states
+    """
+    current_pid = os.getpid()
+
+    # First, configure everything
+    config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    # Retrieve the actual processes before deploying anything
+    start_state = construct_scheduler_children(current_pid)
+    for children in start_state.children:
+        assert children.is_running()
+
+    snippetcompiler.setup_for_snippet(
+        """
+import minimalwaitingmodule
+
+a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
+""",
+        autostd=True,
+    )
+
+    # Now, let's deploy a resource
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    async def are_resources_deploying(deployed_resources: int = 1) -> bool:
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        deployed = summary["by_state"]["deploying"]
+        return deployed == deployed_resources
+
+    # Wait for this resource to be deployed
+    await retry_limited(are_resources_deploying, 5)
+
+    # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
+    # something is moving
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=True,
+        executor_to_be_defined=1,
+    )
+
+    # Retrieve the current processes, we should have more processes than `start_children`
+    children_after_deployment = construct_scheduler_children(current_pid)
+    for children in children_after_deployment.children:
+        assert children.is_running()
+
+    # We want to simulate a crash
+    children_after_deployment.scheduler.kill()
+
+    # We are only waiting for the scheduler to die. The executor should be cleaned up
+    await retry_limited(
+        wait_for_terminated_status,
+        timeout=const.EXECUTOR_GRACE_HARD + 2,
+        current_children=children_after_deployment.children,
+        expected_terminated_process=1,
+    )
+
+    async def wait_for_down_status() -> bool:
+        """
+        Wait for the down status of Agent1
+        """
+        result = await client.get_agents(environment)
+        assert result.code == 200
+        actual_data = result.result["data"]
+        if len(actual_data) != 1:
+            return False
+        return actual_data[0]["status"] == "down"
+
+    await retry_limited(
+        wait_for_down_status,
+        timeout=5,
+    )
+
+    result = await client.get_agents(environment)
+    assert result.code == 200
+    actual_data = result.result["data"]
+    assert len(actual_data) == 1
+    expected_data = {
+        "environment": environment,
+        "last_failover": actual_data[0]["last_failover"],
+        "name": "agent1",
+        "paused": False,
+        "process_id": actual_data[0]["process_id"],
+        "process_name": actual_data[0]["process_name"],
+        "status": "down",
+        "unpause_on_resume": None,
+    }
+    assert actual_data[0] == expected_data
+
+    await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import minimalwaitingmodule
+
+a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
+    """,
+        autostd=True,
+    )
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    # Let's restart everything and check that the resource is considered as available
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    summary = result.result["metadata"]["deploy_summary"]
+    assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
