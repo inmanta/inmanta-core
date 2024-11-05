@@ -101,6 +101,13 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
     )
 
 
+@pytest.mark.parametrize(
+    "agent_deploy_interval",
+    [
+        "2",
+        "*/2 * * * * * *",
+    ],
+)
 async def test_spontaneous_deploy(
     server,
     client,
@@ -109,6 +116,7 @@ async def test_spontaneous_deploy(
     environment,
     clienthelper,
     caplog,
+    agent_deploy_interval,
 ):
     """ """
     with caplog.at_level(logging.DEBUG):
@@ -116,7 +124,9 @@ async def test_spontaneous_deploy(
 
         env_id = UUID(environment)
 
-        Config.set("scheduler", "resource-compliance-check-window", "2")
+        Config.set("config", "agent-deploy-interval", agent_deploy_interval)
+
+        # This is just so we can reuse the agent from the fixtures with the new config options
         agent._set_deploy_and_repair_intervals()
 
         resource_container.Provider.set_fail("agent1", "key1", 1)

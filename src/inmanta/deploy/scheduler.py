@@ -509,6 +509,36 @@ class ResourceScheduler(TaskManager):
         assert task is None or isinstance(task, ScheduledTask)
         return task
 
+    def create_recurring_deploy_for_resource(self, resource: ResourceIdStr) -> ScheduledTask | None:
+        """
+        Schedule individual periodic deploy for a given resource iff the deploy timer is specified as
+        an int
+        """
+        # If deploy timer is specified as a cron, a global deploy is scheduled instead of a per-resource one.
+        if isinstance(self._deploy_timer, str):
+            return None
+
+        async def _deploy() -> None:
+            async with self._scheduler_lock:
+                if self._state.resource_state[resource].status is ResourceStatus.UP_TO_DATE:
+                    return
+
+                to_deploy: set[ResourceIdStr] = {resource}
+
+                self._work.deploy_with_context(
+                    to_deploy,
+                    priority=TaskPriority.INTERVAL_REPAIR,
+                    deploying=self._deploying_latest,
+                )
+
+        interval_schedule: IntervalSchedule = IntervalSchedule(interval=float(self._deploy_timer), initial_delay=0)
+        task = self._sched.add_action(_deploy, interval_schedule)
+
+        # Omitting this yields mypy error:
+        # Returning Any from function declared to return "ScheduledTask | None"  [no-any-return]
+        assert task is None or isinstance(task, ScheduledTask)
+        return task
+
     # TaskManager interface
 
     async def get_resource_intent(
@@ -553,10 +583,31 @@ class ResourceScheduler(TaskManager):
             if deployment_result is not None:
                 # first update state, then send out events
                 self._deploying_latest.remove(resource)
-                state.deployment_result = deployment_result
+
+                previous_deployment_result = state.deployment_result
+
+                state.deployment_result = deployment_result   # check old vs new DeploymentResult before . after this
                 self._work.finished_deploy(resource)
+
+                # Set of dependant resources that are interested in successful deploys of the current resource
+                concerned_resources: set[ResourceIdStr] = set()
+
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
+
+                    if previous_deployment_result != DeploymentResult.DEPLOYED:
+                        # This resource went from not deployed to deployed
+                        # we have to inform its dependant regardless of event propagation
+
+                        provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
+                        dependant_resources: Set[ResourceIdStr] = {
+                            dependant
+                            for dependant in provides
+                            if self._state.resources.get(dependant, None) is not None
+                        }
+
+                        concerned_resources.update(dependant_resources)
+
                 # propagate events
                 if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
                     provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
@@ -567,13 +618,15 @@ class ResourceScheduler(TaskManager):
                         # default to True for backward compatibility, i.e. not all resources have the field
                         if dependant_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
                     }
-                    if event_listeners:
-                        # do not pass deploying tasks because for event propagation we really want to start a new one,
-                        # even if the current intent is already being deployed
-                        task = Deploy(resource=resource)
-                        assert task in self._work.agent_queues.in_progress
-                        priority = self._work.agent_queues.in_progress[task]
-                        self._work.deploy_with_context(event_listeners, priority=priority, deploying=set())
+                    concerned_resources.update(event_listeners)
+
+                if concerned_resources:
+                    # do not pass deploying tasks because for event propagation we really want to start a new one,
+                    # even if the current intent is already being deployed
+                    task = Deploy(resource=resource)
+                    assert task in self._work.agent_queues.in_progress
+                    priority = self._work.agent_queues.in_progress[task]
+                    self._work.deploy_with_context(concerned_resources, priority=priority, deploying=set())
 
     async def cancel_periodic_repair_and_deploy_for_resource(self, resource_id: ResourceIdStr) -> None:
         """
@@ -591,8 +644,10 @@ class ResourceScheduler(TaskManager):
         periodic_repair: ScheduledTask | None = self.create_recurring_repair_for_resource(resource_id)
         if periodic_repair:
             self.resource_periodic_repairs[resource_id] = periodic_repair
-        # TODO add periodic deploy
-        # self.resource_periodic_deploys[resource_id] = self.create_recurring_deploy(resource_id)
+
+        periodic_deploy: ScheduledTask | None = self.create_recurring_deploy_for_resource(resource_id)
+        if periodic_deploy:
+            self.resource_periodic_deploys[resource_id] = periodic_deploy
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
