@@ -36,7 +36,15 @@ from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
-from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
+from inmanta.deploy.state import (
+    AgentStatus,
+    BlockedStatus,
+    DeploymentResult,
+    ModelState,
+    ResourceDetails,
+    ResourceState,
+    ResourceStatus,
+)
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
 from inmanta.protocol import Client
@@ -632,13 +640,27 @@ class ResourceScheduler(TaskManager):
         self, resource_id: ResourceIdStr
     ) -> dict[ResourceIdStr, const.ResourceState]:
         """
-        Get resource state for every dependency of a give resource from the scheduler state
+        Get resource state for every dependency of a given resource from the scheduler state.
+        The state is then converted to const.ResourceState.
 
         :param resource_id: The id of the resource to find the dependencies for
         """
-        provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires
-        dependencies: Set[ResourceIdStr] = provides_view.get(resource_id, set())
-        return {id: const.ResourceState(self._state.resource_state[id].deployment_result) for id in dependencies}
+        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
+        dependencies: Set[ResourceIdStr] = requires_view.get(resource_id, set())
+        dependencies_state = {}
+        for dep_id in dependencies:
+            new_state = self._state.resource_state[dep_id]
+            if new_state.status == ResourceStatus.UNDEFINED:
+                dependencies_state[dep_id] = const.ResourceState.undefined
+            elif new_state.blocked == BlockedStatus.YES:
+                dependencies_state[dep_id] = const.ResourceState.skipped
+            elif new_state.deployment_result == DeploymentResult.NEW:
+                dependencies_state[dep_id] = const.ResourceState.available
+            elif new_state.deployment_result == DeploymentResult.DEPLOYED:
+                dependencies_state[dep_id] = const.ResourceState.deployed
+            elif new_state.deployment_result == DeploymentResult.FAILED:
+                dependencies_state[dep_id] = const.ResourceState.failed
+        return dependencies_state
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
