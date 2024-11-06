@@ -37,9 +37,11 @@ from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
-from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
+from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus, \
+    BlockedStatus
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
+from inmanta.deploy.timermanager import TimerManager
 from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, Scheduler
@@ -475,7 +477,7 @@ class ResourceScheduler(TaskManager):
     ) -> None:
         up_to_date_resources = {} if up_to_date_resources is None else up_to_date_resources
         async with self._intent_lock:
-            # Inspect new state and compare it with the old one before acquiring scheduler the lock.
+            # Inspect new state and compare it with the old one before acquiring the scheduler lock.
             # This is safe because we only read intent-related state here, for which we've already acquired the lock
             deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
             for resource in deleted_resources:
@@ -489,7 +491,7 @@ class ResourceScheduler(TaskManager):
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             for resource, details in up_to_date_resources.items():
-                self._state.add_up_to_date_resource(resource, details)
+                self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
 
             for resource, details in resources.items():
                 if details.status is const.ResourceState.undefined:
@@ -531,14 +533,14 @@ class ResourceScheduler(TaskManager):
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in blocked_resources:
-                    self._state.block_resource(resource, resources[resource], is_transitive=False)
+                    self._state.block_resource(resource, resources[resource], is_transitive=False)  # Removes from the dirty set
                 for resource in new_desired_state:
-                    self._state.update_desired_state(resource, resources[resource])
+                    self._state.update_desired_state(resource, resources[resource])  # Updates the dirty set
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
                 transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 for resource in unblocked_resources:
-                    self._state.mark_as_defined(resource, resources[resource])
+                    self._state.mark_as_defined(resource, resources[resource])  # Updates the dirty set
                 # Update set of in-progress non-stale deploys by trimming resources with new state
                 self._deploying_latest.difference_update(
                     new_desired_state, deleted_resources, blocked_resources, transitively_blocked_resources
@@ -553,7 +555,7 @@ class ResourceScheduler(TaskManager):
                     dropped_requires=dropped_requires,
                 )
                 for resource in deleted_resources:
-                    self._state.drop(resource)
+                    self._state.drop(resource)  # Removes from the dirty set
                 for resource in blocked_resources | transitively_blocked_resources:
                     self._work.delete_resource(resource)
 
@@ -618,7 +620,7 @@ class ResourceScheduler(TaskManager):
         """
         return name in self._workers and self._workers[name].is_running()
 
-    def create_recurring_repair_for_resource(self, resource: ResourceIdStr) -> ScheduledTask | None:
+    def create_recurring_repair_for_resource(self, resource: ResourceIdStr, first_iteration: bool = False) -> ScheduledTask | None:
         """
         Schedule individual periodic repair for a given resource iff the repair timer is specified as
         an int
@@ -629,8 +631,9 @@ class ResourceScheduler(TaskManager):
 
         async def _repair() -> None:
             async with self._scheduler_lock:
-                to_deploy: set[ResourceIdStr] = set()
-                to_deploy.add(resource)
+                if self._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy:
+                    return
+                to_deploy: set[ResourceIdStr] = {resource}
 
                 self._work.deploy_with_context(
                     to_deploy,
@@ -638,7 +641,8 @@ class ResourceScheduler(TaskManager):
                     deploying=self._deploying_latest,
                 )
 
-        interval_schedule: IntervalSchedule = IntervalSchedule(interval=float(self._repair_timer), initial_delay=0)
+        initial_delay: float = self._repair_timer if first_iteration else 0
+        interval_schedule: IntervalSchedule = IntervalSchedule(interval=float(self._repair_timer), initial_delay=initial_delay)
         task = self._sched.add_action(_repair, interval_schedule)
 
         # Omitting this yields mypy error:
@@ -646,7 +650,7 @@ class ResourceScheduler(TaskManager):
         assert task is None or isinstance(task, ScheduledTask)
         return task
 
-    def create_recurring_deploy_for_resource(self, resource: ResourceIdStr) -> ScheduledTask | None:
+    def create_recurring_deploy_for_resource(self, resource: ResourceIdStr, first_iteration: bool = False) -> ScheduledTask | None:
         """
         Schedule individual periodic deploy for a given resource iff the deploy timer is specified as
         an int
@@ -657,7 +661,10 @@ class ResourceScheduler(TaskManager):
 
         async def _deploy() -> None:
             async with self._scheduler_lock:
-                if self._state.resource_state[resource].status is ResourceStatus.UP_TO_DATE:
+                if any([
+                    self._state.resource_state[resource].status is ResourceStatus.UP_TO_DATE,  # No need to deploy
+                    self._state.resource_state[resource].blocked is BlockedStatus.YES,  # Can't deploy
+                ]):
                     return
 
                 to_deploy: set[ResourceIdStr] = {resource}
@@ -668,7 +675,8 @@ class ResourceScheduler(TaskManager):
                     deploying=self._deploying_latest,
                 )
 
-        interval_schedule: IntervalSchedule = IntervalSchedule(interval=float(self._deploy_timer), initial_delay=0)
+        initial_delay: float = self._deploy_timer if first_iteration else 0
+        interval_schedule: IntervalSchedule = IntervalSchedule(interval=float(self._deploy_timer), initial_delay=initial_delay)
         task = self._sched.add_action(_deploy, interval_schedule)
 
         # Omitting this yields mypy error:

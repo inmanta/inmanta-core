@@ -473,8 +473,9 @@ class ScheduledWork:
 
     def delete_resource(self, resource: ResourceIdStr) -> None:
         """
-        Drop tasks for a given resource when it's deleted from the model. Does not affect dry-run tasks because they
-        do not act on the latest desired state.
+        Drop tasks for a given resource e.g. when it's deleted from the model or known to be
+        undeployable (because it is undefined or blocked).
+        Does not affect dry-run tasks because they do not act on the latest desired state.
         """
         # delete from waiting collection if deploy task is waiting to be queued
         if resource in self._waiting:
