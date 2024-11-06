@@ -21,7 +21,7 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Add indexes required by the diagnose endpoint.
+    Drop the deployed and result columns from configurationmodel.
     """
     schema = """
     ALTER TABLE configurationmodel DROP deployed, DROP result;

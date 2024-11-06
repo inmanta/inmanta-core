@@ -500,7 +500,7 @@ async def test_show_messages_actionlog(server, environment, client, cli, agent, 
 
 async def test_monitor(server, environment, client, cli, agent, clienthelper, resource_container):
     """
-    Test the `inmanta-cli action-log show-messages` command.
+    Test the `inmanta-cli monitor` command.
     """
     result = await client.reserve_version(tid=environment)
     assert result.code == 200

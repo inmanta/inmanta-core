@@ -4,7 +4,7 @@ change-type: major
 destination-branches: [master]
 sections:
   upgrade-note: |
-    The fields `deployed` and `result` have been removed from all API endpoint and tools that report on versions.
+    The fields ``deployed`` and ``result`` have been removed from all API endpoint and tools that report on versions.
     Deploy status information is no longer maintained for individual versions, but only for the latest, active version.
 
     | api endpoint | change | alternative |
