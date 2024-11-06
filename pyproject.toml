@@ -64,7 +64,6 @@ markers = [
 log_format = "%(asctime)s.%(msecs)03d %(levelname)s %(message)s"
 
 [tool.coverage.run]
-# TODO `-s` is hiding assertion error of background task -> should we write into a file and then in the latest server down log everything and make it crash? -p no errro
 concurrency = ["multiprocessing"]
 parallel = true
 sigterm = true
