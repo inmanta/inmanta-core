@@ -867,7 +867,7 @@ class ExhaustedPoolWatcher:
         """
         Checks if the database pool is exhausted
         """
-        pool_exhausted: bool = self._pool.get_size() == self._pool.get_max_size() and self._pool.get_idle_size() == 0
+        pool_exhausted: bool = (self._pool.get_size() == self._pool.get_max_size()) and self._pool.get_idle_size() == 0
         if pool_exhausted:
             self._exhausted_pool_events_count += 1
 

@@ -210,7 +210,7 @@ class AgentManager(ServerSlice, SessionListener):
                 "max_pool": report.max_pool,
                 "open_connections": report.open_connections,
                 "free_connections": report.free_connections,
-                "pool_exhaustion_count": report.pool_exhaustion_count,
+                "pool_exhaustion_time": report.pool_exhaustion_time,
             }
 
         if good_reports:
