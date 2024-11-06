@@ -1017,7 +1017,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         if is_resource_state_update and is_resource_action_finished:
 
             def post_deploy_update() -> None:
-                assert model_version is not None  # mypy can't figure this out
                 waiting_agents = {
                     (Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides
                 }

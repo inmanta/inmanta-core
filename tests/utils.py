@@ -379,10 +379,10 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     return versions.result
 
 
-async def get_done_count(
+async def get_done_and_total(
     client: Client,
     environment: str,
-) -> int:
+) -> tuple[int, int]:
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
@@ -390,13 +390,23 @@ async def get_done_count(
     #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
 
     return (
-        summary["by_state"]["deployed"]
-        + summary["by_state"]["failed"]
-        + summary["by_state"]["skipped"]
-        + summary["by_state"]["skipped_for_undefined"]
-        + summary["by_state"]["unavailable"]
-        + summary["by_state"]["undefined"]
+        (
+            summary["by_state"]["deployed"]
+            + summary["by_state"]["failed"]
+            + summary["by_state"]["skipped"]
+            + summary["by_state"]["skipped_for_undefined"]
+            + summary["by_state"]["unavailable"]
+            + summary["by_state"]["undefined"]
+        ),
+        summary["total"],
     )
+
+
+async def get_done_count(
+    client: Client,
+    environment: str,
+) -> int:
+    return (await get_done_and_total(client, environment))[0]
 
 
 async def wait_until_deployment_finishes(

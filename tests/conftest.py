@@ -45,6 +45,7 @@ from inmanta.protocol import auth
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
+from utils import get_done_and_total
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -2523,21 +2524,7 @@ def resource_container(clean_reset):
 
         # unhang waiters
         now = time.time()
-        result = await client.resource_list(env_id, deploy_summary=True)
-        assert result.code == 200
-        summary = result.result["metadata"]["deploy_summary"]
-        # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
-        #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
-        total: int = summary["total"]
-
-        done = (
-            summary["by_state"]["deployed"]
-            + summary["by_state"]["failed"]
-            + summary["by_state"]["skipped"]
-            + summary["by_state"]["skipped_for_undefined"]
-            + summary["by_state"]["unavailable"]
-            + summary["by_state"]["undefined"]
-        )
+        done, total = await get_done_and_total(client, env_id)
 
         log_progress(done, total)
         while (total - done) > 0:
@@ -2545,25 +2532,12 @@ def resource_container(clean_reset):
                 raise Exception("Timeout")
             if wait_for_this_amount_of_resources_in_done and done - wait_for_this_amount_of_resources_in_done >= 0:
                 break
-            result = await client.resource_list(env_id, deploy_summary=True)
-            assert result.code == 200
-            summary = result.result["metadata"]["deploy_summary"]
-            done = (
-                summary["by_state"]["deployed"]
-                + summary["by_state"]["failed"]
-                + summary["by_state"]["skipped"]
-                + summary["by_state"]["skipped_for_undefined"]
-                + summary["by_state"]["unavailable"]
-                + summary["by_state"]["undefined"]
-            )
-
+            done, total = await get_done_and_total(client, env_id)
             log_progress(done, total)
             waiter.acquire()
             waiter.notify_all()
             waiter.release()
             await asyncio.sleep(0.1)
-
-        return result
 
     async def wait_for_condition_with_waiters(wait_condition, timeout=10):
         """
