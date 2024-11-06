@@ -1690,11 +1690,7 @@ async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, m
     rid2 = ResourceIdStr("test::Resource[agent1,name=2]")
 
     resources = {
-        rid1: make_resource_minimal(
-            rid=rid1,
-            values={"value": "r1_value"},
-            requires=[],
-        ),
+        rid1: make_resource_minimal(rid=rid1, values={"value": "r1_value"}, requires=[]),
         rid2: make_resource_minimal(rid=rid2, values={"value": "r2_value"}, requires=[]),
     }
 
