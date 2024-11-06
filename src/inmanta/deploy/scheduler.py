@@ -239,6 +239,8 @@ class ResourceScheduler(TaskManager):
         self.resource_periodic_deploys: dict[ResourceIdStr, ScheduledTask] = {}
         self._deploy_timer: Union[int, str] = agent_config.agent_deploy_interval.get()
 
+        self.global_periodic_deploy_task: ScheduledTask | None = None
+
     async def clear_periodic_tasks(self) -> None:
         """
         Cancel periodic deploys and repairs and clears the associated book-keeping dicts.
@@ -249,6 +251,9 @@ class ResourceScheduler(TaskManager):
 
         if self.global_periodic_repair_task is not None:
             self._sched.remove(self.global_periodic_repair_task)
+
+        if self.global_periodic_deploy_task is not None:
+            self._sched.remove(self.global_periodic_deploy_task)
 
     async def reset(self) -> None:
         """
@@ -302,6 +307,7 @@ class ResourceScheduler(TaskManager):
         )
 
         self.global_periodic_repair_task = self.trigger_global_repair()
+        self.global_periodic_deploy_task = self.trigger_global_deploy()
 
     async def stop(self) -> None:
         if not self._running:
@@ -336,6 +342,33 @@ class ResourceScheduler(TaskManager):
             self._work.deploy_with_context(
                 self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
             )
+
+    def trigger_global_deploy(self) -> ScheduledTask | None:
+        """
+        Trigger a global deploy when deploy interval is passed as a cron expression.
+        When deploy interval is passed as an int, deploys are scheduled on a
+        per-resource basis instead.
+
+        :returns: the associated scheduled task, if any.
+        """
+
+        if isinstance(self._deploy_timer, str):
+            cron_schedule = CronSchedule(cron=self._deploy_timer)
+
+            async def _action() -> None:
+                await self.deploy(
+                    reason=f"Global deploy triggered because of set cron {self._deploy_timer}",
+                    priority=TaskPriority.INTERVAL_DEPLOY,
+                )
+
+            task = self._sched.add_action(_action, cron_schedule)
+            # Omitting this yields mypy error:
+            # Returning Any from function declared to return "ScheduledTask | None"  [no-any-return]
+            assert task is None or isinstance(task, ScheduledTask)
+            return task
+
+        # Not a cron expression -> don't schedule a global deploy.
+        return None
 
     def trigger_global_repair(self) -> ScheduledTask | None:
         """

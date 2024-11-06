@@ -125,9 +125,12 @@ async def test_spontaneous_deploy(
         env_id = UUID(environment)
 
         Config.set("config", "agent-deploy-interval", agent_deploy_interval)
+        # Setting repair to a cron expression to disable individual repairs
+        Config.set("config", "agent-repair-interval", "* * * * * * 2099")  # 2099 is the max crontab allowed value for year
 
         # This is just so we can reuse the agent from the fixtures with the new config options
         agent._set_deploy_and_repair_intervals()
+        agent.scheduler.trigger_global_deploy()
 
         resource_container.Provider.set_fail("agent1", "key1", 1)
 
