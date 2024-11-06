@@ -160,7 +160,7 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
@@ -250,7 +250,6 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
 
     # resource stays available but an unavailable state is logged because of the failed dryrun
     result = response.result
-    assert result["resource"]["status"] == "available"
     log_entry = result["logs"][0]
     assert log_entry["action"] == "dryrun"
     assert log_entry["status"] == "unavailable"
@@ -323,7 +322,7 @@ async def test_dryrun_code_loading_failure(server, client, resource_container, e
 
     await clienthelper.put_version_simple(resources, version)
 
-    await wait_until_deployment_finishes(client, environment, version, timeout=10)
+    await wait_until_deployment_finishes(client, environment, timeout=10)
 
     result = await client.dryrun_trigger(environment, version)
     assert result.code == 200

@@ -34,7 +34,7 @@ from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server.services.compilerservice import CompilerService
 
 if __file__ and os.path.dirname(__file__).split("/")[-2] == "inmanta_tests":
-    from inmanta_tests.utils import _wait_until_deployment_finishes, wait_for_version  # noqa: F401
+    from inmanta_tests.utils import wait_for_version, wait_until_deployment_finishes  # noqa: F401
 else:
     from utils import wait_for_version, wait_until_deployment_finishes
 
@@ -145,7 +145,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
         await client.release_version(env_id_1, v1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
     )
 
-    await wait_until_deployment_finishes(client, env_id_1, v1, 20)
+    await wait_until_deployment_finishes(client, env_id_1, 20)
 
     check_result(await client.notify_change(id=env_id_1, update=False))
 
@@ -166,7 +166,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
         )
     )
 
-    await wait_until_deployment_finishes(client, env_id_1, env_1_version, 20)
+    await wait_until_deployment_finishes(client, env_id_1, 20)
 
     # a version that is release, but not deployed
     check_result(await client.notify_change(id=env_id_1, update=False))

@@ -1296,10 +1296,12 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
         total=1,
         version_info={},
         is_suitable_for_partial_compiles=False,
+        released=True,
     )
     await cm.insert()
 
-    rvid_r1_v1 = f"std::testing::NullResource[agent1,name=file1],v={model_version}"
+    rid_r1 = "std::testing::NullResource[agent1,name=file1]"
+    rvid_r1_v1 = f"{rid_r1},v={model_version}"
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.available,
@@ -1340,7 +1342,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
-    assert result.result["resource"]["status"] == const.ResourceState.deploying
 
     result = await client.get_version(tid=env_id, id=1)
     assert result.code == 200, result.result
@@ -1426,9 +1427,9 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["changes"] == {rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test").dict()}}
     assert resource_action["change"] == const.Change.purged.value
 
-    result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
+    result = await client.resource_details(tid=env_id, rid=rid_r1)
     assert result.code == 200, result.result
-    assert result.result["resource"]["status"] == const.ResourceState.deployed
+    assert result.result["data"]["status"] == const.ResourceState.deployed
 
     result = await client.get_version(tid=env_id, id=1)
     assert result.code == 200, result.result

@@ -22,14 +22,16 @@ import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Optional
 
-from inmanta import config, const, protocol
+import inmanta.server.config as opt
+from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange, DataBaseReport, ResourceVersionIdStr
 from inmanta.deploy import scheduler
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
+from inmanta.server.services.databaseservice import DatabaseMonitor
 from inmanta.types import Apireturn
 from inmanta.util import ensure_directory_exist, join_threadpools
 
@@ -66,6 +68,22 @@ class Agent(SessionEndpoint):
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
         self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
+
+        self._set_deploy_and_repair_intervals()
+
+    async def start(self) -> None:
+        # Make mypy happy
+        assert data.Resource._connection_pool is not None
+        self._db_monitor = DatabaseMonitor(
+            data.Resource._connection_pool,
+            opt.db_name.get(),
+            opt.db_host.get(),
+            "scheduler",
+            str(self.environment),
+        )
+        self._db_monitor.start()
+
+        await super().start()
 
     def _set_deploy_and_repair_intervals(self) -> None:
         """
@@ -112,50 +130,60 @@ class Agent(SessionEndpoint):
         self.working = True
         await self.executor_manager.start()
         await self.scheduler.start()
+        LOGGER.info("Scheduler started for environment %s", self.environment)
 
-    async def stop_working(self) -> None:
+    async def stop_working(self, timeout: float = 0.0) -> None:
         """Stop working, connection lost"""
         if not self.working:
             return
         self.working = False
-        await self.executor_manager.stop()
         await self.scheduler.stop()
+        await self.executor_manager.stop()
+        await self.executor_manager.join([], timeout=timeout)
+        await self.scheduler.join()
+        LOGGER.info("Scheduler stopped for environment %s", self.environment)
 
     @protocol.handle(methods_v2.update_agent_map)
     async def update_agent_map(self, agent_map: dict[str, str]) -> None:
         # Not used here
         pass
 
-    async def unpause(self, name: str) -> Apireturn:
-        if name != AGENT_SCHEDULER_ID:
-            return 404, "No such agent"
-
-        LOGGER.info("Scheduler started for environment %s", self.environment)
-        await self.start_working()
-        return 200
-
-    async def pause(self, name: str) -> Apireturn:
-        if name != AGENT_SCHEDULER_ID:
-            return 404, "No such agent"
-
-        LOGGER.info("Scheduler stopped for environment %s", self.environment)
-        await self.stop_working()
-        return 200
-
     @protocol.handle(methods.set_state)
-    async def set_state(self, agent: str, enabled: bool) -> Apireturn:
-        if enabled:
-            return await self.unpause(agent)
+    async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
+        if agent == AGENT_SCHEDULER_ID:
+            if enabled:
+                if self.working != enabled:
+                    await self.start_working()
+                else:
+                    # Special case that the server considers us disconnected, but the Scheduler thinks we are still connected.
+                    # In that case, the Scheduler may have missed some event, therefore, we need to refresh everything
+                    # (Scheduler side) to make sure we are up to date when the server considers that the Scheduler
+                    # is back online
+                    await self.scheduler.read_version()
+                    await self.scheduler.refresh_all_agent_states_from_db()
+            else:
+                # We want the request to not end in a 500 error:
+                # if the scheduler is being shut down, it cannot respond to the request
+                await self.stop_working(timeout=const.EXECUTOR_GRACE_HARD)
+
+            return 200, "Scheduler has been notified!"
         else:
-            return await self.pause(agent)
+            if agent is None:
+                await self.scheduler.refresh_all_agent_states_from_db()
+                return 200, "All agents have been notified!"
+            else:
+                await self.scheduler.refresh_agent_state_from_db(name=agent)
+                return 200, f"Agent `{agent}` has been notified!"
 
     async def on_reconnect(self) -> None:
-        name = AGENT_SCHEDULER_ID
-        result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=name)
+        result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)
         if result.code == 200 and result.result is not None:
             state = result.result
             if "enabled" in state and isinstance(state["enabled"], bool):
-                await self.set_state(name, state["enabled"])
+                if state["enabled"]:
+                    await self.start_working()
+                else:
+                    assert not self.working
             else:
                 LOGGER.warning("Server reported invalid state %s" % (repr(state)))
         else:
@@ -174,10 +202,10 @@ class Agent(SessionEndpoint):
         assert agent == AGENT_SCHEDULER_ID
         if incremental_deploy:
             LOGGER.info("Agent %s got a trigger to run deploy in environment %s", agent, env)
-            await self.scheduler.deploy()
+            await self.scheduler.deploy(reason="Deploy was triggered because user has requested a deploy")
         else:
             LOGGER.info("Agent %s got a trigger to run repair in environment %s", agent, env)
-            await self.scheduler.repair()
+            await self.scheduler.repair(reason="Deploy was triggered because user has requested a repair")
         return 200
 
     @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
@@ -227,6 +255,20 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods.get_status)
     async def get_status(self) -> Apireturn:
         return 200, collect_report(self)
+
+    @protocol.handle(methods_v2.get_db_status)
+    async def get_db_status(self) -> DataBaseReport:
+        if self._db_monitor is None:
+            return DataBaseReport(
+                connected=False,
+                database="",
+                host="",
+                max_pool=0,
+                open_connections=0,
+                free_connections=0,
+                pool_exhaustion_count=0,
+            )
+        return await self._db_monitor.get_status()
 
     def check_storage(self) -> dict[str, str]:
         """

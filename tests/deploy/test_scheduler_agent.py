@@ -28,14 +28,14 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Mapping, Optional, Sequence, Tuple
 from uuid import UUID
 
+import asyncpg
 import pytest
 
-import inmanta.types
 import utils
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import DeployResult, DryrunResult, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.const import Change
 from inmanta.data import ResourceIdStr
@@ -45,6 +45,7 @@ from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import BlockedStatus
 from inmanta.deploy.work import TaskPriority
+from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.resources import Id
 from inmanta.util import retry_limited
@@ -96,6 +97,10 @@ class DummyExecutor(executor.Executor):
         reason: str,
         requires: dict[ResourceIdStr, const.ResourceState],
     ) -> DeployResult:
+        assert reason
+        # Actual reason or test reason
+        # The actual reasons are of the form `action because of reason`
+        assert ("because" in reason) or ("Test" in reason)
         self.execute_count += 1
         result = (
             const.ResourceState.failed
@@ -114,7 +119,7 @@ class DummyExecutor(executor.Executor):
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
         self.dry_run_count += 1
 
-    async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
+    async def get_facts(self, resource: ResourceDetails) -> None:
         self.facts_count += 1
 
     async def open_version(self, version: int) -> None:
@@ -245,6 +250,9 @@ class DummyStateManager(StateUpdateManager):
             if status:
                 assert scheduler._state.resource_state[resource].status == status
 
+    def set_parameters(self, fact_result: FactResult) -> None:
+        pass
+
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
         self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
 
@@ -258,6 +266,40 @@ async def pass_method():
     A dummy method that does nothing at all.
     """
     pass
+
+
+class TestScheduler(ResourceScheduler):
+    def __init__(self, environment: uuid.UUID, executor_manager: executor.ExecutorManager[executor.Executor], client: Client):
+        super().__init__(environment, executor_manager, client)
+        # Bypass DB
+        self.executor_manager = self.executor_manager
+        self.code_manager = DummyCodeManager(client)
+        self.mock_versions = {}
+        self._state_update_delegate = DummyStateManager()
+
+    async def read_version(
+        self,
+    ) -> None:
+        pass
+
+    async def reset_resource_state(self) -> None:
+        pass
+
+    async def _initialize(
+        self,
+    ) -> None:
+        pass
+
+    async def should_be_running(self) -> bool:
+        return True
+
+    async def should_runner_be_running(self, endpoint: str) -> bool:
+        return True
+
+    async def _build_resource_mappings_from_db(
+        self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Mapping[ResourceIdStr, ResourceDetails]:
+        return self.mock_versions[version]
 
 
 class TestAgent(Agent):
@@ -280,18 +322,7 @@ class TestAgent(Agent):
     ):
         super().__init__(environment)
         self.executor_manager = DummyManager()
-        self.scheduler.executor_manager = self.executor_manager
-        self.scheduler.code_manager = DummyCodeManager(self._client)
-        # Bypass DB
-        self.scheduler.read_version = pass_method
-        self.scheduler._initialize = pass_method
-        self.scheduler.mock_versions = {}
-
-        async def build_resource_mappings_from_db(version: int | None) -> Mapping[ResourceIdStr, ResourceDetails]:
-            return self.scheduler.mock_versions[version]
-
-        self.scheduler._build_resource_mappings_from_db = build_resource_mappings_from_db
-        self.scheduler._state_update_delegate = DummyStateManager()
+        self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
 
 
 @pytest.fixture
@@ -450,7 +481,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     # Verify deploy behavior when everything is in a known good state #
     ###################################################################
     agent.executor_manager.reset_executor_counters()
-    await agent.scheduler.deploy()
+    await agent.scheduler.deploy(reason="Test")
     # nothing new has run or is scheduled
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent2"].execute_count == 0
@@ -474,7 +505,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
 
     # call deploy
-    await agent.scheduler.deploy()
+    await agent.scheduler.deploy(reason="Test")
     # everything but r2 was in known good state => only r2 got another deploy
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
 
@@ -494,10 +525,10 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     ######################################################################################################
     agent.executor_manager.reset_executor_counters()
     # call deploy again => schedules r2
-    await agent.scheduler.deploy()
+    await agent.scheduler.deploy(reason="Test")
     # wait until r2 is running, then call deploy once more
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    await agent.scheduler.deploy()
+    await agent.scheduler.deploy(reason="Test")
     # verify that r2 did not get scheduled again, since it is already running for the same intent
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues) == 0
@@ -517,7 +548,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     state_manager_check(agent)
 
     # redeploy again, but r3 is already scheduled
-    await agent.scheduler.deploy()
+    await agent.scheduler.deploy(reason="Test")
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
@@ -566,7 +597,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     # wait until r2 is running
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     # call repair, verify that only r1 is scheduled because r2 and r3 are running or scheduled respectively
-    await agent.scheduler.repair()
+    await agent.scheduler.repair(reason="Test")
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
     executor1.deploys[rid1].set_result(const.ResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
@@ -1568,9 +1599,9 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
 
     # The tasks are consumed in the priority order
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(first_task, tasks.Deploy)
+    assert isinstance(first_task[0], tasks.Deploy)
     second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(second_task, tasks.DryRun)
+    assert isinstance(second_task[0], tasks.DryRun)
 
     # The same is true if a task with lesser priority is added first
     # Add a fact refresh task to the queue
@@ -1578,20 +1609,20 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
 
     # Then add an interval deploy task to the queue
     agent.scheduler._state.dirty.add(rid1)
-    await agent.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
+    await agent.scheduler.deploy(reason="Test", priority=TaskPriority.INTERVAL_DEPLOY)
 
     # The tasks are consumed in the priority order
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(first_task, tasks.Deploy)
+    assert isinstance(first_task[0], tasks.Deploy)
     second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(second_task, tasks.RefreshFact)
+    assert isinstance(second_task[0], tasks.RefreshFact)
     # Assert that all tasks were consumed
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
     assert len(queue) == 0
 
     # Add an interval deploy task to the queue
     agent.scheduler._state.dirty.add(rid1)
-    await agent.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
+    await agent.scheduler.deploy(reason="Test", priority=TaskPriority.INTERVAL_DEPLOY)
 
     # Add a dryrun to the queue (which has more priority)
     dryrun = uuid.uuid4()
@@ -1608,9 +1639,9 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
     await agent.trigger_update(environment, "$__scheduler", incremental_deploy=True)
 
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(first_task, tasks.Deploy)
+    assert isinstance(first_task[0], tasks.Deploy)
     second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(second_task, tasks.DryRun)
+    assert isinstance(second_task[0], tasks.DryRun)
 
     # Interval deploy is still in the queue but marked as deleted
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
@@ -1633,7 +1664,7 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
 
     # Try to add an interval deploy task to the queue
     agent.scheduler._state.dirty.add(rid1)
-    await agent.scheduler.deploy(TaskPriority.INTERVAL_DEPLOY)
+    await agent.scheduler.deploy(reason="Test", priority=TaskPriority.INTERVAL_DEPLOY)
 
     # Assert that we still have only 2 tasks in the queue
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
@@ -1641,9 +1672,9 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
 
     # The order is unaffected, the interval deploy was essentially ignored
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(first_task, tasks.Deploy)
+    assert isinstance(first_task[0], tasks.Deploy)
     second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(second_task, tasks.DryRun)
+    assert isinstance(second_task[0], tasks.DryRun)
 
     # All tasks were consumed
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue

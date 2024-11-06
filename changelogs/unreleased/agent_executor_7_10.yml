@@ -1,0 +1,4 @@
+description: Ensure mutability safety
+change-type: patch
+destination-branches: [master]
+
