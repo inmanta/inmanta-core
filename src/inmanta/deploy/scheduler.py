@@ -37,11 +37,17 @@ from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
-from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus, \
-    BlockedStatus
+from inmanta.deploy.state import (
+    AgentStatus,
+    BlockedStatus,
+    DeploymentResult,
+    ModelState,
+    ResourceDetails,
+    ResourceState,
+    ResourceStatus,
+)
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
-from inmanta.deploy.timermanager import TimerManager
 from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, Scheduler
@@ -494,6 +500,7 @@ class ResourceScheduler(TaskManager):
                 self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
 
             for resource, details in resources.items():
+                await self.create_periodic_repair_and_deploy(resource, first_iteration=True)
                 if details.status is const.ResourceState.undefined:
                     blocked_resources.add(resource)
                     self._work.delete_resource(resource)
@@ -620,14 +627,13 @@ class ResourceScheduler(TaskManager):
         """
         return name in self._workers and self._workers[name].is_running()
 
-    def create_recurring_repair_for_resource(self, resource: ResourceIdStr, first_iteration: bool = False) -> ScheduledTask | None:
+    def create_recurring_repair_for_resource(
+        self, resource: ResourceIdStr, first_iteration: bool = False
+    ) -> ScheduledTask | None:
         """
         Schedule individual periodic repair for a given resource iff the repair timer is specified as
         an int
         """
-        # If repair timer is specified as a cron, a global repair is scheduled instead of a per-resource one.
-        if isinstance(self._repair_timer, str):
-            return None
 
         async def _repair() -> None:
             async with self._scheduler_lock:
@@ -650,21 +656,22 @@ class ResourceScheduler(TaskManager):
         assert task is None or isinstance(task, ScheduledTask)
         return task
 
-    def create_recurring_deploy_for_resource(self, resource: ResourceIdStr, first_iteration: bool = False) -> ScheduledTask | None:
+    def create_recurring_deploy_for_resource(
+        self, resource: ResourceIdStr, first_iteration: bool = False
+    ) -> ScheduledTask | None:
         """
         Schedule individual periodic deploy for a given resource iff the deploy timer is specified as
         an int
         """
-        # If deploy timer is specified as a cron, a global deploy is scheduled instead of a per-resource one.
-        if isinstance(self._deploy_timer, str):
-            return None
 
         async def _deploy() -> None:
             async with self._scheduler_lock:
-                if any([
-                    self._state.resource_state[resource].status is ResourceStatus.UP_TO_DATE,  # No need to deploy
-                    self._state.resource_state[resource].blocked is BlockedStatus.YES,  # Can't deploy
-                ]):
+                if any(
+                    [
+                        self._state.resource_state[resource].status is ResourceStatus.UP_TO_DATE,  # No need to deploy
+                        self._state.resource_state[resource].blocked is BlockedStatus.YES,  # Can't deploy
+                    ]
+                ):
                     return
 
                 to_deploy: set[ResourceIdStr] = {resource}
@@ -731,7 +738,7 @@ class ResourceScheduler(TaskManager):
 
                 previous_deployment_result = state.deployment_result
 
-                state.deployment_result = deployment_result   # check old vs new DeploymentResult before . after this
+                state.deployment_result = deployment_result  # check old vs new DeploymentResult before . after this
                 self._work.finished_deploy(resource)
 
                 # Set of dependant resources that are interested in successful deploys of the current resource
@@ -746,9 +753,7 @@ class ResourceScheduler(TaskManager):
 
                         provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
                         dependant_resources: Set[ResourceIdStr] = {
-                            dependant
-                            for dependant in provides
-                            if self._state.resources.get(dependant, None) is not None
+                            dependant for dependant in provides if self._state.resources.get(dependant, None) is not None
                         }
 
                         concerned_resources.update(dependant_resources)
@@ -771,7 +776,12 @@ class ResourceScheduler(TaskManager):
                     task = Deploy(resource=resource)
                     assert task in self._work.agent_queues.in_progress
                     priority = self._work.agent_queues.in_progress[task]
-                    self._work.deploy_with_context(concerned_resources, reason=f"Deploying because an event was received from {resource}", priority=priority, deploying=set())
+                    self._work.deploy_with_context(
+                        concerned_resources,
+                        reason=f"Deploying because an event was received from {resource}",
+                        priority=priority,
+                        deploying=set(),
+                    )
 
     async def cancel_periodic_repair_and_deploy_for_resource(self, resource_id: ResourceIdStr) -> None:
         """
@@ -781,18 +791,30 @@ class ResourceScheduler(TaskManager):
             if task is not None:
                 self._sched.remove(task)
 
-    async def resume_periodic_repair_and_deploy(self, resource_id: ResourceIdStr) -> None:
+    async def _create_periodic_repair(self, resource_id, first_iteration: bool = False):
+        # If repair timer is specified as a cron, a global repair should be scheduled instead of a per-resource one.
+        if isinstance(self._repair_timer, str):
+            return
+        periodic_repair: ScheduledTask | None = self.create_recurring_repair_for_resource(resource_id, first_iteration)
+        if periodic_repair:
+            self.resource_periodic_repairs[resource_id] = periodic_repair
+
+    async def _create_periodic_deploy(self, resource_id, first_iteration: bool = False):
+        # If deploy timer is specified as a cron, a global deploy is scheduled instead of a per-resource one.
+        if isinstance(self._deploy_timer, str):
+            return
+        periodic_deploy: ScheduledTask | None = self.create_recurring_deploy_for_resource(resource_id, first_iteration)
+        if periodic_deploy:
+            self.resource_periodic_deploys[resource_id] = periodic_deploy
+
+    async def create_periodic_repair_and_deploy(self, resource_id: ResourceIdStr, first_iteration: bool = False) -> None:
         """
         Resume periodic deploy/repair for the given resource.
         """
         await self.cancel_periodic_repair_and_deploy_for_resource(resource_id)
-        periodic_repair: ScheduledTask | None = self.create_recurring_repair_for_resource(resource_id)
-        if periodic_repair:
-            self.resource_periodic_repairs[resource_id] = periodic_repair
 
-        periodic_deploy: ScheduledTask | None = self.create_recurring_deploy_for_resource(resource_id)
-        if periodic_deploy:
-            self.resource_periodic_deploys[resource_id] = periodic_deploy
+        await self._create_periodic_repair(resource_id, first_iteration)
+        await self._create_periodic_deploy(resource_id, first_iteration)
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])

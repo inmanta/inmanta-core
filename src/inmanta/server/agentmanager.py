@@ -1254,8 +1254,8 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 config_path,
                 "--config-dir",
                 Config._config_dir if Config._config_dir is not None else "",
-                # "--log-file",
-                # agent_log,
+                "--log-file",
+                agent_log,
                 "scheduler",
             ],
             out,
@@ -1391,7 +1391,7 @@ tags = {config_map_to_str(opt.influxdb_tags.get())}
             env = os.environ.copy()
             env.update(tracing.get_context())
             return await asyncio.create_subprocess_exec(
-                sys.executable, *full_args, cwd=cwd, env=env, stdout=sys.stdout, stderr=sys.stdout
+                sys.executable, *full_args, cwd=cwd, env=env, stdout=outhandle, stderr=errhandle
             )
         finally:
             if outhandle is not None:

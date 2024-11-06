@@ -222,7 +222,7 @@ class Deploy(Task):
                 status=state.ResourceStatus.UP_TO_DATE if success else state.ResourceStatus.HAS_UPDATE,
                 deployment_result=state.DeploymentResult.DEPLOYED if success else state.DeploymentResult.FAILED,
             )
-            await task_manager.resume_periodic_repair_and_deploy(executor_resource_details.rid)
+            await task_manager.create_periodic_repair_and_deploy(executor_resource_details.rid)
 
 
 @dataclass(frozen=True, kw_only=True)
