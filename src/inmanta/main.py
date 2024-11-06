@@ -620,8 +620,10 @@ def version_list(client: Client, environment: str) -> None:
             [
                 x["date"],
                 x["version"],
-                x["status"]
-                not in [DesiredStateVersionStatus.candidate.value, DesiredStateVersionStatus.skipped_candidate.value],
+                str(
+                    x["status"]
+                    not in [DesiredStateVersionStatus.candidate.value, DesiredStateVersionStatus.skipped_candidate.value]
+                ),
                 x["total"],
                 x["status"],
             ]
