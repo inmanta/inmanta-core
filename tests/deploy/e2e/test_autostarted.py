@@ -506,7 +506,6 @@ async def wait_for_consistent_children(
     async def wait_consistent_scheduler() -> bool:
         # This can occur, when the fork server forks and for a small amount of time, there will be two fork servers
         # even though one of them is actually the executor process (will be shortly renamed)
-        # '/tmp/tmped5s_q_n/logs/agent-fc87119b-fb25-4831-9996-6aa72d1c9533.log'
         current = construct_scheduler_children(current_pid)
         is_scheduler_defined = current.scheduler is not None
         is_fork_server_defined = current.fork_server is not None
