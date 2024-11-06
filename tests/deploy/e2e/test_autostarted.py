@@ -490,31 +490,6 @@ async def assert_is_paused(client, environment: str, expected_agents: dict[str, 
     assert {e["name"]: e["paused"] for e in result.result["agents"]} == expected_agents
 
 
-def log_scheduler_logs(current_pid: int) -> None:
-    """
-    Fetch and log Scheduler logs
-    """
-
-    current = construct_scheduler_children(current_pid)
-    if current.scheduler is None:
-        return
-
-    cmd_line_scheduler = current.scheduler.cmdline()
-    # No log file seems to be provided
-    if "--log-file" not in cmd_line_scheduler:
-        return
-
-    index_log_file = cmd_line_scheduler.index("--log-file") + 1
-    # The argument of the '--log-file' does not seem to be present
-    if len(cmd_line_scheduler) <= index_log_file:
-        return
-
-    log_file = pathlib.Path(cmd_line_scheduler[index_log_file])
-    if log_file.exists():
-        scheduler_logs = log_file.read_text()
-        logger.debug("Scheduler logs:\n%s", scheduler_logs)
-
-
 async def wait_for_consistent_children(
     current_pid: int,
     should_scheduler_be_defined: bool,
@@ -532,25 +507,27 @@ async def wait_for_consistent_children(
     async def wait_consistent_scheduler() -> bool:
         # This can occur, when the fork server forks and for a small amount of time, there will be two fork servers
         # even though one of them is actually the executor process (will be shortly renamed)
+        # '/tmp/tmped5s_q_n/logs/agent-fc87119b-fb25-4831-9996-6aa72d1c9533.log'
         current = construct_scheduler_children(current_pid)
         is_scheduler_defined = current.scheduler is not None
         is_fork_server_defined = current.fork_server is not None
-
-        match_scheduler = is_scheduler_defined == should_scheduler_be_defined
-        match_fork_server = is_fork_server_defined == should_fork_server_be_defined
-        logger.debug(
-            "Scheduler defined: %s | Fork Server defined: %s | N° Executors (expected %d) %s",
-            str(match_scheduler),
-            str(match_fork_server),
-            nb_executor_to_be_defined,
-            str(current.executors),
+        return (
+            (is_scheduler_defined == should_scheduler_be_defined)
+            and (is_fork_server_defined == should_fork_server_be_defined)
+            and (len(current.executors) == nb_executor_to_be_defined)
         )
-        return match_scheduler and match_fork_server and (len(current.executors) == nb_executor_to_be_defined)
 
     try:
         await retry_limited(wait_consistent_scheduler, 10)
     except AssertionError:
-        log_scheduler_logs(current_pid=current_pid)
+        current = construct_scheduler_children(current_pid)
+        logger.debug(
+            "Scheduler running: %s | Fork Server running: %s | N° Executors: %s",
+            str(current.scheduler is not None),
+            str(current.fork_server is not None),
+            str(current.executors),
+        )
+
         raise
 
 
@@ -624,6 +601,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         nb_executor_to_be_defined=1,
     )
 
+    assert False
     # Wait for something to be deployed
     try:
         await clienthelper.wait_for_deployed(timeout=5)
