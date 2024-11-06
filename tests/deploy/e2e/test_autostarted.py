@@ -24,7 +24,6 @@ import json
 import logging
 import multiprocessing
 import os
-import pathlib
 import uuid
 from dataclasses import dataclass, field
 from functools import partial
