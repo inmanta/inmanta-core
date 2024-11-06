@@ -1,4 +1,4 @@
-description: Remove `deployed` and `result from configuration model
+description: Remove `deployed` and `result` from configuration model
 issue-nr: 8252
 change-type: major
 destination-branches: [master]
