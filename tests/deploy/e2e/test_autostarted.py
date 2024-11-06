@@ -601,7 +601,6 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         nb_executor_to_be_defined=1,
     )
 
-    assert False
     # Wait for something to be deployed
     try:
         await clienthelper.wait_for_deployed(timeout=5)
