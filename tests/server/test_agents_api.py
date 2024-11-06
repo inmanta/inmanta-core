@@ -227,6 +227,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert result.result["links"] == {
         "first": "/api/v2/agents?limit=1&sort=name.asc&filter.status=paused",
         "prev": "/api/v2/agents?limit=1&sort=name.asc&filter.status=paused&end=zz&last_id=zzzz",
+        "self": "/api/v2/agents?limit=1&sort=name.asc&filter.status=paused&first_id=zzzz&start=zz",
     }
     assert result.result["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
 
