@@ -3675,9 +3675,7 @@ class Compile(BaseDocument):
 
     @classmethod
     # TODO: Use join
-    async def get_report(
-        cls, compile_id: uuid.UUID, order_by: Optional[str] = None, order: Optional[str] = None
-    ) -> Optional[dict]:
+    async def get_report(cls, compile_id: uuid.UUID) -> Optional[dict]:
         """
         Get the compile and the associated reports from the database
         """
@@ -3686,7 +3684,7 @@ class Compile(BaseDocument):
             return None
 
         dict_model = result.to_dict()
-        reports = await Report.get_list(compile=result.id, order_by_column=order_by, order=order)
+        reports = await Report.get_list(compile=result.id)
         dict_model["reports"] = [r.to_dict() for r in reports]
 
         return dict_model
