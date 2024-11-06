@@ -811,9 +811,6 @@ def monitor_deploy(client: Client, environment: str) -> None:
         deploy_status = client.do_request("resource_list", arguments=dict(tid=tid, deploy_summary=True, limit=0))
 
         summary = deploy_status["metadata"]["deploy_summary"]
-        # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
-        #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
-
         done: int = (
             summary["by_state"]["deployed"]
             + summary["by_state"]["failed"]

@@ -512,4 +512,3 @@ async def test_monitor(server, environment, client, cli, agent, clienthelper, re
 
     result = await cli.run("monitor", "-e", environment)
     assert result.exit_code == 0
-    print(result.output)
