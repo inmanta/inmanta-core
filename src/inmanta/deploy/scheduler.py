@@ -348,7 +348,14 @@ class ResourceScheduler(TaskManager):
 
         if isinstance(self._repair_timer, str):
             cron_schedule = CronSchedule(cron=self._repair_timer)
-            task = self._sched.add_action(self.repair, cron_schedule)
+
+            async def _action() -> None:
+                await self.repair(
+                    reason=f"Global repair triggered because of set cron {self._repair_timer}",
+                    priority=TaskPriority.INTERVAL_REPAIR,
+                )
+
+            task = self._sched.add_action(_action, cron_schedule)
             # Omitting this yields mypy error:
             # Returning Any from function declared to return "ScheduledTask | None"  [no-any-return]
             assert task is None or isinstance(task, ScheduledTask)
@@ -643,10 +650,13 @@ class ResourceScheduler(TaskManager):
 
                 self._work.deploy_with_context(
                     to_deploy,
+                    reason=f"Individual repair triggered for resource {resource} because last "
+                    f"repair happened more than {self._repair_timer}s ago.",
                     priority=TaskPriority.INTERVAL_REPAIR,
                     deploying=self._deploying_latest,
                 )
 
+        assert isinstance(self._repair_timer, int)
         initial_delay: float = self._repair_timer if first_iteration else 0
         interval_schedule: IntervalSchedule = IntervalSchedule(interval=float(self._repair_timer), initial_delay=initial_delay)
         task = self._sched.add_action(_repair, interval_schedule)
@@ -678,10 +688,13 @@ class ResourceScheduler(TaskManager):
 
                 self._work.deploy_with_context(
                     to_deploy,
-                    priority=TaskPriority.INTERVAL_REPAIR,
+                    reason=f"Individual deploy triggered for resource {resource} because last "
+                    f"deploy happened more than {self._deploy_timer}s ago.",
+                    priority=TaskPriority.INTERVAL_DEPLOY,
                     deploying=self._deploying_latest,
                 )
 
+        assert isinstance(self._deploy_timer, int)
         initial_delay: float = self._deploy_timer if first_iteration else 0
         interval_schedule: IntervalSchedule = IntervalSchedule(interval=float(self._deploy_timer), initial_delay=initial_delay)
         task = self._sched.add_action(_deploy, interval_schedule)
@@ -743,7 +756,7 @@ class ResourceScheduler(TaskManager):
 
                 # Set of dependant resources that are interested in successful deploys of the current resource
                 concerned_resources: set[ResourceIdStr] = set()
-
+                provides: Set[ResourceIdStr]
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
 
@@ -751,7 +764,7 @@ class ResourceScheduler(TaskManager):
                         # This resource went from not deployed to deployed
                         # we have to inform its dependant regardless of event propagation
 
-                        provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
+                        provides = self._state.requires.provides_view().get(resource, set())
                         dependant_resources: Set[ResourceIdStr] = {
                             dependant for dependant in provides if self._state.resources.get(dependant, None) is not None
                         }
@@ -760,7 +773,7 @@ class ResourceScheduler(TaskManager):
 
                 # propagate events
                 if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
-                    provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
+                    provides = self._state.requires.provides_view().get(resource, set())
                     event_listeners: Set[ResourceIdStr] = {
                         dependant
                         for dependant in provides
@@ -791,7 +804,7 @@ class ResourceScheduler(TaskManager):
             if task is not None:
                 self._sched.remove(task)
 
-    async def _create_periodic_repair(self, resource_id, first_iteration: bool = False):
+    async def _create_periodic_repair(self, resource_id: ResourceIdStr, first_iteration: bool = False) -> None:
         # If repair timer is specified as a cron, a global repair should be scheduled instead of a per-resource one.
         if isinstance(self._repair_timer, str):
             return
@@ -799,7 +812,7 @@ class ResourceScheduler(TaskManager):
         if periodic_repair:
             self.resource_periodic_repairs[resource_id] = periodic_repair
 
-    async def _create_periodic_deploy(self, resource_id, first_iteration: bool = False):
+    async def _create_periodic_deploy(self, resource_id: ResourceIdStr, first_iteration: bool = False) -> None:
         # If deploy timer is specified as a cron, a global deploy is scheduled instead of a per-resource one.
         if isinstance(self._deploy_timer, str):
             return
