@@ -690,8 +690,9 @@ class ResourceScheduler(TaskManager):
                 )
 
         assert isinstance(self._repair_timer, int)
-        initial_delay: float = self._repair_timer if first_iteration else 0
-        interval_schedule: IntervalSchedule = IntervalSchedule(interval=float(self._repair_timer), initial_delay=initial_delay)
+        interval_schedule: IntervalSchedule = IntervalSchedule(
+            interval=float(self._repair_timer), initial_delay=self._repair_timer
+        )
         task = self._sched.add_action(_repair, interval_schedule)
 
         # Omitting this yields mypy error:
@@ -728,8 +729,9 @@ class ResourceScheduler(TaskManager):
                 )
 
         assert isinstance(self._deploy_timer, int)
-        initial_delay: float = self._deploy_timer if first_iteration else 0
-        interval_schedule: IntervalSchedule = IntervalSchedule(interval=float(self._deploy_timer), initial_delay=initial_delay)
+        interval_schedule: IntervalSchedule = IntervalSchedule(
+            interval=float(self._deploy_timer), initial_delay=self._deploy_timer
+        )
         task = self._sched.add_action(_deploy, interval_schedule)
 
         # Omitting this yields mypy error:
@@ -839,19 +841,17 @@ class ResourceScheduler(TaskManager):
 
     async def _create_periodic_repair(self, resource_id: ResourceIdStr, first_iteration: bool = False) -> None:
         # If repair timer is specified as a cron, a global repair should be scheduled instead of a per-resource one.
-        if isinstance(self._repair_timer, str):
-            return
-        periodic_repair: ScheduledTask | None = self.create_recurring_repair_for_resource(resource_id, first_iteration)
-        if periodic_repair:
-            self.resource_periodic_repairs[resource_id] = periodic_repair
+        if isinstance(self._repair_timer, int) and self._repair_timer > 0:
+            periodic_repair: ScheduledTask | None = self.create_recurring_repair_for_resource(resource_id, first_iteration)
+            if periodic_repair:
+                self.resource_periodic_repairs[resource_id] = periodic_repair
 
     async def _create_periodic_deploy(self, resource_id: ResourceIdStr, first_iteration: bool = False) -> None:
         # If deploy timer is specified as a cron, a global deploy is scheduled instead of a per-resource one.
-        if isinstance(self._deploy_timer, str):
-            return
-        periodic_deploy: ScheduledTask | None = self.create_recurring_deploy_for_resource(resource_id, first_iteration)
-        if periodic_deploy:
-            self.resource_periodic_deploys[resource_id] = periodic_deploy
+        if isinstance(self._deploy_timer, int) and self._deploy_timer > 0:
+            periodic_deploy: ScheduledTask | None = self.create_recurring_deploy_for_resource(resource_id, first_iteration)
+            if periodic_deploy:
+                self.resource_periodic_deploys[resource_id] = periodic_deploy
 
     async def create_periodic_repair_and_deploy(self, resource_id: ResourceIdStr, first_iteration: bool = False) -> None:
         """
