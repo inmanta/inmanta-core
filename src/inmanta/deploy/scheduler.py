@@ -650,18 +650,19 @@ class ResourceScheduler(TaskManager):
         dependencies_state = {}
         for dep_id in dependencies:
             new_state = self._state.resource_state[dep_id]
-            if new_state.status == ResourceStatus.UNDEFINED:
-                dependencies_state[dep_id] = const.ResourceState.undefined
-            elif new_state.blocked == BlockedStatus.YES:
-                dependencies_state[dep_id] = const.ResourceState.skipped
-            elif new_state.deployment_result == DeploymentResult.NEW or new_state.status == ResourceStatus.HAS_UPDATE:
-                dependencies_state[dep_id] = const.ResourceState.available
-            elif new_state.deployment_result == DeploymentResult.DEPLOYED:
-                dependencies_state[dep_id] = const.ResourceState.deployed
-            elif new_state.deployment_result == DeploymentResult.FAILED:
-                dependencies_state[dep_id] = const.ResourceState.failed
-            else:
-                raise Exception(f"Failed to parse the resource state for {dep_id}: {new_state}")
+            match new_state:
+                case ResourceState(status=ResourceStatus.UNDEFINED):
+                    dependencies_state[dep_id] = const.ResourceState.undefined
+                case ResourceState(blocked=BlockedStatus.YES):
+                    dependencies_state[dep_id] = const.ResourceState.skipped
+                case ResourceState(deployment_result=DeploymentResult.NEW) | ResourceState(status=ResourceStatus.HAS_UPDATE):
+                    dependencies_state[dep_id] = const.ResourceState.available
+                case ResourceState(deployment_result=DeploymentResult.DEPLOYED):
+                    dependencies_state[dep_id] = const.ResourceState.deployed
+                case ResourceState(deployment_result=DeploymentResult.FAILED):
+                    dependencies_state[dep_id] = const.ResourceState.failed
+                case _:
+                    raise Exception(f"Failed to parse the resource state for {dep_id}: {new_state}")
         return dependencies_state
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
