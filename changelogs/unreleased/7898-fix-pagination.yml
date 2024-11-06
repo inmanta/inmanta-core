@@ -1,4 +1,4 @@
-description: "Fixed pagination when on a page returning 0 results (due to pagination criteria) that is strictly after or strictly before the bulk of the actual results"
+description: "Fixed pagination metadata when on a page behind the last result, or before the first result (due to filtering)"
 issue-nr: 7898
 change-type: patch
 sections:

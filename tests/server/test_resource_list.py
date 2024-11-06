@@ -467,6 +467,7 @@ async def test_none_resources_paging(server, client, env_with_resources):
     assert no_result_desc_prev.result["links"] == {
         "prev": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&start=aaaa&first_id=aaa",
         "first": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False",
+        "self": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False",
     }
     assert no_result_desc_prev.result["metadata"] == {"after": 0, "before": 6, "page_size": 2, "total": 6}
 
@@ -497,7 +498,8 @@ async def test_none_resources_paging(server, client, env_with_resources):
     assert no_result_desc_next.code == 200
     assert len(no_result_desc_next.result["data"]) == 0
     assert no_result_desc_next.result["links"] == {
-        "next": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&end=zzz&last_id=zzzz"
+        "next": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&end=zzz&last_id=zzzz",
+        "self": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&first_id=zzzz&start=zzz",
     }
     assert no_result_desc_next.result["metadata"] == {"after": 6, "before": 0, "page_size": 2, "total": 6}
 
@@ -529,6 +531,7 @@ async def test_none_resources_paging(server, client, env_with_resources):
     assert no_result_asc_prev.result["links"] == {
         "prev": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&end=zzz&last_id=zzzz",
         "first": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False",
+        "self": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&first_id=zzzz&start=zzz",
     }
     assert no_result_asc_prev.result["metadata"] == {"after": 0, "before": 6, "page_size": 2, "total": 6}
 
@@ -559,7 +562,8 @@ async def test_none_resources_paging(server, client, env_with_resources):
     assert no_result_asc_next.code == 200
     assert len(no_result_asc_next.result["data"]) == 0
     assert no_result_asc_next.result["links"] == {
-        "next": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&start=aaaaa&first_id=aa"
+        "next": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&start=aaaaa&first_id=aa",
+        "self": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False",
     }
     assert no_result_asc_next.result["metadata"] == {"after": 6, "before": 0, "page_size": 2, "total": 6}
 

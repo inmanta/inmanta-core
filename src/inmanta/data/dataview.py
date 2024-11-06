@@ -472,12 +472,11 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             links["first"] = make_link()
 
         # Same page
-        if dtos:
-            links["self"] = make_link(
-                first_id=self.requested_page_boundaries.first_id,
-                start=self.requested_page_boundaries.start,
-            )
-            # TODO: last links
+        links["self"] = make_link(
+            first_id=self.requested_page_boundaries.first_id,
+            start=self.requested_page_boundaries.start,
+        )
+        # TODO: last links
         return links
 
     def validate_limit(self, limit: Optional[int]) -> int:
