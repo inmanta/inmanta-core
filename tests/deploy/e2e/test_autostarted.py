@@ -592,6 +592,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     # Let's check the agent table and check that agent1 is present and not paused
     await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
 
+    assert False
     # Make sure the children of the scheduler are consistent
     await wait_for_consistent_children(
         current_pid=current_pid,

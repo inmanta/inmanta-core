@@ -756,6 +756,7 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
     if tests_failed_during and auto_start_agent:
         for file in glob(log_dir.get() + "/*"):
             if not os.path.isdir(file):
+                logger.debug("HUGO HERE")
                 with open(file, "r") as fh:
                     logger.debug("%s\n%s", file, fh.read())  #
 
