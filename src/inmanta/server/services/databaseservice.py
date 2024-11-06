@@ -23,7 +23,7 @@ import asyncpg
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
-from inmanta import data, util
+from inmanta import data
 from inmanta.data.model import DataBaseReport
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
@@ -56,14 +56,14 @@ class DatabaseMonitor:
         self._exhausted_pool_events_count: int = 0
         self._last_report: int = 0
 
-    def _report_and_reset(self, logger: logging.Logger) -> None:
+    def _report_and_reset(self) -> None:
         """
         Log how long the DB pool was exhausted since the last time the counter
         was reset, if any, and reset the counter.
         """
         since_last = self._exhausted_pool_events_count - self._last_report
         if since_last > 0:
-            logger.warning(
+            LOGGER.warning(
                 "Database pool was exhausted %d seconds in the past 24h.", since_last * self._db_exhaustion_check_interval
             )
             self._last_report = self._exhausted_pool_events_count
@@ -80,7 +80,7 @@ class DatabaseMonitor:
         self.start_monitor()
 
         async def _report_database_pool_exhaustion() -> None:
-            self._report_and_reset(LOGGER)
+            self._report_and_reset()
 
         async def _check_database_pool_exhaustion() -> None:
             self._check_for_pool_exhaustion()
