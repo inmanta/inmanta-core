@@ -24,6 +24,7 @@ import json
 import logging
 import multiprocessing
 import os
+import pathlib
 import uuid
 from dataclasses import dataclass, field
 from functools import partial
@@ -489,6 +490,31 @@ async def assert_is_paused(client, environment: str, expected_agents: dict[str, 
     assert {e["name"]: e["paused"] for e in result.result["agents"]} == expected_agents
 
 
+def log_scheduler_logs(current_pid: int) -> None:
+    """
+    Fetch and log Scheduler logs
+    """
+
+    current = construct_scheduler_children(current_pid)
+    if current.scheduler is None:
+        return
+
+    cmd_line_scheduler = current.scheduler.cmdline()
+    # No log file seems to be provided
+    if "--log-file" not in cmd_line_scheduler:
+        return
+
+    index_log_file = cmd_line_scheduler.index("--log-file") + 1
+    # The argument of the '--log-file' does not seem to be present
+    if len(cmd_line_scheduler) <= index_log_file:
+        return
+
+    log_file = pathlib.Path(cmd_line_scheduler[index_log_file])
+    if log_file.exists():
+        scheduler_logs = log_file.read_text()
+        logger.debug("Scheduler logs:\n%s", scheduler_logs)
+
+
 async def wait_for_consistent_children(
     current_pid: int,
     should_scheduler_be_defined: bool,
@@ -521,7 +547,11 @@ async def wait_for_consistent_children(
         )
         return match_scheduler and match_fork_server and (len(current.executors) == nb_executor_to_be_defined)
 
-    await retry_limited(wait_consistent_scheduler, 10)
+    try:
+        await retry_limited(wait_consistent_scheduler, 10)
+    except AssertionError:
+        log_scheduler_logs(current_pid=current_pid)
+        raise
 
 
 @pytest.mark.slowtest
