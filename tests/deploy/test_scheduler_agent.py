@@ -31,12 +31,11 @@ from uuid import UUID
 import asyncpg
 import pytest
 
-import inmanta.types
 import utils
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import DeployResult, DryrunResult, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.const import Change
 from inmanta.data import ResourceIdStr
@@ -120,7 +119,7 @@ class DummyExecutor(executor.Executor):
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
         self.dry_run_count += 1
 
-    async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
+    async def get_facts(self, resource: ResourceDetails) -> None:
         self.facts_count += 1
 
     async def open_version(self, version: int) -> None:
@@ -250,6 +249,9 @@ class DummyStateManager(StateUpdateManager):
                 assert scheduler._state.resource_state[resource].blocked == blocked
             if status:
                 assert scheduler._state.resource_state[resource].status == status
+
+    def set_parameters(self, fact_result: FactResult) -> None:
+        pass
 
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
         self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
