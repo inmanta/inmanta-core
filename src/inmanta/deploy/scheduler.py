@@ -293,6 +293,7 @@ class ResourceScheduler(TaskManager):
         """
         Trigger a repair, i.e. mark all unblocked resources as dirty, then trigger a deploy.
         """
+
         def _should_deploy(resource: ResourceIdStr) -> bool:
             if (resource_state := self._state.resource_state.get(resource)) is not None:
                 return not resource_state.blocked.is_blocked()
