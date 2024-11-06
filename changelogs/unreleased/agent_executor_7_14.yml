@@ -1,0 +1,4 @@
+description: Ensure mutability safety on agent_multi
+change-type: patch
+destination-branches: [master]
+

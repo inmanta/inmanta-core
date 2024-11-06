@@ -86,7 +86,8 @@ async def test_logging_error(resource_container, environment, client, agent, cli
     resource_container.Provider.reset()
     version = await clienthelper.get_version()
 
-    res_id_1 = "test::BadLogging[agent1,key=key1],v=%d" % version
+    rid_1 = "test::BadLogging[agent1,key=key1]"
+    res_id_1 = f"{rid_1},v=%d" % version
     resources = [
         {
             "key": "key1",
@@ -107,9 +108,9 @@ async def test_logging_error(resource_container, environment, client, agent, cli
     assert result.code == 200
 
     await wait_until_deployment_finishes(client, environment, version)
-    result = await client.get_resource(tid=environment, id=res_id_1, logs=False, status=True)
+    result = await client.resource_details(tid=environment, rid=rid_1)
     assert result.code == 200
-    assert result.result["status"] == "failed"
+    assert result.result["data"]["status"] == "failed"
 
     log_contains(caplog, "conftest.agent1", logging.ERROR, "Failed to serialize argument for log message")
 
@@ -143,7 +144,7 @@ async def test_formatting_exception_messages(
     await clienthelper.put_version_simple(resources, version)
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_resource_actions(
         tid=environment,
@@ -195,7 +196,7 @@ async def test_format_token_in_logline(server, agent, client, environment, resou
 
     result = await client.get_version(environment, version)
     assert result.code == 200
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == 1
@@ -211,7 +212,8 @@ async def test_deploy_handler_method(server, client, environment, agent, clienth
 
     async def deploy_resource(set_state_to_deployed_in_handler: bool = False) -> const.ResourceState:
         version = await clienthelper.get_version()
-        rvid = f"test::Deploy[agent1,key=key1],v={version}"
+        rid = "test::Deploy[agent1,key=key1]"
+        rvid = f"{rid},v={version}"
         resources = [
             {
                 "key": "key1",
@@ -227,15 +229,11 @@ async def test_deploy_handler_method(server, client, environment, agent, clienth
 
         await _deploy_resources(client, environment, resources, version, push=True)
         await clienthelper.wait_for_released(version)
-        await wait_until_deployment_finishes(client, environment, version=version)
+        await wait_until_deployment_finishes(client, environment)
 
-        result = await client.get_resource(
-            tid=environment,
-            id=rvid,
-            status=True,
-        )
+        result = await client.resource_details(tid=environment, rid=rid)
         assert result.code == 200
-        return result.result["status"]
+        return result.result["data"]["status"]
 
     # No exception raise + no state set explicitly via Handler Context -> deployed state
     assert const.ResourceState.deployed == await deploy_resource(set_state_to_deployed_in_handler=False)

@@ -1256,7 +1256,9 @@ async def test_compileservice_queue_with_env_var_merging(
 
 
 @pytest.mark.parametrize("no_agent", [True])
-async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
+async def test_compilerservice_halt(
+    mocked_compiler_service_block, server, client, environment: uuid.UUID, no_agent: bool
+) -> None:
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     result = await client.get_compile_queue(environment)
@@ -1904,6 +1906,7 @@ async def test_status_compilerservice_task_queue(
     mocked_compiler_service_block,
     only_clear_environment: bool,
     compile_is_running: bool,
+    no_agent: bool,
 ) -> None:
     """
     Verify that the size of the compiler queue, reported by the /serverstatus API endpoint, is correctly
