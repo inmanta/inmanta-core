@@ -476,15 +476,21 @@ class PagingBoundaries:
     So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "highest"
     and "lowest".
 
-    Let's show this in an example: User requests all Resources with name >= foo in ASC order. page size = 10
-    The RequestPagingBoundary will be as follows:
+    Let's show this in an example: a user requests the following:
+     - all Resources with name >= foo
+     - ASCENDING order
+     - Page size = 10
+
+    The equivalent RequestPagingBoundary will be as follows:
         ```
         RequestPagingBoundary:
             start = foo
             end = None
         ```
-    The actual data will be: [foo1 ... foo10]
-    But the Pagingboundary will be as follows:
+
+    The fetched data will be: [foo1 ... foo10]
+
+    But the Pagingboundary will be constructed this way:
         ```
         Pagingboundary:
             end = foo1
