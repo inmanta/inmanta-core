@@ -211,11 +211,15 @@ async def diagnose_compile_reports(client: protocol.Client, environments: list[u
                 started_timestamp = sub_report["started"].timestamp() if sub_report["started"] is not None else None
                 completed_timestamp = sub_report["completed"].timestamp() if sub_report["completed"] is not None else None
 
-                time_in_queue = (started_timestamp - requested_timestamp) if started_timestamp else None
+                queue_time = (started_timestamp - requested_timestamp) if started_timestamp else None
+                queue_timeout = (
+                    (datetime.now().astimezone().timestamp() - requested_timestamp) if started_timestamp is None else None
+                )
+
                 completion_time = (
                     (completed_timestamp - started_timestamp) if completed_timestamp and started_timestamp else None
                 )
-                timed_out_time = (
+                completion_timeout = (
                     (datetime.now().astimezone().timestamp() - started_timestamp)
                     if completion_time is None and started_timestamp is not None
                     else None
@@ -230,9 +234,10 @@ async def diagnose_compile_reports(client: protocol.Client, environments: list[u
                     "Started timestamp: %s\n"
                     "Completed timestamp: %s\n"
                     "## Times ##\n"
-                    "Time in queue: %s\n"
+                    "Queue time: %s\n"
+                    "Queue timeout: %s\n"
                     "Completion time: %s\n"
-                    "Timed out completion time: %s\n"
+                    "Completion timeout: %s\n"
                     "## Execution ##\n"
                     "Executed command: %s\n"
                     "Exit code: %s\n"
@@ -245,9 +250,10 @@ async def diagnose_compile_reports(client: protocol.Client, environments: list[u
                     str(requested_timestamp),
                     str(started_timestamp),
                     str(completed_timestamp),
-                    str(time_in_queue),
+                    str(queue_time),
+                    str(queue_timeout),
                     str(completion_time),
-                    str(timed_out_time),
+                    str(completion_timeout),
                     sub_report["command"],
                     str(sub_report["returncode"]),
                     pprint.pformat(sub_report["outstream"]),
@@ -1299,9 +1305,10 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog) -
         requested_timestamp: float
         started_timestamp: Optional[float]
         completed_timestamp: Optional[float]
-        time_in_queue: Optional[float]
+        queue_time: Optional[float]
+        queue_timeout: Optional[float]
         completion_time: Optional[float]
-        timed_out_completion_time: Optional[float]
+        completion_timeout: Optional[float]
         executed_command: str
         exit_code: Optional[int]
         output_stream: str
@@ -1320,9 +1327,10 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog) -
                 optional_fields = [
                     "started_timestamp",
                     "completed_timestamp",
-                    "time_in_queue",
+                    "queue_time",
+                    "queue_timeout",
                     "completion_time",
-                    "timed_out_completion_time",
+                    "completion_timeout",
                     "exit_code",
                     "substitute_compile_id",
                 ]
@@ -1338,22 +1346,22 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog) -
 
             if self.started_timestamp is not None:
                 # This should be computable if requested and started timestamps are defined
-                assert self.time_in_queue > 0
+                assert self.queue_time > 0
+                assert self.queue_timeout is None
             else:
-                assert self.time_in_queue is None, "Time in queue should not be defined for unstarted compile!"
+                assert self.queue_time is None, "Time in queue should not be defined for unstarted compile!"
+                assert self.queue_timeout > 0
 
             if self.completed_timestamp is not None:
                 # This should be computable if requested and started timestamps are defined
                 assert self.started_timestamp is not None, "Started time should be defined for finished compile!"
                 assert self.completion_time is not None, "Completion time should be defined for finished compile!"
                 assert self.completed_timestamp > self.started_timestamp
-                assert (
-                    self.timed_out_completion_time is None
-                ), "Timed out completion time should not be defined for finished compile!"
+                assert self.completion_timeout is None, "Timed out completion time should not be defined for finished compile!"
                 # assert self.exit_code is not None, "Exit code should be defined for finished compile!"
             else:
                 assert self.completion_time is None, "Completion time should not be defined for unfinished compile!"
-                assert self.timed_out_completion_time > 0
+                assert self.completion_timeout > 0
                 assert self.exit_code is None, "Exit code should not be defined for unfinished compile!"
 
     with tempfile.TemporaryDirectory() as tmpdirname:
