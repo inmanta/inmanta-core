@@ -654,9 +654,9 @@ class ResourceScheduler(TaskManager):
             for dep_id in dependencies:
                 new_state = self._state.resource_state[dep_id]
                 if new_state.status == ResourceStatus.UNDEFINED:
-                    dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
+                    dependencies_state[dep_id] = const.ResourceState.undefined
                 elif new_state.blocked == BlockedStatus.YES:
-                    dependencies_state[dep_id] = const.ResourceState.skipped
+                    dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
                 elif new_state.status == ResourceStatus.HAS_UPDATE:
                     dependencies_state[dep_id] = const.ResourceState.available
                 elif new_state.deployment_result == DeploymentResult.DEPLOYED:
