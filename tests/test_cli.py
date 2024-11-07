@@ -173,8 +173,8 @@ async def test_agent(server, client, environment, cli):
     assert result.exit_code == 0
 
 
-@pytest.mark.parametrize("push_method", [([]), (["-p"]), (["-p", "--full"])])
-async def test_version(server, client, clienthelper, environment, cli, push_method):
+@pytest.mark.parametrize("auto_start_agent", [True])  # Allow autostart
+async def test_version(server, client, clienthelper, environment, cli):
     version = str(await clienthelper.get_version())
     resources = [
         {
@@ -216,15 +216,15 @@ async def test_version(server, client, clienthelper, environment, cli, push_meth
     result = await cli.run("version", "list", "-e", environment)
     assert result.exit_code == 0
     assert version in result.output
-    assert "pending" in result.output
+    assert "candidate" in result.output
 
-    result = await cli.run("version", "release", "-e", environment, version, *push_method)
+    result = await cli.run("version", "release", "-e", environment, version)
     assert result.exit_code == 0
     assert version in result.output
 
     result = await client.get_version(environment, version)
     assert result.code == 200
-    assert result.result["model"]["result"] == "deploying"
+    assert result.result["model"]["released"]
 
     result = await cli.run("version", "report", "-e", environment, "-i", version)
     assert result.exit_code == 0
@@ -496,3 +496,19 @@ async def test_show_messages_actionlog(server, environment, client, cli, agent, 
     assert result.exit_code == 0
     assert "DEBUG Started deployment" in result.output
     assert "INFO Deployed successfully" in result.output
+
+
+async def test_monitor(server, environment, client, cli, agent, clienthelper, resource_container):
+    """
+    Test the `inmanta-cli monitor` command.
+    """
+    result = await client.reserve_version(tid=environment)
+    assert result.code == 200
+    version = result.result["data"]
+
+    resource1 = get_resource(version, key="test1")
+    await clienthelper.set_auto_deploy()
+    await clienthelper.put_version_simple(resources=[resource1], version=version, wait_for_released=True)
+
+    result = await cli.run("monitor", "-e", environment)
+    assert result.exit_code == 0

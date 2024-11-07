@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 # This file holds reference equivalents for primive types (excluding lists and dicts). Currently they are
 # both a reference and a real value. For a string it is easy to provide a mock value, for a number it is not
 # so much.
@@ -25,20 +26,20 @@ import uuid
 
 import pydantic
 
-
-T = typing.TypeVar("T", bound=object|str|float|int|bool)
+T = typing.TypeVar("T", bound=object | str | float | int | bool)
 """ A typevar for the type that reference can point to. The provided bound is mostly for documentation
 purposes. object is for opaque types that the compiler cannot do anything with. The other types the 
 compiler knows how to handle.
 """
 
+
 class Reference(typing.Generic[T]):
-    """ A generic reference to a value.
-    """
+    """A generic reference to a value."""
 
 
 class ValueReference:
     pass
+
 
 class AttributeReference:
     pass

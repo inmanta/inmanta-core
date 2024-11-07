@@ -30,13 +30,13 @@ from asyncio import Semaphore
 from collections import abc
 from typing import TYPE_CHECKING, Optional
 
-import pkg_resources
 import py.path
 import pytest
 from pytest import approx
 
 import inmanta.ast.export as ast_export
 import inmanta.data.model as model
+import inmanta.util
 import utils
 from inmanta import config, data
 from inmanta.const import INMANTA_REMOVED_SET_ID, ParameterSource
@@ -658,7 +658,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
     """
     Test a partial_compile on the server
     """
-    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
     print("Project at: ", project_dir)
 
@@ -738,12 +738,13 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
 
 
 @pytest.mark.slowtest
+@pytest.mark.parametrize("no_agent", [True])
 async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
     """
 
-    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
     print("Project at: ", project_dir)
 
@@ -867,7 +868,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
     # clear the environment
     state_dir = config.state_dir.get()
-    project_dir = os.path.join(state_dir, "server", "environments", environment)
+    project_dir = os.path.join(state_dir, "server", environment)
     assert os.path.exists(project_dir)
 
     result = await client.clear_environment(environment)
@@ -882,7 +883,7 @@ async def test_server_recompile_param_fact_v2(server, client, environment):
     Test recompile triggers when setting params and facts with the v2 endpoint
     """
 
-    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
 
     shutil.copytree(project_source, project_dir)
@@ -1254,7 +1255,10 @@ async def test_compileservice_queue_with_env_var_merging(
     assert t2.request.used_environment_variables == {"my_var": "1", "v1": "a C", "v2": "b"}
 
 
-async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
+@pytest.mark.parametrize("no_agent", [True])
+async def test_compilerservice_halt(
+    mocked_compiler_service_block, server, client, environment: uuid.UUID, no_agent: bool
+) -> None:
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     result = await client.get_compile_queue(environment)
@@ -1319,7 +1323,7 @@ async def server_with_frequent_cleanups(server_pre_start, server_config, async_f
     ibl = InmantaBootloader(configure_logging=True)
     await ibl.start()
     yield ibl.restserver
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
 
 @pytest.fixture(scope="function")
@@ -1807,7 +1811,7 @@ async def test_uninstall_python_packages(
     venv = PythonEnvironment(env_path=venv_path)
     assert name_protected_pkg not in venv.get_installed_packages()
     venv.install_for_config(
-        requirements=[pkg_resources.Requirement.parse(name_protected_pkg)],
+        requirements=[inmanta.util.parse_requirement(requirement=name_protected_pkg)],
         config=PipConfig(
             index_url=local_module_package_index,
         ),
@@ -1894,8 +1898,15 @@ def {exporter_name}(exporter: Exporter) -> None:
 
 @pytest.mark.parametrize("only_clear_environment", [True, False])
 @pytest.mark.parametrize("compile_is_running", [True, False])
+@pytest.mark.parametrize("no_agent", [True])
 async def test_status_compilerservice_task_queue(
-    server, client, environment: str, mocked_compiler_service_block, only_clear_environment: bool, compile_is_running: bool
+    server,
+    client,
+    environment: str,
+    mocked_compiler_service_block,
+    only_clear_environment: bool,
+    compile_is_running: bool,
+    no_agent: bool,
 ) -> None:
     """
     Verify that the size of the compiler queue, reported by the /serverstatus API endpoint, is correctly
@@ -1957,7 +1968,6 @@ async def test_environment_delete_removes_env_directories_on_server(
     """
     state_dir: Optional[str] = config.Config.get("config", "state-dir")
     assert state_dir is not None
-    env_dir = py.path.local(state_dir).join("server", "environments")
 
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -1976,12 +1986,13 @@ async def test_environment_delete_removes_env_directories_on_server(
 
     await utils.retry_limited(wait_for_compile, 15)
 
-    assert os.path.exists(os.path.join(env_dir, env_id))
+    env_dir = py.path.local(state_dir).join("server", str(env_id), "compiler")
+    assert os.path.exists(env_dir)
 
     result = await client.environment_delete(env_id)
     assert result.code == 200
 
-    assert not os.path.exists(os.path.join(env_dir, env_id))
+    assert not os.path.exists(env_dir)
 
 
 async def test_overlapping_env_vars(mocked_compiler_service, server, client, environment) -> None:

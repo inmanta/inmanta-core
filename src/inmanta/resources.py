@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Callable, Optional, TypeVar, U
 from pydantic import Field
 
 import inmanta.util
-from inmanta import plugins, references
+from inmanta import const, plugins, references
 from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, util
@@ -288,7 +288,7 @@ class Resource(metaclass=ResourceMeta):
     static methods in the class with the name "get_$fieldname".
     """
 
-    fields: Sequence[str] = ("send_event", "value_references")
+    fields: Sequence[str] = (const.RESOURCE_ATTRIBUTE_SEND_EVENTS, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, "references")
     send_event: bool  # Deprecated field
     model: "proxy.DynamicProxy"
     map: dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
@@ -304,6 +304,14 @@ class Resource(metaclass=ResourceMeta):
     def get_value_references(_, instance) -> dict:
         """This method is present so the serialization works correctly. This field is set by the serializer"""
         return {}
+
+    @staticmethod
+    def get_receive_events(_exporter: "export.Exporter", obj: "Resource") -> bool:
+        try:
+            return obj.receive_events
+        except Exception:
+            # default to True for backward compatibility (all resources used to receive events)
+            return True
 
     @classmethod
     def convert_requires(
@@ -465,6 +473,11 @@ class Resource(metaclass=ResourceMeta):
         force_fields = False
         if cls_resource is None:
             raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
+
+        # backward compatibility for resources that were exported and stored in serialized form before the
+        # receive_events field was introduced
+        if const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS not in obj_map:
+            obj_map = {**obj_map, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True}
 
         obj = cls_resource(obj_id)
         obj.populate(obj_map, force_fields)

@@ -19,21 +19,81 @@
 import contextlib
 import logging
 import os
-from typing import Any, Callable, ContextManager, LiteralString, Mapping, ParamSpec, Sequence, TypeVar
-
-import logfire
-import logfire._internal.config
-import logfire.integrations
-import logfire.integrations.pydantic
-from logfire import LevelName, LogfireSpan
-from logfire._internal.main import NoopSpan
-from logfire.propagate import ContextCarrier
-from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
+from typing import Any, Callable, ContextManager, Literal, LiteralString, Mapping, ParamSpec, Sequence, TypeVar
 
 LOGGER = logging.getLogger("inmanta")
 
-# Make sure we don't get warnings when it is off
-logfire._internal.config.GLOBAL_CONFIG.ignore_no_config = True
+# We need this early to make @instrument work
+enabled = os.getenv("LOGFIRE_TOKEN", None) is not None
+try:
+    import logfire._internal.config
+    import logfire.integrations
+    import logfire.integrations.pydantic
+    import logfire.propagate
+    from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
+
+    # Make sure we don't get warnings when it is off
+    logfire._internal.config.GLOBAL_CONFIG.ignore_no_config = True
+    enabled = os.getenv("LOGFIRE_TOKEN", None) is not None
+
+
+except (ModuleNotFoundError, Exception):
+    enabled = False
+
+# Retaken from Logfire 1.0.1 to make sure tests pass even if logfire is not installed
+LevelName = Literal["trace", "debug", "info", "notice", "warn", "warning", "error", "fatal"]
+"""Level names for records."""
+
+
+class NoopSpan:
+    """Implements the same methods as `LogfireSpan` but does nothing.
+
+    Used in place of `LogfireSpan` and `FastLogfireSpan` when an exception occurs during span creation.
+    This way code like:
+
+        with logfire.span(...) as span:
+            span.set_attribute(...)
+
+    doesn't raise an error even if `logfire.span` fails internally.
+    If `logfire.span` just returned `None` then the `with` block and the `span.set_attribute` call would raise an error.
+    """
+
+    def __init__(self, *_args: Any, **__kwargs: Any) -> None:
+        pass
+
+    def __getattr__(self, _name: str) -> Any:
+        # Handle methods of LogfireSpan which return nothing
+        return lambda *_args, **__kwargs: None
+
+    def __enter__(self) -> "NoopSpan":
+        return self
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: Any) -> None:
+        pass
+
+    # Implement methods/properties that return something to get the type right.
+    @property
+    def message_template(self) -> str:  # pragma: no cover
+        return ""
+
+    @property
+    def tags(self) -> Sequence[str]:  # pragma: no cover
+        return []
+
+    @property
+    def message(self) -> str:  # pragma: no cover
+        return ""
+
+    # This is required to make `span.message = ` not raise an error.
+    @message.setter
+    def message(self, message: str) -> None:
+        pass
+
+    def is_recording(self) -> bool:
+        return False
+
+
+ContextCarrier = Mapping[str, Any]
 
 
 def configure_logfire(service: str) -> None:
@@ -50,7 +110,7 @@ def configure_logfire(service: str) -> None:
     - OTEL_DETAILED_REPORTING: When set detailed parameters are logged such as asyncpg parameters and pydantic objects
     """
 
-    if os.getenv("LOGFIRE_TOKEN", None):
+    if enabled:
         LOGGER.info("Setting up telemetry")
         enable()
 
@@ -58,18 +118,14 @@ def configure_logfire(service: str) -> None:
 
         AsyncPGInstrumentor(capture_parameters=detailed_reporting).instrument()
 
+        logfire.instrument_pydantic("all" if detailed_reporting else "off")
         logfire.configure(
             service_name=service,
             send_to_logfire="if-token-present",
             console=False,
-            pydantic_plugin=logfire.integrations.pydantic.PydanticPlugin(record="all") if detailed_reporting else None,
         )
     else:
         LOGGER.info("Not setting up telemetry")
-
-
-# We need this early to make @instrument work
-enabled = os.getenv("LOGFIRE_TOKEN", None) is not None
 
 
 no_span = NoopSpan()
@@ -82,16 +138,16 @@ def span(
     *,
     _tags: Sequence[str] | None = None,
     _span_name: str | None = None,
-    _level: LevelName | None = None,
+    _level: "LevelName | None | logfire.LevelName" = None,
     **attributes: Any,
-) -> LogfireSpan:
+) -> "NoopSpan | logfire.LogfireSpan":
     if enabled:
         return logfire.span(msg_template, _tags=_tags, _span_name=_span_name, _level=_level, **attributes)
     else:
         return no_span
 
 
-def attach_context(carrier: ContextCarrier) -> ContextManager[None]:
+def attach_context(carrier: "ContextCarrier | logfire.propagate.ContextCarrier") -> ContextManager[None]:
     if enabled:
         return logfire.propagate.attach_context(carrier)
     else:

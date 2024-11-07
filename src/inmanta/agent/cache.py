@@ -37,28 +37,35 @@ class CacheItem:
     def __init__(
         self,
         key: str,
-        timeout: float,
         value: Any,
         call_on_delete: Optional[Callable[[Any], None]],
-        lingering: bool = True,
+        evict_after_last_access: float,
+        evict_after_creation: float,
     ) -> None:
         """
         :param key: The full key identifying this item in the cache.
-        :param timeout: Hard timeout for non-lingering cache item.
         :param value: The value being cached associated to the key.
         :param call_on_delete: Optional finalizer to call when the cache item is deleted. This is
             a callable expecting the cached value as an argument.
-        :param lingering: When True, this cache item will linger in the cache for 60s after its last use.
-            When False, this cache item will be evicted from the cache <timeout> seconds after
+        :param evict_after_last_access: This cache item will be considered stale this number of seconds after
+            it was last accessed.
+        :param evict_after_creation: This cache item will be considered stale this number of seconds after
             entering the cache.
         """
         self.key = key
         self.value = value
         self.call_on_delete = call_on_delete
-        self.lingering = lingering
+        self.refresh_after_access = evict_after_last_access
 
         now = time.time()
-        self.expiry_time = (now + 60) if lingering else (now + timeout)
+        self.expiry_time: float = sys.float_info.max
+        self.after_creation_expiry_time: float = sys.float_info.max
+
+        if evict_after_last_access > 0:
+            self.expiry_time = now + evict_after_last_access
+        if evict_after_creation > 0:
+            self.after_creation_expiry_time = now + evict_after_creation
+            self.expiry_time = min(self.expiry_time, self.after_creation_expiry_time)
 
         # Make sure finalizers are only called once
         self.finalizer_lock = Lock()
@@ -76,31 +83,49 @@ class CacheItem:
     def __del__(self) -> None:
         self.delete()
 
+    def refresh(self, now: float) -> None:
+        """
+        Refresh this cache item. Resets the expiry time for items marked
+        for eviction a certain time after their last access.
+
+        :parameter now: Baseline 'now' time to make sure expiry times are synced up
+            across cache items.
+        """
+        if self.refresh_after_access <= 0:
+            # Refreshing on access is disabled on the CacheItem.
+            return
+        self.expiry_time = min(now + self.refresh_after_access, self.after_creation_expiry_time)
+
 
 @stable_api
 class AgentCache:
     """
     Caching system for the agent.
 
-    Cached items are of two types:
+    Cached items will live in the cache as long as they are not stale.
+    This expiry time can be set with relation to item creation timestamp and/or
+    item last access timestamp. If both are set, the shortest duration of the
+    two will trigger the item to become stale.
 
-    1. Lingering items
+    1. evict_after_last_access
 
         These items are expected to be reused across multiple
-        model versions. Their expiry time is reset to 60s any
-        time they're accessed.
+        model versions. Their expiry time is reset to the value
+        set by the `evict_after_last_access` parameter of the
+        `@cache` decorator any time they're accessed.
 
-    2. Non-lingering items
+    2. evict_after_creation
 
         These items have a fixed lifetime. Their expiry time
-        is set by the timeout parameter of the @cache decorator.
+        is set by the `evict_after_creation` parameter of the `@cache` decorator.
 
     To enforce consistency, this cache should be used as a context manager
     by the agent when performing a resource action (deploy / repair / fact retrieval / dry run).
 
     This ensures that:
         - before using the cache: we clean up stale entries.
-        - when done using the cache: we reset the expiry time of lingering items
+        - when done using the cache: we reset the expiry time of items meant
+          to be reused across multiple model versions.
     """
 
     def __init__(self, agent_instance: Optional["AgentInstance"] = None) -> None:
@@ -110,10 +135,6 @@ class AgentCache:
         """
         # The cache itself
         self.cache: dict[str, CacheItem] = {}
-
-        # Lingering items will remain in the cache for this
-        # many seconds after they were last used.
-        self.item_lingering_time: float = 60
 
         # Time-based eviction mechanism
         # Keep track of when is the next earliest cache item expiry time.
@@ -126,18 +147,20 @@ class AgentCache:
         self.addLocks: dict[str, Lock] = {}
         self._agent_instance = agent_instance
 
-        # Set of lingering cache items used during a resource action.
-        self.used_lingering_items: set[CacheItem] = set()
+        # This set holds cache items used during a resource action whose
+        # expiry time should be refreshed i.e. evict_after_last_access>0
+        self.used_items_to_refresh: set[CacheItem] = set()
 
     def touch_used_cache_items(self) -> None:
         """
-        Extend the expiry time of items in the used_lingering_items by 60s
+        Extend the expiry time of items in the used_items_to_refresh by their
+        respective grace period.
         """
         now = time.time()
-        for item in self.used_lingering_items:
-            item.expiry_time = now + 60
+        for item in self.used_items_to_refresh:
+            item.refresh(now)
 
-        self.used_lingering_items = set()
+        self.used_items_to_refresh = set()
         if self.timer_queue:
             # Bad O(N) but unavoidable (?) Since we modify elements above
             # we have to make sure the heap is still a heap.
@@ -189,8 +212,8 @@ class AgentCache:
         """
         item = self.cache[key]
 
-        if item.lingering:
-            self.used_lingering_items.add(item)
+        if item.refresh_after_access:
+            self.used_items_to_refresh.add(item)
 
         return item
 
@@ -202,8 +225,8 @@ class AgentCache:
 
         heapq.heappush(self.timer_queue, item)
 
-        if item.lingering:
-            self.used_lingering_items.add(item)
+        if item.refresh_after_access:
+            self.used_items_to_refresh.add(item)
 
         if item.expiry_time < self.next_action:
             self.next_action = item.expiry_time
@@ -218,26 +241,32 @@ class AgentCache:
         self,
         key: str,
         value: Any,
+        evict_after_last_access: float = 60,
+        evict_after_creation: float = 0,
         resource: Optional[Resource] = None,
-        timeout: int = 5000,
         call_on_delete: Optional[Callable[[Any], None]] = None,
-        for_version: bool = True,
     ) -> None:
         """
         add a value to the cache with the given key
 
         if a resource is given, it is appended to the key
 
-        :param timeout: nr of second before this value is expired
+        :param key: Key for this item
+        :param value: The value to cache
+        :param evict_after_last_access: This cache item will be considered stale this number of seconds after
+            it was last accessed.
+        :param evict_after_creation: This cache item will be considered stale this number of seconds after
+            entering the cache.
+        :param resource: The resource associated with this entry
         :param call_on_delete: A callback function that is called when the value is removed from the cache.
         """
         self._cache(
             CacheItem(
                 self._get_key(key, resource),
-                timeout,
                 value,
                 call_on_delete,
-                lingering=for_version,
+                evict_after_last_access=evict_after_last_access,
+                evict_after_creation=evict_after_creation,
             )
         )
 
@@ -257,8 +286,12 @@ class AgentCache:
         self,
         key: str,
         function: Callable[..., Any],
-        for_version: bool = True,
-        timeout: int = 5000,
+        # deprecated parameter, kept for backwards compatibility
+        for_version: Optional[bool] = None,
+        # deprecated parameter, kept for backwards compatibility
+        timeout: Optional[int] = None,
+        evict_after_last_access: float = 60.0,
+        evict_after_creation: float = 0.0,
         ignore: set[str] = set(),
         cache_none: bool = True,
         call_on_delete: Optional[Callable[[Any], None]] = None,
@@ -272,16 +305,70 @@ class AgentCache:
 
         all kwargs are prepended to the key
 
-        :param timeout: Use in combination with for_version=False to set a "hard" expiry timeout (in seconds).
-          The cached entry will be evicted from the cache after this period of time.
-          Ignored when for_version=True.
-        :param for_version: This parameter controls when the cached value is considered expired.
-            - for_version=False: the cached value is not tied to any model version. It is
-              considered stale after <timeout> seconds have elapsed since it entered the cache.
-            - for_version=True: the cached value is expected to be reused across multiple versions.
-              It is considered stale if no agent used this entry in the last 60s.
+        :param evict_after_last_access: This cache item will be considered stale this number of seconds after
+            it was last accessed.
+        :param evict_after_creation: This cache item will be considered stale this number of seconds after
+            entering the cache.
 
         """
+
+        def _get_retention_policy(
+            for_version: Optional[bool],
+            timeout: Optional[int],
+            evict_after_last_access: float,
+            evict_after_creation: float,
+        ) -> tuple[float, float]:
+            """
+            This method is a backwards compatibility layer to compute a "new-style" retention policy (i.e. that is using
+            evict_after_last_access and/or evict_after_creation semantics) from the parameters of the `get_or_else` method.
+
+            :param for_version: Compatibility rules for this deprecated parameter:
+                If passed and True, entries will expire <evict_after_last_access>s after their last access (60s default)
+                If passed and False, entries will expire a certain number of seconds after entering the cache. This time
+                is either <evict_after_creation>, <timeout> or a default of 5000s, whichever is set, inspected in this order.
+            :param timeout: Compatibility rules for this deprecated parameter:
+                If `for_version=False` and the new-style parameter `evict_after_creation` is not set, this parameter
+                controls the expiry time (in seconds) of entries after entering the cache.
+                If `for_version` is not set, this parameter is an alias for the new-style parameter `evict_after_creation`.
+                (If both are set, the new-style parameter `evict_after_creation` has precedence)
+            :param evict_after_last_access: This cache item will be considered stale this number of seconds after
+                it was last accessed.
+            :param evict_after_creation: This cache item will be considered stale this number of seconds after
+                entering the cache.
+            """
+            _evict_after_last_access: float
+            _evict_after_creation: float
+
+            # Legacy `for_version` parameter is used, compute
+            # evict_after_last_access and evict_after_creation
+            if for_version is not None:
+                if for_version:
+                    _evict_after_creation = 0.0
+                    _evict_after_last_access = evict_after_last_access if evict_after_last_access > 0 else 60.0
+                else:
+                    _evict_after_last_access = 0.0
+                    if evict_after_creation > 0:
+                        _evict_after_creation = evict_after_creation
+                    elif timeout and timeout > 0:
+                        _evict_after_creation = timeout
+                    else:
+                        _evict_after_creation = 5000.0
+
+            else:
+                _evict_after_last_access = evict_after_last_access
+                _evict_after_creation = evict_after_creation
+
+                # Set default retention policy if both params are <= 0
+                if _evict_after_creation <= 0 and _evict_after_last_access <= 0:
+                    if timeout and timeout > 0:
+                        # Use legacy parameter timeout if it is set.
+                        _evict_after_creation = timeout
+                    else:
+                        # keep entries alive in the cache for 60s after their last usage by default.
+                        _evict_after_last_access = 60.0
+
+            return _evict_after_last_access, _evict_after_creation
+
         acceptable = {"resource"}
         args = {k: v for k, v in kwargs.items() if k in acceptable and k not in ignore}
         others = sorted([k for k in kwargs.keys() if k not in acceptable and k not in ignore])
@@ -302,8 +389,19 @@ class AgentCache:
                 except KeyError:
                     value = function(**kwargs)
                     if cache_none or value is not None:
+                        _evict_after_last_access, _evict_after_creation = _get_retention_policy(
+                            for_version=for_version,
+                            timeout=timeout,
+                            evict_after_last_access=evict_after_last_access,
+                            evict_after_creation=evict_after_creation,
+                        )
                         self.cache_value(
-                            key, value, timeout=timeout, call_on_delete=call_on_delete, for_version=for_version, **args
+                            key=key,
+                            value=value,
+                            call_on_delete=call_on_delete,
+                            evict_after_last_access=_evict_after_last_access,
+                            evict_after_creation=_evict_after_creation,
+                            **args,
                         )
             with self.addLock:
                 del self.addLocks[key]
@@ -323,7 +421,8 @@ class AgentCache:
         exc_tb: Optional[TracebackType],
     ) -> None:
         """
-        When done using the cache, update expiry time
-        of all lingering items.
+        When done using the cache, reset the expiry time
+        of all cache items that should be refreshed after
+        access.
         """
         self.touch_used_cache_items()

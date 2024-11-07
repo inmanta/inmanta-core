@@ -32,7 +32,7 @@ from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT, InvalidSort
+from inmanta.data import APILIMIT, InvalidSort, model
 from inmanta.data.dataview import (
     DiscoveredResourceView,
     ResourceHistoryView,
@@ -63,9 +63,10 @@ from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, Forbidden, NotFound, ServerError
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
 from inmanta.server import config as opt
 from inmanta.server import extensions, protocol
+from inmanta.server.services.environmentlistener import EnvironmentAction, EnvironmentListener
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 from inmanta.util import parse_timestamp
@@ -111,7 +112,7 @@ class ResourceActionLogLine(logging.LogRecord):
         self.relativeCreated = (self.created - logging._startTime) * 1000
 
 
-class ResourceService(protocol.ServerSlice):
+class ResourceService(protocol.ServerSlice, EnvironmentListener):
     """Resource Manager service"""
 
     agentmanager_service: "agentmanager.AgentManager"
@@ -148,6 +149,11 @@ class ResourceService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.agentmanager_service = cast("agentmanager.AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
+        # This is difficult to type without import loop
+        # The type is EnvironmentService
+        server.get_slice(SLICE_ENVIRONMENT).register_listener_for_multiple_actions(
+            self, [EnvironmentAction.deleted, EnvironmentAction.cleared]
+        )
 
     async def start(self) -> None:
         self.schedule(
@@ -158,9 +164,23 @@ class ResourceService(protocol.ServerSlice):
     async def stop(self) -> None:
         await super().stop()
 
-    def clear_env_cache(self, env: data.Environment) -> None:
+    def clear_env_cache(self, env: data.Environment | model.Environment) -> None:
         LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env.id)
         self._increment_cache[env.id] = None
+
+    async def environment_action_cleared(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is cleared
+        :param env: The environment that is cleared
+        """
+        self.clear_env_cache(env)
+
+    async def environment_action_deleted(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is deleted
+        :param env: The environment that is deleted
+        """
+        self.clear_env_cache(env)
 
     def get_resource_action_logger(self, environment: uuid.UUID) -> logging.Logger:
         """Get the resource action logger for the given environment.
@@ -189,7 +209,6 @@ class ResourceService(protocol.ServerSlice):
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
         logs: bool,
-        status: bool,
         log_action: const.ResourceAction,
         log_limit: int,
         connection: Optional[Connection] = None,
@@ -204,9 +223,6 @@ class ResourceService(protocol.ServerSlice):
             resv = await data.Resource.get(env.id, resource_id, con)
             if resv is None:
                 return 404, {"message": "The resource with the given id does not exist in the given environment"}
-
-            if status is not None and status:
-                return 200, {"status": resv.status}
 
             actions: list[data.ResourceAction] = []
             if bool(logs):
@@ -261,8 +277,6 @@ class ResourceService(protocol.ServerSlice):
             "resource_types": list(ResourceType),  # ALL the types for this model version
         }
         """
-        if not self.agentmanager_service.is_primary(env, sid, agent):
-            return 409, {"message": f"This agent is not currently the primary for the endpoint {agent} (sid: {sid})"}
         if incremental_deploy:
             if version is not None:
                 return 500, {"message": "Cannot request increment for a specific version"}
@@ -479,13 +493,6 @@ class ResourceService(protocol.ServerSlice):
                 await data.Resource.set_deployed_multi(env.id, resources_id_filtered, version, connection=inner_connection)
                 # Resource persistent state should not be affected
 
-        def post_deploy_update() -> None:
-            # Make sure tasks are scheduled AFTER the tx is done.
-            # This method is only called if the transaction commits successfully.
-            self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, version))
-
-        connection.call_after_tx(post_deploy_update)
-
     async def _update_deploy_state(
         self,
         env: data.Environment,
@@ -667,7 +674,7 @@ class ResourceService(protocol.ServerSlice):
     ) -> None:
         resource_id_str = resource_id.resource_version_str()
         finished = datetime.datetime.now().astimezone()
-        changes_with_rvid = {
+        changes_with_rvid: dict[ResourceVersionIdStr, dict[str, object]] = {
             resource_id_str: {attr_name: attr_change.model_dump()} for attr_name, attr_change in changes.items()
         }
 
@@ -772,10 +779,8 @@ class ResourceService(protocol.ServerSlice):
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
 
-        self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
-
         waiting_agents = {(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides}
-        for agent, resource_id in waiting_agents:
+        for agent, aresource_id in waiting_agents:
             aclient = self.agentmanager_service.get_agent_client(env.id, agent)
             if aclient is not None:
                 if change is None:
@@ -783,7 +788,7 @@ class ResourceService(protocol.ServerSlice):
                 await aclient.resource_event(
                     tid=env.id,
                     id=agent,
-                    resource=resource_id,
+                    resource=aresource_id,
                     send_events=False,
                     state=status,
                     change=change,
@@ -801,7 +806,7 @@ class ResourceService(protocol.ServerSlice):
         finished: datetime.datetime,
         status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
         messages: list[dict[str, Any]],
-        changes: dict[str, Any],
+        changes: dict[ResourceVersionIdStr, dict[str, object]],
         change: const.Change,
         send_events: bool,
         keep_increment_cache: bool = False,
@@ -969,7 +974,6 @@ class ResourceService(protocol.ServerSlice):
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
 
-                        model_version = None
                         for res in resources:
                             await res.update_fields(
                                 status=status,
@@ -998,8 +1002,6 @@ class ResourceService(protocol.ServerSlice):
                                 connection=inner_connection,
                             )
 
-                            model_version = res.model
-
                             if (
                                 "purged" in res.attributes
                                 and res.attributes["purged"]
@@ -1012,11 +1014,6 @@ class ResourceService(protocol.ServerSlice):
         if is_resource_state_update and is_resource_action_finished:
 
             def post_deploy_update() -> None:
-                assert model_version is not None  # mypy can't figure this out
-                # Make sure tasks are scheduled AFTER the tx is done.
-                # This method is only called if the transaction commits successfully.
-                self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, model_version))
-
                 waiting_agents = {
                     (Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides
                 }
@@ -1222,19 +1219,6 @@ class ResourceService(protocol.ServerSlice):
             raise BadRequest(e.message) from e
 
         # TODO: optimize for no orphans
-
-    @handle(methods_v2.resources_status, env="tid")
-    async def resources_status(
-        self,
-        env: data.Environment,
-        version: int,
-        rids: list[ResourceIdStr],
-    ) -> dict[str, ResourceState]:
-        try:
-            rids = [Id.parse_id(rid).resource_str() for rid in rids]
-        except ValueError as e:
-            raise BadRequest(str(e))
-        return await data.Resource.get_status_for(env.id, version, rids)
 
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:

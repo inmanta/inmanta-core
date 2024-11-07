@@ -18,6 +18,7 @@
 
 import base64
 import inspect
+import json
 import logging
 import traceback
 import typing
@@ -41,7 +42,6 @@ from inmanta.types import SimpleTypes
 from inmanta.util import hash_file
 
 if typing.TYPE_CHECKING:
-    import inmanta.agent.agent
     import inmanta.agent.executor
 
 
@@ -104,12 +104,16 @@ class InvalidOperation(Exception):
 def cache(
     func: Optional[T_FUNC] = None,
     ignore: list[str] = [],
-    timeout: int = 5000,
-    for_version: bool = True,
+    # deprecated parameter kept for backwards compatibility: alias for evict_after_creation
+    timeout: Optional[int] = None,
+    # deprecated parameter kept for backwards compatibility: if set, overrides evict_after_creation/evict_after_last_access
+    for_version: Optional[bool] = None,
     cache_none: bool = True,
     # deprecated parameter kept for backwards compatibility: if set, overrides cache_none
     cacheNone: Optional[bool] = None,  # noqa: N803
     call_on_delete: Optional[Callable[[Any], None]] = None,
+    evict_after_creation: float = 0.0,
+    evict_after_last_access: float = 0.0,
 ) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
     """
     decorator for methods in resource handlers to provide caching
@@ -123,21 +127,31 @@ def cache(
     If an argument named resource is present,
     it is assumed to be a resource and its ID is used, without the version information
 
-    :param timeout: Hard timeout for non-lingering cache item i.e. when `for_version=False`.
-        Ignored otherwise.
-    :param for_version: When True, this cache item will linger in the cache for 60s after its last use.
-        When False, this cache item will be evicted from the cache <timeout> seconds after
-        entering the cache.
     :param ignore: a list of argument names that should not be part of the cache key
     :param cache_none: allow the caching of None values
     :param call_on_delete: A callback function that is called when the value is removed from the cache,
             with the value as argument.
+    :param evict_after_creation: This cache item will be considered stale this number of seconds after
+        entering the cache.
+    :param evict_after_last_access: This cache item will be considered stale this number of seconds after
+        it was last accessed.
     """
 
     def actual(f: Callable[..., object]) -> T_FUNC:
         myignore = set(ignore)
         sig = inspect.signature(f)
         myargs = list(sig.parameters.keys())[1:]  # Starts at 1 because 0 is self.
+        if evict_after_creation > 0 and timeout and timeout > 0:
+            LOGGER.warning(
+                "Both the `evict_after_creation` and the deprecated `timeout` parameter are set "
+                "for cached method %s.%s. The `timeout` parameter will be ignored and cached entries will "
+                "be kept in the cache for %.2fs after entering it. The `timeout` parameter should no"
+                "longer be used. Please refer to the handler documentation "
+                "for more information about setting a retention policy.",
+                f.__module__,
+                f.__name__,
+                evict_after_creation,
+            )
 
         def wrapper(self: HandlerAPI[TResource], *args: object, **kwds: object) -> object:
             kwds.update(dict(zip(myargs, args)))
@@ -146,14 +160,16 @@ def cache(
                 return f(self, **kwds)
 
             return self.cache.get_or_else(
-                f.__name__,
-                bound,
-                for_version,
-                timeout,
-                myignore,
-                cacheNone if cacheNone is not None else cache_none,
-                **kwds,
+                key=f.__name__,
+                function=bound,
+                for_version=for_version,
+                timeout=timeout,
+                evict_after_last_access=evict_after_last_access,
+                evict_after_creation=evict_after_creation,
+                ignore=myignore,
+                cache_none=cacheNone if cacheNone is not None else cache_none,
                 call_on_delete=call_on_delete,
+                **kwds,
             )
 
         # Too much magic to type statically
@@ -409,20 +425,33 @@ class HandlerContext(LoggerABC):
         if exc_info:
             kwargs["traceback"] = traceback.format_exc()
 
-        for k, v in kwargs.items():
+        def clean_arg_value(k: str, v: object) -> object:
+            """
+            Make sure we have a clean dict.
+
+            These values will be pickled and json serialized later down the stream.
+            As such we have to make sure both things are possible.
+
+            Clean json is both json serializable and (safely) pickleable
+
+            Also, the data will only be accessed via json endpoints,
+            so anything not picked up by the json serializer will be lost anyways.
+            """
             try:
-                json_encode(v)
+                return json.loads(json_encode(v))
             except TypeError:
                 if inmanta.RUNNING_TESTS:
                     # Fail the test when the value is not serializable
                     raise Exception(f"Failed to serialize argument for log message {k}={v}")
                 else:
                     # In production, try to cast the non-serializable value to str to prevent the handler from failing.
-                    kwargs[k] = str(v)
-
+                    return str(v)
             except Exception as e:
                 raise Exception("Exception during serializing log message arguments") from e
-        log = data.LogLine.log(level, msg, **kwargs)
+
+        packaged_kwargs = {k: clean_arg_value(k, v) for k, v in kwargs.items()}
+
+        log = data.LogLine.log(level, msg, **packaged_kwargs)
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
 
@@ -779,7 +808,9 @@ class ResourceHandler(HandlerAPI[TResource]):
                 ctx.set_status(const.ResourceState.dry)
         except SkipResource as e:
             ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
+            )
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception(
@@ -793,7 +824,7 @@ class ResourceHandler(HandlerAPI[TResource]):
             except Exception as e:
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
+                    resource_id=resource.id.resource_str(),
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
@@ -818,7 +849,7 @@ class ResourceHandler(HandlerAPI[TResource]):
             except Exception as e:
                 ctx.exception(
                     "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
+                    resource_id=resource.id.resource_str(),
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
@@ -944,13 +975,15 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
 
         except SkipResource as e:
             ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
+            )
 
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                resource_id=resource.id,
+                resource_id=resource.id.resource_str(),
                 exception=f"{e.__class__.__name__}('{e}')",
                 traceback=traceback.format_exc(),
             )
@@ -960,7 +993,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             except Exception as e:
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
+                    resource_id=resource.id.resource_str(),
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
@@ -1037,12 +1070,14 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                 ctx.set_status(const.ResourceState.deployed)
         except SkipResource as e:
             ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
+            )
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                resource_id=resource.id,
+                resource_id=resource.id.resource_str(),
                 exception=f"{e.__class__.__name__}('{e}')",
                 traceback=traceback.format_exc(),
             )
@@ -1052,7 +1087,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
             except Exception as e:
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
+                    resource_id=resource.id.resource_str(),
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 

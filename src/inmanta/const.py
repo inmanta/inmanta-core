@@ -358,5 +358,15 @@ INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"
 INMANTA_VENV_STATUS_FILENAME = ".inmanta_venv_status"
 
 
+# File present in the root of the state dir to indicate that this orchestrator
+# uses the new disk layout.
+INMANTA_USE_NEW_DISK_LAYOUT_FILENAME = ".inmanta_use_new_disk_layout"
+
+
 # ID to represent the new scheduler as an agent
 AGENT_SCHEDULER_ID = "$__scheduler"
+
+
+# resource attributes for event propagation
+RESOURCE_ATTRIBUTE_SEND_EVENTS = "send_event"
+RESOURCE_ATTRIBUTE_RECEIVE_EVENTS = "receive_events"

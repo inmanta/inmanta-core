@@ -42,9 +42,10 @@ def main(args):
         # 3) Set the state to 'start' so that our new candidate attribute set is validated and, eventually, promoted.
         if instance["state"] not in ["failed", "up"]:
             print(
-                f"Instance with id {instance['id']} is being skipped because it is on state {instance['state']}"
+                f"Instance with id {instance['id']} is being skipped because it is on state {instance['state']} "
                 f"and not on state 'up' or 'failed'."
             )
+            continue
 
         description = "migrated instance"
 

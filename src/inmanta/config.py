@@ -306,6 +306,10 @@ def is_map(map_in: str | typing.Mapping[str, str]) -> typing.Mapping[str, str]:
     return map_out
 
 
+def config_map_to_str(inp: typing.Mapping[str, str]) -> str:
+    return ",".join(f"{k}={v}" for k, v in inp.items())
+
+
 def is_str(value: str) -> str:
     """str"""
     return str(value)
@@ -466,7 +470,7 @@ def get_default_nodename() -> str:
 
 
 nodename = Option("config", "node-name", get_default_nodename, "Force the hostname of this machine to a specific value", is_str)
-feature_file_config = Option("config", "feature-file", None, "The loacation of the inmanta feature file.", is_str_opt)
+feature_file_config = Option("config", "feature-file", None, "The location of the inmanta feature file.", is_str_opt)
 
 
 ###############################

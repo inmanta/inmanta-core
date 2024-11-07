@@ -29,19 +29,20 @@ import pathlib
 import shutil
 import typing
 import uuid
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, cast
+from uuid import UUID
 
-import pkg_resources
-
-import inmanta.types
-import inmanta.util
+import packaging.requirements
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
-from inmanta.const import ResourceState
-from inmanta.data.model import PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.agent.handler import HandlerContext
+from inmanta.const import Change, ResourceState
+from inmanta.data import LogLine
+from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
@@ -64,6 +65,16 @@ class AgentInstance(abc.ABC):
         pass
 
 
+@dataclass
+class DryrunResult:
+    rvid: ResourceVersionIdStr
+    dryrun_id: uuid.UUID
+    changes: dict[str, AttributeStateChange]
+    started: datetime.datetime
+    finished: datetime.datetime
+    messages: list[LogLine]
+
+
 class ResourceDetails:
     """
     In memory representation of the desired state of a resource
@@ -76,8 +87,8 @@ class ResourceDetails:
     requires: Sequence[Id]
     attributes: dict[str, object]
 
-    def __init__(self, id: ResourceIdStr, version: int, attributes: dict[str, object]) -> None:
-        self.attributes = attributes
+    def __init__(self, id: ResourceIdStr, version: int, attributes: Mapping[str, object]) -> None:
+        self.attributes = dict(attributes)
         self.id = Id.parse_id(id).copy(version=version)
         self.rid = self.id.resource_str()
         self.rvid = self.id.resource_version_str()
@@ -162,6 +173,8 @@ class ExecutorBlueprint(EnvBlueprint):
         requirements and making sure they all share the same pip config.
         """
 
+        if not code:
+            raise ValueError("from_specs expects at least one resource install spec")
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
         pip_configs = [cd.blueprint.pip_config for cd in code]
@@ -297,7 +310,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         await asyncio.get_running_loop().run_in_executor(self.io_threadpool, self.init_env)
         if len(req):  # install_for_config expects at least 1 requirement or a path to install
             await self.async_install_for_config(
-                requirements=list(pkg_resources.parse_requirements(req)),
+                requirements=[packaging.requirements.Requirement(requirement_string=e) for e in req],
                 config=blueprint.pip_config,
             )
 
@@ -352,19 +365,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         self.remove_venv()
         os.makedirs(self.env_path)
-
-
-def initialize_envs_directory() -> str:
-    """
-    Initializes the base directory for storing virtual environments. If the directory
-    does not exist, it is created.
-
-    :return: The path to the environments directory.
-    """
-    state_dir = cfg.state_dir.get()
-    env_dir = os.path.join(state_dir, "envs")
-    os.makedirs(env_dir, exist_ok=True)
-    return env_dir
 
 
 class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, str, ExecutorVirtualEnvironment]):
@@ -428,11 +428,11 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
         This method must execute under the self._locks.get(<blueprint-hash>) lock to ensure thread-safe operations for each
         unique blueprint.
 
-        :param blueprint: The blueprint specifying the configuration for the new virtual environment.
+        :param member_id: The blueprint specifying the configuration for the new virtual environment.
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
         """
-        interal_id = member_id.blueprint_hash()
-        env_dir_name: str = interal_id
+        internal_id = member_id.blueprint_hash()
+        env_dir_name: str = internal_id
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
         # Check if the directory already exists and create it if not
@@ -444,7 +444,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
                 "Found existing venv for content %s at %s, content hash: %s",
                 str(member_id),
                 env_dir,
-                interal_id,
+                internal_id,
             )
             is_new = False  # Returning the path and False for existing directory
 
@@ -457,16 +457,65 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
                 "Venv is already present but it was not correctly initialized. Re-creating it for content %s, "
                 "content hash: %s located in %s",
                 str(member_id),
-                interal_id,
+                internal_id,
                 env_dir,
             )
             await loop.run_in_executor(self.thread_pool, process_environment.reset)
             is_new = True
 
         if is_new:
-            LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), interal_id)
+            LOGGER.info("Creating venv for content %s, content hash: %s", str(member_id), internal_id)
             await process_environment.create_and_install_environment(member_id)
         return process_environment
+
+
+@dataclass
+class FactResult:
+    resource_id: ResourceVersionIdStr
+    # Failed fact checks may have empty action_id
+    action_id: Optional[uuid.UUID]
+    started: datetime.datetime
+    finished: datetime.datetime
+    success: bool
+    parameters: list[dict[str, Any]]
+    messages: list[LogLine]
+    error_msg: Optional[str] = None
+
+
+@dataclass
+class DeployResult:
+    rvid: ResourceVersionIdStr
+    action_id: uuid.UUID
+    status: ResourceState
+    messages: list[LogLine]
+    changes: dict[str, AttributeStateChange]
+    change: Optional[Change]
+
+    @classmethod
+    def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployResult":
+        if ctx.status is None:
+            ctx.warning("Deploy status field is None, failing!")
+            ctx.set_status(ResourceState.failed)
+
+        return DeployResult(
+            rvid=rvid,
+            action_id=ctx.action_id,
+            status=ctx.status or ResourceState.failed,
+            messages=ctx.logs,
+            changes=ctx.changes,
+            change=ctx.change,
+        )
+
+    @classmethod
+    def undeployable(self, rvid: ResourceVersionIdStr, action_id: UUID, message: LogLine) -> "DeployResult":
+        return DeployResult(
+            rvid=rvid,
+            action_id=action_id,
+            status=ResourceState.unavailable,
+            messages=[message],
+            changes={},
+            change=Change.nochange,
+        )
 
 
 class Executor(abc.ABC):
@@ -484,10 +533,12 @@ class Executor(abc.ABC):
     @abc.abstractmethod
     async def execute(
         self,
+        action_id: uuid.UUID,
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-    ) -> ResourceState:
+        requires: dict[ResourceIdStr, const.ResourceState],
+    ) -> DeployResult:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
 
@@ -500,19 +551,19 @@ class Executor(abc.ABC):
     @abc.abstractmethod
     async def dry_run(
         self,
-        resources: Sequence[ResourceDetails],
+        resource: ResourceDetails,
         dry_run_id: uuid.UUID,
-    ) -> None:
+    ) -> DryrunResult:
         """
         Perform a dryrun for the given resources
 
-        :param resources: Sequence of resources for which to perform a dryrun.
+        :param resource: Resource for which to perform a dryrun.
         :param dry_run_id: id for this dryrun
         """
         pass
 
     @abc.abstractmethod
-    async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
+    async def get_facts(self, resource: ResourceDetails) -> FactResult:
         """
         Get facts for a given resource
         :param resource: The resource for which to get facts.

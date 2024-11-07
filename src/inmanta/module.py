@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import reduce
 from importlib.abc import Loader
+from importlib.metadata import PackageNotFoundError
 from io import BytesIO, TextIOBase
 from itertools import chain
 from subprocess import CalledProcessError
@@ -47,13 +48,13 @@ from time import time
 from typing import Annotated, ClassVar, Dict, Generic, List, NewType, Optional, TextIO, TypeVar, Union, cast
 
 import more_itertools
-import pkg_resources
 import pydantic
 import yaml
-from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
 
 import inmanta.data.model
+import packaging.requirements
+import packaging.utils
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
@@ -67,7 +68,8 @@ from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
-from packaging import version
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 from ruamel.yaml.comments import CommentedMap
 
 try:
@@ -96,26 +98,31 @@ class InmantaModuleRequirement:
             used by distinguishing the two on a type level.
     """
 
-    def __init__(self, requirement: Requirement) -> None:
-        if requirement.project_name.startswith(ModuleV2.PKG_NAME_PREFIX):
+    def __init__(self, requirement: inmanta.util.CanonicalRequirement) -> None:
+        if requirement.name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError(
                 f"InmantaModuleRequirement instances work with inmanta module names, not python package names. "
                 f"Problematic case: {str(requirement)}"
             )
-        self._requirement: Requirement = requirement
+        self._requirement = requirement
 
     @property
     def project_name(self) -> str:
-        # Requirement converts all "_" to "-". Inmanta modules use "_"
-        return self._requirement.project_name.replace("-", "_")
+        warnings.warn(InmantaWarning("The `project_name` property has been deprecated in favor of `name`"))
+        return self.name
+
+    @property
+    def name(self) -> str:
+        return self._requirement.name.replace("-", "_")
 
     @property
     def key(self) -> str:
         # Requirement converts all "_" to "-". Inmanta modules use "_"
-        return self._requirement.key.replace("-", "_")
+        warnings.warn(InmantaWarning("The `key` property has been deprecated in favor of `name`"))
+        return self.name
 
     @property
-    def specifier(self) -> str:
+    def specifier(self) -> SpecifierSet:
         return self._requirement.specifier
 
     def __eq__(self, other: object) -> bool:
@@ -123,24 +130,14 @@ class InmantaModuleRequirement:
             return NotImplemented
         return self._requirement == other._requirement
 
-    def __contains__(self, version: str) -> bool:
-        return version in self._requirement
+    def __contains__(self, version: packaging.version.Version | str) -> bool:
+        return self._requirement.specifier.contains(version, prereleases=True)
 
     def __str__(self) -> str:
         return str(self._requirement).replace("-", "_")
 
     def __hash__(self) -> int:
         return self._requirement.__hash__()
-
-    @property
-    def specs(self) -> Sequence[tuple[str, str]]:
-        return self._requirement.specs
-
-    def version_spec_str(self) -> str:
-        """
-        Returns a string representation of this module requirement's version spec. Includes only the version part.
-        """
-        return ",".join("".join(spec) for spec in self.specs)
 
     @classmethod
     def parse(cls: type[TInmantaModuleRequirement], spec: str) -> TInmantaModuleRequirement:
@@ -150,16 +147,16 @@ class InmantaModuleRequirement:
             )
         if "-" in spec:
             raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
-        return cls(Requirement.parse(spec))
+        return cls(inmanta.util.parse_requirement(requirement=spec))
 
-    def get_python_package_requirement(self) -> Requirement:
+    def get_python_package_requirement(self) -> inmanta.util.CanonicalRequirement:
         """
         Return a Requirement with the name of the Python distribution package for this module requirement.
         """
-        module_name = self.project_name
+        module_name = self.name
         pkg_name = ModuleV2Source.get_package_name_for(module_name)
         pkg_req_str = str(self).replace(module_name, pkg_name, 1)  # Replace max 1 occurrence
-        return Requirement.parse(pkg_req_str)
+        return inmanta.util.parse_requirement(requirement=pkg_req_str)
 
 
 class CompilerExceptionWithExtendedTrace(CompilerException):
@@ -341,7 +338,7 @@ class GitProvider:
         pass
 
     @abstractmethod
-    def get_version_tags(self, repo: str, only_return_stable_versions: bool = False) -> list[version.Version]:
+    def get_version_tags(self, repo: str, only_return_stable_versions: bool = False) -> list[packaging.version.Version]:
         pass
 
     @abstractmethod
@@ -422,7 +419,7 @@ class CLIGitProvider(GitProvider):
     def get_all_tags(self, repo: str) -> list[str]:
         return subprocess.check_output(["git", "tag"], cwd=repo).decode("utf-8").splitlines()
 
-    def get_version_tags(self, repo: str, only_return_stable_versions: bool = False) -> list[version.Version]:
+    def get_version_tags(self, repo: str, only_return_stable_versions: bool = False) -> list[packaging.version.Version]:
         """
         Return the Git tags that represent version numbers as version.Version objects. Only PEP440 compliant
         versions will be returned.
@@ -434,8 +431,8 @@ class CLIGitProvider(GitProvider):
         all_tags: list[str] = sorted(self.get_all_tags(repo))
         for tag in all_tags:
             try:
-                parsed_version: version.Version = version.Version(tag)
-            except version.InvalidVersion:
+                parsed_version: packaging.version.Version = packaging.version.Version(tag)
+            except packaging.version.InvalidVersion:
                 continue
             if not only_return_stable_versions or not parsed_version.is_prerelease:
                 result.append(parsed_version)
@@ -595,7 +592,9 @@ class ModuleSource(Generic[TModule]):
         :param module_name: The name of the module.
         :param module_spec: List of inmanta requirements in which to look for the module.
         """
-        constraints_on_module: list[str] = [str(req) for req in module_spec if module_name == req.key and req.specs]
+        constraints_on_module: list[str] = [
+            str(req) for req in module_spec if module_name == req.name and len(req.specifier) > 0
+        ]
         if constraints_on_module:
             from_constraints = f"(with constraints {' '.join(constraints_on_module)})"
         else:
@@ -611,18 +610,21 @@ class ModuleSource(Generic[TModule]):
         """
         raise NotImplementedError("Abstract method")
 
-    def _log_version_snapshot(self, header: Optional[str], version_snapshot: dict[str, version.Version]) -> None:
+    def _log_version_snapshot(self, header: Optional[str], version_snapshot: dict[str, packaging.version.Version]) -> None:
         if version_snapshot:
             out = [header] if header is not None else []
             out.extend(f"{mod}: {version}" for mod, version in version_snapshot.items())
             LOGGER.debug("\n".join(out))
 
     def _log_snapshot_difference(
-        self, version_snapshot: dict[str, version.Version], previous_snapshot: dict[str, version.Version], header: Optional[str]
+        self,
+        version_snapshot: dict[str, packaging.version.Version],
+        previous_snapshot: dict[str, packaging.version.Version],
+        header: Optional[str],
     ) -> None:
-        set_pre_install: set[tuple[str, version.Version]] = set(previous_snapshot.items())
-        set_post_install: set[tuple[str, version.Version]] = set(version_snapshot.items())
-        updates_and_additions: set[tuple[str, version.Version]] = set_post_install - set_pre_install
+        set_pre_install: set[tuple[str, packaging.version.Version]] = set(previous_snapshot.items())
+        set_post_install: set[tuple[str, packaging.version.Version]] = set(version_snapshot.items())
+        updates_and_additions: set[tuple[str, packaging.version.Version]] = set_post_install - set_pre_install
 
         if version_snapshot:
             out = [header] if header is not None else []
@@ -665,7 +667,7 @@ class ModuleSource(Generic[TModule]):
         raise NotImplementedError("Abstract method")
 
     def _get_module_name(self, module_spec: list[InmantaModuleRequirement]) -> str:
-        module_names: set[str] = {req.project_name for req in module_spec}
+        module_names: set[str] = {req.name for req in module_spec}
         module_name: str = more_itertools.one(
             module_names,
             too_short=ValueError("module_spec should contain at least one requirement"),
@@ -683,19 +685,16 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         self.urls: list[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
 
     @classmethod
-    def get_installed_version(cls, module_name: str) -> Optional[version.Version]:
+    def get_installed_version(cls, module_name: str) -> Optional[packaging.version.Version]:
         """
         Returns the version for a module if it is installed.
         """
         if module_name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError("PythonRepo instances work with inmanta module names, not Python package names.")
         try:
-            dist: Distribution = pkg_resources.get_distribution(ModuleV2Source.get_package_name_for(module_name))
-            return version.Version(dist.version)
-        except DistributionNotFound:
+            return packaging.version.Version(importlib.metadata.version(ModuleV2Source.get_package_name_for(module_name)))
+        except PackageNotFoundError:
             return None
-        except version.InvalidVersion:
-            raise InvalidModuleException(f"Package {dist.project_name} was installed but it has no valid version.")
 
     @classmethod
     def get_inmanta_module_name(cls, python_package_name: str) -> str:
@@ -720,14 +719,14 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
         assert_pip_has_source(project.metadata.pip, f"a v2 module {module_name}")
 
-        requirements: list[Requirement] = [req.get_python_package_requirement() for req in module_spec]
+        requirements: list[inmanta.util.CanonicalRequirement] = [req.get_python_package_requirement() for req in module_spec]
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
 
         # Get known requires and add them to prevent invalidating constraints through updates
         # These could be constraints (-c) as well, but that requires additional sanitation
         # Because for pip not every valid -r is a valid -c
         current_requires = project.get_strict_python_requirements_as_list()
-        requirements += [Requirement.parse(r) for r in current_requires]
+        requirements += inmanta.util.parse_requirements(current_requires)
 
         if preinstalled is not None:
             # log warning if preinstalled version does not match constraints
@@ -737,7 +736,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                     "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
                     module_name,
                     preinstalled_version,
-                    ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
+                    ",".join(str(constraint.specifier) for constraint in module_spec if len(constraint.specifier) > 0),
                 )
         try:
             self.log_pre_install_information(module_name, module_spec)
@@ -760,7 +759,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def log_pre_install_information(self, module_name: str, module_spec: list[InmantaModuleRequirement]) -> None:
         LOGGER.debug("Installing module %s (v2) %s.", module_name, super()._format_constraints(module_name, module_spec))
 
-    def take_v2_modules_snapshot(self, header: Optional[str] = None) -> dict[str, version.Version]:
+    def take_v2_modules_snapshot(self, header: Optional[str] = None) -> dict[str, packaging.version.Version]:
         """
         Log and return a dictionary containing currently installed v2 modules and their versions.
 
@@ -772,7 +771,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return version_snapshot
 
     def log_snapshot_difference_v2_modules(
-        self, previous_snapshot: dict[str, version.Version], header: Optional[str] = None
+        self, previous_snapshot: dict[str, packaging.version.Version], header: Optional[str] = None
     ) -> None:
         """
         Logs a diff view of v2 inmanta modules currently installed (in alphabetical order) and their version.
@@ -792,7 +791,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
         :param module_name: The module's name.
         """
-        installed_version: Optional[version.Version] = self.get_installed_version(module_name)
+        installed_version: Optional[packaging.version.Version] = self.get_installed_version(module_name)
         LOGGER.debug("Successfully installed module %s (v2) version %s", module_name, installed_version)
 
     def path_for(self, name: str) -> Optional[str]:
@@ -857,7 +856,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
     def log_pre_install_information(self, module_name: str, module_spec: list[InmantaModuleRequirement]) -> None:
         LOGGER.debug("Installing module %s (v1) %s.", module_name, super()._format_constraints(module_name, module_spec))
 
-    def take_modules_snapshot(self, project: "Project", header: Optional[str] = None) -> dict[str, version.Version]:
+    def take_modules_snapshot(self, project: "Project", header: Optional[str] = None) -> dict[str, packaging.version.Version]:
         """
         Log and return a dictionary containing currently loaded modules and their versions.
 
@@ -869,7 +868,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         return version_snapshot
 
     def log_snapshot_difference_v1_modules(
-        self, project: "Project", previous_snapshot: dict[str, version.Version], header: Optional[str] = None
+        self, project: "Project", previous_snapshot: dict[str, packaging.version.Version], header: Optional[str] = None
     ) -> None:
         """
         Logs a diff view on inmanta modules (both v1 and v2) currently loaded (in alphabetical order) and their version.
@@ -912,7 +911,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
                     "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
                     module_name,
                     preinstalled_version,
-                    ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
+                    ",".join(str(constraint.specifier) for constraint in module_spec if len(constraint.specifier) > 0),
                 )
                 self.log_pre_install_information(module_name, module_spec)
                 modules_pre_install = self.take_modules_snapshot(project, header="Modules versions before installation:")
@@ -1055,7 +1054,7 @@ def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, Rem
 def merge_specs(mainspec: "Dict[str, List[InmantaModuleRequirement]]", new: "List[InmantaModuleRequirement]") -> None:
     """Merge two maps str->[TMetadata] by concatting their lists."""
     for req in new:
-        key = req.project_name
+        key = req.name
         if key not in mainspec:
             mainspec[key] = [req]
         else:
@@ -1175,14 +1174,17 @@ class RequirementsTxtFile:
         Returns True iff this requirements.txt file contains the given package name. The given `pkg_name` is matched
         case insensitive against the requirements in this RequirementsTxtFile.
         """
-        return any(r.key == pkg_name.lower() for r in self._requirements)
+        canonicalized: str = packaging.utils.canonicalize_name(pkg_name)
+        return any(r.name == canonicalized for r in self._requirements)
 
-    def set_requirement_and_write(self, requirement: Requirement) -> None:
+    def set_requirement_and_write(self, requirement: inmanta.util.CanonicalRequirement) -> None:
         """
         Add the given requirement to the requirements.txt file and update the file on disk, replacing any existing constraints
         on this package.
         """
-        new_content_file = RequirementsTxtParser.get_content_with_dep_removed(self._filename, remove_dep_on_pkg=requirement.key)
+        new_content_file = RequirementsTxtParser.get_content_with_dep_removed(
+            self._filename, remove_dep_on_pkg=requirement.name
+        )
         new_content_file = new_content_file.rstrip()
         if new_content_file:
             new_content_file = f"{new_content_file}\n{requirement}"
@@ -1270,8 +1272,8 @@ class ModuleMetadata(ABC, Metadata):
     @classmethod
     def is_pep440_version(cls, v: str) -> str:
         try:
-            version.Version(v)
-        except version.InvalidVersion as e:
+            packaging.version.Version(v)
+        except packaging.version.InvalidVersion as e:
             raise ValueError(f"Version {v} is not PEP440 compliant") from e
         return v
 
@@ -1322,9 +1324,9 @@ class ModuleMetadata(ABC, Metadata):
     @classmethod
     def _compose_full_version(cls, v: str, version_tag: str) -> packaging.version.Version:
         if not version_tag:
-            return version.Version(v)
+            return packaging.version.Version(v)
         normalized_tag: str = version_tag.lstrip(".")
-        return version.Version(f"{v}.{normalized_tag}")
+        return packaging.version.Version(f"{v}.{normalized_tag}")
 
 
 @stable_api
@@ -1358,11 +1360,11 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
 
     @classmethod
     def _substitute_version(cls: type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
-        new_version_obj: version.Version = cls._compose_full_version(new_version, version_tag)
+        new_version_obj: packaging.version.Version = cls._compose_full_version(new_version, version_tag)
         return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", rf"\g<1>{new_version_obj}\g<2>", source)
 
     def get_full_version(self) -> packaging.version.Version:
-        return version.Version(self.version)
+        return packaging.version.Version(self.version)
 
     def to_v2(self) -> "ModuleV2Metadata":
         values = self.dict()
@@ -1372,7 +1374,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
         install_requires = [ModuleV2Source.get_package_name_for(r) for r in values["requires"]]
         del values["requires"]
         values["name"] = ModuleV2Source.get_package_name_for(values["name"])
-        values["version"], values["version_tag"] = ModuleV2Metadata.split_version(version.Version(values["version"]))
+        values["version"], values["version_tag"] = ModuleV2Metadata.split_version(packaging.version.Version(values["version"]))
         return ModuleV2Metadata(**values, install_requires=install_requires)
 
 
@@ -1408,7 +1410,7 @@ class ModuleV2Metadata(ModuleMetadata):
     @field_validator("version")
     @classmethod
     def is_base_version(cls, v: str) -> str:
-        version_obj: version.Version = version.Version(v)
+        version_obj: packaging.version.Version = packaging.version.Version(v)
         if str(version_obj) != version_obj.base_version:
             raise ValueError(
                 "setup.cfg version should be a base version without tag. Use egg_info.tag_build to configure a tag"
@@ -1439,7 +1441,7 @@ class ModuleV2Metadata(ModuleMetadata):
     def is_valid_version_tag(cls, v: str) -> str:
         try:
             cls._compose_full_version("1.0.0", v)
-        except version.InvalidVersion as e:
+        except packaging.version.InvalidVersion as e:
             raise ValueError(f"Version tag {v} is not PEP440 compliant") from e
         return v
 
@@ -1830,7 +1832,7 @@ class ModuleLike(ABC, Generic[TMetadata]):
                   declare dependencies module dependencies. This could include the requirements.txt file
                   next to the metadata file of the project or module.
         """
-        return any(module_name == InmantaModuleRequirement.parse(req).key for req in self.get_module_requirements())
+        return any(module_name == InmantaModuleRequirement.parse(req).name for req in self.get_module_requirements())
 
     def _load_file(self, ns: Namespace, file: str) -> tuple[list[Statement], BasicBlock]:
         ns.location = Location(file, 1)
@@ -1902,7 +1904,7 @@ class ModuleLikeWithYmlMetadataFile(ABC):
         # Update requires
         if "requires" in content and content["requires"]:
             existing_matching_reqs: list[str] = [
-                r for r in content["requires"] if InmantaModuleRequirement.parse(r).key == requirement.key
+                r for r in content["requires"] if InmantaModuleRequirement.parse(r).name == requirement.name
             ]
             for r in existing_matching_reqs:
                 content["requires"].remove(r)
@@ -1919,7 +1921,7 @@ class ModuleLikeWithYmlMetadataFile(ABC):
         content: CommentedMap = PreservativeYamlParser.parse(self.get_metadata_file_path())
         if "requires" not in content:
             return False
-        return any(r for r in content["requires"] if InmantaModuleRequirement.parse(r).key == module_name)
+        return any(r for r in content["requires"] if InmantaModuleRequirement.parse(r).name == module_name)
 
     def remove_module_requirement_from_requires_and_write(self, module_name: str) -> None:
         """
@@ -1930,7 +1932,7 @@ class ModuleLikeWithYmlMetadataFile(ABC):
         if not self.has_module_requirement_in_requires(module_name):
             return
         content: CommentedMap = PreservativeYamlParser.parse(self.get_metadata_file_path())
-        content["requires"] = [r for r in content["requires"] if InmantaModuleRequirement.parse(r).key != module_name]
+        content["requires"] = [r for r in content["requires"] if InmantaModuleRequirement.parse(r).name != module_name]
         PreservativeYamlParser.dump(self.get_metadata_file_path(), content)
 
 
@@ -2124,7 +2126,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.verify_module_version_compatibility()
 
         # do python install
-        pyreq: list[Requirement] = [Requirement.parse(x) for x in self.collect_python_requirements()]
+        pyreq: list[inmanta.util.CanonicalRequirement] = inmanta.util.parse_requirements(self.collect_python_requirements())
 
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
@@ -2316,13 +2318,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             for requirement in module_like.get_module_v2_requirements():
                 # load module
                 self.get_module(
-                    requirement.key,
+                    requirement.name,
                     allow_v1=False,
                     install_v2=install,
                     bypass_module_cache=bypass_module_cache,
                 )
                 # queue AST reload
-                require_v2(requirement.key)
+                require_v2(requirement.name)
 
         def setup_module(module: Module) -> None:
             """
@@ -2520,10 +2522,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 LOGGER.warning("Module %s is present in requires but it is not used by the model.", name)
                 continue
             module = self.modules[name]
-            version = parse_version(str(module.version))
+            current_version = Version(version=str(module.version))
             for r in spec:
-                if version not in r:
-                    exc_message += f"\n\t* requirement {r} on module {name} not fulfilled, now at version {version}."
+                if current_version not in r:
+                    exc_message += f"\n\t* requirement {r} on module {name} not fulfilled, now at version {current_version}."
 
         if exc_message:
             exc_message = f"The following requirements were not satisfied:{exc_message}"
@@ -2542,7 +2544,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
         if self.strict_deps_check:
-            constraints: list[Requirement] = [Requirement.parse(item) for item in self.collect_python_requirements()]
+            constraints: list[inmanta.util.CanonicalRequirement] = inmanta.util.parse_requirements(
+                self.collect_python_requirements()
+            )
             env.process_env.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
             if not env.process_env.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
@@ -2661,7 +2665,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
         elif os.path.exists(requirements_txt_file_path):
             requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
-            requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().key)
+            requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().name)
 
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
@@ -2673,7 +2677,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # filter on import stmt
         reqs = []
         for spec in self._metadata.requires:
-            req = [x for x in parse_requirements(spec)]
+            req = [inmanta.util.parse_requirement(requirement=spec)]
             if len(req) > 1:
                 print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
@@ -2704,7 +2708,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         return {name: get_spec(name) for name in imports}
 
-    def collect_python_requirements(self) -> list[str]:
+    def collect_python_requirements(self) -> Sequence[str]:
         """
         Collect the list of all python requirements of all modules in this project, excluding those on inmanta modules.
         """
@@ -2810,7 +2814,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         reqs = []
         for spec in self.get_module_requirements():
-            req = [x for x in parse_requirements(spec)]
+            req = [inmanta.util.parse_requirement(requirement=spec)]
             if len(req) > 1:
                 print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
@@ -2838,12 +2842,12 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             fd.write(new_module_def)
         self._metadata = new_metadata
 
-    def get_version(self) -> version.Version:
+    def get_version(self) -> packaging.version.Version:
         """
         Return the version of this module. This is the actually installed version, which might differ from the version declared
         in its metadata (e.g. by a .dev0 tag).
         """
-        return version.Version(self._metadata.version)
+        return packaging.version.Version(self._metadata.version)
 
     version = property(get_version)
 
@@ -2898,7 +2902,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             if impor not in out:
                 v1_mode: bool = self.GENERATION == ModuleGeneration.V1
                 mainmod = self._project.get_module(impor, install_v1=v1_mode, allow_v1=v1_mode)
-                vers: version.Version = mainmod.version
+                vers: packaging.version.Version = mainmod.version
                 # track submodules for cycle avoidance
                 out[impor] = mode + " " + str(vers)
                 if recursive:
@@ -3085,12 +3089,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
         return loader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
-    def execute_command(self, cmd: str) -> None:
-        print(f"executing {cmd} on {self.name} in {self._path}")
-        print("=" * 10)
-        subprocess.call(cmd, shell=True, cwd=self._path)
-        print("=" * 10)
-
     def unload(self) -> None:
         """
         Unloads this module instance from the project, the registered plugins and the loaded Python modules.
@@ -3154,7 +3152,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         :return: all modules required by an import from any sub-modules, with all constraints applied
         """
         # get all constraints
-        spec: dict[str, InmantaModuleRequirement] = {req.project_name: req for req in self.requires()}
+        spec: dict[str, InmantaModuleRequirement] = {req.name: req for req in self.requires()}
         # find all imports
         imports = {imp.name.split("::")[0] for subm in sorted(self.get_all_submodules()) for imp in self.get_imports(subm)}
         return [spec[r] if spec.get(r) else InmantaModuleRequirement.parse(r) for r in imports]
@@ -3203,30 +3201,30 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     @classmethod
     def get_suitable_version_for(
         cls, modulename: str, requirements: Iterable[InmantaModuleRequirement], path: str, release_only: bool = True
-    ) -> Optional[version.Version]:
+    ) -> Optional[packaging.version.Version]:
         versions_str = gitprovider.get_all_tags(path)
 
-        def try_parse(x: str) -> Optional[version.Version]:
+        def try_parse(x: str) -> Optional[packaging.version.Version]:
             try:
-                return parse_version(x)
+                return Version(version=x)
             except Exception:
                 return None
 
-        versions: list[version.Version] = [x for x in [try_parse(v) for v in versions_str] if x is not None]
+        versions: list[packaging.version.Version] = [x for x in [try_parse(v) for v in versions_str] if x is not None]
         versions = sorted(versions, reverse=True)
 
         for r in requirements:
-            versions = [x for x in r.specifier.filter(versions, not release_only)]
+            versions = [x for x in r.specifier.filter(iterable=versions, prereleases=not release_only)]
 
         comp_version_raw = get_compiler_version()
-        comp_version = parse_version(comp_version_raw)
+        comp_version = Version(version=comp_version_raw)
         return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
 
     @classmethod
     def __best_for_compiler_version(
-        cls, modulename: str, versions: list[version.Version], path: str, comp_version: version.Version
-    ) -> Optional[version.Version]:
-        def get_cv_for(best: version.Version) -> Optional[version.Version]:
+        cls, modulename: str, versions: list[packaging.version.Version], path: str, comp_version: packaging.version.Version
+    ) -> Optional[packaging.version.Version]:
+        def get_cv_for(best: packaging.version.Version) -> Optional[packaging.version.Version]:
             cfg_text: str = gitprovider.get_file_for_version(path, str(best), cls.MODULE_FILE)
             metadata: ModuleV1Metadata = cls.get_metadata_file_schema_type().parse(cfg_text)
             if metadata.compiler_version is None:
@@ -3234,7 +3232,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             v = metadata.compiler_version
             if isinstance(v, (int, float)):
                 v = str(v)
-            return parse_version(v)
+            return Version(version=v)
 
         if not versions:
             return None
@@ -3286,23 +3284,23 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             # Remove requirement from requirements.txt file
             if os.path.exists(requirements_txt_file_path):
                 requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
-                requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().key)
+                requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().name)
         else:
             # Add requirement to requirements.txt
             requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
             requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
             # Remove requirement from module.yml file
-            self.remove_module_requirement_from_requires_and_write(requirement.key)
+            self.remove_module_requirement_from_requires_and_write(requirement.name)
 
-    def versions(self) -> list[version.Version]:
+    def versions(self) -> list[packaging.version.Version]:
         """
         Provide a list of all versions available in the repository
         """
         versions_str: list[str] = gitprovider.get_all_tags(self._path)
 
-        def try_parse(x: str) -> Optional[version.Version]:
+        def try_parse(x: str) -> Optional[packaging.version.Version]:
             try:
-                return parse_version(x)
+                return Version(version=x)
             except Exception:
                 return None
 
@@ -3358,10 +3356,10 @@ class ModuleV2(Module[ModuleV2Metadata]):
         project: Optional[Project],
         path: str,
         is_editable_install: bool = False,
-        installed_version: Optional[version.Version] = None,
+        installed_version: Optional[packaging.version.Version] = None,
     ) -> None:
         self._is_editable_install = is_editable_install
-        self._version: Optional[version.Version] = installed_version
+        self._version: Optional[packaging.version.Version] = installed_version
         super().__init__(project, path)
 
         if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
@@ -3380,7 +3378,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
             # setup.cfg is a generic Python config file: if the metadata does not match an inmanta module's, return None
             return None
 
-    def get_version(self) -> version.Version:
+    def get_version(self) -> packaging.version.Version:
         return self._version if self._version is not None else self._metadata.get_full_version()
 
     version = property(get_version)
@@ -3427,12 +3425,12 @@ class ModuleV2(Module[ModuleV2Metadata]):
         # Parse config file
         config_parser = ConfigParser()
         config_parser.read(self.get_metadata_file_path())
-        python_pkg_requirement: Requirement = requirement.get_python_package_requirement()
+        python_pkg_requirement: inmanta.util.CanonicalRequirement = requirement.get_python_package_requirement()
         if config_parser.has_option("options", "install_requires"):
             new_install_requires = [
                 r
                 for r in config_parser.get("options", "install_requires").split("\n")
-                if r and Requirement.parse(r).key != python_pkg_requirement.key
+                if r and inmanta.util.parse_requirement(requirement=r).name != python_pkg_requirement.name
             ]
             new_install_requires.append(str(python_pkg_requirement))
         else:

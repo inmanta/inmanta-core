@@ -25,12 +25,12 @@ from re import sub
 from typing import Any
 from uuid import UUID, uuid4
 
-import utils
-from inmanta import config, const, data
-from inmanta.agent.agent import Agent
+import pytest
+
+from inmanta import const, data
 from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE
+from inmanta.server import SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.util import get_compiler_version
@@ -137,22 +137,6 @@ class MultiVersionSetup:
             self.states_per_version[v][rvid] = state
         return rid
 
-    async def setup_agent(self, server, environment):
-        agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-        endpoints = list(self.results.keys())
-
-        config.Config.set("config", "agent-deploy-interval", "0")
-        config.Config.set("config", "agent-repair-interval", "0")
-
-        a = Agent(hostname="node1", environment=environment, agent_map={e: "localhost" for e in endpoints}, code_loader=False)
-        for e in endpoints:
-            await a.add_end_point_name(e)
-        await a.start()
-        await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-        return a
-
     async def setup(
         self, serverdirect: OrchestrationService, resource_service: ResourceService, env: data.Environment, sid: UUID
     ):
@@ -225,10 +209,11 @@ class MultiVersionSetup:
         return allresources
 
 
-async def test_deploy(server, agent: Agent, environment, caplog):
+async def test_deploy(server, null_agent, environment, caplog, clienthelper):
     """
     Test basic deploy mechanism mocking
     """
+    agent = null_agent
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
@@ -303,7 +288,7 @@ async def test_deploy(server, agent: Agent, environment, caplog):
 
         result, payload = await orchestration_service.get_version(env, version)
         assert result == 200
-        assert payload["model"].done == len(resources)
+        assert await clienthelper.done_count() == len(resources)
 
         # second, identical check_version
         v2 = await env.get_next_version()
@@ -339,7 +324,8 @@ def strip_version(v):
     return sub(",v=[0-9]+", "", v)
 
 
-async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
+async def test_deploy_scenarios(server, null_agent, environment, caplog):
+    agent = null_agent
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
@@ -381,7 +367,8 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
     assert_no_warning(caplog)
 
 
-async def test_deploy_scenarios_removed_req_by_increment(server, agent: Agent, environment, caplog):
+async def test_deploy_scenarios_removed_req_by_increment(server, null_agent, environment, caplog):
+    agent = null_agent
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
@@ -402,7 +389,8 @@ async def test_deploy_scenarios_removed_req_by_increment(server, agent: Agent, e
     assert_no_warning(caplog)
 
 
-async def test_deploy_scenarios_removed_req_by_increment2(server, environment, caplog):
+async def test_deploy_scenarios_removed_req_by_increment2(server, environment, caplog, null_agent):
+    agent = null_agent
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
@@ -418,8 +406,6 @@ async def test_deploy_scenarios_removed_req_by_increment2(server, environment, c
         id4 = setup.add_resource("R4", "A1 D2", True, agent="agent2")
         id2 = setup.add_resource("R2", "A1 D2", True, requires=[id1, id3, id4])
 
-        agent = await setup.setup_agent(server, environment)
-
         sid = agent.sessionid
 
         try:
@@ -433,7 +419,9 @@ async def test_deploy_scenarios_removed_req_by_increment2(server, environment, c
     assert_no_warning(caplog)
 
 
-async def test_deploy_scenarios_added_by_send_event(server, agent: Agent, environment, caplog):
+async def test_deploy_scenarios_added_by_send_event(server, null_agent, environment, caplog):
+    agent = null_agent
+
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
@@ -456,14 +444,8 @@ async def test_deploy_scenarios_added_by_send_event(server, agent: Agent, enviro
     assert_no_warning(caplog)
 
 
-async def test_deploy_scenarios_added_by_send_event_cad(server, agent_factory, environment, caplog):
-    agent = await agent_factory(
-        hostname="node1",
-        environment=environment,
-        agent_map={"agent1": "localhost", "agent2": "localhost"},
-        code_loader=False,
-        agent_names=["agent1", "agent2"],
-    )
+async def test_deploy_scenarios_added_by_send_event_cad(server, null_agent, environment, caplog):
+    agent = null_agent
     # ensure CAD does not change send_event
     with caplog.at_level(logging.WARNING):
         # acquire raw server
@@ -488,18 +470,13 @@ async def test_deploy_scenarios_added_by_send_event_cad(server, agent_factory, e
     assert_no_warning(caplog)
 
 
-async def test_deploy_cad_double(server, agent_factory, environment, caplog, client, clienthelper):
+async def test_deploy_cad_double(server, null_agent, environment, caplog, client, clienthelper):
+    agent = null_agent
+
     # resource has CAD with send_events B requires A
     # do full deploy
     # then produce a change on A
     # B is once more in the increment
-    agent = await agent_factory(
-        hostname="node1",
-        environment=environment,
-        agent_map={"agent1": "localhost", "agent2": "localhost"},
-        code_loader=False,
-        agent_names=["agent1", "agent2"],
-    )
     sid = agent.sessionid
 
     version = await clienthelper.get_version()
@@ -559,3 +536,55 @@ async def test_deploy_cad_double(server, agent_factory, environment, caplog, cli
     result = await agent._client.get_resources_for_agent(environment, "agent2", incremental_deploy=True, sid=sid)
     assert result.code == 200, result.result
     assert len(result.result["resources"]) == 1
+
+
+@pytest.mark.slowtest
+async def test_release_stuck(
+    server,
+    environment,
+    clienthelper,
+    client,
+    project_default,
+):
+    async def make_version() -> int:
+        version = await clienthelper.get_version()
+        rvid = f"test::Resource[agent1,key=key1],v={version}"
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": rvid,
+                "change": False,
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+                "purge_on_delete": False,
+            },
+        ]
+        await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+        return version
+
+        # set auto deploy and push
+
+    result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
+    assert result.code == 200
+
+    #  a version v1 is deploying
+    await make_version()
+
+    #  a version v2 is deploying
+    await make_version()
+
+    # Delete environment
+    result = await client.environment_delete(environment)
+    assert result.code == 200
+
+    # Re-create
+    result = await client.create_environment(project_id=project_default, name="env", environment_id=environment)
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
+    assert result.code == 200
+
+    await make_version()
+    # This will time-out when there is a run_ahead_lock still in place
+    await make_version()

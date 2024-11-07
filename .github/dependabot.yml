@@ -31,12 +31,10 @@ updates:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
   ignore:
-    # #6668
-    - dependency-name: "setuptools"
-      update-types: ["version-update:semver-major"]
     - dependency-name: "pytest-inmanta-extensions"
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
       update-types: ["version-update:semver-major"]
+    - dependency-name: "pydantic-core" # pydantic/pydantic#10494
     - dependency-name: "execnet"
       update-types: ["version-update:semver-major"]

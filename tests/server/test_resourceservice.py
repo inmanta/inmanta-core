@@ -27,7 +27,9 @@ from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 
 
 @pytest.fixture
-async def resource_deployer(client, environment, agent):
+async def resource_deployer(client, environment, null_agent):
+    agent = null_agent
+
     class ResourceDeploymentHelperFunctions:
         @classmethod
         async def start_deployment(cls, rvid: ResourceVersionIdStr) -> uuid.UUID:
@@ -162,35 +164,14 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     # Finish deployment r1
     await resource_deployer.deployment_finished(rvid=rvid_r1_v1, action_id=action_id)
 
-    # request 3
-    # only two exist
-    result = await agent._client.resources_status(
-        tid=environment,
-        version=version,
-        rids=[
-            "std::testing::NullResource[agent1,name=file2]",
-            "std::testing::NullResource[agent1,name=file3]",
-            "std::testing::NullResource[agent1,name=file4]",
-        ],
-    )
-    assert result.code == 200
-    assert result.result["data"] == {
-        "std::testing::NullResource[agent1,name=file2]": "deployed",
-        "std::testing::NullResource[agent1,name=file3]": "deployed",
-    }
 
-    result = await agent._client.resources_status(
-        tid=environment, version=version, rids=["std::testing::NullResource[agent1,name=file2]", "Resource WITH invalid id"]
-    )
-    assert result.code == 400
-    assert result.result["message"] == "Invalid request: Invalid id for resource Resource WITH invalid id"
-
-
-async def test_events_api_endpoints_increment(server, client, environment, clienthelper, agent, resource_deployer):
+async def test_events_api_endpoints_increment(server, client, environment, clienthelper, null_agent, resource_deployer):
     """
     Test whether the `get_resource_events` and the `resource_did_dependency_change`
     endpoints behave as expected. Also test the exclude_change parameter for get_resource_events
     """
+    agent = null_agent
+
     rid = r"""exec::Run[agent1,command=sh -c "git _%\/ clone \"https://codis.git\"  && chown -R centos:centos "]"""
     rid_r1 = ResourceIdStr(rid)
     rid_r2 = ResourceIdStr("std::testing::NullResource[agent1,name=file2]")
