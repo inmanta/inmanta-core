@@ -23,7 +23,7 @@ import asyncpg
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
-from inmanta import data, util
+from inmanta import data
 from inmanta.data.model import DataBaseReport
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
@@ -41,7 +41,6 @@ class DatabaseMonitor:
     ) -> None:
         self._pool = pool
         self._scheduler = Scheduler(f"Database monitor for {db_name}")
-        self._db_pool_watcher = util.ExhaustedPoolWatcher(self._pool)
         self.dn_name = db_name
         self.db_host = db_host
         self.component = component
@@ -53,18 +52,50 @@ class DatabaseMonitor:
             self.infuxdb_suffix += f",environment={self.environment}"
 
         self.registered_gauges: list[str] = []
+        self._db_exhaustion_check_interval = 0.2
+        self._exhausted_pool_events_count: int = 0
+        self._last_report: int = 0
+
+    def _report_and_reset(self) -> None:
+        """
+        Log how long the DB pool was exhausted since the last time the counter
+        was reset, if any, and reset the counter.
+        """
+        since_last = self._exhausted_pool_events_count - self._last_report
+        if since_last > 0:
+            LOGGER.warning(
+                "Database pool was exhausted %d seconds in the past 24h.", since_last * self._db_exhaustion_check_interval
+            )
+            self._last_report = self._exhausted_pool_events_count
+
+    def _check_for_pool_exhaustion(self) -> None:
+        """
+        Checks if the database pool is exhausted
+        """
+        pool_exhausted: bool = (self._pool.get_size() == self._pool.get_max_size()) and self._pool.get_idle_size() == 0
+        if pool_exhausted:
+            self._exhausted_pool_events_count += 1
 
     def start(self) -> None:
         self.start_monitor()
 
+        async def _report_database_pool_exhaustion() -> None:
+            self._report_and_reset()
+
+        async def _check_database_pool_exhaustion() -> None:
+            self._check_for_pool_exhaustion()
+
         # Schedule database pool exhaustion watch:
         # Check for pool exhaustion every 200 ms
         self._scheduler.add_action(
-            self._check_database_pool_exhaustion, IntervalSchedule(0.2), cancel_on_stop=True, quiet_mode=True
+            _check_database_pool_exhaustion,
+            IntervalSchedule(self._db_exhaustion_check_interval),
+            cancel_on_stop=True,
+            quiet_mode=True,
         )
 
         # Report pool exhaustion every 24h
-        self._scheduler.add_action(self._report_database_pool_exhaustion, IntervalSchedule(3600 * 24), cancel_on_stop=True)
+        self._scheduler.add_action(_report_database_pool_exhaustion, IntervalSchedule(3600 * 24), cancel_on_stop=True)
 
     async def stop(self) -> None:
         self.stop_monitor()
@@ -79,10 +110,16 @@ class DatabaseMonitor:
             database=self.dn_name,
             host=self.db_host,
             max_pool=self._pool.get_max_size(),
+            free_pool=self.get_pool_free(),
             open_connections=self._pool.get_size(),
             free_connections=self._pool.get_idle_size(),
-            pool_exhaustion_count=self._db_pool_watcher._exhausted_pool_events_count,
+            pool_exhaustion_time=self._exhausted_pool_events_count * self._db_exhaustion_check_interval,
         )
+
+    def get_pool_free(self) -> int:
+        if self._pool is None or self._pool._closing:
+            return 0
+        return self._pool.get_max_size() - self._pool.get_size() + self._pool.get_idle_size()
 
     def _add_gauge(self, name: str, the_gauge: CallbackGauge) -> None:
         """Helper to register gauges and keep track of registrations"""
@@ -111,8 +148,16 @@ class DatabaseMonitor:
             CallbackGauge(callback=lambda: self._pool.get_idle_size() if self._pool is not None else 0),
         )
         self._add_gauge(
+            "db.free_pool",
+            CallbackGauge(callback=self.get_pool_free),
+        )
+        self._add_gauge(
             "db.pool_exhaustion_count",
-            CallbackGauge(callback=lambda: self._db_pool_watcher._exhausted_pool_events_count),
+            CallbackGauge(callback=lambda: self._exhausted_pool_events_count),
+        )
+        self._add_gauge(
+            "db.pool_exhaustion_time",
+            CallbackGauge(callback=lambda: self._exhausted_pool_events_count * self._db_exhaustion_check_interval),
         )
 
     def stop_monitor(self) -> None:
@@ -130,14 +175,6 @@ class DatabaseMonitor:
             except Exception:
                 LOGGER.exception("Connection to PostgreSQL failed")
         return False
-
-    async def _report_database_pool_exhaustion(self) -> None:
-        assert self._db_pool_watcher is not None  # Make mypy happy
-        self._db_pool_watcher.report_and_reset(LOGGER)
-
-    async def _check_database_pool_exhaustion(self) -> None:
-        assert self._db_pool_watcher is not None  # Make mypy happy
-        self._db_pool_watcher.check_for_pool_exhaustion()
 
 
 class DatabaseService(protocol.ServerSlice):
