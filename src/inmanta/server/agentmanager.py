@@ -1000,6 +1000,9 @@ class AgentManager(ServerSlice, SessionListener):
         return dto
 
 
+DEBUG_COUNTER_ASSERTION_ERROR = 0
+
+
 class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentlistener.EnvironmentListener):
     """
     An instance of this class manages autostarted agent instance processes. It does not manage the logical agents as those
@@ -1226,6 +1229,10 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         Start an autostarted agent process for the given environment. Should only be called if none is running yet.
         """
+        if assert_no_start_scheduler:
+            global DEBUG_COUNTER_ASSERTION_ERROR
+            DEBUG_COUNTER_ASSERTION_ERROR += 1
+
         assert not assert_no_start_scheduler
 
         config: str = await self._make_agent_config(env, connection=connection)

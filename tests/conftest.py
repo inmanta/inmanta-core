@@ -734,6 +734,7 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
     tests_failed_before = request.session.testsfailed
     ibl = InmantaBootloader(configure_logging=True)
 
+    counter_before_test = agentmanager.DEBUG_COUNTER_ASSERTION_ERROR
     try:
         await ibl.start()
     except SliceStartupException as e:
@@ -745,6 +746,8 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
         raise e
 
     yield ibl.restserver
+
+    counter_after_test = agentmanager.DEBUG_COUNTER_ASSERTION_ERROR
 
     try:
         # This timeout needs to be bigger than the timeout of other components. Otherwise, this would leak sessions and cause
@@ -759,6 +762,9 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
             if not os.path.isdir(file):
                 with open(file, "r") as fh:
                     logger.debug("%s\n%s", file, fh.read())
+
+    if counter_before_test != counter_after_test:
+        raise RuntimeError("An assertion error is present in this test!")
 
 
 @pytest.fixture(
