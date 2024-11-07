@@ -636,33 +636,36 @@ class ResourceScheduler(TaskManager):
                             deploying=set(),
                         )
 
-    def get_last_non_deploying_state_for_dependencies(
+    async def get_last_non_deploying_state_for_dependencies(
         self, resource_id: ResourceIdStr
     ) -> dict[ResourceIdStr, const.ResourceState]:
         """
         Get resource state for every dependency of a given resource from the scheduler state.
         The state is then converted to const.ResourceState.
 
+        Acquires the appropriate locks
+
         :param resource_id: The id of the resource to find the dependencies for
         """
-        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
-        dependencies: Set[ResourceIdStr] = requires_view.get(resource_id, set())
-        dependencies_state = {}
-        for dep_id in dependencies:
-            new_state = self._state.resource_state[dep_id]
-            if new_state.status == ResourceStatus.UNDEFINED:
-                dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
-            elif new_state.blocked == BlockedStatus.YES:
-                dependencies_state[dep_id] = const.ResourceState.skipped
-            elif new_state.status == ResourceStatus.HAS_UPDATE:
-                dependencies_state[dep_id] = const.ResourceState.available
-            elif new_state.deployment_result == DeploymentResult.DEPLOYED:
-                dependencies_state[dep_id] = const.ResourceState.deployed
-            elif new_state.deployment_result == DeploymentResult.FAILED:
-                dependencies_state[dep_id] = const.ResourceState.failed
-            else:
-                raise Exception(f"Failed to parse the resource state for {dep_id}: {new_state}")
-        return dependencies_state
+        async with self._scheduler_lock:
+            requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
+            dependencies: Set[ResourceIdStr] = requires_view.get(resource_id, set())
+            dependencies_state = {}
+            for dep_id in dependencies:
+                new_state = self._state.resource_state[dep_id]
+                if new_state.status == ResourceStatus.UNDEFINED:
+                    dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
+                elif new_state.blocked == BlockedStatus.YES:
+                    dependencies_state[dep_id] = const.ResourceState.skipped
+                elif new_state.status == ResourceStatus.HAS_UPDATE:
+                    dependencies_state[dep_id] = const.ResourceState.available
+                elif new_state.deployment_result == DeploymentResult.DEPLOYED:
+                    dependencies_state[dep_id] = const.ResourceState.deployed
+                elif new_state.deployment_result == DeploymentResult.FAILED:
+                    dependencies_state[dep_id] = const.ResourceState.failed
+                else:
+                    raise Exception(f"Failed to parse the resource state for {dep_id}: {new_state}")
+            return dependencies_state
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])

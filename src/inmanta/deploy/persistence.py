@@ -185,7 +185,9 @@ class ToDbUpdateManager(StateUpdateManager):
 
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
-            return self.scheduler.get_last_non_deploying_state_for_dependencies(resource_id=resource_id_parsed.resource_str())
+            return await self.scheduler.get_last_non_deploying_state_for_dependencies(
+                resource_id=resource_id_parsed.resource_str()
+            )
 
     async def send_deploy_done(self, result: DeployResult) -> None:
         def error_and_log(message: str, **context: Any) -> None:
