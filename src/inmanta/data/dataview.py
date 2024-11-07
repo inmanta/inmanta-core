@@ -102,6 +102,11 @@ class RequestedPagingBoundaries:
     Represents the lower and upper bounds that the user requested for the paging boundaries, if any.
 
     Boundary values represent min and max values, regardless of sorting direction (ASC or DESC), e.g
+    - ASC sorting based on next links -> a page is requested for which all elements are > (start,first_id)
+    - ASC sorting based on prev links -> a page is requested for which all elements are < (end,last_id)
+    - DESC sorting based on next links -> a page is requested for which all elements are < (end,last_id)
+    - DESC sorting based on prev links -> a page is requested for which all elements are > (start,first_id)
+
     So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "lowest" and
     "highest".
 
