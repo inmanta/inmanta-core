@@ -31,6 +31,7 @@ import textwrap
 import uuid
 from collections import abc, defaultdict
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Optional, Sequence, Union
 
 import py.path
@@ -43,7 +44,6 @@ import inmanta.data.model
 import inmanta.env
 import inmanta.main
 import utils
-from black import datetime
 from inmanta import config, data, protocol
 from inmanta.module import Project
 from inmanta.server.protocol import Server
