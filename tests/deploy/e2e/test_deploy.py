@@ -20,7 +20,7 @@ import asyncio
 import logging
 import pathlib
 import uuid
-from typing import Mapping, Optional, Callable
+from typing import Callable, Mapping, Optional
 from uuid import UUID
 
 import pytest

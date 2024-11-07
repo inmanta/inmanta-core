@@ -1384,7 +1384,6 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         resources[rid7].attribute_hash,
     )
 
-
     # rid4 becomes deployable
     # rid5 and rid6 are undefined
     # Change the desired state of rid2

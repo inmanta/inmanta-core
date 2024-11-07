@@ -801,7 +801,9 @@ class ResourceScheduler(TaskManager):
 
                         provides = self._state.requires.provides_view().get(resource, set())
                         dependant_resources: Set[ResourceIdStr] = {
-                            dependant for dependant in provides if self._state.resources.get(dependant, None) is not None
+                            dependant
+                            for dependant in provides
+                            if self._state.resources.get(dependant, None) is not None
                             if (dependant_status := self._state.resource_state.get(dependant, None)) is not None
                             if dependant_status.blocked is BlockedStatus.NO
                         }
@@ -817,7 +819,6 @@ class ResourceScheduler(TaskManager):
                         if (dependant_details := self._state.resources.get(dependant, None)) is not None
                         # default to True for backward compatibility, i.e. not all resources have the field
                         if dependant_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
-
                         if (dependant_status := self._state.resource_state.get(dependant, None)) is not None
                         if dependant_status.blocked is BlockedStatus.NO
                     }
