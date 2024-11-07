@@ -206,6 +206,8 @@ async def diagnose_compile_reports(client: protocol.Client, environments: list[u
     # chronological view
     for result in await asyncio.gather(*(client.get_reports(env_id) for env_id in environments)):
         for report in result.result["reports"]:
+            # Abuse the fact that the DB can order results, while the server api cannot (and we probably don't want to modify it
+            # only for a test)
             detailed_report = await data.Compile.get_report(compile_id=report["id"], order_by="started", order="ASC")
             assert detailed_report
             for sub_report in detailed_report["reports"]:
