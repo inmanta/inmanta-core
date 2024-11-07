@@ -104,15 +104,6 @@ class RequestedPagingBoundaries:
     Boundary values represent min and max values, regardless of sorting direction (ASC or DESC), e.g
     So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "lowest" and
     "highest".
-                  |        prev             |                current page                    |    next
-     -------------|-------------------------|------------------------------------------------|----------------------
-     ASC sorting  | [  ...  ] (99 c)        | [ (100 d) ( 100 e) ... (10 000 r) (10 000 s) ] | (10 001 t) [ ...   ]
-                  |            end = 99     |     start = 100          end = 10 000          |     start = 10 001
-                  |            last_id = c  |     first_id = d         last_id = s           |     first_id = t
-                  |
-     DESC sorting | [  ...  ] (10 001 t)    | [ (10 000 s) (10 000 r) ... (100 d) ( 100 c) ] |  (99 b) [ ...   ]
-                  |          start = 10 001 |         end = 10000          start = 100       |     end = 99
-                  |          first_id = t   |         last_id = s          first_id = c      |     last_id = b
 
     :param start: min boundary value (exclusive) for the requested page for the primary sort column.
     :param end: max boundary value (exclusive) for the requested page for the primary sort column.

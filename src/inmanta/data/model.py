@@ -473,20 +473,23 @@ class PagingBoundaries:
 
     The largest / smallest value of the current page represents respectively the min / max boundary value (exclusive) for the
     neighbouring pages. Which represents next and which prev depends on sorting order (ASC or DESC).
-
-    Boundary values represent max and min values, regardless of sorting direction (ASC or DESC), i.e.
-                  |        prev             |                current page                    |    next
-     -------------|-------------------------|------------------------------------------------|----------------------
-     ASC sorting  | [  ...  ] (99 c)        | [ (100 d) ( 100 e) ... (10 000 r) (10 000 s) ] | (10 001 t) [ ...   ]
-                  |            start = 99   |     end = 100            start = 10 000        |     end = 10 001
-                  |            first_id = c |    last_id = d          first_id = s           |     first_id = t
-                  |
-     DESC sorting | [  ...  ] (10 001 s)    | [ (10 000 t) (10 000 r) ... (100 d) ( 100 c) ] |  (99 b) [ ...   ]
-                  |            end = 10 001 |          start = 10000          end = 100      |     start = 99
-                  |            last_id = t  |          first_id = t           last_id = c    |     first_id = b
-
     So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "highest"
     and "lowest".
+
+    Let's show this in an example: User requests all Resources with name >= foo in ASC order. page size = 10
+    The RequestPagingBoundary will be as follows:
+        ```
+        RequestPagingBoundary:
+            start = foo
+            end = None
+        ```
+    The actual data will be: [foo1 ... foo10]
+    But the Pagingboundary will be as follows:
+        ```
+        Pagingboundary:
+            end = foo1
+            start = foo10    # Reversed because these are meant to be used by the neighbouring pages
+        ```
 
     :param start: largest value of current page for the primary sort column.
     :param end: smallest value of current page for the primary sort column.
