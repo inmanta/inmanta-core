@@ -32,6 +32,7 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM
 from inmanta.util import get_compiler_version
 from utils import (
     _deploy_resources,
+    get_done_count,
     no_error_in_logs,
     retry_limited,
     wait_for_n_deployed_resources,
@@ -128,8 +129,7 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
 
     await wait_until_deployment_finishes(client, environment)
 
-    result = await client.get_version(environment, version)
-    assert result.result["model"]["done"] == len(resources)
+    assert await get_done_count(client, environment) == len(resources)
 
     # The resource facts should be purged
     result = await client.get_param(environment, "length", resource_id_wov)

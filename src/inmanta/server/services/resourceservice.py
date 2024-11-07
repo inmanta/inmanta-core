@@ -494,12 +494,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                 await data.Resource.set_deployed_multi(env.id, resources_id_filtered, version, connection=inner_connection)
                 # Resource persistent state should not be affected
 
-        def post_deploy_update() -> None:
-            # Make sure tasks are scheduled AFTER the tx is done.
-            # This method is only called if the transaction commits successfully.
-            self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, version))
-
-        connection.call_after_tx(post_deploy_update)
 
     async def get_increment(
         self,
@@ -679,8 +673,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
 
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
-
-        self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
         waiting_agents = {(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides}
         for agent, aresource_id in waiting_agents:
@@ -877,7 +869,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
 
-                        model_version = None
                         for res in resources:
                             await res.update_fields(
                                 status=status,
@@ -911,8 +902,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                                 connection=inner_connection,
                             )
 
-                            model_version = res.model
-
                             if (
                                 "purged" in res.attributes
                                 and res.attributes["purged"]
@@ -925,11 +914,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         if is_resource_state_update and is_resource_action_finished:
 
             def post_deploy_update() -> None:
-                assert model_version is not None  # mypy can't figure this out
-                # Make sure tasks are scheduled AFTER the tx is done.
-                # This method is only called if the transaction commits successfully.
-                self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, model_version))
-
                 waiting_agents = {
                     (Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides
                 }

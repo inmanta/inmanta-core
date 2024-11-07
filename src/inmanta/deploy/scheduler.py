@@ -84,7 +84,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: ResourceStatus,
+        status: Optional[ResourceStatus] = None,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         """
@@ -96,7 +96,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         :param resource: The resource to report state for.
         :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
             hash indicates the state information is stale.
-        :param status: The new resource status.
+        :param status: The new resource status. If none, the old one is kept.
         :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
         """
 
@@ -598,7 +598,7 @@ class ResourceScheduler(TaskManager):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: ResourceStatus,
+        status: Optional[ResourceStatus] = None,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         if deployment_result is DeploymentResult.NEW:
@@ -612,7 +612,8 @@ class ResourceScheduler(TaskManager):
                 # There is also no need to send out events because a newer version will have been scheduled.
                 return
             state: ResourceState = self._state.resource_state[resource]
-            state.status = status
+            if status is not None:
+                state.status = status
             if deployment_result is not None:
                 # first update state, then send out events
                 self._deploying_latest.remove(resource)
@@ -620,6 +621,11 @@ class ResourceScheduler(TaskManager):
                 self._work.finished_deploy(resource)
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
+                else:
+                    # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
+                    # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
+                    # (or skip) causes it to become dirty now.
+                    self._state.dirty.add(resource)
                 # propagate events
                 if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
                     provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())

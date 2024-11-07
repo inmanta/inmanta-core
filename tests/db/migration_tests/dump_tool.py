@@ -25,6 +25,8 @@ import shutil
 import uuid
 from uuid import UUID
 
+import pytest
+
 import inmanta.protocol
 from inmanta import const, data
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
@@ -98,7 +100,7 @@ async def populate_facts_and_parameters(client, env_id: str):
         )
 
 
-@pytest.mark.parametrize("auto_start_agent", [True])
+@pytest.mark.parametrize("auto_start_agent", [True])  # set config value
 async def test_dump_db(server, client, postgres_db, database_name):
     if False:
         # trick autocomplete to have autocomplete on client

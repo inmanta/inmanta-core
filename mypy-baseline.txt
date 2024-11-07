@@ -603,20 +603,6 @@ src/inmanta/data/__init__.py:0: note: def [_T] __init__(self) -> list[_T]
 src/inmanta/data/__init__.py:0: note: def [_T] __init__(self, Iterable[_T], /) -> list[_T]
 src/inmanta/data/__init__.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "__init__" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "bool"  [arg-type]
-src/inmanta/data/__init__.py:0: error: Need type annotation for "_status" (hint: "_status: dict[<type>, <type>] = ...")  [var-annotated]
-src/inmanta/data/__init__.py:0: error: Invalid index type "str" for "str"; expected type "SupportsIndex | slice"  [index]
-src/inmanta/data/__init__.py:0: error: Signature of "get_list" incompatible with supertype "BaseDocument"  [override]
-src/inmanta/data/__init__.py:0: note: Superclass:
-src/inmanta/data/__init__.py:0: note: @classmethod
-src/inmanta/data/__init__.py:0: note: def get_list(cls, *, order_by_column: str | None = ..., order: str | None = ..., limit: int | None = ..., offset: int | None = ..., no_obj: bool | None = ..., lock: RowLockMode | None = ..., connection: Connection | None = ..., **query: object) -> Coroutine[Any, Any, list[ConfigurationModel]]
-src/inmanta/data/__init__.py:0: note: Subclass:
-src/inmanta/data/__init__.py:0: note: @classmethod
-src/inmanta/data/__init__.py:0: note: def get_list(cls, *, order_by_column: str | None = ..., order: str | None = ..., limit: int | None = ..., offset: int | None = ..., no_obj: bool | None = ..., lock: RowLockMode | None = ..., connection: Connection | None = ..., no_status: bool = ..., **query: object) -> Coroutine[Any, Any, list[ConfigurationModel]]
-src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_status_field" of "ConfigurationModel" has incompatible type "object"; expected "UUID"  [arg-type]
-src/inmanta/data/__init__.py:0: error: Argument 2 to "_get_status_field" of "ConfigurationModel" has incompatible type "object"; expected "str"  [arg-type]
-src/inmanta/data/__init__.py:0: error: Argument 1 to "_get_status_field" of "ConfigurationModel" has incompatible type "object"; expected "UUID"  [arg-type]
-src/inmanta/data/__init__.py:0: error: Argument 2 to "_get_status_field" of "ConfigurationModel" has incompatible type "object"; expected "str"  [arg-type]
-src/inmanta/data/__init__.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "int")  [assignment]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "append" of "list" has incompatible type "ConfigurationModel"; expected "dict[str, object]"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Incompatible return value type (got "list[dict[str, object]]", expected "list[ConfigurationModel]")  [return-value]
 src/inmanta/data/__init__.py:0: error: Item "None" of "RowLockMode | None" has no attribute "value"  [union-attr]
@@ -626,7 +612,6 @@ src/inmanta/data/__init__.py:0: note: Possible overload variants:
 src/inmanta/data/__init__.py:0: note: def __new__(cls, str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
 src/inmanta/data/__init__.py:0: note: def __new__(cls, str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/data/__init__.py:0: error: Incompatible return value type (got "list[object]", expected "list[str]")  [return-value]
-src/inmanta/data/__init__.py:0: error: Enum index should be a string (actual index type "object")  [misc]
 src/inmanta/data/__init__.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/data/__init__.py:0: error: Unsupported left operand type for > ("object")  [operator]
 src/inmanta/data/__init__.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "int")  [assignment]
@@ -1131,5 +1116,6 @@ src/inmanta/model.py:0: error: "Value" has no attribute "to_dict"  [attr-defined
 src/inmanta/model.py:0: error: "Value" has no attribute "to_dict"  [attr-defined]
 src/inmanta/main.py:0: error: Returning Any from function declared to return "dict[str, Any] | None"  [no-any-return]
 src/inmanta/main.py:0: error: Invalid index type "str" for "str"; expected type "SupportsIndex | slice"  [index]
+src/inmanta/main.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/main.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/main.py:0: error: Need type annotation for "bar"  [var-annotated]

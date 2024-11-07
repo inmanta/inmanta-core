@@ -3,7 +3,7 @@ issue-nr: 8196
 change-type: major
 destination-branches: [master]
 sections:
-  upgrade-note: >
+  upgrade-note: |
     All api endpoints reporting deployment status for specific versions of resources have been removed.
 
     | api endpoint | change | alternative |
