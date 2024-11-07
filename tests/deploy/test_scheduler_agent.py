@@ -1119,8 +1119,8 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert len(agent.scheduler._state.dirty) == 0
 
     # release change for r1, sending event to r2 when it finishes
-    resources = make_resources(version=16, r1_value=5, r2_value=0, r3_value=0)
-    await agent.scheduler._new_version(16, resources, make_requires(resources))
+    resources = make_resources(version=17, r1_value=5, r2_value=0, r3_value=0)
+    await agent.scheduler._new_version(17, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
 
     # verify that r2 is still in an assumed good state, even though we're deploying it
