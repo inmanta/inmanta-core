@@ -596,7 +596,7 @@ class ResourceScheduler(TaskManager):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: ResourceStatus,
+        status: Optional[ResourceStatus] = None,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         if deployment_result is DeploymentResult.NEW:
