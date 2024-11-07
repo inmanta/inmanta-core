@@ -974,7 +974,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
 
-                        model_version = None
                         for res in resources:
                             await res.update_fields(
                                 status=status,
@@ -1002,8 +1001,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                                 last_deployed_attribute_hash=res.attribute_hash,
                                 connection=inner_connection,
                             )
-
-                            model_version = res.model
 
                             if (
                                 "purged" in res.attributes
