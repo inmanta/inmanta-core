@@ -25,7 +25,7 @@ from uuid import UUID
 from asyncpg import UniqueViolationError
 
 from inmanta import const, data
-from inmanta.agent.executor import DeployResult, DryrunResult
+from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.protocol import Client
@@ -56,6 +56,10 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def set_parameters(self, fact_result: FactResult) -> None:
         pass
 
 
@@ -110,6 +114,18 @@ class ToServerUpdateManager(StateUpdateManager):
             finished=dryrun_result.finished,
             messages=dryrun_result.messages,
             status=const.ResourceState.dry,
+        )
+
+    async def set_parameters(self, fact_result: FactResult) -> None:
+        await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
+        await self.client.resource_action_update(
+            tid=self.environment,
+            resource_ids=[fact_result.resource_id],
+            action_id=fact_result.action_id,
+            action=const.ResourceAction.getfact,
+            started=fact_result.started,
+            finished=fact_result.finished,
+            messages=fact_result.messages,
         )
 
 
@@ -330,4 +346,16 @@ class ToDbUpdateManager(StateUpdateManager):
             finished=dryrun_result.finished,
             messages=dryrun_result.messages,
             status=const.ResourceState.dry,
+        )
+
+    async def set_parameters(self, fact_result: FactResult) -> None:
+        await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
+        await self.client.resource_action_update(
+            tid=self.environment,
+            resource_ids=[fact_result.resource_id],
+            action_id=fact_result.action_id,
+            action=const.ResourceAction.getfact,
+            started=fact_result.started,
+            finished=fact_result.finished,
+            messages=fact_result.messages,
         )

@@ -74,7 +74,7 @@ async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):
         """
         Returns true if some database exhaustion events have been recorded
         """
-        n_events: int = database_slice._db_monitor._db_pool_watcher._exhausted_pool_events_count
+        n_events: int = database_slice._db_monitor._exhausted_pool_events_count
         return n_events > 0
 
     with caplog.at_level(logging.WARNING, "inmanta.server.services.databaseservice"):
@@ -91,7 +91,7 @@ async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):
             await connection.close()
 
         # Call _report_database_pool_exhaustion manually (scheduled to run every 24h)
-        await database_slice._db_monitor._report_database_pool_exhaustion()
+        database_slice._db_monitor._report_and_reset()
 
         log_contains(
             caplog,

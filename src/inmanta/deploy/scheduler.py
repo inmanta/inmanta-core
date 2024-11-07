@@ -31,7 +31,7 @@ import asyncpg
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import DeployResult
+from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
@@ -654,3 +654,6 @@ class ResourceScheduler(TaskManager):
 
     async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
         await self._state_update_delegate.dryrun_update(env, dryrun_result)
+
+    async def set_parameters(self, fact_result: FactResult) -> None:
+        await self._state_update_delegate.set_parameters(fact_result)
