@@ -64,6 +64,7 @@ markers = [
 log_format = "%(asctime)s.%(msecs)03d %(levelname)s %(message)s"
 
 [tool.coverage.run]
+# Needed by pytest-cov:  https://pytest-cov.readthedocs.io/en/latest/subprocess-support.html#if-you-use-multiprocessing
 concurrency = ["multiprocessing"]
 parallel = true
 sigterm = true

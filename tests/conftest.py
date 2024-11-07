@@ -45,6 +45,7 @@ from inmanta.protocol import auth
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
+from utils import get_done_and_total
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -2522,26 +2523,21 @@ def resource_container(clean_reset):
             )
 
         # unhang waiters
-        result = await client.get_version(env_id, version)
-        assert result.code == 200
         now = time.time()
-        log_progress(result.result["model"]["done"], result.result["model"]["total"])
-        while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        done, total = await get_done_and_total(client, env_id)
+
+        log_progress(done, total)
+        while (total - done) > 0:
             if now + timeout < time.time():
                 raise Exception("Timeout")
-            if (
-                wait_for_this_amount_of_resources_in_done
-                and result.result["model"]["done"] - wait_for_this_amount_of_resources_in_done >= 0
-            ):
+            if wait_for_this_amount_of_resources_in_done and done - wait_for_this_amount_of_resources_in_done >= 0:
                 break
-            result = await client.get_version(env_id, version)
-            log_progress(result.result["model"]["done"], result.result["model"]["total"])
+            done, total = await get_done_and_total(client, env_id)
+            log_progress(done, total)
             waiter.acquire()
             waiter.notify_all()
             waiter.release()
             await asyncio.sleep(0.1)
-
-        return result
 
     async def wait_for_condition_with_waiters(wait_condition, timeout=10):
         """
