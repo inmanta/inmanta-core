@@ -1315,6 +1315,13 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         rid6: make_resource_minimal(rid=rid6, values={"value": "a"}, requires=[rid7]),
         rid7: make_resource_minimal(rid=rid7, values={"value": "a"}, requires=[]),
     }
+
+    #                             +-- rid2  <- rid5
+    #                             |              |
+    #      "Provides"      rid1 <-+-- rid3  <----+
+    #        view                 |              |
+    #                             +-- rid4     rid6 <- rid7
+
     await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
@@ -1376,6 +1383,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         state.BlockedStatus.NO,
         resources[rid7].attribute_hash,
     )
+
 
     # rid4 becomes deployable
     # rid5 and rid6 are undefined
