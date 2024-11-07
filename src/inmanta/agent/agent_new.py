@@ -110,10 +110,11 @@ class Agent(SessionEndpoint):
     async def stop(self) -> None:
         if self.working:
             await self.stop_working()
+        if self._db_monitor:
+            await self._db_monitor.stop()
         threadpools_to_join = [self.thread_pool]
         await self.executor_manager.join(threadpools_to_join, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
         self.thread_pool.shutdown(wait=False)
-
         await join_threadpools(threadpools_to_join)
         await super().stop()
 

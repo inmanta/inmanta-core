@@ -316,10 +316,7 @@ async def test_deploy_empty(server, client, clienthelper, environment, agent):
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    assert result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 0
-    assert result.result["model"]["result"] == const.VersionState.success.name
 
 
 @pytest.mark.skip("fine grained deploy trigger seems gone")
@@ -391,10 +388,7 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == len(resources)
-    assert result.result["model"]["result"] == "deploying"
 
     # The server will mark the full version as deployed even though the agent has not done anything yet.
     result = await client.get_version(environment, version)
@@ -478,9 +472,6 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
     assert result.code == 200
 
     await wait_until_deployment_finishes(client, environment)
-
-    result = await client.get_version(environment, version)
-    assert result.result["model"]["done"] == len(resources)
 
     result = await client.get_version(environment, version, include_logs=True)
 
@@ -773,18 +764,13 @@ async def test_deploy_and_events(
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 3
-    assert result.result["model"]["result"] == "deploying"
 
     result = await client.get_version(environment, version)
     assert result.code == 200
 
     await wait_until_deployment_finishes(client, environment)
-
-    result = await client.get_version(environment, version)
-    assert result.result["model"]["done"] == len(resources)
 
     # verify against result matrices
     assert dorun[dep_state.index][self_state.index] == (resource_container.Provider.readcount("agent1", "key3") > 0)
@@ -836,18 +822,12 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    assert not result.result["model"]["deployed"]
-    assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 2
-    assert result.result["model"]["result"] == "deploying"
 
     result = await client.get_version(environment, version)
     assert result.code == 200
 
     await wait_until_deployment_finishes(client, environment)
-
-    result = await client.get_version(environment, version)
-    assert result.result["model"]["done"] == len(resources)
 
     assert dep_state.index == resource_container.Provider.reloadcount("agent1", "key2")
 

@@ -209,7 +209,7 @@ class MultiVersionSetup:
         return allresources
 
 
-async def test_deploy(server, null_agent, environment, caplog):
+async def test_deploy(server, null_agent, environment, caplog, clienthelper):
     """
     Test basic deploy mechanism mocking
     """
@@ -288,7 +288,7 @@ async def test_deploy(server, null_agent, environment, caplog):
 
         result, payload = await orchestration_service.get_version(env, version)
         assert result == 200
-        assert payload["model"].done == len(resources)
+        assert await clienthelper.done_count() == len(resources)
 
         # second, identical check_version
         v2 = await env.get_next_version()

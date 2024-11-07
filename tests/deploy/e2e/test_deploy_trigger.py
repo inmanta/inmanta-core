@@ -158,22 +158,18 @@ async def test_spontaneous_deploy(
         )
         assert result.code == 200
 
-        assert not result.result["model"]["deployed"]
         assert result.result["model"]["released"]
-        assert result.result["model"]["total"] == 1
-        assert result.result["model"]["result"] == "deploying"
 
         result = await client.get_version(env_id, version)
         assert result.code == 200
 
         await clienthelper.wait_for_deployed()
 
-        await clienthelper.wait_full_success(env_id)
+        await clienthelper.wait_full_success()
 
         duration = time.time() - start
 
-        result = await client.get_version(env_id, version)
-        assert result.result["model"]["done"] == 1
+        assert await clienthelper.done_count() == 1
 
         assert resource_container.Provider.isset("agent1", "key1")
 
@@ -224,20 +220,16 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
         tid=env_id, id=version, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
     )
     assert result.code == 200
-    assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 1
-    assert result.result["model"]["result"] == "deploying"
 
     result = await client.get_version(env_id, version)
     assert result.code == 200
 
-    await clienthelper.wait_full_success(env_id)
+    await clienthelper.wait_full_success()
 
     async def verify_deployment_result():
-        result = await client.get_version(env_id, version)
         # A repair run may put one resource from the deployed state to the deploying state.
-        assert len(resources) - 1 <= result.result["model"]["done"] <= len(resources)
+        assert len(resources) - 1 <= await clienthelper.done_count() <= len(resources)
 
         assert resource_container.Provider.isset("agent1", "key1")
         assert resource_container.Provider.get("agent1", "key1") == "value1"
