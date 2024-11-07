@@ -200,12 +200,16 @@ async def diagnose_compile_reports(client: protocol.Client, environments: list[u
 
     # We assume that get_reports is still ordered by the `started` column in descending order to have a
     # chronological view
-    for result in await asyncio.gather(*(client.get_reports(env_id) for env_id in environments)):
+    reports_env = await asyncio.gather(*(client.get_reports(env_id) for env_id in environments))
+    for result in reports_env:
         for report in result.result["reports"]:
             # Abuse the fact that the DB can order results, while the server api cannot (and we probably don't want to modify it
             # only for a test)
             detailed_report = await data.Compile.get_report(compile_id=report["id"], order_by="started", order="ASC")
             assert detailed_report
+            environment_id = str(detailed_report["environment"])
+            if len(detailed_report["reports"]) == 0:
+                logging.debug("No reports are available (yet) for environment id: %s", environment_id)
             for sub_report in detailed_report["reports"]:
                 requested_timestamp = detailed_report["requested"].timestamp()
                 started_timestamp = sub_report["started"].timestamp() if sub_report["started"] is not None else None
@@ -243,7 +247,7 @@ async def diagnose_compile_reports(client: protocol.Client, environments: list[u
                     "Exit code: %s\n"
                     "Output stream: %s\n"
                     "Error stream: %s\n",
-                    str(detailed_report["environment"]),
+                    environment_id,
                     report["id"],
                     # Some fields might not be present
                     str(report["substitute_compile_id"]),
@@ -1292,8 +1296,9 @@ async def test_workon_sets_pip_config(
     )
 
 
+@pytest.mark.parametrize("iteration", range(1000))
 @pytest.mark.slowtest
-async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog) -> None:
+async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog, iteration) -> None:
     """
     Check the expected behaviour for compile that would take too much time.
     """
@@ -1382,15 +1387,20 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog) -
         try:
             raise AssertionError
         except AssertionError:
+            queue_environments = await asyncio.gather(*(client.get_compile_queue(env.id) for env in environments))
             problematic_env_ids = []
-            for result in await asyncio.gather(*(client.get_compile_queue(env.id) for env in environments)):
+            for result in queue_environments:
                 if len(result.result["queue"]) > 0:
                     problematic_env_ids.append(result.result["queue"][0]["environment"])
             await diagnose_compile_reports(client=client, environments=problematic_env_ids)
 
             min_timestamp = defaultdict(lambda: 0.0)
             relevant_keys = TestDiagnoseReport.model_fields
+
+            unfinished_compiles_env_id = set()
             for i, (_, _, message) in enumerate(caplog.record_tuples):
+                if "No reports are available (yet) for environment id:" in message:
+                    unfinished_compiles_env_id.add(message.split(":")[1].strip())
                 if "Environment id:" not in message:
                     continue
 
@@ -1437,4 +1447,6 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog) -
                 # The completion time of this compile is the new minimum value (ensure no overlap)
                 min_timestamp[current_report.environment_id] = current_report.completed_timestamp
 
-            assert len(min_timestamp) == len(problematic_env_ids)
+            assert set(min_timestamp.keys()) == set(problematic_env_ids) or (
+                set(min_timestamp.keys()).union(set(unfinished_compiles_env_id)) == set(problematic_env_ids)
+            )
