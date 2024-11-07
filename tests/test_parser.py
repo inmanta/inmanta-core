@@ -1212,10 +1212,10 @@ end"""
 
 
 def test_lexer():
+    # // comments are no longer supported
     parse_code(
         """
 #test
-//test2
 a=0.5
 b=""
 """
