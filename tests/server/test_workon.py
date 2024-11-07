@@ -1296,7 +1296,6 @@ async def test_workon_sets_pip_config(
     )
 
 
-@pytest.mark.parametrize("iteration", range(1000))
 @pytest.mark.slowtest
 async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog, iteration) -> None:
     """
