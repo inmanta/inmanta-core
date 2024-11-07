@@ -176,10 +176,6 @@ async def simple_environments(client: protocol.Client) -> abc.AsyncIterator[abc.
     yield [await create_environment(project, f"env-{i}") for i in range(5)]
 
 
-class DiagnoseReport(pydantic.BaseModel):
-    pass
-
-
 async def diagnose_compile_reports(client: protocol.Client, environments: list[uuid.UUID]) -> None:
     """
     Logs useful information about compile reports that have run in the provided environments such as:
@@ -1385,6 +1381,7 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog) -
             await diagnose_compile_reports(client=client, environments=problematic_env_ids)
 
             min_timestamp = defaultdict(lambda: 0.0)
+            relevant_keys = TestDiagnoseReport.model_fields
             for i, (_, _, message) in enumerate(caplog.record_tuples):
                 if "Environment id:" not in message:
                     continue
@@ -1420,7 +1417,7 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog) -
                     dict_log_line = {
                         line[0].lower().replace(" ", "_"): line[1].strip()
                         for line in (item.split(":") for item in log_line.split("\n"))
-                        if len(line) == 2
+                        if line[0].lower().replace(" ", "_") in relevant_keys
                     }
                     return TestDiagnoseReport(**dict_log_line)
 
@@ -1431,3 +1428,5 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog) -
                 assert min_timestamp[current_report.environment_id] <= current_report.started_timestamp
                 # The completion time of this compile is the new minimum value (ensure no overlap)
                 min_timestamp[current_report.environment_id] = current_report.completed_timestamp
+
+            assert len(min_timestamp) == len(problematic_env_ids)
