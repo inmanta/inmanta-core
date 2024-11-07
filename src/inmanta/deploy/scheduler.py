@@ -23,6 +23,7 @@ import typing
 import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
+from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
 
@@ -53,6 +54,13 @@ from inmanta.resources import Id
 LOGGER = logging.getLogger(__name__)
 
 
+@dataclass
+class ResourceIntent:
+    state_version: int
+    resource: ResourceDetails
+    dependencies: dict[ResourceIdStr, const.ResourceState]
+
+
 class TaskManager(StateUpdateManager, abc.ABC):
     """
     Interface for communication with tasks (deploy.task.Task). Offers methods to inspect intent and to report task results.
@@ -72,10 +80,10 @@ class TaskManager(StateUpdateManager, abc.ABC):
     @abstractmethod
     async def get_resource_intent(
         self,
-        resource: ResourceIdStr,
+        resource_id: ResourceIdStr,
         *,
         for_deploy: bool = False,
-    ) -> Optional[tuple[int, ResourceDetails]]:
+    ) -> Optional[ResourceIntent]:
         """
         Returns the current version and the details for the given resource, or None if it is not (anymore) managed by the
         scheduler.
@@ -567,13 +575,11 @@ class ResourceScheduler(TaskManager):
 
     # TaskManager interface
 
-    async def get_resource_intent(
-        self, resource: ResourceIdStr, *, for_deploy: bool = False
-    ) -> Optional[tuple[int, ResourceDetails]]:
+    async def get_resource_intent(self, resource_id: ResourceIdStr, *, for_deploy: bool = False) -> Optional[ResourceIntent]:
         async with self._scheduler_lock:
             # fetch resource details under lock
             try:
-                result = self._state.version, self._state.resources[resource]
+                resource = self._state.resources[resource_id]
             except KeyError:
                 # Stale resource
                 # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
@@ -581,10 +587,11 @@ class ResourceScheduler(TaskManager):
                 # locking for performance reasons.
                 return None
             else:
+                dependencies = await self._get_last_non_deploying_state_for_dependencies(resource_id=resource_id)
                 if for_deploy:
                     # still under lock => can safely add to non-stale in-progress set
-                    self._deploying_latest.add(resource)
-                return result
+                    self._deploying_latest.add(resource_id)
+                return ResourceIntent(state_version=self._state.version, resource=resource, dependencies=dependencies)
 
     async def report_resource_state(
         self,
@@ -636,7 +643,7 @@ class ResourceScheduler(TaskManager):
                             deploying=set(),
                         )
 
-    async def get_last_non_deploying_state_for_dependencies(
+    async def _get_last_non_deploying_state_for_dependencies(
         self, resource_id: ResourceIdStr
     ) -> dict[ResourceIdStr, const.ResourceState]:
         """
@@ -647,33 +654,31 @@ class ResourceScheduler(TaskManager):
 
         :param resource_id: The id of the resource to find the dependencies for
         """
-        async with self._scheduler_lock:
-            requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
-            dependencies: Set[ResourceIdStr] = requires_view.get(resource_id, set())
-            dependencies_state = {}
-            for dep_id in dependencies:
-                new_state = self._state.resource_state[dep_id]
-                if new_state.status == ResourceStatus.UNDEFINED:
+        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
+        dependencies: Set[ResourceIdStr] = requires_view.get(resource_id, set())
+        dependencies_state = {}
+        for dep_id in dependencies:
+            new_state = self._state.resource_state[dep_id]
+            match new_state:
+                case ResourceState(status=ResourceStatus.UNDEFINED):
                     dependencies_state[dep_id] = const.ResourceState.undefined
-                elif new_state.blocked == BlockedStatus.YES:
+                case ResourceState(blocked=BlockedStatus.YES):
                     dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
-                elif new_state.status == ResourceStatus.HAS_UPDATE:
+                case ResourceState(status=ResourceStatus.HAS_UPDATE):
                     dependencies_state[dep_id] = const.ResourceState.available
-                elif new_state.deployment_result == DeploymentResult.DEPLOYED:
+                case ResourceState(deployment_result=DeploymentResult.DEPLOYED):
                     dependencies_state[dep_id] = const.ResourceState.deployed
-                elif new_state.deployment_result == DeploymentResult.FAILED:
+                case ResourceState(deployment_result=DeploymentResult.FAILED):
                     dependencies_state[dep_id] = const.ResourceState.failed
-                else:
+                case _:
                     raise Exception(f"Failed to parse the resource state for {dep_id}: {new_state}")
-            return dependencies_state
+        return dependencies_state
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
 
-    async def send_in_progress(
-        self, action_id: UUID, resource_id: ResourceVersionIdStr
-    ) -> dict[ResourceIdStr, const.ResourceState]:
-        return await self._state_update_delegate.send_in_progress(action_id, resource_id)
+    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+        await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
     async def send_deploy_done(self, result: DeployResult) -> None:
         return await self._state_update_delegate.send_deploy_done(result)

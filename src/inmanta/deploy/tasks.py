@@ -120,7 +120,8 @@ class Deploy(Task):
             return
 
         # Resolve to exector form
-        version, resource_details = intent
+        version = intent.state_version
+        resource_details = intent.resource
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
 
         # Make id's
@@ -142,9 +143,7 @@ class Deploy(Task):
 
             # Signal start to server
             try:
-                requires: dict[ResourceIdStr, const.ResourceState] = await task_manager.send_in_progress(
-                    action_id, executor_resource_details.rvid
-                )
+                await task_manager.send_in_progress(action_id, executor_resource_details.rvid)
             except Exception:
                 # Unrecoverable, can't reach server
                 success = False
@@ -181,7 +180,9 @@ class Deploy(Task):
             assert reason is not None  # Should always be set for deploy
             # Deploy
             try:
-                deploy_result = await my_executor.execute(action_id, gid, executor_resource_details, reason, requires)
+                deploy_result = await my_executor.execute(
+                    action_id, gid, executor_resource_details, reason, intent.dependencies
+                )
                 success = deploy_result.status == const.ResourceState.deployed
             except Exception as e:
                 # This should not happen
@@ -274,7 +275,8 @@ class RefreshFact(Task):
             # Stale resource, can simply be dropped.
             return
         # FIXME, should not need resource details, only id, see related FIXME on executor side
-        version, resource_details = intent
+        version = intent.state_version
+        resource_details = intent.resource
 
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
         try:
