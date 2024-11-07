@@ -18,7 +18,7 @@
 
     Tool to populate the database and dump it for database update testing
 """
-import pytest
+
 import asyncio
 import os
 import shutil

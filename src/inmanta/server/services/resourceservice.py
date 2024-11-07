@@ -494,7 +494,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                 await data.Resource.set_deployed_multi(env.id, resources_id_filtered, version, connection=inner_connection)
                 # Resource persistent state should not be affected
 
-
     async def get_increment(
         self,
         env: data.Environment,
