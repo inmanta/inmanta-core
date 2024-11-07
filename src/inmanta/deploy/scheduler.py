@@ -54,11 +54,11 @@ from inmanta.resources import Id
 LOGGER = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ResourceIntent:
-    state_version: int
-    resource: ResourceDetails
-    dependencies: dict[ResourceIdStr, const.ResourceState]
+    model_version: int
+    details: ResourceDetails
+    dependencies: Mapping[ResourceIdStr, const.ResourceState]
 
 
 class TaskManager(StateUpdateManager, abc.ABC):
@@ -644,13 +644,13 @@ class ResourceScheduler(TaskManager):
                         )
 
     async def _get_last_non_deploying_state_for_dependencies(
-        self, resource_id: ResourceIdStr
+        self, resource: ResourceIdStr
     ) -> dict[ResourceIdStr, const.ResourceState]:
         """
         Get resource state for every dependency of a given resource from the scheduler state.
         The state is then converted to const.ResourceState.
 
-        Acquires the appropriate locks
+        Should only be called under scheduler lock.
 
         :param resource_id: The id of the resource to find the dependencies for
         """
