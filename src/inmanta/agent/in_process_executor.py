@@ -18,7 +18,8 @@ import logging
 import typing
 import uuid
 from asyncio import InvalidStateError, Lock
-from collections import abc, defaultdict
+from collections import defaultdict
+from collections.abc import Mapping
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Optional
 
@@ -142,7 +143,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         resource: Resource,
         gid: uuid.UUID,
         ctx: handler.HandlerContext,
-        requires: abc.Mapping[ResourceIdStr, const.ResourceState],
+        requires: Mapping[ResourceIdStr, const.ResourceState],
     ) -> None:
         """
         Get the handler for a given resource and run its ``deploy`` method.
@@ -221,7 +222,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-        requires: abc.Mapping[ResourceIdStr, const.ResourceState],
+        requires: Mapping[ResourceIdStr, const.ResourceState],
     ) -> DeployResult:
         try:
             resource: Resource = Resource.deserialize(resource_details.attributes)
