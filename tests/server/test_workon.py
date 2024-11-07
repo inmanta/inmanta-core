@@ -1385,7 +1385,7 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog, i
             assert result.code == 200
 
         try:
-            raise AssertionError
+            raise AssertionError  # We want to simulate a timeout error
         except AssertionError:
             queue_environments = await asyncio.gather(*(client.get_compile_queue(env.id) for env in environments))
             problematic_env_ids = []

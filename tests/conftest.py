@@ -758,7 +758,7 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
         for file in glob(log_dir.get() + "/*"):
             if not os.path.isdir(file):
                 with open(file, "r") as fh:
-                    logger.debug("%s\n%s", file, fh.read())  #
+                    logger.debug("%s\n%s", file, fh.read())
 
 
 @pytest.fixture(
