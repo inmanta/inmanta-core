@@ -19,7 +19,7 @@
 import abc
 import datetime
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID
 
 from asyncpg import UniqueViolationError
@@ -34,10 +34,6 @@ from inmanta.resources import Id
 from inmanta.server.services import resourceservice
 
 LOGGER = logging.getLogger(__name__)
-
-
-if TYPE_CHECKING:
-    from inmanta.deploy.scheduler import ResourceScheduler
 
 
 class StateUpdateManager(abc.ABC):
@@ -114,14 +110,13 @@ class ToServerUpdateManager(StateUpdateManager):
 
 class ToDbUpdateManager(StateUpdateManager):
 
-    def __init__(self, client: Client, environment: UUID, scheduler: "ResourceScheduler") -> None:
+    def __init__(self, client: Client, environment: UUID) -> None:
         self.environment = environment
         # TODO: The client is only here temporarily while we fix the dryrun_update
         self.client = client
         # FIXME: We may want to move the writing of the log to the scheduler side as well,
         #  when all uses of this logger are moved
         self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
-        self.scheduler = scheduler
 
     def get_resource_action_logger(self, environment: UUID) -> logging.Logger:
         """Get the resource action logger for the given environment.
