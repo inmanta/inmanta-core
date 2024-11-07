@@ -1401,6 +1401,7 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog, i
             for i, (_, _, message) in enumerate(caplog.record_tuples):
                 if "No reports are available (yet) for environment id:" in message:
                     unfinished_compiles_env_id.add(message.split(":")[1].strip())
+                    continue
                 if "Environment id:" not in message:
                     continue
 
