@@ -101,7 +101,9 @@ class RequestedPagingBoundaries:
     """
     Represents the lower and upper bounds that the user requested for the paging boundaries, if any.
 
-    Boundary values represent min and max values, regardless of sorting direction (ASC or DESC), i.e.
+    Boundary values represent min and max values, regardless of sorting direction (ASC or DESC), e.g
+    So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "lowest" and
+    "highest".
                   |        prev             |                current page                    |    next
      -------------|-------------------------|------------------------------------------------|----------------------
      ASC sorting  | [  ...  ] (99 c)        | [ (100 d) ( 100 e) ... (10 000 r) (10 000 s) ] | (10 001 t) [ ...   ]
@@ -111,9 +113,6 @@ class RequestedPagingBoundaries:
      DESC sorting | [  ...  ] (10 001 t)    | [ (10 000 s) (10 000 r) ... (100 d) ( 100 c) ] |  (99 b) [ ...   ]
                   |          start = 10 001 |         end = 10000          start = 100       |     end = 99
                   |          first_id = t   |         last_id = s          first_id = c      |     last_id = b
-
-    So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "lowest" and
-    "highest".
 
     :param start: min boundary value (exclusive) for the requested page for the primary sort column.
     :param end: max boundary value (exclusive) for the requested page for the primary sort column.
@@ -335,14 +334,14 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         try:
             dtos, paging_boundaries = await self.get_data()
             metadata = await self._get_page_count(paging_boundaries)
-            links = await self.prepare_paging_links(dtos, paging_boundaries, metadata)
+            links = await self.prepare_paging_links(paging_boundaries, metadata)
             return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata.to_dict())
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
 
     # Paging helpers
 
-    async def _get_page_count(self, bounds: Union[PagingBoundaries, RequestedPagingBoundaries]) -> PagingMetadata:
+    async def _get_page_count(self, bounds: PagingBoundaries) -> PagingMetadata:
         """
         Construct the page counts,
 
@@ -415,8 +414,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
     async def prepare_paging_links(
         self,
-        dtos: Sequence[T_DTO],
-        paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries],
+        paging_boundaries: PagingBoundaries,
         meta: PagingMetadata,
     ) -> dict[str, str]:
         """
