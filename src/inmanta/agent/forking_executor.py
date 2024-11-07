@@ -491,7 +491,7 @@ class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, Deplo
         gid: uuid.UUID,
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
-        requires: dict[ResourceIdStr, const.ResourceState],
+        requires: collections.abc.Mapping[ResourceIdStr, const.ResourceState],
     ) -> None:
         self.agent_name = agent_name
         self.gid = gid
@@ -811,7 +811,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         gid: uuid.UUID,
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
-        requires: dict[ResourceIdStr, const.ResourceState],
+        requires: collections.abc.Mapping[ResourceIdStr, const.ResourceState],
     ) -> DeployResult:
         return await self.call(ExecuteCommand(self.id.agent_name, action_id, gid, resource_details, reason, requires))
 

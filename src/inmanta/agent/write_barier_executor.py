@@ -19,6 +19,7 @@
 import concurrent
 import typing
 import uuid
+from collections.abc import Mapping
 from copy import deepcopy
 
 import inmanta.types
@@ -40,7 +41,7 @@ class WriteBarierExecutor(executor.Executor):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-        requires: dict[ResourceIdStr, const.ResourceState],
+        requires: Mapping[ResourceIdStr, const.ResourceState],
     ) -> DeployResult:
         return await self.delegate.execute(
             action_id,

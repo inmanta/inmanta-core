@@ -120,8 +120,8 @@ class Deploy(Task):
             return
 
         # Resolve to exector form
-        version = intent.state_version
-        resource_details = intent.resource
+        version = intent.model_version
+        resource_details = intent.details
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
 
         # Make id's
@@ -275,8 +275,8 @@ class RefreshFact(Task):
             # Stale resource, can simply be dropped.
             return
         # FIXME, should not need resource details, only id, see related FIXME on executor side
-        version = intent.state_version
-        resource_details = intent.resource
+        version = intent.model_version
+        resource_details = intent.details
 
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
         try:

@@ -579,7 +579,7 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             # fetch resource details under lock
             try:
-                resource = self._state.resources[resource_id]
+                resource_details = self._state.resources[resource_id]
             except KeyError:
                 # Stale resource
                 # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
@@ -587,11 +587,11 @@ class ResourceScheduler(TaskManager):
                 # locking for performance reasons.
                 return None
             else:
-                dependencies = await self._get_last_non_deploying_state_for_dependencies(resource_id=resource_id)
+                dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource_id)
                 if for_deploy:
                     # still under lock => can safely add to non-stale in-progress set
                     self._deploying_latest.add(resource_id)
-                return ResourceIntent(state_version=self._state.version, resource=resource, dependencies=dependencies)
+                return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=dependencies)
 
     async def report_resource_state(
         self,
@@ -645,7 +645,7 @@ class ResourceScheduler(TaskManager):
 
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
-    ) -> dict[ResourceIdStr, const.ResourceState]:
+    ) -> Mapping[ResourceIdStr, const.ResourceState]:
         """
         Get resource state for every dependency of a given resource from the scheduler state.
         The state is then converted to const.ResourceState.
@@ -655,7 +655,7 @@ class ResourceScheduler(TaskManager):
         :param resource_id: The id of the resource to find the dependencies for
         """
         requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
-        dependencies: Set[ResourceIdStr] = requires_view.get(resource_id, set())
+        dependencies: Set[ResourceIdStr] = requires_view.get(resource, set())
         dependencies_state = {}
         for dep_id in dependencies:
             new_state = self._state.resource_state[dep_id]
