@@ -652,14 +652,14 @@ class ResourceScheduler(TaskManager):
 
         Should only be called under scheduler lock.
 
-        :param resource_id: The id of the resource to find the dependencies for
+        :param resource: The id of the resource to find the dependencies for
         """
         requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
         dependencies: Set[ResourceIdStr] = requires_view.get(resource, set())
         dependencies_state = {}
         for dep_id in dependencies:
-            new_state = self._state.resource_state[dep_id]
-            match new_state:
+            resource_state_object: ResourceState = self._state.resource_state[dep_id]
+            match resource_state_object:
                 case ResourceState(status=ResourceStatus.UNDEFINED):
                     dependencies_state[dep_id] = const.ResourceState.undefined
                 case ResourceState(blocked=BlockedStatus.YES):
@@ -671,7 +671,7 @@ class ResourceScheduler(TaskManager):
                 case ResourceState(deployment_result=DeploymentResult.FAILED):
                     dependencies_state[dep_id] = const.ResourceState.failed
                 case _:
-                    raise Exception(f"Failed to parse the resource state for {dep_id}: {new_state}")
+                    raise Exception(f"Failed to parse the resource state for {dep_id}: {resource_state_object}")
         return dependencies_state
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
