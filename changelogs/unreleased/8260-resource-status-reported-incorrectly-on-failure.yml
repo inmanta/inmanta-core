@@ -1,0 +1,8 @@
+description: >
+  Fix resource status reported in the deploy summary of /resource GET endpoint. This status
+  was previously incorrectly reported as 'available' in case the deployment of the resource
+  failed in a previous version of the model.
+change-type: patch
+destination-branches: [master, iso7]
+sections:
+  bugfix: "{{description}}"

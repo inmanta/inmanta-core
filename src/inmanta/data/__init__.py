@@ -5180,27 +5180,30 @@ class Resource(BaseDocument):
     @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
         inner_query = f"""
-        SELECT r.resource_id as resource_id,
-        (
-            CASE WHEN r.status IN ('deploying', 'undefined', 'skipped_for_undefined')
-                     THEN r.status::text
-                 WHEN rps.last_deployed_attribute_hash != r.attribute_hash
-                     -- The hash changed since the last deploy -> new desired state
-                     THEN r.status::text
-                 ELSE
-                     rps.last_non_deploying_status::text
-            END
-        ) as status
-        FROM {cls.table_name()} as r
-            JOIN resource_persistent_state rps ON r.resource_id = rps.resource_id and r.environment = rps.environment
-                WHERE r.environment=$1 AND r.model=(SELECT MAX(cm.version)
-                                                    FROM public.configurationmodel AS cm
-                                                    WHERE cm.environment=$1 AND cm.released=TRUE)
+            SELECT
+                r.resource_id as resource_id,
+                rps.last_non_deploying_status::text as status
+            FROM {cls.table_name()} as r
+            JOIN {ResourcePersistentState.table_name()} rps
+            ON
+                r.resource_id = rps.resource_id AND
+                r.environment = rps.environment
+
+            WHERE
+                r.environment=$1 AND
+                r.model=(
+                    SELECT MAX(cm.version)
+                    FROM {ConfigurationModel.table_name()} AS cm
+                    WHERE
+                        cm.environment=$1 AND
+                        cm.released=TRUE
+                )
         """
 
         query = f"""
-            SELECT COUNT(ro.resource_id) as count,
-                   ro.status
+            SELECT
+                COUNT(ro.resource_id) as count,
+                ro.status
             FROM ({inner_query}) as ro
             GROUP BY ro.status
         """
