@@ -61,6 +61,7 @@ from inmanta.data.model import (
     ResourceVersionIdStr,
     api_boundary_datetime_normalizer,
 )
+from inmanta.deploy import state
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -4482,8 +4483,28 @@ class ResourcePersistentState(BaseDocument):
     # Last produced an event. i.e. the end time of the last deploy where we had an effective change
     # (change is not None and change != Change.nochange)
 
+    resource_status: state.ResourceStatus
+
     # status
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
+
+    @classmethod
+    async def get_resource_status(
+        cls, environment: uuid.UUID, resource_id: ResourceIdStr, connection: Optional[Connection] = None
+    ) -> state.ResourceStatus:
+        result = await cls._fetchval(
+            f"""
+                SELECT resource_status
+                FROM {cls.table_name()}
+                WHERE environment=$1 AND resource_id=$2
+            """,
+            cls._get_value(environment),
+            cls._get_value(resource_id),
+            connection=connection,
+        )
+        if result is None:
+            raise KeyError()
+        return state.ResourceStatus[result]
 
     @classmethod
     async def trim(cls, environment: UUID, connection: Optional[Connection] = None) -> None:
@@ -4500,6 +4521,29 @@ class ResourcePersistentState(BaseDocument):
             environment,
             connection=connection,
         )
+
+    @classmethod
+    async def mark_orphans(
+        cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        """
+        Mark resources that have become an orphan as such.
+
+        :param version: The version that should be considered the latest released version.
+        """
+        query = f"""
+            UPDATE {cls.table_name()} AS rps
+            SET resource_status='ORPHAN'::new_resource_status
+            WHERE rps.environment=$1
+                  AND NOT EXISTS(
+                      SELECT *
+                      FROM {Resource.table_name()} r
+                      WHERE r.environment=rps.environment
+                          AND r.model=$2
+                          AND r.resource_id = rps.resource_id
+                  )
+        """
+        await cls._execute_query(query, environment, version, connection=connection)
 
 
 @stable_api
@@ -5325,10 +5369,17 @@ class Resource(BaseDocument):
             doc.make_hash()
         # TODO performance?
         for doc in documents:
+            resource_status = (
+                state.ResourceStatus.UNDEFINED
+                if doc.status is const.ResourceState.undefined
+                else state.ResourceStatus.HAS_UPDATE
+            )
             await cls._execute_query(
                 """
-                INSERT INTO resource_persistent_state (environment, resource_id, resource_type, agent, resource_id_value)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO resource_persistent_state (
+                    environment, resource_id, resource_type, agent, resource_id_value, resource_status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6)
                 ON CONFLICT DO NOTHING
                 """,
                 doc.environment,
@@ -5336,6 +5387,7 @@ class Resource(BaseDocument):
                 doc.resource_type,
                 doc.agent,
                 doc.resource_id_value,
+                cls._get_value(resource_status),
                 connection=connection,
             )
         await super().insert_many(documents, connection=connection)
@@ -5396,6 +5448,7 @@ class Resource(BaseDocument):
         last_produced_events: Optional[datetime.datetime] = None,
         last_deployed_attribute_hash: Optional[str] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
+        resource_status: Optional[state.ResourceStatus] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
@@ -5409,6 +5462,8 @@ class Resource(BaseDocument):
             "last_deployed_version": last_deployed_version,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
+        if resource_status:
+            query_parts.append(f"resource_status={args(resource_status.name)}::new_resource_status")
         if not query_parts:
             return
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"

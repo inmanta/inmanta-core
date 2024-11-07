@@ -340,16 +340,18 @@ class ResourceScheduler(TaskManager):
         async with data.Resource.get_connection(connection) as con:
             resources_from_db = await data.Resource.get_resources_for_version(self.environment, version, connection=con)
 
-        resource_mapping = {
-            resource.resource_id: ResourceDetails(
-                resource_id=resource.resource_id,
-                attribute_hash=resource.attribute_hash,
-                attributes=resource.attributes,
-                status=resource.status,
-            )
-            for resource in resources_from_db
-        }
-        return resource_mapping
+            resource_mapping = {
+                resource.resource_id: ResourceDetails(
+                    resource_id=resource.resource_id,
+                    attribute_hash=resource.attribute_hash,
+                    attributes=resource.attributes,
+                    status=await data.ResourcePersistentState.get_resource_status(
+                        self.environment, resource.resource_id, connection=con
+                    ),
+                )
+                for resource in resources_from_db
+            }
+            return resource_mapping
 
     def _construct_requires_mapping(
         self, resources: Mapping[ResourceIdStr, ResourceDetails]
@@ -444,7 +446,7 @@ class ResourceScheduler(TaskManager):
                 self._state.add_up_to_date_resource(resource, details)
 
             for resource, details in resources.items():
-                if details.status is const.ResourceState.undefined:
+                if details.status is ResourceStatus.UNDEFINED:
                     blocked_resources.add(resource)
                     self._work.delete_resource(resource)
                 elif resource in self._state.resources:

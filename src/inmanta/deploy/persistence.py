@@ -28,6 +28,7 @@ from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
+from inmanta.deploy import state
 from inmanta.protocol import Client
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
@@ -300,15 +301,15 @@ class ToDbUpdateManager(StateUpdateManager):
                     connection=connection,
                 )
 
-                extra_fields = {}
+                extra_datetime_fields: dict[str, datetime.datetime] = {}
                 if status == ResourceState.deployed:
-                    extra_fields["last_success"] = resource_action.started
+                    extra_datetime_fields["last_success"] = resource_action.started
 
                 # keep track IF we need to propagate if we are stale
                 # but only do it at the end of the transaction
                 if change != Change.nochange:
                     # We are producing an event
-                    extra_fields["last_produced_events"] = finished
+                    extra_datetime_fields["last_produced_events"] = finished
 
                 await resource.update_fields(
                     status=status,
@@ -319,7 +320,8 @@ class ToDbUpdateManager(StateUpdateManager):
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
-                    **extra_fields,
+                    resource_status=state.ResourceStatus.UP_TO_DATE if status is const.ResourceState.deployed else None,
+                    **extra_datetime_fields,
                     connection=connection,
                 )
 

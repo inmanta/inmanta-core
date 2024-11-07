@@ -1180,6 +1180,8 @@ class OrchestrationService(protocol.ServerSlice):
                             env, neg_increment, now, version_id, connection=connection_holder
                         )
 
+                    await ResourcePersistentState.mark_orphans(environment=env.id, version=version_id, connection=connection)
+
                     # Setting the model's released field to True is the trigger for the agents
                     # to start pulling in the resources.
                     # This has to be done after the resources outside of the increment have been marked as deployed.

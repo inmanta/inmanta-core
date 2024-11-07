@@ -25,7 +25,6 @@ from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
 
-from inmanta import const
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.resources import Id
 from inmanta.util.collections import BidirectionalManyMapping
@@ -39,20 +38,6 @@ class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceId
         return self.reverse_mapping()
 
 
-@dataclass(frozen=True)
-class ResourceDetails:
-    resource_id: ResourceIdStr
-    attribute_hash: str
-    attributes: Mapping[str, object] = dataclasses.field(hash=False)
-    status: const.ResourceState
-
-    id: Id = dataclasses.field(init=False, compare=False, hash=False)
-
-    def __post_init__(self) -> None:
-        # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
-        object.__setattr__(self, "id", Id.parse_id(self.resource_id))
-
-
 class ResourceStatus(StrEnum):
     """
     Status of a resource's operational status with respect to its latest desired state, to the best of our knowledge.
@@ -64,11 +49,27 @@ class ResourceStatus(StrEnum):
         has never been (successfully) deployed, or was deployed for a different desired state or a compliance check revealed a
         diff.
     UNDEFINED: The resource status is undefined, because it has an unknown attribute.
+    ORPHAN: The resource has become an orphan, i.e. it is no longer present in the latest released model version.
     """
 
     UP_TO_DATE = enum.auto()
     HAS_UPDATE = enum.auto()
     UNDEFINED = enum.auto()
+    ORPHAN = enum.auto()
+
+
+@dataclass(frozen=True)
+class ResourceDetails:
+    resource_id: ResourceIdStr
+    attribute_hash: str
+    attributes: Mapping[str, object] = dataclasses.field(hash=False)
+    status: ResourceStatus
+
+    id: Id = dataclasses.field(init=False, compare=False, hash=False)
+
+    def __post_init__(self) -> None:
+        # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
+        object.__setattr__(self, "id", Id.parse_id(self.resource_id))
 
 
 class DeploymentResult(StrEnum):

@@ -43,7 +43,7 @@ from inmanta.data.model import ResourceVersionIdStr
 from inmanta.deploy import state, tasks
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
-from inmanta.deploy.state import BlockedStatus
+from inmanta.deploy.state import BlockedStatus, ResourceStatus
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
@@ -360,7 +360,7 @@ def make_resource_minimal(environment):
         rid: ResourceIdStr,
         values: dict[str, object],
         requires: list[str],
-        status: const.ResourceState = const.ResourceState.available,
+        status: state.ResourceStatus = state.ResourceStatus.HAS_UPDATE,
     ) -> state.ResourceDetails:
         """Produce a resource that is valid to the scheduler"""
         attributes = dict(values)
@@ -1306,11 +1306,10 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
             rid=rid1,
             values={"value": "unknown"},
             requires=[rid2, rid3, rid4],
-            status=const.ResourceState.skipped_for_undefined,
         ),
         rid2: make_resource_minimal(rid=rid2, values={"value": "a"}, requires=[rid5]),
         rid3: make_resource_minimal(rid=rid3, values={"value": "a"}, requires=[rid5, rid6]),
-        rid4: make_resource_minimal(rid=rid4, values={"value": "unknown"}, requires=[], status=const.ResourceState.undefined),
+        rid4: make_resource_minimal(rid=rid4, values={"value": "unknown"}, requires=[], status=ResourceStatus.UNDEFINED),
         rid5: make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[]),
         rid6: make_resource_minimal(rid=rid6, values={"value": "a"}, requires=[rid7]),
         rid7: make_resource_minimal(rid=rid7, values={"value": "a"}, requires=[]),
@@ -1380,19 +1379,15 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid4 becomes deployable
     # rid5 and rid6 are undefined
     # Change the desired state of rid2
-    resources[rid4] = make_resource_minimal(rid=rid4, values={"value": "a"}, requires=[], status=const.ResourceState.available)
+    resources[rid4] = make_resource_minimal(rid=rid4, values={"value": "a"}, requires=[])
     resources[rid5] = make_resource_minimal(
-        rid=rid5, values={"value": "unknown"}, requires=[], status=const.ResourceState.undefined
+        rid=rid5, values={"value": "unknown"}, requires=[], status=ResourceStatus.UNDEFINED
     )
     resources[rid6] = make_resource_minimal(
-        rid=rid6, values={"value": "unknown"}, requires=[rid7], status=const.ResourceState.undefined
+        rid=rid6, values={"value": "unknown"}, requires=[rid7], status=ResourceStatus.UNDEFINED
     )
-    resources[rid2] = make_resource_minimal(
-        rid=rid2, values={"value": "b"}, requires=[rid5], status=const.ResourceState.skipped_for_undefined
-    )
-    resources[rid3] = make_resource_minimal(
-        rid=rid3, values={"value": "a"}, requires=[rid5, rid6], status=const.ResourceState.skipped_for_undefined
-    )
+    resources[rid2] = make_resource_minimal(rid=rid2, values={"value": "b"}, requires=[rid5])
+    resources[rid3] = make_resource_minimal(rid=rid3, values={"value": "a"}, requires=[rid5, rid6])
     await agent.scheduler._new_version(version=2, resources=resources, requires=make_requires(resources))
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
@@ -1455,10 +1450,8 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
 
     # rid5 no longer has an unknown attribute
-    resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[], status=const.ResourceState.available)
-    resources[rid2] = make_resource_minimal(
-        rid=rid2, values={"value": "b"}, requires=[rid5], status=const.ResourceState.available
-    )
+    resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[])
+    resources[rid2] = make_resource_minimal(rid=rid2, values={"value": "b"}, requires=[rid5])
     await agent.scheduler._new_version(version=3, resources=resources, requires=make_requires(resources))
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
@@ -1524,9 +1517,9 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     rid8 = ResourceIdStr("test::Resource[agent1,name=8]")
     rid9 = ResourceIdStr("test::Resource[agent1,name=9]")
     resources = {
-        rid8: make_resource_minimal(rid=rid8, values={"value": "unknown"}, requires=[], status=const.ResourceState.undefined),
+        rid8: make_resource_minimal(rid=rid8, values={"value": "unknown"}, requires=[], status=ResourceStatus.UNDEFINED),
         rid9: make_resource_minimal(
-            rid=rid9, values={"value": "unknown"}, requires=[rid8], status=const.ResourceState.undefined
+            rid=rid9, values={"value": "unknown"}, requires=[rid8], status=ResourceStatus.UNDEFINED
         ),
     }
     await agent.scheduler._new_version(version=4, resources=resources, requires=make_requires(resources))
@@ -1550,7 +1543,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
 
     # rid8 is no longer undefined
-    resources[rid8] = make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[], status=const.ResourceState.available)
+    resources[rid8] = make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[])
 
     await agent.scheduler._new_version(version=5, resources=resources, requires=make_requires(resources))
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
