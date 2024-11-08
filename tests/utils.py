@@ -412,6 +412,11 @@ async def get_done_count(
 async def wait_until_deployment_finishes(
     client: Client, environment: str, version: int = -1, timeout: int = 10, wait_for_n: int | None = None
 ) -> None:
+    """
+    Wait until deployment is finished (regardless of success/fail result) for
+    all resources by default, or when a certain amount of resources is done.
+    """
+
     async def done():
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200

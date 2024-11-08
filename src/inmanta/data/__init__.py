@@ -5182,13 +5182,18 @@ class Resource(BaseDocument):
         inner_query = f"""
             SELECT
                 r.resource_id as resource_id,
-                rps.last_non_deploying_status::text as status
+                (
+                    CASE WHEN r.status IN ('deploying', 'undefined', 'skipped_for_undefined')
+                             THEN r.status::text
+                         ELSE
+                             rps.last_non_deploying_status::text
+                    END
+                ) as status
             FROM {cls.table_name()} as r
             JOIN {ResourcePersistentState.table_name()} rps
             ON
                 r.resource_id = rps.resource_id AND
                 r.environment = rps.environment
-
             WHERE
                 r.environment=$1 AND
                 r.model=(
