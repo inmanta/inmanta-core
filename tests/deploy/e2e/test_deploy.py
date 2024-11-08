@@ -201,6 +201,17 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         await clienthelper.put_version_simple(version=version, resources=resources)
         return version
 
+    async def check_summary(expected_key_values: Mapping[str, int]):
+        """
+        Checks that the resource list deploy summary is as expected
+        """
+        # check states
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        for k, v in expected_key_values.items():
+            assert v == summary["by_state"][k]
+
     logger.info("setup done")
 
     version1, resources = await make_version()
@@ -222,16 +233,12 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     await resource_action_consistency_check()
     await check_server_state_vs_scheduler_state(client, environment, scheduler)
 
-    # check states
-    result = await client.resource_list(environment, deploy_summary=True)
-    assert result.code == 200
-    summary = result.result["metadata"]["deploy_summary"]
-    # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
-    #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
-    print(summary)
-    assert 10 == summary["by_state"]["deployed"]
-    assert 1 == summary["by_state"]["failed"]
-    assert 4 == summary["by_state"]["skipped"]
+    expected_summary_kv = {
+        "deployed": 10,
+        "failed": 1,
+        "skipped": 4,
+    }
+    await check_summary(expected_key_values=expected_summary_kv)
 
     version1, resources = await make_version(True)
     await clienthelper.put_version_simple(version=version1, resources=resources)
@@ -239,9 +246,16 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     # deploy and wait until one is ready
     result = await client.release_version(env_id, version1, push=False)
+    assert result.code == 200
+
+    await check_summary(expected_key_values=expected_summary_kv)
+
     await clienthelper.wait_for_released(version1)
 
+    await check_summary(expected_key_values=expected_summary_kv)
+
     await clienthelper.wait_for_deployed()
+    await check_summary(expected_key_values=expected_summary_kv)
 
     await check_scheduler_state(resources, scheduler)
 
