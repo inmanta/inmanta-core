@@ -24,17 +24,20 @@ from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
-from inmanta.data.model import ResourceIdStr, ResourceType
-from inmanta.resources import Id
+from inmanta import resources
 from inmanta.util.collections import BidirectionalManyMapping
 
+if TYPE_CHECKING:
+    from inmanta.data.model import ResourceIdStr, ResourceType
 
-class RequiresProvidesMapping(BidirectionalManyMapping[ResourceIdStr, ResourceIdStr]):
-    def requires_view(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
+
+class RequiresProvidesMapping(BidirectionalManyMapping["ResourceIdStr", "ResourceIdStr"]):
+    def requires_view(self) -> Mapping["ResourceIdStr", Set["ResourceIdStr"]]:
         return self
 
-    def provides_view(self) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
+    def provides_view(self) -> Mapping["ResourceIdStr", Set["ResourceIdStr"]]:
         return self.reverse_mapping()
 
 
@@ -60,16 +63,16 @@ class ResourceStatus(StrEnum):
 
 @dataclass(frozen=True)
 class ResourceDetails:
-    resource_id: ResourceIdStr
+    resource_id: "ResourceIdStr"
     attribute_hash: str
     attributes: Mapping[str, object] = dataclasses.field(hash=False)
     status: ResourceStatus
 
-    id: Id = dataclasses.field(init=False, compare=False, hash=False)
+    id: "resources.Id" = dataclasses.field(init=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
-        object.__setattr__(self, "id", Id.parse_id(self.resource_id))
+        object.__setattr__(self, "id", resources.Id.parse_id(self.resource_id))
 
 
 class DeploymentResult(StrEnum):
@@ -141,17 +144,17 @@ class ModelState:
     """
 
     version: int
-    resources: dict[ResourceIdStr, ResourceDetails] = dataclasses.field(default_factory=dict)
+    resources: dict["ResourceIdStr", ResourceDetails] = dataclasses.field(default_factory=dict)
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
-    resource_state: dict[ResourceIdStr, ResourceState] = dataclasses.field(default_factory=dict)
+    resource_state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
     # (might be simply a change of its dependencies), which are still being processed by
     # the resource scheduler. This is a short-lived transient state, used for internal concurrency control. Kept separate from
     # ResourceStatus so that it lives outside the scheduler lock's scope.
-    dirty: set[ResourceIdStr] = dataclasses.field(default_factory=set)
+    dirty: set["ResourceIdStr"] = dataclasses.field(default_factory=set)
     # types per agent keeps track of which resource types live on which agent by doing a reference count
     # the dict is agent_name -> resource_type -> resource_count
-    types_per_agent: dict[str, dict[ResourceType, int]] = dataclasses.field(
+    types_per_agent: dict[str, dict["ResourceType", int]] = dataclasses.field(
         default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
     )
 
@@ -162,7 +165,7 @@ class ModelState:
         self.resource_state.clear()
         self.types_per_agent.clear()
 
-    def add_up_to_date_resource(self, resource: ResourceIdStr, details: ResourceDetails) -> None:
+    def add_up_to_date_resource(self, resource: "ResourceIdStr", details: ResourceDetails) -> None:
         """
         Add a resource to this ModelState for which the desired state was successfully deployed before, has an up-to-date
         desired state and for which the deployment isn't blocked at the moment.
@@ -179,7 +182,7 @@ class ModelState:
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
 
-    def block_resource(self, resource: ResourceIdStr, details: ResourceDetails, is_transitive: bool) -> None:
+    def block_resource(self, resource: "ResourceIdStr", details: ResourceDetails, is_transitive: bool) -> None:
         """
         Mark the given resource as blocked, i.e. it's not deployable. This method updates the resource details
         and the resource_status.
@@ -204,7 +207,7 @@ class ModelState:
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
 
-    def block_provides(self, resources: Set[ResourceIdStr]) -> Set[ResourceIdStr]:
+    def block_provides(self, resources: Set["ResourceIdStr"]) -> Set["ResourceIdStr"]:
         """
         Marks the provides of the given resources as blocked.
 
@@ -235,7 +238,7 @@ class ModelState:
                 todo.extend(provides_view.get(resource_id, set()))
         return result
 
-    def mark_as_defined(self, resource: ResourceIdStr, details: ResourceDetails) -> None:
+    def mark_as_defined(self, resource: "ResourceIdStr", details: ResourceDetails) -> None:
         """
         Mark the given resource as defined. If the given resource or any of its provides became unblocked, because of this,
         this method also updates the blocked status.
@@ -298,7 +301,7 @@ class ModelState:
 
     def update_desired_state(
         self,
-        resource: ResourceIdStr,
+        resource: "ResourceIdStr",
         details: ResourceDetails,
     ) -> None:
         """
@@ -321,15 +324,15 @@ class ModelState:
 
     def update_requires(
         self,
-        resource: ResourceIdStr,
-        requires: Set[ResourceIdStr],
+        resource: "ResourceIdStr",
+        requires: Set["ResourceIdStr"],
     ) -> None:
         """
         Update the requires relation for a resource. Updates the reverse relation accordingly.
         """
         self.requires[resource] = requires
 
-    def drop(self, resource: ResourceIdStr) -> None:
+    def drop(self, resource: "ResourceIdStr") -> None:
         """
         Completely remove a resource from the resource state.
         """
