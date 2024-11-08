@@ -136,6 +136,7 @@ class Deploy(Task):
         # Full status of the deploy,
         # may be unset if we fail before signaling start to the server, will be set if we signaled start
         deploy_result: DeployResult | None = None
+        deploy_state: state.DeploymentResult = state.DeploymentResult.FAILED
 
         try:
             # This try catch block ensures we report at the end of the task
@@ -182,6 +183,11 @@ class Deploy(Task):
             # Deploy
             try:
                 deploy_result = await my_executor.execute(action_id, gid, executor_resource_details, reason, requires)
+                # Translate deploy result status to the new deployment result state
+                if deploy_result.status == const.ResourceState.deployed:
+                    deploy_state = state.DeploymentResult.DEPLOYED
+                elif deploy_result.status == const.ResourceState.skipped:
+                    deploy_state = state.DeploymentResult.SKIPPED
                 success = deploy_result.status == const.ResourceState.deployed
             except Exception as e:
                 # This should not happen
@@ -217,7 +223,7 @@ class Deploy(Task):
                 resource=self.resource,
                 attribute_hash=resource_details.attribute_hash,
                 status=state.ResourceStatus.UP_TO_DATE if success else None,
-                deployment_result=state.DeploymentResult.DEPLOYED if success else state.DeploymentResult.FAILED,
+                deployment_result=deploy_state,
             )
 
 
