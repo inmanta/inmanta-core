@@ -130,13 +130,10 @@ class Deploy(Task):
         # The main difficulty off this code is exception handling
         # We collect state here to report back in the finally block
 
-        # Status of the deploy for the executor/requires/provides
-        success: bool = True
-
         # Full status of the deploy,
         # may be unset if we fail before signaling start to the server, will be set if we signaled start
         deploy_result: DeployResult | None = None
-        scheduler_deployment_result: state.DeploymentResult | None = None
+        scheduler_deployment_result: state.DeploymentResult
 
         try:
             # This try catch block ensures we report at the end of the task
@@ -148,7 +145,7 @@ class Deploy(Task):
                 )
             except Exception:
                 # Unrecoverable, can't reach server
-                success = False
+                scheduler_deployment_result = state.DeploymentResult.FAILED
                 LOGGER.error(
                     "Failed to report the start of the deployment to the server for %s",
                     resource_details.resource_id,
@@ -219,7 +216,6 @@ class Deploy(Task):
                         resource_details.resource_id,
                         exc_info=True,
                     )
-
             # Always notify scheduler
             await task_manager.report_resource_state(
                 resource=self.resource,
