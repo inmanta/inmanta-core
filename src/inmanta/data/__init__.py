@@ -5425,7 +5425,7 @@ class ConfigurationModel(BaseDocument):
     """
     A specific version of the configuration model.
 
-    :param version: The version of the configuration model, represented by a unix timestamp.
+    :param version: The version of the configuration model, represented by monotonically increasing integer.
     :param environment: The environment this configuration model is defined in
     :param date: The date this configuration model was created
     :param partial_base: If this version was calculated from a partial export, the version the partial was applied on.
