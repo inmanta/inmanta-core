@@ -45,7 +45,6 @@ from inmanta.protocol import auth
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
-from utils import get_done_and_total
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -2524,7 +2523,7 @@ def resource_container(clean_reset):
 
         # unhang waiters
         now = time.time()
-        done, total = await get_done_and_total(client, env_id)
+        done, total = await utils.get_done_and_total(client, env_id)
 
         log_progress(done, total)
         while (total - done) > 0:
@@ -2532,7 +2531,7 @@ def resource_container(clean_reset):
                 raise Exception("Timeout")
             if wait_for_this_amount_of_resources_in_done and done - wait_for_this_amount_of_resources_in_done >= 0:
                 break
-            done, total = await get_done_and_total(client, env_id)
+            done, total = await utils.get_done_and_total(client, env_id)
             log_progress(done, total)
             waiter.acquire()
             waiter.notify_all()
