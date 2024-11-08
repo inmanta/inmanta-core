@@ -136,7 +136,7 @@ class Deploy(Task):
         # Full status of the deploy,
         # may be unset if we fail before signaling start to the server, will be set if we signaled start
         deploy_result: DeployResult | None = None
-        deploy_state: state.DeploymentResult = state.DeploymentResult.FAILED
+        scheduler_deployment_result: state.DeploymentResult | None = None
 
         try:
             # This try catch block ensures we report at the end of the task
@@ -176,7 +176,7 @@ class Deploy(Task):
                     traceback="".join(traceback.format_tb(e.__traceback__)),
                 )
                 deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                success = False
+                scheduler_deployment_result = state.DeploymentResult.FAILED
                 return
 
             assert reason is not None  # Should always be set for deploy
@@ -184,11 +184,13 @@ class Deploy(Task):
             try:
                 deploy_result = await my_executor.execute(action_id, gid, executor_resource_details, reason, requires)
                 # Translate deploy result status to the new deployment result state
-                if deploy_result.status == const.ResourceState.deployed:
-                    deploy_state = state.DeploymentResult.DEPLOYED
-                elif deploy_result.status == const.ResourceState.skipped:
-                    deploy_state = state.DeploymentResult.SKIPPED
-                success = deploy_result.status == const.ResourceState.deployed
+                match deploy_result.status:
+                    case const.ResourceState.deployed:
+                        scheduler_deployment_result = state.DeploymentResult.DEPLOYED
+                    case const.ResourceState.skipped:
+                        scheduler_deployment_result = state.DeploymentResult.SKIPPED
+                    case _:
+                        scheduler_deployment_result = state.DeploymentResult.FAILED
             except Exception as e:
                 # This should not happen
 
@@ -204,14 +206,14 @@ class Deploy(Task):
                     traceback="".join(traceback.format_tb(e.__traceback__)),
                 )
                 deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                success = False
+                scheduler_deployment_result = state.DeploymentResult.FAILED
         finally:
             if deploy_result is not None:
                 # We signaled start, so we signal end
                 try:
                     await task_manager.send_deploy_done(deploy_result)
                 except Exception:
-                    success = False
+                    scheduler_deployment_result = state.DeploymentResult.FAILED
                     LOGGER.error(
                         "Failed to report the end of the deployment to the server for %s",
                         resource_details.resource_id,
@@ -222,8 +224,10 @@ class Deploy(Task):
             await task_manager.report_resource_state(
                 resource=self.resource,
                 attribute_hash=resource_details.attribute_hash,
-                status=state.ResourceStatus.UP_TO_DATE if success else None,
-                deployment_result=deploy_state,
+                status=(
+                    state.ResourceStatus.UP_TO_DATE if scheduler_deployment_result == state.DeploymentResult.DEPLOYED else None
+                ),
+                deployment_result=scheduler_deployment_result,
             )
 
 
