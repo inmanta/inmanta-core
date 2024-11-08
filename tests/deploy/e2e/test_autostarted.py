@@ -493,7 +493,7 @@ async def wait_for_consistent_children(
     current_pid: int,
     should_scheduler_be_defined: bool,
     should_fork_server_be_defined: bool,
-    executor_to_be_defined: int,
+    nb_executor_to_be_defined: int,
 ) -> None:
     """
     Wait for consistent children for the Scheduler:
@@ -512,10 +512,21 @@ async def wait_for_consistent_children(
         return (
             (is_scheduler_defined == should_scheduler_be_defined)
             and (is_fork_server_defined == should_fork_server_be_defined)
-            and (len(current.executors) == executor_to_be_defined)
+            and (len(current.executors) == nb_executor_to_be_defined)
         )
 
-    await retry_limited(wait_consistent_scheduler, 10)
+    try:
+        await retry_limited(wait_consistent_scheduler, 10)
+    except AssertionError:
+        current = construct_scheduler_children(current_pid)
+        logger.debug(
+            "Scheduler running: %s | Fork Server running: %s | N° Executors: %s",
+            str(current.scheduler is not None),
+            str(current.fork_server is not None),
+            str(current.executors),
+        )
+
+        raise
 
 
 @pytest.mark.slowtest
@@ -585,7 +596,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         current_pid=current_pid,
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=True,
-        executor_to_be_defined=1,
+        nb_executor_to_be_defined=1,
     )
 
     # Wait for something to be deployed
@@ -602,7 +613,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
             current_pid=current_pid,
             should_scheduler_be_defined=True,
             should_fork_server_be_defined=True,
-            executor_to_be_defined=1,
+            nb_executor_to_be_defined=1,
         )
 
     state_after_deployment = construct_scheduler_children(current_pid)
@@ -680,7 +691,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
             current_pid=current_pid,
             should_scheduler_be_defined=True,
             should_fork_server_be_defined=True,
-            executor_to_be_defined=1,
+            nb_executor_to_be_defined=1,
         )
         current_state = construct_scheduler_children(current_pid)
         assert len(current_state.children) == len(state_after_deployment.children)
@@ -693,7 +704,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
             current_pid=current_pid,
             should_scheduler_be_defined=True,
             should_fork_server_be_defined=False,
-            executor_to_be_defined=0,
+            nb_executor_to_be_defined=0,
         )
 
 
@@ -757,7 +768,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         current_pid=current_pid,
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=True,
-        executor_to_be_defined=1,
+        nb_executor_to_be_defined=1,
     )
 
     # Retrieve the current processes, we should have more processes than `start_children`
@@ -817,7 +828,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         current_pid=current_pid,
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=True,
-        executor_to_be_defined=1,
+        nb_executor_to_be_defined=1,
     )
 
     resumed_state = construct_scheduler_children(current_pid)
@@ -910,7 +921,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         current_pid=current_pid,
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=True,
-        executor_to_be_defined=1,
+        nb_executor_to_be_defined=1,
     )
 
     # Retrieve the current processes, we should have more processes than `start_children`
@@ -933,7 +944,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         current_pid=current_pid,
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=False,
-        executor_to_be_defined=0,
+        nb_executor_to_be_defined=0,
     )
 
     # Everything should be consistent in DB: the agent should still be paused
@@ -1010,7 +1021,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         current_pid=current_pid,
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=True,
-        executor_to_be_defined=1,
+        nb_executor_to_be_defined=1,
     )
 
     # Retrieve the current processes, we should have more processes than `start_children`
@@ -1091,7 +1102,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         current_pid=current_pid,
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=False,
-        executor_to_be_defined=0,
+        nb_executor_to_be_defined=0,
     )
 
     resumed_state = construct_scheduler_children(current_pid)
@@ -1317,7 +1328,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         current_pid=current_pid,
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=True,
-        executor_to_be_defined=1,
+        nb_executor_to_be_defined=1,
     )
 
     # Retrieve the current processes, we should have more processes than `start_children`
