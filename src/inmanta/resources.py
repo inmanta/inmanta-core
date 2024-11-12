@@ -240,19 +240,24 @@ def collect_references(value_reference_collector: ReferenceCollector, value: obj
     :param path: The current path we are working on in the tree
     """
     match value:
-        case list():
+        case list() | proxy.SequenceProxy():
             return [
                 collect_references(value_reference_collector, value, f"{path}[{index}]") for index, value in enumerate(value)
             ]
 
-        case dict():
+        case dict() | proxy.DictProxy():
             return {key: collect_references(value_reference_collector, value, f"{path}.{key}") for key, value in value.items()}
 
         case references.Reference():
             value_reference_collector.add_reference(path, value)
             return None
 
-        case execute.util.Unknown:
+        case proxy.DynamicProxy():
+            # In case we missed a dynamic proxy, also traverse into that structure
+            new_value = collect_references(value_reference_collector, proxy.DynamicProxy.unwrap(value), path)
+            return proxy.DynamicProxy.return_value(new_value)
+
+        case execute.util.Unknown():
             raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
 
         case _:
