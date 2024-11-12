@@ -34,7 +34,7 @@ LOGGER = logging.getLogger(__name__)
 class MetricsService(protocol.ServerSlice):
     """Slice managing metrics collector"""
 
-    def __init__(self, extra_tags: dict[str, str] = {"component": "server"}) -> None:
+    def __init__(self, extra_tags: Mapping[str, str] = {"component": "server"}) -> None:
         super().__init__(SLICE_METRICS)
         self._influx_db_reporter: Optional[InfluxReporter] = None
         self._extra_tags = dict(extra_tags)
