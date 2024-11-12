@@ -72,6 +72,7 @@ class ResourceDetails:
 
     def __post_init__(self) -> None:
         from inmanta import resources
+
         # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
         object.__setattr__(self, "id", resources.Id.parse_id(self.resource_id))
 
