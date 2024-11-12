@@ -484,6 +484,8 @@ class Resource(metaclass=ResourceMeta):
         # - receive_events
         # - references
         # - mutators
+        # TODO: do we need to introduce a default value on fields to prevent this mess? Not only the stored version but also
+        #       all deploy testcases suffer from this.
         if const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS not in obj_map:
             obj_map = {**obj_map, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True}
 
