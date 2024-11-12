@@ -257,7 +257,7 @@ class ModelState:
         # indicates that resource Y is a requirement of resource X that was blocked, last we checked
         known_blockers_cache: dict[ResourceIdStr, ResourceIdStr] = {}
 
-        def update_blocked_status(resource: ResourceIdStr) -> bool:
+        def update_blocked_status(resource: "ResourceIdStr") -> bool:
             """
             Check if the deployment of the given resource is still blocked and mark it as unblocked if it is.
 

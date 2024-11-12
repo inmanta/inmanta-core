@@ -1162,7 +1162,6 @@ class OrchestrationService(protocol.ServerSlice):
                                 send_events=False,
                                 connection=connection_holder,
                             )
-
                     if latest_version:
                         (
                             version,
