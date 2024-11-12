@@ -184,10 +184,10 @@ async def test_available_metrics(server):
                     base_types = [base_type]
                 types[key] = base_types
 
-    assert metrics["db.connected,component=server"]["value"]
-    assert "db.max_pool,component=server" in metrics
-    assert "db.open_connections,component=server" in metrics
-    assert "db.free_connections,component=server" in metrics
+    assert metrics["db.connected"]["value"]
+    assert "db.max_pool" in metrics
+    assert "db.open_connections" in metrics
+    assert "db.free_connections" in metrics
     assert "self.spec.cpu" in metrics
 
     # ensure it doesn't crash when the server is down
@@ -213,6 +213,9 @@ async def test_influxdb_server_and_scheduler(server, influxdb, auto_start_agent,
     # Using this function signature makes test easier to debug, but doesn't test the intialization
     # async def test_influxdb_server_and_scheduler(server, agent, influxdb):
     def has_scheduler_metrics():
-        return any("metrics,key=db.pool_exhaustion_count,component=scheduler,environment=" in line for line in influxdb.lines)
+        return any(
+            f"metrics,component=scheduler,environment={environment},key=db.pool_exhaustion_time" in line
+            for line in influxdb.lines
+        )
 
     await retry_limited(has_scheduler_metrics, 10)
