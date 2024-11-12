@@ -231,9 +231,11 @@ class ReferenceCollector:
 
 
 def collect_references(value_reference_collector: ReferenceCollector, value: object, path: str) -> object:
-    """Collect value references
+    """Collect value references. This method also ensures that there are no values in the resources that are not serializable.
+    This includes:
+        - Unknowns
+        - DynamicProxy
 
-    TODO: can we use this one also to find unknown so we can skip the json dump?
 
     :param value_reference_collector: An object that holds all the collected secret references and mappings
     :param value: The value to recursively find value references on
@@ -252,12 +254,7 @@ def collect_references(value_reference_collector: ReferenceCollector, value: obj
             value_reference_collector.add_reference(path, value)
             return None
 
-        case proxy.DynamicProxy():
-            # In case we missed a dynamic proxy, also traverse into that structure
-            new_value = collect_references(value_reference_collector, proxy.DynamicProxy.unwrap(value), path)
-            return proxy.DynamicProxy.return_value(new_value)
-
-        case execute.util.Unknown():
+        case proxy.DynamicProxy() | execute.util.Unknown():
             raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
 
         case _:
@@ -413,12 +410,14 @@ class Resource(metaclass=ResourceMeta):
             else:
                 value = getattr(model_object, field_name)
 
-            # walk the entire model to find any value references and Unknowns (instead of json dump)
+            # walk the entire model to find any value references. Additionally we also want to make sure we raise exceptions on:
+            # - Unknowns
+            # - DynamicProxys to entities
             if reference_collector:
                 value = collect_references(reference_collector, value, field_name)
             else:
-                # serialize to weed out all unknowns. This is not very efficient, but the tree has to be traversed anyways
-                # passing along the serialized version would break the resource apis
+                # use json dump when there is no reference_collector
+                # TODO: can't we just always use collect_references?
                 json.dumps(value, default=inmanta.util.api_boundary_json_encoder)
 
             return value
