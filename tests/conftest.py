@@ -161,12 +161,6 @@ if PYTEST_PLUGIN_MODE:
 else:
     import utils
 
-# These elements were moved to inmanta.db.util to allow them to be used from other extensions.
-# This import statement is present to ensure backwards compatibility.
-from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore  # noqa: F401
-from inmanta.db.util import clear_database as do_clean_hard  # noqa: F401
-from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_types  # noqa: F401
-
 logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
