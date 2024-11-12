@@ -33,6 +33,13 @@ ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z
 PrimitiveTypes = str | float | int | bool
 
 
+class Value:
+    pass
+
+
+T = typing.TypeVar("T", bound=Value | PrimitiveTypes)
+
+
 class Argument(pydantic.BaseModel):
     """Base class for reference (resolver) arguments"""
 
@@ -46,7 +53,7 @@ class Argument(pydantic.BaseModel):
 
     # TODO: we probably need a context like object so that it is easier to pass more data to this method
     @abc.abstractmethod
-    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference[T]"]) -> object:
         """Get the value for the argument to be able to construct the reference again
 
         :param resource: The resource on which the reference has been defined
@@ -61,7 +68,7 @@ class LiteralArgument(Argument):
     type: typing.Literal["literal"] = "literal"
     value: PrimitiveTypes
 
-    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference[T]"]) -> object:
         return self.value
 
 
@@ -71,7 +78,7 @@ class ReferenceArgument(Argument):
     type: typing.Literal["reference"] = "reference"
     id: uuid.UUID
 
-    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference[T]"]) -> object:
         return ReferencePlaceHolder(self.id, references)
 
 
@@ -81,7 +88,7 @@ class GetArgument(Argument):
     type: typing.Literal["get"] = "get"
     dict_path_expression: str
 
-    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference[T]"]) -> object:
         return None
 
 
@@ -93,7 +100,7 @@ class PythonTypeArgument(Argument):
     type: typing.Literal["python_type"] = "python_type"
     value: str
 
-    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference[T]"]) -> object:
         return None
 
 
@@ -102,7 +109,7 @@ class ResourceArgument(Argument):
 
     type: typing.Literal["resource"] = "resource"
 
-    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference[T]"]) -> object:
         return resource
 
 
@@ -130,11 +137,7 @@ class MutatorModel(BaseModel):
     """A mutator"""
 
 
-class Value:
-    pass
-
-
-T = typing.TypeVar("T", bound=Value | PrimitiveTypes)
+C = typing.TypeVar("C", bound="Base")
 
 
 class Base:
@@ -150,11 +153,11 @@ class Base:
 
     @classmethod
     def deserialize(
-        cls: typing.Self,
+        cls: typing.Type[C],
         ref: BaseModel,
         resource: "inmanta.resources.Resource",
-        references: dict[uuid.UUID, "Reference"],
-    ) -> typing.Self:
+        references: dict[uuid.UUID, "Reference[T]"],
+    ) -> typing.Type[C]:
         return cls(**{arg.name: arg.get_arg_value(resource, references) for arg in ref.args})
 
     @abc.abstractmethod
@@ -293,6 +296,9 @@ class ReferencePlaceHolder(Reference[T]):
 
 R = typing.TypeVar("R", bound=Reference)
 
+
+# TODO: we need to make sure that the executor knows it should load the mutator and executor code before running the handler
+#       of a resource that uses references.
 
 class reference:
     """This decorator register a reference under a specific name"""
