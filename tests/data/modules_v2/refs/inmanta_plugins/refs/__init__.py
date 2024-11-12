@@ -20,6 +20,7 @@ class BoolReference(Reference[bool]):
         """Resolve the reference"""
         return os.getenv(self.get_argument("name")) == "true"
 
+
 @reference("refs::String")
 class StringReference(Reference[str]):
     """A reference to fetch environment variables"""
@@ -34,9 +35,11 @@ class StringReference(Reference[str]):
         """Resolve the reference"""
         return self.get_argument("name")
 
+
 @plugin
 def create_bool_reference(name: "any") -> "bool":
     return BoolReference(name=name)
+
 
 @plugin
 def create_string_reference(name: "any") -> "string":

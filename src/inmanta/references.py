@@ -185,8 +185,7 @@ class Base:
         return arguments
 
     def get_argument(self, name: str) -> object:
-        """ Get an argument from the reference.
-        """
+        """Get an argument from the reference."""
         if name not in self._arguments:
             raise KeyError(f"{type(self).__qualname__} does not have an argument with name {name}")
 
