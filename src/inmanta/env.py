@@ -728,35 +728,7 @@ class PythonEnvironment:
 
         # check if the virtual env exists
         if os.path.isdir(self.env_path) and os.listdir(self.env_path):
-            # Make sure the venv hosts the same python version as the running process
-            if sys.platform.startswith("linux"):
-                # Check if the python binary exists in the environment's bin directory
-                if not os.path.exists(self.python_path):
-                    raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} as no Python installation exists."
-                    )
-                # On linux based systems, the python version is in the path to the site packages dir:
-                if not os.path.exists(self.site_packages_dir):
-                    raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
-                        "is different from the Python version of this process."
-                    )
-            else:
-                # On other distributions a more costly check is required:
-                # Get version as a (major, minor) tuple for the venv and the running process
-                venv_python_version = (
-                    subprocess.check_output([self.python_path, "--version"]).decode("utf-8").strip().split()[1]
-                )
-                venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
-
-                running_process_python_version = sys.version_info[:2]
-
-                if venv_python_version != running_process_python_version:
-                    raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
-                        "is different from the Python version of this process."
-                    )
-
+            self.can_activate()
         else:
             path = os.path.realpath(self.env_path)
             try:
@@ -773,6 +745,35 @@ class PythonEnvironment:
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
             self._write_pip_binary()
             self._write_pth_file()
+
+    def can_activate(self) -> None:
+        """Can this venv be activated with this current python version?"""
+        # Make sure the venv hosts the same python version as the running process
+        if sys.platform.startswith("linux"):
+            # Check if the python binary exists in the environment's bin directory
+            if not os.path.exists(self.python_path):
+                raise VenvActivationFailedError(
+                    msg=f"Unable to use virtualenv at {self.env_path} as no Python installation exists."
+                )
+            # On linux based systems, the python version is in the path to the site packages dir:
+            if not os.path.exists(self.site_packages_dir):
+                raise VenvActivationFailedError(
+                    msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                    "is different from the Python version of this process."
+                )
+        else:
+            # On other distributions a more costly check is required:
+            # Get version as a (major, minor) tuple for the venv and the running process
+            venv_python_version = subprocess.check_output([self.python_path, "--version"]).decode("utf-8").strip().split()[1]
+            venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
+
+            running_process_python_version = sys.version_info[:2]
+
+            if venv_python_version != running_process_python_version:
+                raise VenvActivationFailedError(
+                    msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                    "is different from the Python version of this process."
+                )
 
     def _write_pip_binary(self) -> None:
         """
@@ -1428,7 +1429,7 @@ class VirtualEnv(ActiveEnv):
         """
         Returns True iff the venv exists on disk.
         """
-        return os.path.exists(self.python_path) and os.path.exists(self._path_pth_file)
+        return os.path.exists(self.python_path)
 
     def is_using_virtual_env(self) -> bool:
         return self._using_venv

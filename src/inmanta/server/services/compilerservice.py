@@ -22,6 +22,7 @@ import datetime
 import json
 import logging
 import os
+import platform
 import re
 import subprocess
 import traceback
@@ -31,6 +32,7 @@ from asyncio.subprocess import Process
 from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequence
 from itertools import chain
 from logging import Logger
+from platform import python_version
 from tempfile import NamedTemporaryFile
 from typing import Optional, cast
 
@@ -44,7 +46,7 @@ import inmanta.server.services.environmentlistener
 from inmanta import config, const, data, protocol, server, tracing
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
-from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvCreationFailedError, VirtualEnv
+from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvActivationFailedError, VenvCreationFailedError, VirtualEnv
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -226,6 +228,84 @@ class CompileRun:
                 # The process is still running, kill it
                 sub_process.kill()
 
+    async def ensure_compiler_venv(self) -> None:
+        """ "
+        Ensure we have a compiler venv in the project
+
+        Expected to be in a running stage
+
+        It is built as
+        1. a `.env` symlink to
+        2. a `.env-py3.12` versioned symlink
+        """
+        assert os.path.exists(self._project_dir)
+        project_dir = self._project_dir
+
+        # Eventual venv dir
+        venv_dir = os.path.join(project_dir, ".env")
+
+        # Versioned python dir
+        python_version = ".".join(platform.python_version_tuple()[0:2])
+        versioned_venv_dir = ".env-py" + python_version
+        versioned_venv_dir_full = os.path.join(project_dir, versioned_venv_dir)
+
+        # Determine the final action
+        # If we don't need to symlink, we return
+        do_create = False
+
+        if os.path.islink(venv_dir):
+            # We have a modern setup
+            try:
+                if os.path.samefile(venv_dir, versioned_venv_dir_full):
+                    # all good
+                    await self._info(f"Found existing venv")
+                    return None
+                else:
+                    # Wrong version
+                    os.unlink(venv_dir)
+                    await self._info(f"Creating new venv at {versioned_venv_dir_full}")
+                    do_create = True
+            except FileNotFoundError:
+                # Broken link or does not exist
+                await self._info(f"Creating new venv at {versioned_venv_dir_full}")
+                os.unlink(venv_dir)
+                do_create = True
+        elif not os.path.exists(venv_dir):
+            # Doesn't exist
+            do_create = True
+            await self._info(f"Creating new venv at {versioned_venv_dir_full}")
+        else:
+            # We have an older (< iso8) setup without symlink
+            virtual_env = VirtualEnv(venv_dir)
+            if virtual_env.exists():
+                try:
+                    virtual_env.can_activate() # raises exception
+                    # version matches, move it to the correct folder
+                    os.rename(venv_dir, versioned_venv_dir_full)
+                    await self._info(f"Moving existing venv from {venv_dir} to {versioned_venv_dir_full}")
+                except VenvActivationFailedError:
+                    # Version doesn't match, move to alternative location
+                    os.rename(venv_dir, venv_dir + "_old")
+                    await self._info(f"Discarding existing venv from {venv_dir} to {venv_dir}_old, Creating new")
+                    do_create = True
+            else:
+                # otherwise broken
+                os.rename(venv_dir, venv_dir + "_old")
+                await self._info(f"Discarding existing venv from {venv_dir} to {venv_dir}_old, Creating new")
+                do_create = True
+
+        if do_create:
+            virtual_env = VirtualEnv(versioned_venv_dir_full)
+            virtual_env.init_env()
+
+        # Relative symlink is a bit exotic in python
+        try:
+            dir_fd = os.open(project_dir, os.O_RDONLY)
+            os.symlink(versioned_venv_dir, ".env", dir_fd=dir_fd)
+        finally:
+            if dir_fd:
+                os.close(dir_fd)
+
     async def run(self, force_update: Optional[bool] = False) -> tuple[bool, Optional[model.CompileData]]:
         """
         Runs this compile run.
@@ -268,13 +348,9 @@ class CompileRun:
                 """
                 Ensure a venv is present at `venv_dir`.
                 """
-                virtual_env = VirtualEnv(venv_dir)
-                if virtual_env.exists():
-                    return None
-
                 await self._start_stage("Creating venv", command="")
                 try:
-                    virtual_env.init_env()
+                    await self.ensure_compiler_venv()
                 except VenvCreationFailedError as e:
                     await self._error(message=e.msg)
                     return await self._end_stage(returncode=1)
