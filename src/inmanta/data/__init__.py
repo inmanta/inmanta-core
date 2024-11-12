@@ -4483,7 +4483,7 @@ class ResourcePersistentState(BaseDocument):
     # Last produced an event. i.e. the end time of the last deploy where we had an effective change
     # (change is not None and change != Change.nochange)
 
-    resource_status: "state.ResourceStatus"
+    resource_status: state.ResourceStatus
 
     # status
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
@@ -4491,7 +4491,7 @@ class ResourcePersistentState(BaseDocument):
     @classmethod
     async def get_resource_status(
         cls, environment: uuid.UUID, resource_id: ResourceIdStr, connection: Optional[Connection] = None
-    ) -> "state.ResourceStatus":
+    ) -> state.ResourceStatus:
         result = await cls._fetchval(
             f"""
                 SELECT resource_status
@@ -5454,7 +5454,7 @@ class Resource(BaseDocument):
         last_produced_events: Optional[datetime.datetime] = None,
         last_deployed_attribute_hash: Optional[str] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-        resource_status: Optional["state.ResourceStatus"] = None,
+        resource_status: Optional[state.ResourceStatus] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
