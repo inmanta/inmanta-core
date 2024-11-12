@@ -350,10 +350,10 @@ class String(Primitive):
         """
         if isinstance(value, AnyType):
             return True
-        if not isinstance(value, str):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
         if references.is_reference_of(value, str):
             return True
+        if not isinstance(value, str):
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
         return True
 
     def cast(self, value: Optional[object]) -> object:

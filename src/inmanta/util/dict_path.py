@@ -278,13 +278,13 @@ class WildDictPath(abc.ABC):
 
         TODO: fix the typeguard. Probably by providing multiple methods for validation!
         """
-        if "__getitem__" not in dir(container):
+        if not hasattr(container, "__getitem__"):
             return False
 
-        if set and "__setitem__" not in dir(container):
+        if set and not hasattr(container, "__setitem__"):
             return False
 
-        if remove and "__delitem__" not in dir(container):
+        if remove and not hasattr(container, "__delitem__"):
             return False
 
         return True

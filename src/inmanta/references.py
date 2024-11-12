@@ -184,6 +184,22 @@ class Base:
 
         return arguments
 
+    def get_argument(self, name: str) -> object:
+        """ Get an argument from the reference.
+        """
+        if name not in self._arguments:
+            raise KeyError(f"{type(self).__qualname__} does not have an argument with name {name}")
+
+        arg = self._arguments[name]
+        if isinstance(arg, Reference):
+            return arg.get()
+
+        return arg
+
+    @property
+    def arguments(self) -> collections.abc.Mapping[str, object]:
+        return self._arguments
+
 
 class Mutator(Base):
     """A mutator that has side effects when executed"""

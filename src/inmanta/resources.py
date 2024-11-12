@@ -193,33 +193,25 @@ class ReferenceCollector:
         self.mutators: list[references.MutatorModel] = []
         self.resource = resource
 
-    def _serialize_reference(self, value: object) -> object:
-        """Serialize any recursive references found in a reference"""
+    def _add_reference(self, value: object) -> None:
+        """Add a value reference and recursively add any other references."""
         match value:
             case list():
-                return [self._serialize_reference(v) for v in value]
+                for v in value:
+                    self._add_reference(v)
 
             case dict():
-                return {k: self._serialize_reference(v) for k, v in value.items()}
+                for k, v in value.values():
+                    self._add_reference(v)
 
             case references.Reference():
-                self._add_reference(value)
-
-                return {
-                    "$value_reference": {
-                        "value_reference_id": str(value._value_reference.ref_id),
-                        "attribute": value._attribute,
-                    }
-                }
+                ref = value.serialize()
+                self.references[ref.id] = ref
+                for arg in value.arguments.values():
+                    self._add_reference(arg)
 
             case _:
-                return value
-
-    def _add_reference(self, reference: references.Reference) -> uuid.UUID:
-        """Add a value reference and recursively add any other references."""
-        ref_model = reference.serialize()
-        self.references[ref_model.id] = ref_model
-        return ref_model.id
+                pass
 
     def add_reference(self, path: str, reference: references.Reference) -> None:
         """Add a new attribute map to a value reference that we found at the given path.
@@ -228,6 +220,7 @@ class ReferenceCollector:
         :param reference: The attribute reference
         """
         self._add_reference(reference)
+
         self.mutators.append(
             references.ReplaceValue(
                 resource=self.resource,
