@@ -40,6 +40,7 @@ from inmanta.agent.handler import (
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
 from inmanta.data.model import ResourceIdStr
+from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
