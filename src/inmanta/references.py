@@ -46,7 +46,7 @@ class Argument(pydantic.BaseModel):
 
     # TODO: we probably need a context like object so that it is easier to pass more data to this method
     @abc.abstractmethod
-    def get_arg_value(self, resource: "resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
         """Get the value for the argument to be able to construct the reference again
 
         :param resource: The resource on which the reference has been defined
@@ -61,7 +61,7 @@ class LiteralArgument(Argument):
     type: typing.Literal["literal"] = "literal"
     value: PrimitiveTypes
 
-    def get_arg_value(self, resource: "resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
         return self.value
 
 
@@ -71,7 +71,7 @@ class ReferenceArgument(Argument):
     type: typing.Literal["reference"] = "reference"
     id: uuid.UUID
 
-    def get_arg_value(self, resource: "resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
         return ReferencePlaceHolder(self.id, references)
 
 
@@ -81,7 +81,7 @@ class GetArgument(Argument):
     type: typing.Literal["get"] = "get"
     dict_path_expression: str
 
-    def get_arg_value(self, resource: "resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
         return None
 
 
@@ -93,7 +93,7 @@ class PythonTypeArgument(Argument):
     type: typing.Literal["python_type"] = "python_type"
     value: str
 
-    def get_arg_value(self, resource: "resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
         return None
 
 
@@ -102,7 +102,7 @@ class ResourceArgument(Argument):
 
     type: typing.Literal["resource"] = "resource"
 
-    def get_arg_value(self, resource: "resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference"]) -> object:
         return resource
 
 
@@ -264,7 +264,7 @@ class Reference(Base, typing.Generic[T]):
         if issubclass(value_type, Value) and name in value_type.__annotations__:
             return AttributeReference(
                 resolver=self,
-                attribute_name=field,
+                attribute_name=name,
                 attribute_type=value_type.__annotations__[name],
             )
         raise AttributeError(name=name, obj=self)

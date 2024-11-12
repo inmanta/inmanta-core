@@ -20,7 +20,7 @@ import json
 import os
 import typing
 
-from inmanta import env, references, resources, util
+from inmanta import env, resources, util
 
 if typing.TYPE_CHECKING:
     from conftest import SnippetCompilationTest
@@ -37,7 +37,7 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
         snippet="""
         import refs
         import std::testing
-        
+
         std::testing::NullResource(
             name="test",
             agentname="test",
@@ -53,4 +53,4 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
     resource = resources.Resource.deserialize(json.loads(data))
 
     resource.resolve_all_references()
-    assert resource.fail == False
+    assert not resource.fail

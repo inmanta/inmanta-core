@@ -22,9 +22,7 @@ import re
 import typing
 import uuid
 from collections.abc import Iterable, Iterator, Sequence
-from typing import TYPE_CHECKING, Annotated, Any, Callable, Optional, TypeVar, Union, cast
-
-from pydantic import Field
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
 
 import inmanta.util
 from inmanta import const, execute, plugins, references
@@ -33,7 +31,6 @@ from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType
-from inmanta.util import dict_path
 
 if TYPE_CHECKING:
     from inmanta import export
