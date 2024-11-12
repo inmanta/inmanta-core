@@ -300,6 +300,7 @@ R = typing.TypeVar("R", bound=Reference)
 # TODO: we need to make sure that the executor knows it should load the mutator and executor code before running the handler
 #       of a resource that uses references.
 
+
 class reference:
     """This decorator register a reference under a specific name"""
 
