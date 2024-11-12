@@ -17,6 +17,7 @@
 """
 
 import datetime
+import typing
 from collections import abc
 from enum import Enum
 from typing import Optional
@@ -368,5 +369,9 @@ AGENT_SCHEDULER_ID = "$__scheduler"
 
 
 # resource attributes for event propagation
-RESOURCE_ATTRIBUTE_SEND_EVENTS = "send_event"
-RESOURCE_ATTRIBUTE_RECEIVE_EVENTS = "receive_events"
+RESOURCE_ATTRIBUTE_SEND_EVENTS: typing.Final[str] = "send_event"
+RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: typing.Final[str] = "receive_events"
+
+# resource attributes for references
+RESOURCE_ATTRIBUTE_REFERENCES: typing.Final[str] = "references"
+RESOURCE_ATTRIBUTE_MUTATORS: typing.Final[str] = "mutators"

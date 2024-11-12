@@ -24,6 +24,7 @@ from typing import Callable
 from typing import List as PythonList
 from typing import Optional
 
+from inmanta import references
 from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException
 from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.stable_api import stable_api
@@ -211,7 +212,6 @@ class Number(Primitive):
         """
         if isinstance(value, AnyType):
             return True
-
         if not isinstance(value, numbers.Number):
             raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
@@ -248,7 +248,8 @@ class Float(Primitive):
         """
         if isinstance(value, AnyType):
             return True
-
+        if references.is_reference_of(value, float):
+            return True
         if not isinstance(value, float):
             raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
         return True  # allow this function to be called from a lambda function
@@ -283,7 +284,8 @@ class Integer(Number):
         """
         if isinstance(value, AnyType):
             return True
-
+        if references.is_reference_of(value, int):
+            return True
         if not isinstance(value, numbers.Integral):
             raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
         return True  # allow this function to be called from a lambda function
@@ -310,6 +312,8 @@ class Bool(Primitive):
         if isinstance(value, AnyType):
             return True
         if isinstance(value, bool):
+            return True
+        if references.is_reference_of(value, bool):
             return True
         raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
@@ -348,7 +352,8 @@ class String(Primitive):
             return True
         if not isinstance(value, str):
             raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
-
+        if references.is_reference_of(value, str):
+            return True
         return True
 
     def cast(self, value: Optional[object]) -> object:

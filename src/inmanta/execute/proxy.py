@@ -20,6 +20,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from typing import Callable, Optional, Union
 
+from inmanta import references
 from inmanta.ast import NotFoundException, RuntimeException
 from inmanta.execute import util
 from inmanta.stable_api import stable_api
@@ -133,9 +134,6 @@ class DynamicProxy:
         if isinstance(value, util.Unknown):
             raise UnknownException(value)
 
-        if isinstance(value, util.ValueReference):
-            raise ValueReferenceException()
-
         if isinstance(value, (str, tuple, int, float, bool)):
             return copy(value)
 
@@ -150,6 +148,9 @@ class DynamicProxy:
 
         if hasattr(value, "__call__"):
             return CallProxy(value)
+
+        if isinstance(value, references.Reference):
+            return value
 
         return DynamicProxy(value)
 

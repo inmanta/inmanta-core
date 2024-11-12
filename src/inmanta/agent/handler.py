@@ -929,7 +929,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
     @tracing.instrument("CRUDHandler.execute", extract_args=True)
     def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
         # TODO: tdb where to call this (pytest, agent, facts, ...)
-        resource.resolve_all_references()
+        # resource.resolve_all_references()
         try:
             self.pre(ctx, resource)
 

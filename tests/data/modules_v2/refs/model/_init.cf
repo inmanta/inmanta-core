@@ -1,0 +1,16 @@
+entity EnvironmentReference:
+    """ A reference to an environment variable.
+
+    :attr variable_name: The name of the environment variable to reference.
+    :attr value: The value from the environment
+    """
+    string variable_name
+    bool value
+end
+
+
+implementation env_ref for EnvironmentReference:
+    self.value = refs::create_environment_reference(self.variable_name)
+end
+
+implement EnvironmentReference using env_ref
