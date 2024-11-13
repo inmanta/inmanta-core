@@ -251,7 +251,7 @@ async def test_custom_feature_manager(
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
         config.Config.set("database", "password", pg_password)
-        config.Config.set("database", "connection_timeout", str(1))
+        config.Config.set("database", "db_connection_timeout", str(1))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
         config.Config.set("agent_rest_transport", "port", port)

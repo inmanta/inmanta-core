@@ -37,20 +37,15 @@ LOGGER = logging.getLogger(__name__)
 class DatabaseMonitor:
 
     def __init__(
-        self, pool: asyncpg.pool.Pool, db_name: str, db_host: str, component: str, environment: str | None = None
+        self,
+        pool: asyncpg.pool.Pool,
+        db_name: str,
+        db_host: str,
     ) -> None:
         self._pool = pool
         self._scheduler = Scheduler(f"Database monitor for {db_name}")
         self.dn_name = db_name
         self.db_host = db_host
-        self.component = component
-        self.environment = environment
-
-        # Influxdb part
-        self.infuxdb_suffix = f",component={self.component}"
-        if self.environment:
-            self.infuxdb_suffix += f",environment={self.environment}"
-
         self.registered_gauges: list[str] = []
         self._db_exhaustion_check_interval = 0.2
         self._exhausted_pool_events_count: int = 0
@@ -123,7 +118,6 @@ class DatabaseMonitor:
 
     def _add_gauge(self, name: str, the_gauge: CallbackGauge) -> None:
         """Helper to register gauges and keep track of registrations"""
-        name = name + self.infuxdb_suffix
         gauge(name, the_gauge)
         self.registered_gauges.append(name)
 
@@ -190,7 +184,7 @@ class DatabaseService(protocol.ServerSlice):
         await self.connect_database()
 
         assert self._pool is not None  # Make mypy happy
-        self._db_monitor = DatabaseMonitor(self._pool, opt.db_name.get(), opt.db_host.get(), "server")
+        self._db_monitor = DatabaseMonitor(self._pool, opt.db_name.get(), opt.db_host.get())
         self._db_monitor.start()
 
     async def stop(self) -> None:
