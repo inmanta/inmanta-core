@@ -104,7 +104,8 @@ def do_run(args: list[str], env: typing.Optional[dict[str, str]] = None, cwd: ty
     LOGGER.info("Running %s with env %s and cwd %s", args, env, cwd)
     baseenv = os.environ.copy()
     baseenv.update(env)
-    process = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv)
+    # use close_fds to bypass bug that seems to be indiced by multiprocessing
+    process = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv, close_fds=False)
     return process
 
 
