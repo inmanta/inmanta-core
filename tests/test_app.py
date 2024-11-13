@@ -131,7 +131,7 @@ def do_kill(process: subprocess.Popen, killtime: int = 3, termtime: int = 2) -> 
     out, err = process.communicate()
     end = time.time()
 
-    LOGGER.info("Run took at least %f s", (end-start))
+    LOGGER.info("Run took at least %f s", (end - start))
     t1.cancel()
     t2.cancel()
 

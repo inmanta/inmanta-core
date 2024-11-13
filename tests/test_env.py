@@ -298,7 +298,7 @@ setup(name="test")
     expected = re.escape("Packages this-package-does-not-exist were not found. No indexes were used.")
     other_expected = r"Packages setuptools.*were not found\. No indexes were used\."
 
-    with pytest.raises(env.PackageNotFound, match=f"{expected}|{other_expected}" ):
+    with pytest.raises(env.PackageNotFound, match=f"{expected}|{other_expected}"):
         deactive_venv.install_for_config(
             requirements=[inmanta.util.parse_requirement(requirement="this-package-does-not-exist")],
             paths=[env.LocalPackagePath(path=str(tmpdir))],
