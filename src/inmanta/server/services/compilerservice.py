@@ -32,7 +32,6 @@ from asyncio.subprocess import Process
 from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequence
 from itertools import chain
 from logging import Logger
-from platform import python_version
 from tempfile import NamedTemporaryFile
 from typing import Optional, cast
 
@@ -258,7 +257,7 @@ class CompileRun:
             try:
                 if os.path.samefile(venv_dir, versioned_venv_dir_full):
                     # all good
-                    await self._info(f"Found existing venv")
+                    await self._info("Found existing venv")
                     return None
                 else:
                     # Wrong version
@@ -279,7 +278,7 @@ class CompileRun:
             virtual_env = VirtualEnv(venv_dir)
             if virtual_env.exists():
                 try:
-                    virtual_env.can_activate() # raises exception
+                    virtual_env.can_activate()  # raises exception
                     # version matches, move it to the correct folder
                     os.rename(venv_dir, versioned_venv_dir_full)
                     await self._info(f"Moving existing venv from {venv_dir} to {versioned_venv_dir_full}")
