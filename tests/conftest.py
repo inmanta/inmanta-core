@@ -835,8 +835,8 @@ async def clienthelper(client, environment):
     return utils.ClientHelper(client, environment)
 
 @pytest.fixture(scope="function")
-async def agent_factory() -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
-
+async def agent_factory(server) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
     async def create(environment: uuid.UUID) -> Agent:
@@ -867,7 +867,10 @@ async def agent_factory() -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent
         a.scheduler.executor_manager = executor
         a.scheduler.code_manager = utils.DummyCodeManager(a._client)
         await a.start()
-        await utils.retry_limited(lambda: a.sessionid in agentmanager.sessions, 10)
+        await utils.retry_limited(
+            lambda: agentmanager.get_agent_client(tid=environment, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=True) is not None,
+            timeout=10
+        )
         return a
 
     yield create

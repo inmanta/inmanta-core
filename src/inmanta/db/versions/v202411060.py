@@ -49,7 +49,18 @@ async def update(connection: Connection) -> None:
                      )
                  )
                      THEN 'ORPHAN'::new_resource_status
-                 WHEN rps.last_non_deploying_status = 'undefined'
+                 WHEN EXISTS (
+                        SELECT *
+                        FROM public.resource AS c2
+                        WHERE c2.environment=rps.environment
+                              AND c2.model=(
+                                  SELECT latest.version
+                                  FROM latest_released_version_per_environment AS latest
+                                  WHERE latest.environment=rps.environment
+                              )
+                              AND c2.resource_id=rps.resource_id
+                              AND c2.status = 'undefined'::resourcestate
+                     )
                      THEN 'UNDEFINED'::new_resource_status
                  WHEN rps.last_non_deploying_status = 'deployed'
                      THEN 'UP_TO_DATE'::new_resource_status

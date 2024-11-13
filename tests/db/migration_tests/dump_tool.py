@@ -101,9 +101,9 @@ async def populate_facts_and_parameters(client, env_id: str):
         )
 
 
-# @pytest.mark.parametrize("no_agent", [True])  # set config value
+@pytest.mark.parametrize("no_agent", [True])  # set config value
 async def test_dump_db(
-    server, client, postgres_db, database_name, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]]
+    server, client, postgres_db, database_name, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], resource_container, no_agent
 ) -> None:
     if False:
         # trick autocomplete to have autocomplete on client
@@ -230,6 +230,7 @@ async def test_dump_db(
         return [
             {
                 "key": "key1",
+                "value": "val1",
                 "version": version,
                 "id": f"test::Resource[agent1,key=key1],v={version}",
                 "send_event": True,
@@ -238,6 +239,7 @@ async def test_dump_db(
             },
             {
                 "key": "key2",
+                "value": "val2",
                 "version": version,
                 "id": f"test::Fail[agent1,key=key2],v={version}",
                 "send_event": True,
@@ -246,6 +248,7 @@ async def test_dump_db(
             },
             {
                 "key": "key3",
+                "value": "val3",
                 "version": version,
                 "id": f"test::Resource[agent1,key=key3],v={version}",
                 "send_event": True,
@@ -254,6 +257,7 @@ async def test_dump_db(
             },
             {
                 "key": "key4",
+                "value": "val4",
                 "version": version,
                 "id": f"test::Resource[agent1,key=key4],v={version}",
                 "send_event": True,
@@ -262,6 +266,7 @@ async def test_dump_db(
             },
             {
                 "key": "key5",
+                "value": "val5",
                 "version": version,
                 "id": f"test::Resource[agent1,key=key5],v={version}",
                 "send_event": True,
@@ -270,6 +275,7 @@ async def test_dump_db(
             },
             {
                 "key": "key6",
+                "value": "val6",
                 "version": version,
                 "id": f"test::Resource[agent1,key=key6],v={version}",
                 "send_event": True,
@@ -313,6 +319,7 @@ async def test_dump_db(
             *get_resources(version)[0:-1],
             {
                 "key": "key7",
+                "value": "val7",
                 "version": version,
                 "id": f"test::Resource[agent1,key=key7],v={version}",
                 "send_event": True,

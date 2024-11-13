@@ -40,7 +40,7 @@ from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, Reso
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
 from inmanta.protocol import Client
-from inmanta.resources import Id
+from inmanta.resources import Id, resource
 
 LOGGER = logging.getLogger(__name__)
 
@@ -345,9 +345,7 @@ class ResourceScheduler(TaskManager):
                     resource_id=resource.resource_id,
                     attribute_hash=resource.attribute_hash,
                     attributes=resource.attributes,
-                    status=await data.ResourcePersistentState.get_resource_status(
-                        self.environment, resource.resource_id, connection=con
-                    ),
+                    status=await data.Resource.get_current_resource_state(self.environment, resource.resource_id),
                 )
                 for resource in resources_from_db
             }
