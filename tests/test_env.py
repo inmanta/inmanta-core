@@ -295,6 +295,9 @@ setup(name="test")
     with open(setup_py_path, "w") as setup_file:
         setup_file.write(setup_py_content)
 
+    # We have two possible errors:
+    # we install two packages, that fail differently
+    # The order of failure is not fixed
     expected = re.escape("Packages this-package-does-not-exist were not found. No indexes were used.")
     other_expected = r"Packages setuptools.*were not found\. No indexes were used\."
 
