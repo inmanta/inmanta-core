@@ -45,7 +45,7 @@ import inmanta.server.services.environmentlistener
 from inmanta import config, const, data, protocol, server, tracing
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
-from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvActivationFailedError, VenvCreationFailedError, VirtualEnv
+from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvActivationFailedError, VirtualEnv
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -347,11 +347,11 @@ class CompileRun:
                 """
                 Ensure a venv is present at `venv_dir`.
                 """
-                await self._start_stage("Creating venv", command="")
+                await self._start_stage("Venv check", command="")
                 try:
                     await self.ensure_compiler_venv()
-                except VenvCreationFailedError as e:
-                    await self._error(message=e.msg)
+                except Exception as e:
+                    await self._error(message=str(e))
                     return await self._end_stage(returncode=1)
                 else:
                     return await self._end_stage(returncode=0)
