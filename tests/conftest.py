@@ -834,41 +834,52 @@ async def no_agent() -> bool:
 async def clienthelper(client, environment):
     return utils.ClientHelper(client, environment)
 
+@pytest.fixture(scope="function")
+async def agent_factory() -> Callable[[uuid.UUID], Awaitable[Agent]]:
+
+    agents: list[Agent] = []
+
+    async def create(environment: uuid.UUID) -> Agent:
+        # Mock scheduler state-dir: outside of tests this happens
+        # when the scheduler config is loaded, before starting the scheduler
+        server_state_dir = config.Config.get("config", "state-dir")
+        scheduler_state_dir = pathlib.Path(server_state_dir) / "server" / str(environment)
+        scheduler_state_dir.mkdir(exist_ok=True)
+        config.Config.set("config", "state-dir", str(scheduler_state_dir))
+        a = Agent(environment)
+        # Restore state-dir
+        config.Config.set("config", "state-dir", str(server_state_dir))
+
+        executor = InProcessExecutorManager(
+            environment,
+            a._client,
+            asyncio.get_event_loop(),
+            logger,
+            a.thread_pool,
+            str(pathlib.Path(a._storage["executors"]) / "code"),
+            str(pathlib.Path(a._storage["executors"]) / "venvs"),
+            False,
+        )
+
+        executor = WriteBarierExecutorManager(executor)
+
+        a.executor_manager = executor
+        a.scheduler.executor_manager = executor
+        a.scheduler.code_manager = utils.DummyCodeManager(a._client)
+        await a.start()
+        return a
+
+    yield create
+
+    await asyncio.gather(agent.stop() for agent in agents)
+
 
 @pytest.fixture(scope="function")
-async def agent(server, environment):
+async def agent(server, environment, agent_factory: Callable[[uuid.UUID], Agent]):
     """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    # Mock scheduler state-dir: outside of tests this happens
-    # when the scheduler config is loaded, before starting the scheduler
-    server_state_dir = config.Config.get("config", "state-dir")
-    scheduler_state_dir = pathlib.Path(server_state_dir) / "server" / str(environment)
-    scheduler_state_dir.mkdir(exist_ok=True)
-    config.Config.set("config", "state-dir", str(scheduler_state_dir))
-    a = Agent(environment)
-    # Restore state-dir
-    config.Config.set("config", "state-dir", str(server_state_dir))
-
-    executor = InProcessExecutorManager(
-        environment,
-        a._client,
-        asyncio.get_event_loop(),
-        logger,
-        a.thread_pool,
-        str(pathlib.Path(a._storage["executors"]) / "code"),
-        str(pathlib.Path(a._storage["executors"]) / "venvs"),
-        False,
-    )
-
-    executor = WriteBarierExecutorManager(executor)
-
-    a.executor_manager = executor
-    a.scheduler.executor_manager = executor
-    a.scheduler.code_manager = utils.DummyCodeManager(a._client)
-
-    await a.start()
-
+    a: Agent = agent_factory(uuid.UUID(environment))
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     yield a

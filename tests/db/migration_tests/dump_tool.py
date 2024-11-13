@@ -24,16 +24,17 @@ import os
 import shutil
 import uuid
 from uuid import UUID
-
+from typing import Callable, Awaitable
 import pytest
 
 import inmanta.protocol
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
 from inmanta.data.schema import DBSchema
 from inmanta.protocol import methods
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server.services.compilerservice import CompilerService
+from inmanta.agent.agent_new import Agent
 
 if __file__ and os.path.dirname(__file__).split("/")[-2] == "inmanta_tests":
     from inmanta_tests.utils import wait_for_version, wait_until_deployment_finishes  # noqa: F401
@@ -100,8 +101,10 @@ async def populate_facts_and_parameters(client, env_id: str):
         )
 
 
-@pytest.mark.parametrize("auto_start_agent", [True])  # set config value
-async def test_dump_db(server, client, postgres_db, database_name):
+# @pytest.mark.parametrize("no_agent", [True])  # set config value
+async def test_dump_db(
+    server, client, postgres_db, database_name, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]]
+) -> None:
     if False:
         # trick autocomplete to have autocomplete on client
         client = methods
@@ -116,6 +119,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
     assert result.code == 200
     env_id_1 = result.result["environment"]["id"]
     env1 = await data.Environment.get_by_id(uuid.UUID(env_id_1))
+    await agent_factory(env_id_1)
 
     env_1_version = 1
 
@@ -215,6 +219,116 @@ async def test_dump_db(server, client, postgres_db, database_name):
             version_info=None,
             resource_sets=resource_sets,
         )
+    )
+
+    result = await client.create_environment(project_id=project_id, name="dev-3")
+    assert result.code == 200
+    env_id_3 = result.result["environment"]["id"]
+    await agent_factory(env_id_3)
+
+    def get_resources(version: int) -> list[dict[str, object]]:
+        return [
+            {
+                "key": "key1",
+                "version": version,
+                "id": f"test::Resource[agent1,key=key1],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key2",
+                "version": version,
+                "id": f"test::Fail[agent1,key=key2],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key3",
+                "version": version,
+                "id": f"test::Resource[agent1,key=key3],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [f"test::Fail[agent1,key=key2]"],
+            },
+            {
+                "key": "key4",
+                "version": version,
+                "id": f"test::Resource[agent1,key=key4],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key5",
+                "version": version,
+                "id": f"test::Resource[agent1,key=key5],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [f"test::Resource[agent1,key=key4]"],
+            },
+            {
+                "key": "key6",
+                "version": version,
+                "id": f"test::Resource[agent1,key=key6],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+
+    res = await client.reserve_version(env_id_3)
+    assert res.code == 200
+    version = res.result["data"]
+    res = await client.put_version(
+        tid=env_id_3,
+        version=version,
+        resources=get_resources(version),
+        resource_state={
+            f"test::Resource[agent1,key=key1],v={version}": const.ResourceState.available,
+            f"test::Resource[agent1,key=key2],v={version}": const.ResourceState.available,
+            f"test::Resource[agent1,key=key3],v={version}": const.ResourceState.available,
+            f"test::Resource[agent1,key=key4],v={version}": const.ResourceState.undefined,
+            f"test::Resource[agent1,key=key5],v={version}": const.ResourceState.available,
+            f"test::Resource[agent1,key=key6],v={version}": const.ResourceState.available,
+        },
+        compiler_version=util.get_compiler_version(),
+    )
+    assert res.code == 200
+    await wait_until_deployment_finishes(client, env_id_3)
+
+    # Halt environment dev-3, so that no deploy is done for the latest version
+    res = await client.halt_environment(env_id_3)
+    assert res.code == 200
+
+    # Create a second version in environment dev3 that doesn't have resource key6, but has a new resource key7
+    res = await client.reserve_version(env_id_3)
+    assert res.code == 200
+    version = res.result["data"]
+    await client.put_version(
+        tid=env_id_3,
+        version=version,
+        resources=[
+            *get_resources(version)[0:-1],
+            {
+                "key": "key7",
+                "version": version,
+                "id": f"test::Resource[agent1,key=key7],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+            }
+        ],
+        resource_state={
+            f"test::Resource[agent1,key=key1],v={version}": const.ResourceState.available,
+            f"test::Resource[agent1,key=key2],v={version}": const.ResourceState.available,
+            f"test::Resource[agent1,key=key3],v={version}": const.ResourceState.available,
+            f"test::Resource[agent1,key=key4],v={version}": const.ResourceState.undefined,
+            f"test::Resource[agent1,key=key5],v={version}": const.ResourceState.available,
+            f"test::Resource[agent1,key=key7],v={version}": const.ResourceState.available,
+        },
+        compiler_version=util.get_compiler_version(),
     )
 
     proc = await asyncio.create_subprocess_exec(
