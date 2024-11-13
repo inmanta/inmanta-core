@@ -835,7 +835,7 @@ async def clienthelper(client, environment):
     return utils.ClientHelper(client, environment)
 
 @pytest.fixture(scope="function")
-async def agent_factory() -> Callable[[uuid.UUID], Awaitable[Agent]]:
+async def agent_factory() -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
 
     agents: list[Agent] = []
 
@@ -867,6 +867,7 @@ async def agent_factory() -> Callable[[uuid.UUID], Awaitable[Agent]]:
         a.scheduler.executor_manager = executor
         a.scheduler.code_manager = utils.DummyCodeManager(a._client)
         await a.start()
+        await utils.retry_limited(lambda: a.sessionid in agentmanager.sessions, 10)
         return a
 
     yield create
@@ -875,11 +876,11 @@ async def agent_factory() -> Callable[[uuid.UUID], Awaitable[Agent]]:
 
 
 @pytest.fixture(scope="function")
-async def agent(server, environment, agent_factory: Callable[[uuid.UUID], Agent]):
+async def agent(server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]]) -> AsyncIterator[Agent]:
     """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    a: Agent = agent_factory(uuid.UUID(environment))
+    a: Agent = await agent_factory(uuid.UUID(environment))
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     yield a

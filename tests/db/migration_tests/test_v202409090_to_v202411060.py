@@ -23,6 +23,10 @@ from collections import abc
 import asyncpg
 import pytest
 
+from inmanta.data import Environment, ResourcePersistentState
+from inmanta import const, resources
+from inmanta.deploy import state
+
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
@@ -33,3 +37,15 @@ async def test_add_new_resource_status_column(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
     await migrate_db_from()
+
+    env = await Environment.get_one(name="dev-3")
+    resource_persistent_state = await ResourcePersistentState.get_list(environment=env.id)
+    resource_state_by_resource_id = {record.resource_id: record.resource_status for record in resource_persistent_state}
+    assert resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key1]")] is state.ResourceStatus.UP_TO_DATE
+    assert resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key2]")] is state.ResourceStatus.HAS_UPDATE
+    assert resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key3]")] is state.ResourceStatus.HAS_UPDATE
+    assert resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key4]")] is state.ResourceStatus.UNDEFINED
+    assert resource_state_by_resource_id[
+               resources.ResourceIdStr("test::Resource[agent1,key=key5]")] is state.ResourceStatus.HAS_UPDATE
+    assert resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key6]")] is state.ResourceStatus.ORPHAN
+    assert resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key7]")] is state.ResourceStatus.HAS_UPDATE
