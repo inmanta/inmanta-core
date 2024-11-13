@@ -235,7 +235,7 @@ class CompileRun:
 
         It is built as
         1. a `.env` symlink to
-        2. a `.env-py3.12` versioned symlink
+        2. a `.env-py3.12` versioned directory
         """
         assert os.path.exists(self._project_dir)
         project_dir = self._project_dir
