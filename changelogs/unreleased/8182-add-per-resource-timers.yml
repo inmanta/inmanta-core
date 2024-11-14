@@ -1,6 +1,9 @@
 description: >
-  Add ``scheduler.resource-compliance-check-window`` agent config option to set the maximum time window
-  between two compliance checks on a per-resource basis.
+  Add support for periodic per-resource deploys and repairs.
+  When specified as a number of seconds, the ``config.agent-repair-interval`` agent config option will now be
+  interpreted on a per-resource basis and ensure that no more than this many seconds go by between two repairs.
+  Similarly, the ``config.agent-deploy-interval`` agent config option can be used to set a periodic deploy
+  trigger on a per-resource basis
 change-type: patch
 destination-branches: [master]
 

@@ -118,7 +118,10 @@ async def test_spontaneous_deploy(
     caplog,
     agent_deploy_interval,
 ):
-    """ """
+    """
+    Test that a deploy run is executed every 2 seconds in the new agent
+     as specified in the agent_repair_interval (using a cron or not)
+    """
     with caplog.at_level(logging.DEBUG):
         resource_container.Provider.reset()
 

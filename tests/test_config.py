@@ -36,7 +36,6 @@ from utils import LogSequence
 def test_environment_deprecated_options(caplog):
     for deprecated_option, new_option in [
         (cfg.agent_interval, cfg.agent_deploy_interval),
-        (cfg.agent_splay, cfg.agent_deploy_splay_time),
     ]:
         Config.set(deprecated_option.section, deprecated_option.name, "22")
         caplog.clear()

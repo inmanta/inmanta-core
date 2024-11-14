@@ -102,53 +102,34 @@ agent_deploy_interval: Option[int | str] = Option(
     "config",
     "agent-deploy-interval",
     0,
-    "Either the number of seconds between two (incremental) deployment runs of the agent or a cron-like expression."
-    " If a cron-like expression is specified, a deploy will be run following a cron-like time-to-run specification,"
+    "Set the frequency and the granularity of deploy runs (i.e. only trigger a deploy for resources that have a "
+    " known divergence with their desired state)."
+    " When specified as an integer, this will set the number of seconds between two deploy runs on a per-resource basis."
+    " When specified as a cron-like expression, a global deploy (i.e. for all resources that have a known divergence with their"
+    " desired state) will be run following a cron-like time-to-run specification,"
     " interpreted in UTC. The expected format is ``[sec] min hour dom month dow [year]`` (If only 6 values are provided, they"
     " are interpreted as ``min hour dom month dow year``)."
-    " A deploy will be requested at the scheduled time. Note that if a cron"
-    " expression is used the :inmanta.config:option:`config.agent_deploy_splay_time` setting will be ignored."
+    " A deploy will be requested at the scheduled time."
     " Set this to 0 to disable the scheduled deploy runs.",
     is_time_or_cron,
     predecessor_option=agent_interval,
-)
-agent_deploy_splay_time = Option(
-    "config",
-    "agent-deploy-splay-time",
-    600,
-    """The splaytime added to the agent-deploy-interval. Set this to 0 to disable the splaytime.
-
-At startup the agent will choose a random number between 0 and agent-deploy-splay-time.
-It will wait this number of second before performing the first deployment run.
-Each subsequent repair deployment will start agent-deploy-interval seconds after the previous one.""",
-    is_time,
-    predecessor_option=agent_splay,
 )
 
 agent_repair_interval = Option(
     "config",
     "agent-repair-interval",
     600,
-    "Either the number of seconds between two repair runs (full deploy) of the agent or a cron-like expression."
-    " If a cron-like expression is specified, a repair will be run following a cron-like time-to-run specification,"
+    "Set the frequency and the granularity of repair runs (i.e. trigger a deploy regardless of the assumed"
+    " state of the resource(s))."
+    " When specified as an integer, this will set the number of seconds between two repair runs on a per-resource basis."
+    " When specified as a cron-like expression, a global repair (i.e. a full deploy for all resources, regardless of their"
+    " assumed desired state and regardless of their actual state) will be run following a cron-like"
+    " time-to-run specification,"
     " interpreted in UTC. The expected format is `[sec] min hour dom month dow [year]` ( If only 6 values are provided, they"
     " are interpreted as `min hour dom month dow year`)."
-    " A repair will be requested at the scheduled time. Note that if a cron"
-    " expression is used the 'agent_repair_splay_time' setting will be ignored."
+    " A repair will be requested at the scheduled time."
     " Setting this to 0 to disable the scheduled repair runs.",
     is_time_or_cron,
-)
-agent_repair_splay_time = Option(
-    "config",
-    "agent-repair-splay-time",
-    600,
-    """The splaytime added to the agent-repair-interval. Set this to 0 to disable the splaytime.
-
-At startup the agent will choose a random number between 0 and agent-repair-splay-time.
-It will wait this number of second before performing the first repair run.
-Each subsequent repair deployment will start agent-repair-interval seconds after the previous one.
-This option is ignored and a splay of 0 is used if 'agent_repair_interval' is a cron expression""",
-    is_time,
 )
 
 
