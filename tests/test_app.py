@@ -22,6 +22,7 @@ import re
 import signal
 import subprocess
 import sys
+import time
 import typing
 from subprocess import TimeoutExpired
 from threading import Timer
@@ -126,9 +127,11 @@ def do_kill(process: subprocess.Popen, killtime: int = 3, termtime: int = 2) -> 
     t2 = Timer(termtime, do_and_log(process.terminate, f"terminated process after {termtime}s"))
     t1.start()
     t2.start()
-
+    start = time.time()
     out, err = process.communicate()
+    end = time.time()
 
+    LOGGER.info("Run took at least %f s", (end - start))
     t1.cancel()
     t2.cancel()
 
@@ -138,7 +141,7 @@ def do_kill(process: subprocess.Popen, killtime: int = 3, termtime: int = 2) -> 
 
 
 def run_without_tty(
-    args: list[str], env: typing.Optional[dict[str, str]] = None, killtime: int = 4, termtime: int = 3
+    args: list[str], env: typing.Optional[dict[str, str]] = None, killtime: int = 15, termtime: int = 10
 ) -> tuple[str, str, int]:
     """Run the given command without a tty"""
     process = do_run(args, env)

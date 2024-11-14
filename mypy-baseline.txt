@@ -656,7 +656,6 @@ src/inmanta/ast/blocks.py:0: note: Did you forget to import it from "typing"? (S
 src/inmanta/ast/blocks.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "ExecutionContext")  [assignment]
 src/inmanta/ast/blocks.py:0: error: Returning Any from function declared to return "list[DynamicStatement]"  [no-any-return]
 src/inmanta/agent/cache.py:0: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
-src/inmanta/protocol/rest/server.py:0: error: Module "pyformance" has no attribute "timer"  [attr-defined]
 src/inmanta/protocol/rest/server.py:0: error: Argument 1 to "get_global_url_map" of "RESTServer" has incompatible type "Sequence[CallTarget]"; expected "list[CallTarget]"  [arg-type]
 src/inmanta/protocol/rest/server.py:0: error: Argument 1 to "Application" has incompatible type "list[Rule]"; expected "list[Rule | list[Any] | tuple[str | Matcher, Any] | tuple[str | Matcher, Any, dict[str, Any]] | tuple[str | Matcher, Any, dict[str, Any], str]] | None"  [arg-type]
 src/inmanta/protocol/rest/server.py:0: note: "List" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
