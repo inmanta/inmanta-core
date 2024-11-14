@@ -664,6 +664,8 @@ class ResourceScheduler(TaskManager):
                     dependencies_state[dep_id] = const.ResourceState.undefined
                 case ResourceState(blocked=BlockedStatus.YES):
                     dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
+                case ResourceState(deployment_result=DeploymentResult.SKIPPED):
+                    dependencies_state[dep_id] = const.ResourceState.skipped
                 case ResourceState(status=ResourceStatus.HAS_UPDATE):
                     dependencies_state[dep_id] = const.ResourceState.available
                 case ResourceState(deployment_result=DeploymentResult.DEPLOYED):
