@@ -596,6 +596,10 @@ class ResourceScheduler(TaskManager):
     # TaskManager interface
 
     def _get_resource_intent(self, resource: ResourceIdStr) -> Optional[ResourceDetails]:
+        """
+        Get intent of a given resource.
+        Always expected to be called under lock
+        """
         try:
             return self._state.resources[resource]
         except KeyError:
