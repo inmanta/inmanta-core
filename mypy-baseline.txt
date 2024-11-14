@@ -555,7 +555,6 @@ src/inmanta/data/__init__.py:0: error: Incompatible return value type (got "Reso
 src/inmanta/data/__init__.py:0: error: Argument 1 to "add_logs" of "ResourceAction" has incompatible type "list[dict[str, object]]"; expected "str | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/data/__init__.py:0: error: Argument "changes" to "ResourceAction" has incompatible type "dict[ResourceVersionIdStr, dict[str, object]] | None"; expected "dict[str, Any] | None"  [arg-type]
-src/inmanta/data/__init__.py:0: error: Enum index should be a string (actual index type "object")  [misc]
 src/inmanta/data/__init__.py:0: error: Missing type parameters for generic type "dict"  [type-arg]
 src/inmanta/data/__init__.py:0: error: Unsupported left operand type for + ("object")  [operator]
 src/inmanta/data/__init__.py:0: error: Incompatible return value type (got "Sequence[Resource]", expected "list[Resource]")  [return-value]
@@ -1091,7 +1090,11 @@ src/inmanta/agent/forking_executor.py:0: error: Argument 1 of "connection_made" 
 src/inmanta/agent/forking_executor.py:0: note: This violates the Liskov substitution principle
 src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
 src/inmanta/deploy/scheduler.py:0: error: Argument 1 to "parse_id" of "Id" has incompatible type "object"; expected "ResourceVersionIdStr | ResourceIdStr"  [arg-type]
-src/inmanta/deploy/scheduler.py:0: error: Argument "attribute_hash" to "ResourceDetails" has incompatible type "str | None"; expected "str"  [arg-type]
+src/inmanta/deploy/scheduler.py:0: error: Enum index should be a string (actual index type "object")  [misc]
+src/inmanta/deploy/scheduler.py:0: error: Argument "resource_id" to "ResourceDetails" has incompatible type "object"; expected "ResourceIdStr"  [arg-type]
+src/inmanta/deploy/scheduler.py:0: error: Argument "attribute_hash" to "ResourceDetails" has incompatible type "object"; expected "str"  [arg-type]
+src/inmanta/deploy/scheduler.py:0: error: Argument 1 to "loads" has incompatible type "object"; expected "str | bytes | bytearray"  [arg-type]
+src/inmanta/deploy/scheduler.py:0: error: Incompatible return value type (got "dict[object, ResourceDetails]", expected "Mapping[ResourceIdStr, ResourceDetails]")  [return-value]
 src/inmanta/deploy/scheduler.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/server/services/compilerservice.py:0: error: Incompatible types in assignment (expression has type "bool | int | float | str | dict[str, str | int | bool]", variable has type "int")  [assignment]
 src/inmanta/validation_type.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "Mapping[str, object] | None")  [assignment]
