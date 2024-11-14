@@ -80,16 +80,23 @@ class TaskManager(StateUpdateManager, abc.ABC):
     @abstractmethod
     async def get_resource_intent(
         self,
-        resource_id: ResourceIdStr,
-        *,
-        for_deploy: bool = False,
+        resource: ResourceIdStr,
     ) -> Optional[ResourceIntent]:
         """
         Returns the current version and the details for the given resource, or None if it is not (anymore) managed by the
         scheduler.
 
-        :param for_deploy: True iff the task will start deploying this intent. If set, must call report_resource_state later
-            with deployment result.
+        Acquires appropriate locks.
+        """
+
+    @abstractmethod
+    async def get_resource_intent_for_deploy(
+        self,
+        resource: ResourceIdStr,
+    ) -> Optional[ResourceIntent]:
+        """
+        Returns the current version details for the given resource along with the last non-deploying state for its dependencies,
+        or None if it is not (anymore) managed by the scheduler.
 
         Acquires appropriate locks.
         """
@@ -588,11 +595,24 @@ class ResourceScheduler(TaskManager):
 
     # TaskManager interface
 
-    async def get_resource_intent(self, resource_id: ResourceIdStr, *, for_deploy: bool = False) -> Optional[ResourceIntent]:
+    async def get_resource_intent(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
         async with self._scheduler_lock:
             # fetch resource details under lock
             try:
-                resource_details = self._state.resources[resource_id]
+                resource_details = self._state.resources[resource]
+                return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies={})
+            except KeyError:
+                # Stale resource
+                # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
+                # because of this check, and an intrinsic part of the locking design because it's preferred over wider
+                # locking for performance reasons.
+                return None
+
+    async def get_resource_intent_for_deploy(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
+        async with self._scheduler_lock:
+            # fetch resource details under lock
+            try:
+                resource_details = self._state.resources[resource]
             except KeyError:
                 # Stale resource
                 # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
@@ -600,10 +620,8 @@ class ResourceScheduler(TaskManager):
                 # locking for performance reasons.
                 return None
             else:
-                dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource_id)
-                if for_deploy:
-                    # still under lock => can safely add to non-stale in-progress set
-                    self._deploying_latest.add(resource_id)
+                dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
+                self._deploying_latest.add(resource)
                 return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=dependencies)
 
     async def report_resource_state(
@@ -683,10 +701,10 @@ class ResourceScheduler(TaskManager):
                     dependencies_state[dep_id] = const.ResourceState.undefined
                 case ResourceState(blocked=BlockedStatus.YES):
                     dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
-                case ResourceState(deployment_result=DeploymentResult.SKIPPED):
-                    dependencies_state[dep_id] = const.ResourceState.skipped
                 case ResourceState(status=ResourceStatus.HAS_UPDATE):
                     dependencies_state[dep_id] = const.ResourceState.available
+                case ResourceState(deployment_result=DeploymentResult.SKIPPED):
+                    dependencies_state[dep_id] = const.ResourceState.skipped
                 case ResourceState(deployment_result=DeploymentResult.DEPLOYED):
                     dependencies_state[dep_id] = const.ResourceState.deployed
                 case ResourceState(deployment_result=DeploymentResult.FAILED):

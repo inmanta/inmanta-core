@@ -116,7 +116,7 @@ class Deploy(Task):
             # First do scheduler book keeping to establish what to do
             version: int
             resource_details: "state.ResourceDetails"
-            intent = await task_manager.get_resource_intent(self.resource, for_deploy=True)
+            intent = await task_manager.get_resource_intent_for_deploy(self.resource)
             if intent is None:
                 # Stale resource, can simply be dropped.
                 return
