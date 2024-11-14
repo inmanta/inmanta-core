@@ -31,6 +31,7 @@ file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
 
+@pytest.mark.parametrize("no_agent", [True])
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
 async def test_add_new_resource_status_column(
     postgresql_client: asyncpg.Connection,
@@ -48,4 +49,4 @@ async def test_add_new_resource_status_column(
     assert resource_state_by_resource_id[
                resources.ResourceIdStr("test::Resource[agent1,key=key5]")] is state.ResourceStatus.HAS_UPDATE
     assert resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key6]")] is state.ResourceStatus.ORPHAN
-    assert resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key7]")] is state.ResourceStatus.HAS_UPDATE
+    assert resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key7]")] is state.ResourceStatus.UP_TO_DATE
