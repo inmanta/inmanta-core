@@ -677,7 +677,7 @@ class ResourceScheduler(TaskManager):
 
         async def _repair() -> None:
             async with self._scheduler_lock:
-                if self._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy:
+                if self._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
                     return
                 to_deploy: set[ResourceIdStr] = {resource}
 
@@ -816,6 +816,14 @@ class ResourceScheduler(TaskManager):
                     # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
                     # (or skip) causes it to become dirty now.
                     self._state.dirty.add(resource)
+
+                    if deployment_result is DeploymentResult.SKIPPED:
+                        # Also add back dependents to the dirty set
+                        # For now we add all dependents
+                        dependant_resources = {
+                            dependant for dependant in provides if self._state.resources.get(dependant, None) is not None
+                        }
+                        self._state.dirty.update(dependant_resources)
 
                 # propagate events
                 if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
