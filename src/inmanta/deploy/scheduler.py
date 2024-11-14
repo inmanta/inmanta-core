@@ -116,7 +116,7 @@ class TaskRunner:
         ), f"Task Runner {self.endpoint} is trying to start twice, this should not happen"
         self._task = asyncio.create_task(self._run())
 
-    async def stop(self) -> None:
+    async def _stop(self) -> None:
         self.status = AgentStatus.STOPPING
 
     async def notify(self) -> None:
@@ -131,7 +131,7 @@ class TaskRunner:
 
         match self.status:
             case AgentStatus.STARTED if not should_be_running:
-                await self.stop()
+                await self._stop()
             case AgentStatus.STOPPED if should_be_running:
                 await self._start()
             case AgentStatus.STOPPING if should_be_running:
@@ -220,17 +220,13 @@ class ResourceScheduler(TaskManager):
         self.executor_manager = executor_manager
         self._state_update_delegate = ToDbUpdateManager(client, environment)
 
-    async def reset(self) -> None:
+    def reset(self) -> None:
         """
         Clear out all state and start empty
 
         only allowed when ResourceScheduler is not running
         """
         assert not self._running
-        # Ensure we are down
-        for worker in self._workers.values():
-            assert not worker.is_running()
-            await worker.join()
         self._state.reset()
         self._work.reset()
         self._workers.clear()
@@ -239,22 +235,10 @@ class ResourceScheduler(TaskManager):
     async def start(self) -> None:
         if self._running:
             return
-        await self.reset()
+        self.reset()
         await self.reset_resource_state()
         await self._initialize()
         self._running = True
-
-    async def stop(self) -> None:
-        if not self._running:
-            return
-        self._running = False
-        self._work.agent_queues.send_shutdown()
-        # Ensure workers go down
-        for worker in self._workers.values():
-            await worker.stop()
-
-    async def join(self) -> None:
-        await asyncio.gather(*[worker.join() for worker in self._workers.values()])
 
     async def _initialize(self) -> None:
         """
@@ -284,6 +268,15 @@ class ResourceScheduler(TaskManager):
             up_to_date_resources=up_to_date_resources,
             reason="Deploy was triggered because the scheduler was started",
         )
+
+    async def stop(self) -> None:
+        if not self._running:
+            return
+        self._running = False
+        self._work.agent_queues.send_shutdown()
+
+    async def join(self) -> None:
+        await asyncio.gather(*[worker.join() for worker in self._workers.values()])
 
     async def deploy(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
         """
