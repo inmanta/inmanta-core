@@ -24,6 +24,8 @@ import traceback
 import uuid
 from dataclasses import dataclass
 
+import pyformance
+
 from inmanta import const, data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployResult
@@ -110,25 +112,25 @@ class PoisonPill(Task):
 
 class Deploy(Task):
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
+        with pyformance.timer("internal.deploy").time():
+            # First do scheduler book keeping to establish what to do
+            version: int
+            resource_details: "state.ResourceDetails"
+            intent = await task_manager.get_resource_intent(self.resource, for_deploy=True)
+            if intent is None:
+                # Stale resource, can simply be dropped.
+                return
 
-        # First do scheduler book keeping to establish what to do
-        version: int
-        resource_details: "state.ResourceDetails"
-        intent = await task_manager.get_resource_intent(self.resource, for_deploy=True)
-        if intent is None:
-            # Stale resource, can simply be dropped.
-            return
+            # Resolve to exector form
+            version, resource_details = intent
+            executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
 
-        # Resolve to exector form
-        version, resource_details = intent
-        executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
+            # Make id's
+            gid = uuid.uuid4()
+            action_id = uuid.uuid4()  # can this be gid ?
 
-        # Make id's
-        gid = uuid.uuid4()
-        action_id = uuid.uuid4()  # can this be gid ?
-
-        # The main difficulty off this code is exception handling
-        # We collect state here to report back in the finally block
+            # The main difficulty off this code is exception handling
+            # We collect state here to report back in the finally block
 
         # Full status of the deploy,
         # may be unset if we fail before signaling start to the server, will be set if we signaled start
