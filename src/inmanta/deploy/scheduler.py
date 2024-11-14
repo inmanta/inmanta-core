@@ -58,7 +58,7 @@ LOGGER = logging.getLogger(__name__)
 class ResourceIntent:
     model_version: int
     details: ResourceDetails
-    dependencies: Mapping[ResourceIdStr, const.ResourceState]
+    dependencies: Optional[Mapping[ResourceIdStr, const.ResourceState]]
 
 
 class TaskManager(StateUpdateManager, abc.ABC):
@@ -595,34 +595,33 @@ class ResourceScheduler(TaskManager):
 
     # TaskManager interface
 
+    def _get_resource_intent(self, resource: ResourceIdStr) -> Optional[ResourceDetails]:
+        try:
+            return self._state.resources[resource]
+        except KeyError:
+            # Stale resource
+            # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
+            # because of this check, and an intrinsic part of the locking design because it's preferred over wider
+            # locking for performance reasons.
+            return None
+
     async def get_resource_intent(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
         async with self._scheduler_lock:
             # fetch resource details under lock
-            try:
-                resource_details = self._state.resources[resource]
-                return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies={})
-            except KeyError:
-                # Stale resource
-                # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
-                # because of this check, and an intrinsic part of the locking design because it's preferred over wider
-                # locking for performance reasons.
+            resource_details = self._get_resource_intent(resource)
+            if resource_details is None:
                 return None
+            return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=None)
 
     async def get_resource_intent_for_deploy(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
         async with self._scheduler_lock:
             # fetch resource details under lock
-            try:
-                resource_details = self._state.resources[resource]
-            except KeyError:
-                # Stale resource
-                # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
-                # because of this check, and an intrinsic part of the locking design because it's preferred over wider
-                # locking for performance reasons.
+            resource_details = self._get_resource_intent(resource)
+            if resource_details is None:
                 return None
-            else:
-                dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
-                self._deploying_latest.add(resource)
-                return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=dependencies)
+            dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
+            self._deploying_latest.add(resource)
+            return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=dependencies)
 
     async def report_resource_state(
         self,

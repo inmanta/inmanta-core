@@ -121,6 +121,8 @@ class Deploy(Task):
                 # Stale resource, can simply be dropped.
                 return
 
+        # Dependencies are always set when calling get_resource_intent_for_deploy
+        assert intent.dependencies
         # Resolve to exector form
         version = intent.model_version
         resource_details = intent.details
