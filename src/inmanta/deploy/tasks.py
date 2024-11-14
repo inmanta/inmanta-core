@@ -122,7 +122,7 @@ class Deploy(Task):
                 return
 
         # Dependencies are always set when calling get_resource_intent_for_deploy
-        assert intent.dependencies
+        assert intent.dependencies is not None
         # Resolve to exector form
         version = intent.model_version
         resource_details = intent.details
