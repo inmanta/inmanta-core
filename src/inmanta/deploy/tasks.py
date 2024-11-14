@@ -132,95 +132,101 @@ class Deploy(Task):
             # The main difficulty off this code is exception handling
             # We collect state here to report back in the finally block
 
-            # Status of the deploy for the executor/requires/provides
-            success: bool = True
+        # Full status of the deploy,
+        # may be unset if we fail before signaling start to the server, will be set if we signaled start
+        deploy_result: DeployResult | None = None
+        scheduler_deployment_result: state.DeploymentResult
 
-            # Full status of the deploy,
-            # may be unset if we fail before signaling start to the server, will be set if we signaled start
-            deploy_result: DeployResult | None = None
+        try:
+            # This try catch block ensures we report at the end of the task
 
+            # Signal start to server
             try:
-                # This try catch block ensures we report at the end of the task
+                requires: dict[ResourceIdStr, const.ResourceState] = await task_manager.send_in_progress(
+                    action_id, executor_resource_details.rvid
+                )
+            except Exception:
+                # Unrecoverable, can't reach server
+                scheduler_deployment_result = state.DeploymentResult.FAILED
+                LOGGER.error(
+                    "Failed to report the start of the deployment to the server for %s",
+                    resource_details.resource_id,
+                    exc_info=True,
+                )
+                return
 
-                # Signal start to server
+            # Get executor
+            try:
+                # FIXME: code loading interface is not nice like this,
+                #   - we may want to track modules per agent, instead of types
+                #   - we may also want to track the module version vs the model version
+                #       as it avoid the problem of fast chanfing model versions
+
+                my_executor: executor.Executor = await self.get_executor(
+                    task_manager, agent, executor_resource_details.id.entity_type, version
+                )
+            except Exception as e:
+                log_line = data.LogLine.log(
+                    logging.ERROR,
+                    "All resources of type `%(res_type)s` failed to load handler code or install handler code "
+                    "dependencies: `%(error)s`\n%(traceback)s",
+                    res_type=executor_resource_details.id.entity_type,
+                    error=str(e),
+                    traceback="".join(traceback.format_tb(e.__traceback__)),
+                )
+                deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
+                scheduler_deployment_result = state.DeploymentResult.FAILED
+                return
+
+            assert reason is not None  # Should always be set for deploy
+            # Deploy
+            try:
+                deploy_result = await my_executor.execute(action_id, gid, executor_resource_details, reason, requires)
+                # Translate deploy result status to the new deployment result state
+                match deploy_result.status:
+                    case const.ResourceState.deployed:
+                        scheduler_deployment_result = state.DeploymentResult.DEPLOYED
+                    case const.ResourceState.skipped:
+                        scheduler_deployment_result = state.DeploymentResult.SKIPPED
+                    case _:
+                        scheduler_deployment_result = state.DeploymentResult.FAILED
+            except Exception as e:
+                # This should not happen
+
+                # We log both to scheduler log as well as the DB and the resource_action_log
+                # FIXME: can be logging be unified without losing the ability to have this warning prior to writing to DB?
+                # Such that we can have it if the DB is not there
+                LOGGER.error("Failure during executor execution for resource %s", self.resource, exc_info=True)
+                log_line = data.LogLine.log(
+                    logging.ERROR,
+                    "Failure during executor execution for resource %(res)s",
+                    res=self.resource,
+                    error=str(e),
+                    traceback="".join(traceback.format_tb(e.__traceback__)),
+                )
+                deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
+                scheduler_deployment_result = state.DeploymentResult.FAILED
+        finally:
+            if deploy_result is not None:
+                # We signaled start, so we signal end
                 try:
-                    requires: dict[ResourceIdStr, const.ResourceState] = await task_manager.send_in_progress(
-                        action_id, executor_resource_details.rvid
-                    )
+                    await task_manager.send_deploy_done(deploy_result)
                 except Exception:
-                    # Unrecoverable, can't reach server
-                    success = False
+                    scheduler_deployment_result = state.DeploymentResult.FAILED
                     LOGGER.error(
-                        "Failed to report the start of the deployment to the server for %s",
+                        "Failed to report the end of the deployment to the server for %s",
                         resource_details.resource_id,
                         exc_info=True,
                     )
-                    return
-
-                # Get executor
-                try:
-                    # FIXME: code loading interface is not nice like this,
-                    #   - we may want to track modules per agent, instead of types
-                    #   - we may also want to track the module version vs the model version
-                    #       as it avoid the problem of fast chanfing model versions
-
-                    my_executor: executor.Executor = await self.get_executor(
-                        task_manager, agent, executor_resource_details.id.entity_type, version
-                    )
-                except Exception as e:
-                    log_line = data.LogLine.log(
-                        logging.ERROR,
-                        "All resources of type `%(res_type)s` failed to load handler code or install handler code "
-                        "dependencies: `%(error)s`\n%(traceback)s",
-                        res_type=executor_resource_details.id.entity_type,
-                        error=str(e),
-                        traceback="".join(traceback.format_tb(e.__traceback__)),
-                    )
-                    deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                    success = False
-                    return
-
-                assert reason is not None  # Should always be set for deploy
-                # Deploy
-                try:
-                    deploy_result = await my_executor.execute(action_id, gid, executor_resource_details, reason, requires)
-                    success = deploy_result.status == const.ResourceState.deployed
-                except Exception as e:
-                    # This should not happen
-
-                    # We log both to scheduler log as well as the DB and the resource_action_log
-                    # FIXME: can be logging be unified without losing the ability to have this warning prior to writing to DB?
-                    # Such that we can have it if the DB is not there
-                    LOGGER.error("Failure during executor execution for resource %s", self.resource, exc_info=True)
-                    log_line = data.LogLine.log(
-                        logging.ERROR,
-                        "Failure during executor execution for resource %(res)s",
-                        res=self.resource,
-                        error=str(e),
-                        traceback="".join(traceback.format_tb(e.__traceback__)),
-                    )
-                    deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                    success = False
-            finally:
-                if deploy_result is not None:
-                    # We signaled start, so we signal end
-                    try:
-                        await task_manager.send_deploy_done(deploy_result)
-                    except Exception:
-                        success = False
-                        LOGGER.error(
-                            "Failed to report the end of the deployment to the server for %s",
-                            resource_details.resource_id,
-                            exc_info=True,
-                        )
-
-                # Always notify scheduler
-                await task_manager.report_resource_state(
-                    resource=self.resource,
-                    attribute_hash=resource_details.attribute_hash,
-                    status=state.ResourceStatus.UP_TO_DATE if success else None,
-                    deployment_result=state.DeploymentResult.DEPLOYED if success else state.DeploymentResult.FAILED,
-                )
+            # Always notify scheduler
+            await task_manager.report_resource_state(
+                resource=self.resource,
+                attribute_hash=resource_details.attribute_hash,
+                status=(
+                    state.ResourceStatus.UP_TO_DATE if scheduler_deployment_result == state.DeploymentResult.DEPLOYED else None
+                ),
+                deployment_result=scheduler_deployment_result,
+            )
 
 
 @dataclass(frozen=True, kw_only=True)

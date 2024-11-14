@@ -282,7 +282,7 @@ async def check_server_state_vs_scheduler_state(client, environment, scheduler):
 
         state_correspondence = {
             "deployed": DeploymentResult.DEPLOYED,
-            "skipped": DeploymentResult.FAILED,
+            "skipped": DeploymentResult.SKIPPED,
             "failed": DeploymentResult.FAILED,
         }
 
