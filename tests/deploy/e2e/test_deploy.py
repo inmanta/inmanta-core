@@ -27,8 +27,8 @@ import pytest
 
 from inmanta import config, const, data, execute
 from inmanta.config import Config
-from inmanta.data import SERVER_COMPILE
-from inmanta.deploy.state import DeploymentResult
+from inmanta.data import SERVER_COMPILE, ResourceIdStr
+from inmanta.deploy.state import DeploymentResult, ResourceStatus
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
 from inmanta.util import get_compiler_version
 from utils import (
@@ -216,7 +216,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     logger.info("first version released")
 
-    await clienthelper.wait_for_deployed()
+    await clienthelper.wait_for_deployed(version=1)
 
     await check_scheduler_state(resources, scheduler)
     await resource_action_consistency_check()
@@ -233,25 +233,43 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     assert 1 == summary["by_state"]["failed"]
     assert 4 == summary["by_state"]["skipped"]
 
+    result = await data.ResourcePersistentState.get_list(environment=environment)
+    for r in result:
+        if r.agent == "agent1":
+            assert r.resource_status is ResourceStatus.HAS_UPDATE
+        else:
+            assert r.resource_status is ResourceStatus.UP_TO_DATE
+
     version1, resources = await make_version(True)
     await clienthelper.put_version_simple(version=version1, resources=resources)
     await make_marker_version()
 
     # deploy and wait until one is ready
     result = await client.release_version(env_id, version1, push=False)
+    assert result.code == 200
     await clienthelper.wait_for_released(version1)
 
-    await clienthelper.wait_for_deployed()
+    await clienthelper.wait_for_deployed(version=version1)
 
     await check_scheduler_state(resources, scheduler)
 
     await resource_action_consistency_check()
     assert resource_container.Provider.readcount("agentx", "key") == 0
 
+    result = await data.ResourcePersistentState.get_list(environment=environment)
+    for r in result:
+        if r.agent in {"agent1", "agentx"}:
+            assert r.resource_status is ResourceStatus.HAS_UPDATE
+        else:
+            assert r.resource_status is ResourceStatus.UP_TO_DATE
+
     # deploy trigger
     await client.deploy(environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy)
 
     await wait_full_success(client, environment)
+
+    result = await data.ResourcePersistentState.get_list(environment=environment)
+    all(r.resource_status is ResourceStatus.UP_TO_DATE for r in result)
 
 
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):
@@ -417,8 +435,6 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
     # Do a second deploy of the same model on agent2 with undefined resources
     await agent.trigger_update(UUID(environment), "agent2", incremental_deploy=False)
 
-    result = await client.get_version(environment, version, include_logs=True)
-
     def done():
         return (
             resource_container.Provider.changecount("agent2", "key4") == 0
@@ -477,6 +493,11 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
 
     logs = result.result["resources"][0]["actions"][0]["messages"]
     assert any("traceback" in log["kwargs"] for log in logs), "\n".join(result.result["resources"][0]["actions"][0]["messages"])
+
+    result = await data.ResourcePersistentState.get_list(environment=environment)
+    assert len(result) == 1
+    assert result[0].resource_id == "test::Noprov[agent1,key=key1]"
+    assert result[0].resource_status is ResourceStatus.HAS_UPDATE
 
 
 @pytest.mark.parametrize("halted", [True, False])
@@ -629,6 +650,13 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
     assert states["test::Resource[agent1,key=key3]"] == "skipped"
     assert states["test::Resource[agent1,key=key4]"] == "skipped"
     assert states["test::Resource[agent1,key=key5]"] == "skipped"
+
+    result = await data.ResourcePersistentState.get_list(environment=environment)
+    result_per_resource_id = {r.resource_id: r for r in result}
+    assert result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].resource_status is ResourceStatus.HAS_UPDATE
+    assert result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].resource_status is ResourceStatus.HAS_UPDATE
+    assert result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].resource_status is ResourceStatus.HAS_UPDATE
+    assert result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].resource_status is ResourceStatus.HAS_UPDATE
 
 
 class ResourceProvider:
@@ -831,6 +859,14 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
 
     assert dep_state.index == resource_container.Provider.reloadcount("agent1", "key2")
 
+    result = await data.ResourcePersistentState.get_list(environment=environment)
+    result_per_resource_id = {r.resource_id: r for r in result}
+    status_key2 = result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].resource_status
+    if dep_state.name in {"skip", "fail"}:
+        assert status_key2 is ResourceStatus.HAS_UPDATE
+    else:
+        assert status_key2 is ResourceStatus.UP_TO_DATE
+
 
 async def test_inprogress(resource_container, server, client, clienthelper, environment, agent):
     resource_container.Provider.set("agent1", "key", "value")
@@ -865,5 +901,9 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
         return status == "deploying"
 
     await retry_limited(in_progress, 30)
+
+    result = await data.ResourcePersistentState.get_list(environment=environment)
+    assert len(result) == 1
+    assert result[0].resource_status is ResourceStatus.HAS_UPDATE
 
     await resource_container.wait_for_done_with_waiters(client, environment, version)

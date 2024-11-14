@@ -4535,7 +4535,7 @@ class ResourcePersistentState(BaseDocument):
                       SELECT *
                       FROM {Resource.table_name()} r
                       WHERE r.environment=rps.environment
-                          AND r.model=$2
+                          AND r.model>=$2
                           AND r.resource_id = rps.resource_id
                   )
         """
