@@ -158,7 +158,9 @@ def start_scheduler(options: argparse.Namespace) -> None:
             connection_timeout=agent_config.scheduler_db_connection_timeout.get(),
         )
         # also report metrics if this is relevant
-        metrics_reporter = MetricsService()
+        metrics_reporter = MetricsService(
+            extra_tags={"component": "scheduler", "environment": str(agent_config.environment.get())}
+        )
         metrics_reporter.start_metric_reporters()
         await a.start()
 
