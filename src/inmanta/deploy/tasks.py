@@ -126,12 +126,12 @@ class Deploy(Task):
         resource_details = intent.details
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
 
-            # Make id's
-            gid = uuid.uuid4()
-            action_id = uuid.uuid4()  # can this be gid ?
+        # Make id's
+        gid = uuid.uuid4()
+        action_id = uuid.uuid4()  # can this be gid ?
 
-            # The main difficulty off this code is exception handling
-            # We collect state here to report back in the finally block
+        # The main difficulty off this code is exception handling
+        # We collect state here to report back in the finally block
 
         # Full status of the deploy,
         # may be unset if we fail before signaling start to the server, will be set if we signaled start
@@ -180,7 +180,9 @@ class Deploy(Task):
             assert reason is not None  # Should always be set for deploy
             # Deploy
             try:
-                deploy_result = await my_executor.execute(action_id, gid, executor_resource_details, reason, intent.dependencies)
+                deploy_result = await my_executor.execute(
+                    action_id, gid, executor_resource_details, reason, intent.dependencies
+                )
                 # Translate deploy result status to the new deployment result state
                 match deploy_result.status:
                     case const.ResourceState.deployed:
