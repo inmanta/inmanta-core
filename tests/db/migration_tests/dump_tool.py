@@ -226,6 +226,12 @@ async def test_dump_db(
     env_id_3 = result.result["environment"]["id"]
     await agent_factory(env_id_3)
 
+    check_result(await client.set_setting(env_id_3, "autostart_agent_deploy_splay_time", 0))
+    check_result(await client.set_setting(env_id_3, "autostart_agent_deploy_interval", "0"))
+    check_result(await client.set_setting(env_id_3, "autostart_agent_repair_splay_time", 0))
+    check_result(await client.set_setting(env_id_3, "autostart_agent_repair_interval", "600"))
+    check_result(await client.set_setting(env_id_3, "auto_deploy", False))
+
     def get_resources(version: int) -> list[dict[str, object]]:
         return [
             {
@@ -253,7 +259,7 @@ async def test_dump_db(
                 "id": f"test::Resource[agent1,key=key3],v={version}",
                 "send_event": True,
                 "purged": False,
-                "requires": [f"test::Fail[agent1,key=key2]"],
+                "requires": [f"test::Fail[agent1,key=key2],v={version}"],
             },
             {
                 "key": "key4",
@@ -271,7 +277,7 @@ async def test_dump_db(
                 "id": f"test::Resource[agent1,key=key5],v={version}",
                 "send_event": True,
                 "purged": False,
-                "requires": [f"test::Resource[agent1,key=key4]"],
+                "requires": [f"test::Resource[agent1,key=key4],v={version}"],
             },
             {
                 "key": "key6",
@@ -292,21 +298,21 @@ async def test_dump_db(
         version=version,
         resources=get_resources(version),
         resource_state={
-            f"test::Resource[agent1,key=key1],v={version}": const.ResourceState.available,
-            f"test::Resource[agent1,key=key2],v={version}": const.ResourceState.available,
-            f"test::Resource[agent1,key=key3],v={version}": const.ResourceState.available,
-            f"test::Resource[agent1,key=key4],v={version}": const.ResourceState.undefined,
-            f"test::Resource[agent1,key=key5],v={version}": const.ResourceState.available,
-            f"test::Resource[agent1,key=key6],v={version}": const.ResourceState.available,
+            f"test::Resource[agent1,key=key1]": const.ResourceState.available,
+            f"test::Resource[agent1,key=key2]": const.ResourceState.available,
+            f"test::Resource[agent1,key=key3]": const.ResourceState.available,
+            f"test::Resource[agent1,key=key4]": const.ResourceState.undefined,
+            f"test::Resource[agent1,key=key5]": const.ResourceState.available,
+            f"test::Resource[agent1,key=key6]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
     )
     assert res.code == 200
-    await wait_until_deployment_finishes(client, env_id_3)
-
-    # Halt environment dev-3, so that no deploy is done for the latest version
-    res = await client.halt_environment(env_id_3)
+    res = await client.release_version(
+        env_id_3, id=1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
     assert res.code == 200
+    await wait_until_deployment_finishes(client, env_id_3)
 
     # Create a second version in environment dev3 that doesn't have resource key6, but has a new resource key7
     res = await client.reserve_version(env_id_3)
@@ -328,15 +334,20 @@ async def test_dump_db(
             }
         ],
         resource_state={
-            f"test::Resource[agent1,key=key1],v={version}": const.ResourceState.available,
-            f"test::Resource[agent1,key=key2],v={version}": const.ResourceState.available,
-            f"test::Resource[agent1,key=key3],v={version}": const.ResourceState.available,
-            f"test::Resource[agent1,key=key4],v={version}": const.ResourceState.undefined,
-            f"test::Resource[agent1,key=key5],v={version}": const.ResourceState.available,
-            f"test::Resource[agent1,key=key7],v={version}": const.ResourceState.available,
+            f"test::Resource[agent1,key=key1]": const.ResourceState.available,
+            f"test::Resource[agent1,key=key2]": const.ResourceState.available,
+            f"test::Resource[agent1,key=key3]": const.ResourceState.available,
+            f"test::Resource[agent1,key=key4]": const.ResourceState.undefined,
+            f"test::Resource[agent1,key=key5]": const.ResourceState.available,
+            f"test::Resource[agent1,key=key7]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
     )
+    res = await client.release_version(
+        env_id_3, id=2, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
+    assert res.code == 200
+    await wait_until_deployment_finishes(client, env_id_3)
 
     proc = await asyncio.create_subprocess_exec(
         "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name
