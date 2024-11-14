@@ -32,7 +32,7 @@ from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import DeployResult, FactResult
-from inmanta.data import ConfigurationModel, Environment
+from inmanta.data import ConfigurationModel, Environment, ResourcePersistentState
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
@@ -339,17 +339,17 @@ class ResourceScheduler(TaskManager):
         """
         async with data.Resource.get_connection(connection) as con:
             resources_from_db = await data.Resource.get_resources_for_version(self.environment, version, connection=con)
-
-            resource_mapping = {
+            return {
                 resource.resource_id: ResourceDetails(
                     resource_id=resource.resource_id,
                     attribute_hash=resource.attribute_hash,
                     attributes=resource.attributes,
-                    status=await data.Resource.get_current_resource_state(self.environment, resource.resource_id),
+                    status=await ResourcePersistentState.get_resource_status(
+                        self.environment, resource.resource_id, connection=con
+                    ),
                 )
                 for resource in resources_from_db
             }
-            return resource_mapping
 
     def _construct_requires_mapping(
         self, resources: Mapping[ResourceIdStr, ResourceDetails]
@@ -517,6 +517,10 @@ class ResourceScheduler(TaskManager):
                 # time too many, which is not so bad.
                 self._work.delete_resource(resource)
 
+            # Write orphan state back to the database
+            await ResourcePersistentState.mark_orphans(environment=self.environment, version=self._state.version)
+
+
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
         self._workers[agent] = TaskRunner(endpoint=agent, scheduler=self)
@@ -605,7 +609,7 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             # refresh resource details for latest model state
             details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
-            if details is None or details.attribute_hash != attribute_hash:
+            if details is None or details.status is ResourceStatus.UNDEFINED or details.attribute_hash != attribute_hash:
                 # The reported resource state is for a stale resource and therefore no longer relevant for state updates.
                 # There is also no need to send out events because a newer version will have been scheduled.
                 return

@@ -4490,18 +4490,14 @@ class ResourcePersistentState(BaseDocument):
 
     @classmethod
     async def get_resource_status(
-        cls, environment: uuid.UUID, resource_id: ResourceIdStr, connection: Optional[Connection] = None
+        cls, environment: UUID, resource_id: m.ResourceIdStr, connection: Optional[Connection] = None
     ) -> state.ResourceStatus:
-        result = await cls._fetchval(
-            f"""
-                SELECT resource_status
-                FROM {cls.table_name()}
-                WHERE environment=$1 AND resource_id=$2
-            """,
-            cls._get_value(environment),
-            cls._get_value(resource_id),
-            connection=connection,
-        )
+        query = f"""
+            SELECT resource_status
+            FROM {cls.table_name()}
+            WHERE environment=$1 AND resource_id=$2
+        """
+        result = await cls._fetchval(query, environment, resource_id, connection=connection)
         if result is None:
             raise KeyError()
         return state.ResourceStatus[result]
