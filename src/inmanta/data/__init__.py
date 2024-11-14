@@ -29,7 +29,7 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Callable, Iterable, Sequence, Set, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Sequence, Set
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
@@ -4529,10 +4529,7 @@ class ResourcePersistentState(BaseDocument):
 
     @classmethod
     async def mark_as_has_update(
-        cls,
-        environment: UUID,
-        resource_ids: set[ResourceIdStr],
-        connection: Optional[asyncpg.connection.Connection] = None
+        cls, environment: UUID, resource_ids: set[ResourceIdStr], connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         query = f"""
             UPDATE {cls.table_name()} AS rps

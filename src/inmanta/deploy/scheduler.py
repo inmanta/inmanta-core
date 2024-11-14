@@ -18,6 +18,7 @@
 
 import abc
 import asyncio
+import json
 import logging
 import typing
 import uuid
@@ -25,7 +26,6 @@ from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
 from typing import Optional
 from uuid import UUID
-import json
 
 import asyncpg
 
@@ -41,7 +41,6 @@ from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, Reso
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
 from inmanta.protocol import Client
-from inmanta.protocol.methods_v2 import environment_get
 from inmanta.resources import Id
 
 LOGGER = logging.getLogger(__name__)
@@ -351,7 +350,10 @@ class ResourceScheduler(TaskManager):
         for resource in resources_from_db:
             if const.ResourceState[resource["status"]] is const.ResourceState.undefined:
                 status = ResourceStatus.UNDEFINED
-            elif resource["attribute_hash"] == resource["last_deployed_attribute_hash"] and resource["resource_status"] is ResourceStatus.UP_TO_DATE:
+            elif (
+                resource["attribute_hash"] == resource["last_deployed_attribute_hash"]
+                and resource["resource_status"] is ResourceStatus.UP_TO_DATE
+            ):
                 status = ResourceStatus.UP_TO_DATE
             else:
                 status = ResourceStatus.HAS_UPDATE
@@ -534,7 +536,6 @@ class ResourceScheduler(TaskManager):
 
             # Write orphan state back to the database
             await ResourcePersistentState.mark_orphans(environment=self.environment, version=self._state.version)
-
 
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""

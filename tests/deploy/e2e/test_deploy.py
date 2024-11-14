@@ -908,6 +908,7 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
 
     await resource_container.wait_for_done_with_waiters(client, environment, version)
 
+
 async def test_resource_status(resource_container, server, client, clienthelper, environment, agent):
     """
     Verify that the resource_status column in the resource_persistent_state table contains correct date.
@@ -996,12 +997,12 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         version=version,
         resources=get_resources(version),
         resource_state={
-            ResourceIdStr(f"test::Resource[agent1,key=key1]"): const.ResourceState.available,
-            ResourceIdStr(f"test::Resource[agent1,key=key2]"): const.ResourceState.available,
-            ResourceIdStr(f"test::Resource[agent1,key=key3]"): const.ResourceState.available,
-            ResourceIdStr(f"test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
-            ResourceIdStr(f"test::Resource[agent1,key=key5]"): const.ResourceState.available,
-        }
+            ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
+        },
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
@@ -1019,11 +1020,11 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         version=version,
         resources=get_resources(version)[1:],  # key1 becomes orphan
         resource_state={
-            ResourceIdStr(f"test::Resource[agent1,key=key2]"): const.ResourceState.available,
-            ResourceIdStr(f"test::Resource[agent1,key=key3]"): const.ResourceState.available,
-            ResourceIdStr(f"test::Resource[agent1,key=key4]"): const.ResourceState.available,
-            ResourceIdStr(f"test::Resource[agent1,key=key5]"): const.ResourceState.available,
-        }
+            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
+        },
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
@@ -1039,12 +1040,12 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         version=version,
         resources=get_resources(version),
         resource_state={
-            ResourceIdStr(f"test::Resource[agent1,key=key1]"): const.ResourceState.available,
-            ResourceIdStr(f"test::Resource[agent1,key=key2]"): const.ResourceState.available,
-            ResourceIdStr(f"test::Resource[agent1,key=key3]"): const.ResourceState.available,
-            ResourceIdStr(f"test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
-            ResourceIdStr(f"test::Resource[agent1,key=key5]"): const.ResourceState.available,
-        }
+            ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
+        },
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}

@@ -23,18 +23,19 @@ import asyncio
 import os
 import shutil
 import uuid
+from typing import Awaitable, Callable
 from uuid import UUID
-from typing import Callable, Awaitable
+
 import pytest
 
 import inmanta.protocol
 from inmanta import const, data, util
+from inmanta.agent.agent_new import Agent
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
 from inmanta.data.schema import DBSchema
 from inmanta.protocol import methods
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server.services.compilerservice import CompilerService
-from inmanta.agent.agent_new import Agent
 
 if __file__ and os.path.dirname(__file__).split("/")[-2] == "inmanta_tests":
     from inmanta_tests.utils import wait_for_version, wait_until_deployment_finishes  # noqa: F401
@@ -103,7 +104,13 @@ async def populate_facts_and_parameters(client, env_id: str):
 
 @pytest.mark.parametrize("no_agent", [True])  # set config value
 async def test_dump_db(
-    server, client, postgres_db, database_name, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], resource_container, no_agent
+    server,
+    client,
+    postgres_db,
+    database_name,
+    agent_factory: Callable[[uuid.UUID], Awaitable[Agent]],
+    resource_container,
+    no_agent,
 ) -> None:
     if False:
         # trick autocomplete to have autocomplete on client
@@ -298,12 +305,12 @@ async def test_dump_db(
         version=version,
         resources=get_resources(version),
         resource_state={
-            f"test::Resource[agent1,key=key1]": const.ResourceState.available,
-            f"test::Resource[agent1,key=key2]": const.ResourceState.available,
-            f"test::Resource[agent1,key=key3]": const.ResourceState.available,
-            f"test::Resource[agent1,key=key4]": const.ResourceState.undefined,
-            f"test::Resource[agent1,key=key5]": const.ResourceState.available,
-            f"test::Resource[agent1,key=key6]": const.ResourceState.available,
+            "test::Resource[agent1,key=key1]": const.ResourceState.available,
+            "test::Resource[agent1,key=key2]": const.ResourceState.available,
+            "test::Resource[agent1,key=key3]": const.ResourceState.available,
+            "test::Resource[agent1,key=key4]": const.ResourceState.undefined,
+            "test::Resource[agent1,key=key5]": const.ResourceState.available,
+            "test::Resource[agent1,key=key6]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
     )
@@ -331,15 +338,15 @@ async def test_dump_db(
                 "send_event": True,
                 "purged": False,
                 "requires": [],
-            }
+            },
         ],
         resource_state={
-            f"test::Resource[agent1,key=key1]": const.ResourceState.available,
-            f"test::Resource[agent1,key=key2]": const.ResourceState.available,
-            f"test::Resource[agent1,key=key3]": const.ResourceState.available,
-            f"test::Resource[agent1,key=key4]": const.ResourceState.undefined,
-            f"test::Resource[agent1,key=key5]": const.ResourceState.available,
-            f"test::Resource[agent1,key=key7]": const.ResourceState.available,
+            "test::Resource[agent1,key=key1]": const.ResourceState.available,
+            "test::Resource[agent1,key=key2]": const.ResourceState.available,
+            "test::Resource[agent1,key=key3]": const.ResourceState.available,
+            "test::Resource[agent1,key=key4]": const.ResourceState.undefined,
+            "test::Resource[agent1,key=key5]": const.ResourceState.available,
+            "test::Resource[agent1,key=key7]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
     )
