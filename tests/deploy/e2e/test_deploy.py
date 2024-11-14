@@ -209,7 +209,6 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
-        print(summary)
         for k, v in expected_key_values.items():
             assert v == summary["by_state"][k]
 
