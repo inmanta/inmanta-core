@@ -338,14 +338,13 @@ class ResourceScheduler(TaskManager):
 
         :return: resource_mapping {id -> resource details}
         """
-        async with data.Resource.get_connection(connection) as con:
-            resources_from_db = await data.Resource.get_resources_for_version_raw_with_persistent_state(
-                environment=self.environment,
-                version=version,
-                projection=None,
-                projection_presistent=None,
-                connection=con,
-            )
+        resources_from_db = await data.Resource.get_resources_for_version_raw_with_persistent_state(
+            environment=self.environment,
+            version=version,
+            projection=None,
+            projection_presistent=None,
+            connection=connection,
+        )
         result = {}
         for resource in resources_from_db:
             if const.ResourceState[resource["status"]] is const.ResourceState.undefined:
