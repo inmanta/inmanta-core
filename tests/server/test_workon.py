@@ -1297,7 +1297,7 @@ async def test_workon_sets_pip_config(
 
 
 @pytest.mark.slowtest
-async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog, iteration) -> None:
+async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog) -> None:
     """
     Check the expected behaviour for compile that would take too much time.
     """
@@ -1383,70 +1383,68 @@ async def test_timed_out_waiting_for_compiles(client: protocol.Client, caplog, i
             result: protocol.Result = await client.notify_change(env.id)
             assert result.code == 200
 
-        try:
-            raise AssertionError  # We want to simulate a timeout error
-        except AssertionError:
-            queue_environments = await asyncio.gather(*(client.get_compile_queue(env.id) for env in environments))
-            problematic_env_ids = []
-            for result in queue_environments:
-                if len(result.result["queue"]) > 0:
-                    problematic_env_ids.append(result.result["queue"][0]["environment"])
-            await diagnose_compile_reports(client=client, environments=problematic_env_ids)
+        await asyncio.sleep(10)  # Simulate a timeout
+        queue_environments = await asyncio.gather(*(client.get_compile_queue(env.id) for env in environments))
+        problematic_env_ids = []
+        for result in queue_environments:
+            if len(result.result["queue"]) > 0:
+                problematic_env_ids.append(result.result["queue"][0]["environment"])
+        await diagnose_compile_reports(client=client, environments=problematic_env_ids)
 
-            min_timestamp = defaultdict(lambda: 0.0)
-            relevant_keys = TestDiagnoseReport.model_fields
+        min_timestamp = defaultdict(lambda: 0.0)
+        relevant_keys = TestDiagnoseReport.model_fields
 
-            unfinished_compiles_env_id = set()
-            for i, (_, _, message) in enumerate(caplog.record_tuples):
-                if "No reports are available (yet) for environment id:" in message:
-                    unfinished_compiles_env_id.add(message.split(":")[1].strip())
-                    continue
-                if "Environment id:" not in message:
-                    continue
+        unfinished_compiles_env_id = set()
+        for i, (_, _, message) in enumerate(caplog.record_tuples):
+            if "No reports are available (yet) for environment id:" in message:
+                unfinished_compiles_env_id.add(message.split(":")[1].strip())
+                continue
+            if "Environment id:" not in message:
+                continue
 
-                def convert_log_line_into_report(log_line: str) -> TestDiagnoseReport:
-                    """
-                    As we know that the logging will have the following structure:
-                        ```
-                            Environment id: .......-....-....-....-.......
-                            Compile id: '.......-....-....-....-.......'
-                            Substitute compile id:
-                            ## Timestamps ##
-                            Requested timestamp: AAAAAAAA.BBBBBB
-                            Started timestamp: CCCCCCCC.DDDDDDD
-                            Completed timestamp:
-                            ## Times ##
-                            Time in queue: 0.OOOOOOOOOOOOOO.
-                            Completion time:
-                            Timed out completion time: 0.PPPPPPPPP
-                            ## Execution ##
-                            Executed command:
-                            Exit code:
-                            Output stream: ''
-                            Error stream:
-                        ```
-                    We can transform this structure into a pydantic model by treating each line of this structure
-                    as a dictionary entry:
-                        - The line will be split by ':'
-                            - The generated list will contain the key and the value
-                            - For the key, we replace spaces by '_' and lower every character
-                    """
-                    # Ugly parsing but is convenient as we know that the structure of the log message is clearly defined
-                    dict_log_line = {
-                        line[0].lower().replace(" ", "_"): line[1].strip()
-                        for line in (item.split(":") for item in log_line.split("\n"))
-                        if line[0].lower().replace(" ", "_") in relevant_keys
-                    }
-                    return TestDiagnoseReport(**dict_log_line)
+            def convert_log_line_into_report(log_line: str) -> TestDiagnoseReport:
+                """
+                As we know that the logging will have the following structure:
+                    ```
+                        Environment id: .......-....-....-....-.......
+                        Compile id: '.......-....-....-....-.......'
+                        Substitute compile id:
+                        ## Timestamps ##
+                        Requested timestamp: AAAAAAAA.BBBBBB
+                        Started timestamp: CCCCCCCC.DDDDDDD
+                        Completed timestamp:
+                        ## Times ##
+                        Time in queue: 0.OOOOOOOOOOOOOO.
+                        Completion time:
+                        Timed out completion time: 0.PPPPPPPPP
+                        ## Execution ##
+                        Executed command:
+                        Exit code:
+                        Output stream: ''
+                        Error stream:
+                    ```
+                We can transform this structure into a pydantic model by treating each line of this structure
+                as a dictionary entry:
+                    - The line will be split by ':'
+                        - The generated list will contain the key and the value
+                        - For the key, we replace spaces by '_' and lower every character
+                """
+                # Ugly parsing but is convenient as we know that the structure of the log message is clearly defined
+                dict_log_line = {
+                    line[0].lower().replace(" ", "_"): line[1].strip()
+                    for line in (item.split(":") for item in log_line.split("\n"))
+                    if line[0].lower().replace(" ", "_") in relevant_keys
+                }
+                return TestDiagnoseReport(**dict_log_line)
 
-                # The different reports will be ordered by started field in Ascending order, allowing us to easily check that
-                # there are no overlapping compilations.
-                current_report = convert_log_line_into_report(log_line=message)
-                # We make sure the new compile (for this particular environment) has started after the last known one
-                assert min_timestamp[current_report.environment_id] <= current_report.started_timestamp
-                # The completion time of this compile is the new minimum value (ensure no overlap)
-                min_timestamp[current_report.environment_id] = current_report.completed_timestamp
+            # The different reports will be ordered by started field in Ascending order, allowing us to easily check that
+            # there are no overlapping compilations.
+            current_report = convert_log_line_into_report(log_line=message)
+            # We make sure the new compile (for this particular environment) has started after the last known one
+            assert min_timestamp[current_report.environment_id] <= current_report.started_timestamp
+            # The completion time of this compile is the new minimum value (ensure no overlap)
+            min_timestamp[current_report.environment_id] = current_report.completed_timestamp
 
-            assert set(min_timestamp.keys()) == set(problematic_env_ids) or (
-                set(min_timestamp.keys()).union(set(unfinished_compiles_env_id)) == set(problematic_env_ids)
-            )
+        assert set(min_timestamp.keys()) == set(problematic_env_ids) or (
+            set(min_timestamp.keys()).union(set(unfinished_compiles_env_id)) == set(problematic_env_ids)
+        )
