@@ -29,7 +29,7 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Callable, Iterable, Sequence, Set
+from collections.abc import Awaitable, Callable, Iterable, Sequence, Set, Mapping
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
@@ -4489,20 +4489,6 @@ class ResourcePersistentState(BaseDocument):
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
     @classmethod
-    async def get_resource_status(
-        cls, environment: UUID, resource_id: m.ResourceIdStr, connection: Optional[Connection] = None
-    ) -> state.ResourceStatus:
-        query = f"""
-            SELECT resource_status
-            FROM {cls.table_name()}
-            WHERE environment=$1 AND resource_id=$2
-        """
-        result = await cls._fetchval(query, environment, resource_id, connection=connection)
-        if result is None:
-            raise KeyError()
-        return state.ResourceStatus[result]
-
-    @classmethod
     async def trim(cls, environment: UUID, connection: Optional[Connection] = None) -> None:
         """Remove all records that have no corresponding resource anymore"""
         await cls._execute_query(
@@ -4540,6 +4526,20 @@ class ResourcePersistentState(BaseDocument):
                   )
         """
         await cls._execute_query(query, environment, version, connection=connection)
+
+    @classmethod
+    async def mark_as_has_update(
+        cls,
+        environment: UUID,
+        resource_ids: set[ResourceIdStr],
+        connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        query = f"""
+            UPDATE {cls.table_name()} AS rps
+            SET resource_status='HAS_UPDATE'::new_resource_status
+            WHERE rps.environment=$1 AND rps.resource_id=ANY($2)
+        """
+        await cls._execute_query(query, environment, resource_ids, connection=connection)
 
 
 @stable_api

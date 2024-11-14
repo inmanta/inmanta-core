@@ -25,6 +25,7 @@ from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
 from typing import Optional
 from uuid import UUID
+import json
 
 import asyncpg
 
@@ -40,7 +41,8 @@ from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, Reso
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
 from inmanta.protocol import Client
-from inmanta.resources import Id, resource
+from inmanta.protocol.methods_v2 import environment_get
+from inmanta.resources import Id
 
 LOGGER = logging.getLogger(__name__)
 
@@ -338,18 +340,28 @@ class ResourceScheduler(TaskManager):
         :return: resource_mapping {id -> resource details}
         """
         async with data.Resource.get_connection(connection) as con:
-            resources_from_db = await data.Resource.get_resources_for_version(self.environment, version, connection=con)
-            return {
-                resource.resource_id: ResourceDetails(
-                    resource_id=resource.resource_id,
-                    attribute_hash=resource.attribute_hash,
-                    attributes=resource.attributes,
-                    status=await ResourcePersistentState.get_resource_status(
-                        self.environment, resource.resource_id, connection=con
-                    ),
-                )
-                for resource in resources_from_db
-            }
+            resources_from_db = await data.Resource.get_resources_for_version_raw_with_persistent_state(
+                environment=self.environment,
+                version=version,
+                projection=None,
+                projection_presistent=None,
+                connection=con,
+            )
+        result = {}
+        for resource in resources_from_db:
+            if const.ResourceState[resource["status"]] is const.ResourceState.undefined:
+                status = ResourceStatus.UNDEFINED
+            elif resource["attribute_hash"] == resource["last_deployed_attribute_hash"] and resource["resource_status"] is ResourceStatus.UP_TO_DATE:
+                status = ResourceStatus.UP_TO_DATE
+            else:
+                status = ResourceStatus.HAS_UPDATE
+            result[resource["resource_id"]] = ResourceDetails(
+                resource_id=resource["resource_id"],
+                attribute_hash=resource["attribute_hash"],
+                attributes=json.loads(resource["attributes"]),
+                status=status,
+            )
+        return result
 
     def _construct_requires_mapping(
         self, resources: Mapping[ResourceIdStr, ResourceDetails]
@@ -508,6 +520,9 @@ class ResourceScheduler(TaskManager):
                     self._state.drop(resource)
                 for resource in blocked_resources | transitively_blocked_resources:
                     self._work.delete_resource(resource)
+
+                # Write dirty state back to the database
+                await ResourcePersistentState.mark_as_has_update(self.environment, set(self._state.dirty))
 
             # Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added
             # again by a deploy trigger (because we dropped them outside the lock).

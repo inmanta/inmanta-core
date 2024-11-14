@@ -907,3 +907,149 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
     assert result[0].resource_status is ResourceStatus.HAS_UPDATE
 
     await resource_container.wait_for_done_with_waiters(client, environment, version)
+
+async def test_resource_status(resource_container, server, client, clienthelper, environment, agent):
+    """
+    Verify that the resource_status column in the resource_persistent_state table contains correct date.
+    """
+    resource_container.Provider.reset()
+    env_id = environment
+
+    result = await client.set_setting(environment, "auto_deploy", False)
+    assert result.code == 200
+
+    def get_resources(version: int) -> list[dict[str, object]]:
+        return [
+            {
+                "key": "key1",
+                "value": "value",
+                "id": f"test::Resource[agent1,key=key1],v={version}",
+                "requires": [],
+                "purged": False,
+                "send_event": False,
+                "receive_events": False,
+            },
+            {
+                "key": "key2",
+                "value": "value",
+                "id": f"test::Resource[agent1,key=key2],v={version}",
+                "requires": [],
+                "purged": False,
+                "send_event": False,
+                "receive_events": False,
+            },
+            {
+                "key": "key3",
+                "value": "value",
+                "id": f"test::Resource[agent1,key=key3],v={version}",
+                "requires": [f"test::Resource[agent1,key=key2],v={version}"],
+                "purged": False,
+                "send_event": False,
+                "receive_events": False,
+            },
+            {
+                "key": "key4",
+                "value": f"value-{version}",  # Make sure the attribute_hash changes on each version
+                "id": f"test::Resource[agent1,key=key4],v={version}",
+                "requires": [],
+                "purged": False,
+                "send_event": False,
+                "receive_events": False,
+            },
+            {
+                "key": "key5",
+                "value": "value",
+                "id": f"test::Resource[agent1,key=key5],v={version}",
+                "requires": [f"test::Resource[agent1,key=key4],v={version}"],
+                "purged": False,
+                "send_event": False,
+                "receive_events": False,
+            },
+        ]
+
+    async def deploy_resources(
+        version: int, resources: list[dict[str, object]], resource_state: dict[ResourceIdStr, const.ResourceState]
+    ) -> None:
+        result = await client.put_version(
+            tid=env_id,
+            version=version,
+            resources=resources,
+            resource_state=resource_state,
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+        )
+        assert result.code == 200, result.result
+
+        # deploy and wait until done
+        result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
+        assert result.code == 200
+
+        result = await client.get_version(env_id, version)
+        assert result.code == 200
+
+        await wait_until_deployment_finishes(client, env_id)
+
+    resource_container.Provider.set_fail("agent1", "key2", 1)
+    version = await clienthelper.get_version()
+    await deploy_resources(
+        version=version,
+        resources=get_resources(version),
+        resource_state={
+            ResourceIdStr(f"test::Resource[agent1,key=key1]"): const.ResourceState.available,
+            ResourceIdStr(f"test::Resource[agent1,key=key2]"): const.ResourceState.available,
+            ResourceIdStr(f"test::Resource[agent1,key=key3]"): const.ResourceState.available,
+            ResourceIdStr(f"test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
+            ResourceIdStr(f"test::Resource[agent1,key=key5]"): const.ResourceState.available,
+        }
+    )
+    result = await data.ResourcePersistentState.get_list(environment=environment)
+    result_per_resource_id = {r.resource_id: r for r in result}
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")].resource_status is ResourceStatus.UP_TO_DATE
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].resource_status is ResourceStatus.HAS_UPDATE
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")].resource_status is ResourceStatus.HAS_UPDATE
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")].resource_status is ResourceStatus.UNDEFINED
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")].resource_status is ResourceStatus.HAS_UPDATE
+
+    # * Remove key1, so that it becomes orphan
+    # * Make key2 no longer fail
+    # * Make key4 no longer undefined
+    version = await clienthelper.get_version()
+    await deploy_resources(
+        version=version,
+        resources=get_resources(version)[1:],  # key1 becomes orphan
+        resource_state={
+            ResourceIdStr(f"test::Resource[agent1,key=key2]"): const.ResourceState.available,
+            ResourceIdStr(f"test::Resource[agent1,key=key3]"): const.ResourceState.available,
+            ResourceIdStr(f"test::Resource[agent1,key=key4]"): const.ResourceState.available,
+            ResourceIdStr(f"test::Resource[agent1,key=key5]"): const.ResourceState.available,
+        }
+    )
+    result = await data.ResourcePersistentState.get_list(environment=environment)
+    result_per_resource_id = {r.resource_id: r for r in result}
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")].resource_status is ResourceStatus.ORPHAN
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].resource_status is ResourceStatus.UP_TO_DATE
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")].resource_status is ResourceStatus.UP_TO_DATE
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")].resource_status is ResourceStatus.UP_TO_DATE
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")].resource_status is ResourceStatus.UP_TO_DATE
+
+    # Make key4 undefined again
+    version = await clienthelper.get_version()
+    await deploy_resources(
+        version=version,
+        resources=get_resources(version),
+        resource_state={
+            ResourceIdStr(f"test::Resource[agent1,key=key1]"): const.ResourceState.available,
+            ResourceIdStr(f"test::Resource[agent1,key=key2]"): const.ResourceState.available,
+            ResourceIdStr(f"test::Resource[agent1,key=key3]"): const.ResourceState.available,
+            ResourceIdStr(f"test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
+            ResourceIdStr(f"test::Resource[agent1,key=key5]"): const.ResourceState.available,
+        }
+    )
+    result = await data.ResourcePersistentState.get_list(environment=environment)
+    result_per_resource_id = {r.resource_id: r for r in result}
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")].resource_status is ResourceStatus.UP_TO_DATE
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].resource_status is ResourceStatus.UP_TO_DATE
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")].resource_status is ResourceStatus.UP_TO_DATE
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")].resource_status is ResourceStatus.UNDEFINED
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")].resource_status is ResourceStatus.UP_TO_DATE
